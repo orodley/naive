@@ -2,6 +2,40 @@
 #include "misc.h"
 #include "tokenise.h"
 
+// @PORT
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+
+typedef struct InputBuffer
+{
+	char *buffer;
+	size_t length;
+} InputBuffer;
+
+#define INVALID_INPUT_BUFFER ((InputBuffer) { NULL, -1 })
+
+// @PORT
+InputBuffer map_file_into_memory(const char *filename)
+{
+	int fd = open(filename, O_RDONLY);
+	if (fd == -1)
+		return INVALID_INPUT_BUFFER;
+
+	off_t file_size = lseek(fd, 0, SEEK_END);
+
+	if (file_size == -1)
+		return INVALID_INPUT_BUFFER;
+
+	char *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+	if (buffer == MAP_FAILED)
+		return INVALID_INPUT_BUFFER;
+
+	return (InputBuffer) { buffer, file_size };
+}
+
+
 typedef struct Reader
 {
 	char *buffer;
@@ -30,8 +64,13 @@ static inline void back_up(Reader *reader)
 }
 
 // TODO: Replace with a finite state machine
-void tokenise(InputBuffer buffer)
+void tokenise(const char *input_filename)
 {
+	InputBuffer buffer = map_file_into_memory(input_filename);
+
+	if (buffer.buffer == NULL)
+		return;
+
 	Reader reader = (Reader) { buffer.buffer, 0, (u32)buffer.length };
 	Reader *r = &reader;
 

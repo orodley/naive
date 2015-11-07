@@ -75,6 +75,6 @@ typedef enum TokenType
 	TOK_RSQUARE,
 } TokenType;
 
-void tokenise(InputBuffer buffer);
+void tokenise(const char *input_filename);
 
 #endif
