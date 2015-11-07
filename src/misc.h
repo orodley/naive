@@ -17,4 +17,12 @@ typedef  int64_t i64;
 #include <stdbool.h>
 #include <stddef.h>
 
+typedef struct InputBuffer
+{
+	char *buffer;
+	size_t length;
+} InputBuffer;
+
+#define INVALID_INPUT_BUFFER ((InputBuffer) { NULL, -1 })
+
 #endif
