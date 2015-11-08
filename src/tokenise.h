@@ -2,9 +2,12 @@
 #define NAIVE_TOKENISE_H
 
 #include "misc.h"
+#include "array.h"
 
 typedef enum TokenType
 {
+	TOK_INVALID,
+
 	TOK_INT_LITERAL,
 	TOK_FLOAT_LITERAL,
 	TOK_STRING_LITERAL,
@@ -75,6 +78,18 @@ typedef enum TokenType
 	TOK_RSQUARE,
 } TokenType;
 
-void tokenise(const char *input_filename);
+typedef struct Token
+{
+	TokenType type;
+
+	union
+	{
+		i64 int_literal;
+		double float_literal;
+		char *symbol_or_string_literal;
+	} val;
+} Token;
+
+void tokenise(Array *tokens, const char *input_filename);
 
 #endif

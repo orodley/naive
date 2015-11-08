@@ -1,6 +1,10 @@
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "misc.h"
 #include "tokenise.h"
+#include "array.h"
 
 // @PORT
 #include <unistd.h>
@@ -31,6 +35,8 @@ InputBuffer map_file_into_memory(const char *filename)
 	char *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (buffer == MAP_FAILED)
 		return INVALID_INPUT_BUFFER;
+
+	close(fd);
 
 	return (InputBuffer) { buffer, file_size };
 }
@@ -64,32 +70,54 @@ static inline void back_up(Reader *reader)
 }
 
 // TODO: Replace with a finite state machine
-void tokenise(const char *input_filename)
+void tokenise(Array *tokens, const char *input_filename)
 {
 	InputBuffer buffer = map_file_into_memory(input_filename);
 
 	if (buffer.buffer == NULL)
 		return;
 
+	// TODO: 500 tokens is a quick estimate. We should do some actual
+	// measurement and determine a good value for this.
+	array_init(tokens, sizeof(Token), 500);
+
 	Reader reader = (Reader) { buffer.buffer, 0, (u32)buffer.length };
 	Reader *r = &reader;
 
+	Token *token;
+	bool read_token = true;
 	while (reader.position < reader.length) {
+		if (read_token) {
+			token = array_append(tokens);
+			token->type = TOK_INVALID;
+		}
+
+		// We read tokens more often than not, so set it here and override it
+		// later in the few cases where necessary.
+		read_token = true;
+
 		switch (read_char(r)) {
 		case '0': case '1': case '2': case '3': case '4': case '5': case '6':
-		case '7': case '8': case '9':
+		case '7': case '8': case '9': {
+			i64 value = 0;
+
 			for (;;) {
 				char c = peek_char(r);
 				if (!(c >= '0' && c <= '9'))
 					break;
 
+				value *= 10;
+				value += c - '0';
 				advance(r);
 			}
 
-			puts("TOK_INT_LITERAL");
-			break;
+			token->type = TOK_INT_LITERAL;
+			token->val.int_literal = value;
 
-		case '"':
+			break;
+		}
+		case '"': {
+			u32 start_index = reader.position;
 			for (;;) {
 				char c = read_char(r);
 
@@ -99,20 +127,28 @@ void tokenise(const char *input_filename)
 					break;
 			}
 
-			puts("TOK_STRING_LITERAL");
-			break;
+			u32 size = reader.position - start_index + 1;
 
+			token->type = TOK_STRING_LITERAL;
+			char *str = malloc(size);
+			strncpy(str, reader.buffer + start_index, size - 1);
+			str[size - 1] = '\0';
+
+			token->val.symbol_or_string_literal = str;
+
+			break;
+		}
 		case '+':
 			switch (read_char(r)) {
 			case '+':
-				puts("TOK_INCREMENT");
+				token->type = TOK_INCREMENT;
 				break;
 			case '=':
-				puts("TOK_PLUS_ASSIGN");
+				token->type = TOK_PLUS_ASSIGN;
 				break;
 			default:
 				back_up(r);
-				puts("TOK_PLUS");
+				token->type = TOK_PLUS;
 			}
 
 			break;
@@ -120,27 +156,27 @@ void tokenise(const char *input_filename)
 		case '-':
 			switch (read_char(r)) {
 			case '-':
-				puts("TOK_DECREMENT");
+				token->type = TOK_DECREMENT;
 				break;
 			case '=':
-				puts("TOK_MINUS_ASSING");
+				token->type = TOK_MINUS_ASSIGN;
 				break;
 			case '>':
-				puts("TOK_ARROW");
+				token->type = TOK_ARROW;
 				break;
 			default:
 				back_up(r);
-				puts("TOK_MINUS");
+				token->type = TOK_MINUS;
 			}
 
 			break;
 
 		case '*':
 			if (read_char(r) == '=') {
-				puts("TOK_MULT_ASSIGN");
+				token->type = TOK_MULT_ASSIGN;
 			} else {
 				back_up(r);
-				puts("TOK_ASTERISK");
+				token->type = TOK_ASTERISK;
 			}
 
 			break;
@@ -148,11 +184,13 @@ void tokenise(const char *input_filename)
 		case '/':
 			switch (read_char(r)) {
 			case '=':
-				puts("TOK_DIVIDE_ASSIGN");
+				token->type = TOK_DIVIDE_ASSIGN;
 				break;
 			case '/':
 				while (read_char(r) != '\n')
 					;
+
+				read_token = false;
 				break;
 			case '*':
 				for (;;) {
@@ -164,20 +202,22 @@ void tokenise(const char *input_filename)
 						back_up(r);
 					}
 				}
+
+				read_token = false;
 				break;
 			default:
 				back_up(r);
-				puts("TOK_DIVIDE");
+				token->type = TOK_DIVIDE;
 			}
 
 			break;
 
 		case '%':
 			if (read_char(r) == '=') {
-				puts("TOK_MOD_ASSIGN");
+				token->type = TOK_MOD_ASSIGN;
 			} else {
 				back_up(r);
-				puts("TOK_MOD");
+				token->type = TOK_MOD;
 			}
 
 			break;
@@ -185,14 +225,14 @@ void tokenise(const char *input_filename)
 		case '&':
 			switch (read_char(r)) {
 			case '&':
-				puts("TOK_LOGICAL_AND");
+				token->type = TOK_LOGICAL_AND;
 				break;
 			case '=':
-				puts("TOK_BIT_AND_ASSIGN");
+				token->type = TOK_BIT_AND_ASSIGN;
 				break;
 			default:
 				back_up(r);
-				puts("TOK_AMPERSAND");
+				token->type = TOK_AMPERSAND;
 			}
 
 			break;
@@ -200,44 +240,44 @@ void tokenise(const char *input_filename)
 		case '|':
 			switch (read_char(r)) {
 			case '|':
-				puts("TOK_LOGICAL_OR");
+				token->type = TOK_LOGICAL_OR;
 				break;
 			case '=':
-				puts("TOK_BIT_OR_ASSIGN");
+				token->type = TOK_BIT_OR_ASSIGN;
 				break;
 			default:
 				back_up(r);
-				puts("TOK_BIT_OR");
+				token->type = TOK_BIT_OR;
 			}
 
 			break;
 
 		case '^':
 			if (read_char(r) == '=') {
-				puts("TOK_BIT_XOR_ASSIGN");
+				token->type = TOK_BIT_XOR_ASSIGN;
 			} else {
 				back_up(r);
-				puts("TOK_BIT_XOR");
+				token->type = TOK_BIT_XOR;
 			}
 
 			break;
 
 		case '=':
 			if (read_char(r) == '=') {
-				puts("TOK_EQUAL");
+				token->type = TOK_EQUAL;
 			} else {
 				back_up(r);
-				puts("TOK_ASSIGN");
+				token->type = TOK_ASSIGN;
 			}
 
 			break;
 
 		case '!':
 			if (read_char(r) == '=') {
-				puts("TOK_NOT_EQUAL");
+				token->type = TOK_NOT_EQUAL;
 			} else {
 				back_up(r);
-				puts("TOK_NOT");
+				token->type = TOK_NOT;
 			}
 
 			break;
@@ -245,19 +285,19 @@ void tokenise(const char *input_filename)
 		case '<':
 			switch (read_char(r)) {
 			case '=':
-				puts("TOK_LESS_THAN_OR_EQUAL");
+				token->type = TOK_LESS_THAN_OR_EQUAL;
 				break;
 			case '<':
 				if (read_char(r) == '=') {
-					puts("TOK_LEFT_SHIFT_ASSIGN");
+					token->type = TOK_LEFT_SHIFT_ASSIGN;
 				} else {
 					back_up(r);
-					puts("TOK_LEFT_SHIFT");
+					token->type = TOK_LEFT_SHIFT;
 				}
 				break;
 			default:
 				back_up(r);
-				puts("TOK_LESS_THAN");
+				token->type = TOK_LESS_THAN;
 			}
 
 			break;
@@ -265,29 +305,29 @@ void tokenise(const char *input_filename)
 		case '>':
 			switch (read_char(r)) {
 			case '=':
-				puts("TOK_GREATER_THAN_OR_EQUAL");
+				token->type = TOK_GREATER_THAN_OR_EQUAL;
 				break;
 			case '>':
 				if (read_char(r) == '=') {
-					puts("TOK_RIGHT_SHIFT_ASSIGN");
+					token->type = TOK_RIGHT_SHIFT_ASSIGN;
 				} else {
 					back_up(r);
-					puts("TOK_RIGHT_SHIFT");
+					token->type = TOK_RIGHT_SHIFT;
 				}
 				break;
 			default:
 				back_up(r);
-				puts("TOK_GREATER_THAN");
+				token->type = TOK_GREATER_THAN;
 			}
 
 			break;
 
 		case '#':
 			if (read_char(r) == '#') {
-				puts("TOK_DOUBLE_HASH");
+				token->type = TOK_DOUBLE_HASH;
 			} else {
 				back_up(r);
-				puts("TOK_HASH");
+				token->type = TOK_HASH;
 			}
 
 			break;
@@ -295,36 +335,38 @@ void tokenise(const char *input_filename)
 		case '.':
 			if (read_char(r) == '.') {
 				if (read_char(r) == '.') {
-					puts("TOK_ELLIPSIS");
+					token->type = TOK_ELLIPSIS;
 				} else {
 					back_up(r);
 					back_up(r);
-					puts("TOK_DOT");
+					token->type = TOK_DOT;
 				}
 			} else {
 				back_up(r);
-				puts("TOK_DOT");
+				token->type = TOK_DOT;
 			}
 
 			break;
 
-		case '~': puts("TOK_BIT_NOT"); break;
-		case '?': puts("TOK_QUESTION_MARK"); break;
-		case ':': puts("TOK_COLON"); break;
-		case ';': puts("TOK_SEMICOLON"); break;
-		case ',': puts("TOK_COMMA"); break;
+		case '~': token->type = TOK_BIT_NOT; break;
+		case '?': token->type = TOK_QUESTION_MARK; break;
+		case ':': token->type = TOK_COLON; break;
+		case ';': token->type = TOK_SEMICOLON; break;
+		case ',': token->type = TOK_COMMA; break;
 
-		case '{': puts("TOK_LCURLY"); break;
-		case '}': puts("TOK_RCURLY"); break;
-		case '(': puts("TOK_LROUND"); break;
-		case ')': puts("TOK_RROUND"); break;
-		case '[': puts("TOK_LSQUARE"); break;
-		case ']': puts("TOK_RSQUARE"); break;
+		case '{': token->type = TOK_LCURLY; break;
+		case '}': token->type = TOK_RCURLY; break;
+		case '(': token->type = TOK_LROUND; break;
+		case ')': token->type = TOK_RROUND; break;
+		case '[': token->type = TOK_LSQUARE; break;
+		case ']': token->type = TOK_RSQUARE; break;
 
 		case ' ': case '\t': case '\n':
-			  break;
+			read_token = false;
+			break;
 
-		default:
+		default: {
+			u32 start_index = reader.position;
 			for (;;) {
 				char c = peek_char(r);
 				if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
@@ -334,8 +376,21 @@ void tokenise(const char *input_filename)
 				advance(r);
 			}
 
-			puts("TOK_SYMBOL");
+			u32 size = reader.position - start_index + 1;
+
+			token->type = TOK_SYMBOL;
+			char *str = malloc(size);
+			strncpy(str, reader.buffer + start_index, size - 1);
+			str[size - 1] = '\0';
+
+			token->val.symbol_or_string_literal = str;
 			break;
 		}
+		}
+
+		assert(!read_token || token->type != TOK_INVALID);
 	}
+
+	if (!read_token)
+		array_delete_last(tokens);
 }
