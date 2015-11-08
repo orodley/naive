@@ -18,6 +18,9 @@ int main(int argc, char *argv[])
 	for (u32 i = 0; i < tokens.size; i++) {
 		Token *token = array_ref(&tokens, i);
 		printf("%d\n", token->type);
+
+		if (token->type == TOK_SYMBOL || token->type == TOK_STRING_LITERAL)
+			printf("\t%s\n", token->val.symbol_or_string_literal);
 	}
 
 	return 0;

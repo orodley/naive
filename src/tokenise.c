@@ -127,7 +127,7 @@ void tokenise(Array *tokens, const char *input_filename)
 					break;
 			}
 
-			u32 size = reader.position - start_index + 1;
+			u32 size = ((reader.position - 1) - start_index) + 1;
 
 			token->type = TOK_STRING_LITERAL;
 			char *str = malloc(size);
@@ -366,7 +366,7 @@ void tokenise(Array *tokens, const char *input_filename)
 			break;
 
 		default: {
-			u32 start_index = reader.position;
+			u32 start_index = reader.position - 1;
 			for (;;) {
 				char c = peek_char(r);
 				if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
