@@ -47,12 +47,10 @@ typedef struct Reader
 	char *buffer;
 	u32 position;
 	u32 length;
-} Reader;
 
-static inline char read_char(Reader *reader)
-{
-	return reader->buffer[reader->position++];
-}
+	u32 line;
+	u32 column;
+} Reader;
 
 static inline char peek_char(Reader *reader)
 {
@@ -61,11 +59,32 @@ static inline char peek_char(Reader *reader)
 
 static inline void advance(Reader *reader)
 {
+	if (peek_char(reader) == '\n') {
+		reader->line++;
+		reader->column = 1;
+	} else {
+		reader->column++;
+	}
+
 	reader->position++;
+}
+
+static inline char read_char(Reader *reader)
+{
+	char c = peek_char(reader);
+	advance(reader);
+
+	return c;
 }
 
 static inline void back_up(Reader *reader)
 {
+	// We should never need to back up over a newline. We assert that we don't
+	// because if we did we'd need to keep track of the previous lines length
+	// to preserve source information.
+	assert(peek_char(reader) != '\n');
+
+	reader->column--;
 	reader->position--;
 }
 
@@ -77,23 +96,29 @@ void tokenise(Array *tokens, const char *input_filename)
 	if (buffer.buffer == NULL)
 		return;
 
-	// TODO: 500 tokens is a quick estimate. We should do some actual
-	// measurement and determine a good value for this.
-	array_init(tokens, sizeof(Token), 500);
+	// TODO: 500 tokens is a quick estimate of a reasonable minimum. We should
+	// do some more thorough measurement and determine a good value for this.
+	array_init(tokens, sizeof(SourceToken), 500);
 
-	Reader reader = (Reader) { buffer.buffer, 0, (u32)buffer.length };
+	Reader reader = { buffer.buffer, 0, (u32)buffer.length, 1, 1 };
 	Reader *r = &reader;
 
-	Token *token;
+	SourceToken *source_token;
 	bool read_token = true;
 	while (reader.position < reader.length) {
 		if (read_token) {
-			token = array_append(tokens);
-			token->type = TOK_INVALID;
+			source_token = array_append(tokens);
+			source_token->token.type = TOK_INVALID;
 		}
 
+		source_token->source_loc.filename = input_filename;
+		source_token->source_loc.line = reader.line;
+		source_token->source_loc.column = reader.column;
+
+		Token *token = &source_token->token;
+
 		// We read tokens more often than not, so set it here and override it
-		// later in the few cases where necessary.
+		// later in the few cases where it's necessary.
 		read_token = true;
 
 		switch (read_char(r)) {

@@ -90,6 +90,19 @@ typedef struct Token
 	} val;
 } Token;
 
+typedef struct SourceLoc
+{
+	const char *filename;
+	u32 line;
+	u32 column;
+} SourceLoc;
+
+typedef struct SourceToken
+{
+	Token token;
+	SourceLoc source_loc;
+} SourceToken;
+
 void tokenise(Array *tokens, const char *input_filename);
 
 #endif
