@@ -99,6 +99,8 @@ typedef struct SourceLoc
 
 typedef struct SourceToken
 {
+	// This is deliberately at the start, so that pointers to SourceTokens can
+	// be treated as pointers to Tokens.
 	Token token;
 	SourceLoc source_loc;
 } SourceToken;

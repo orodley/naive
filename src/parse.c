@@ -32,7 +32,12 @@ static inline Token *current_token(Reader *reader)
 
 static inline bool expect_token(Reader *reader, TokenType type)
 {
-	return read_token(reader)->type == type;
+	if (current_token(reader)->type == type) {
+		read_token(reader);
+		return true;
+	}
+
+	return false;
 }
 
 static inline bool expect_keyword(Reader *reader, const char *keyword)
@@ -41,6 +46,17 @@ static inline bool expect_keyword(Reader *reader, const char *keyword)
 	return (token->type == TOK_SYMBOL) &&
 		(strcmp(token->val.symbol_or_string_literal, keyword) == 0);
 }
+
+static inline SourceLoc *token_context(Token *token)
+{
+	return &((SourceToken *)token)->source_loc;
+}
+
+static inline SourceLoc *reader_context(Reader *reader)
+{
+	return token_context(current_token(reader));
+}
+
 
 static ASTType *parse_type(Reader *reader)
 {
@@ -51,7 +67,7 @@ static ASTType *parse_type(Reader *reader)
 
 		return type_spec;
 	} else {
-		issue_error("Expected symbol");
+		issue_error(token_context(token), "Expected symbol");
 		return NULL;
 	}
 }
@@ -60,7 +76,7 @@ static ASTExpression *parse_expr(Reader *reader)
 {
 	Token *token = read_token(reader);
 	if (token->type != TOK_INT_LITERAL) {
-		issue_error("Expected integer literal");
+		issue_error(token_context(token), "Expected integer literal");
 		return NULL;
 	}
 
@@ -74,7 +90,7 @@ static ASTExpression *parse_expr(Reader *reader)
 static ASTStatement *parse_statement(Reader *reader)
 {
 	if (!expect_keyword(reader, "return")) {
-		issue_error("Expected 'return'");
+		issue_error(reader_context(reader), "Expected 'return'");
 		return NULL;
 	}
 
@@ -83,7 +99,7 @@ static ASTStatement *parse_statement(Reader *reader)
 		return NULL;
 
 	if (!expect_token(reader, TOK_SEMICOLON)) {
-		issue_error("Expected ';'");
+		issue_error(reader_context(reader), "Expected ';'");
 		return NULL;
 	}
 
@@ -94,6 +110,8 @@ static ASTStatement *parse_statement(Reader *reader)
 	return statement;
 }
 
+// The input array consists of SourceToken*s, but we treat them as Token*s most
+// of the time.
 ASTToplevel *parse_toplevel(Array *tokens)
 {
 	Reader _reader = { tokens, 0 };
@@ -108,13 +126,13 @@ ASTToplevel *parse_toplevel(Array *tokens)
 
 	Token *identifier = read_token(reader);
 	if (identifier->type != TOK_SYMBOL) {
-		issue_error("Expected identifier");
+		issue_error(token_context(identifier), "Expected identifier");
 		return NULL;
 	}
 	result->val.function_def.name = identifier->val.symbol_or_string_literal;
 
 	if (!expect_token(reader, TOK_LROUND)) {
-		issue_error("Expected '('");
+		issue_error(reader_context(reader), "Expected '('");
 		return NULL;
 	}
 
@@ -128,7 +146,7 @@ ASTToplevel *parse_toplevel(Array *tokens)
 
 		Token *identifier = read_token(reader);
 		if (identifier->type != TOK_SYMBOL) {
-			issue_error("Expected identifier");
+			issue_error(token_context(identifier), "Expected identifier");
 			return NULL;
 		}
 
@@ -142,13 +160,13 @@ ASTToplevel *parse_toplevel(Array *tokens)
 		if (comma_or_close_bracket->type == TOK_RROUND)
 			break;
 		if (comma_or_close_bracket->type != TOK_COMMA) {
-			issue_error("Expected ')'");
+			issue_error(token_context(comma_or_close_bracket), "Expected ')'");
 			return NULL;
 		}
 	}
 
 	if (!expect_token(reader, TOK_LCURLY)) {
-		issue_error("Expected '{'");
+		issue_error(reader_context(reader), "Expected '{'");
 		return NULL;
 	}
 

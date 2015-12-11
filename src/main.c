@@ -29,7 +29,8 @@ int main(int argc, char *argv[])
 	}
 
 	ASTToplevel *ast = parse_toplevel(&tokens);
-	dump_toplevel(ast);
+	if (ast != NULL)
+		dump_toplevel(ast);
 
 	return 0;
 }
