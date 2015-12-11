@@ -2,6 +2,7 @@
 #include "array.h"
 #include "misc.h"
 #include "tokenise.h"
+#include "parse.h"
 
 int main(int argc, char *argv[])
 {
@@ -26,6 +27,9 @@ int main(int argc, char *argv[])
 		if (type == TOK_SYMBOL || type == TOK_STRING_LITERAL)
 			printf("\t%s\n", source_token->token.val.symbol_or_string_literal);
 	}
+
+	ASTToplevel *ast = parse_toplevel(&tokens);
+	dump_toplevel(ast);
 
 	return 0;
 }

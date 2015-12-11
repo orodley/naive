@@ -18,7 +18,7 @@ typedef struct InputBuffer
 	size_t length;
 } InputBuffer;
 
-#define INVALID_INPUT_BUFFER ((InputBuffer) { NULL, -1 })
+#define INVALID_INPUT_BUFFER ((InputBuffer) { NULL, 0 })
 
 // @PORT
 InputBuffer map_file_into_memory(const char *filename)

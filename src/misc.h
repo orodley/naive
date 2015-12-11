@@ -4,6 +4,7 @@
 #define NAIVE_MISC_H_
 
 #include <stdint.h>
+#include <inttypes.h>
 
 typedef uint8_t  u8;
 typedef  int8_t  i8;

@@ -1,6 +1,6 @@
 NAME := ncc
 CC ?= clang
-CFLAGS := -std=c99 -Werror -Wall -Wextra -Wstrict-prototypes
+CFLAGS += -std=c99 -Werror -Wall -Wextra -Wstrict-prototypes
 
 OBJS := $(patsubst src/%.c, src/%.o, $(wildcard src/*.c))
 
