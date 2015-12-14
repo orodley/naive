@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "array.h"
+#include "ir_gen.h"
 #include "misc.h"
 #include "tokenise.h"
 #include "parse.h"
@@ -29,8 +30,18 @@ int main(int argc, char *argv[])
 	}
 
 	ASTToplevel *ast = parse_toplevel(&tokens);
-	if (ast != NULL)
-		dump_toplevel(ast);
+	if (ast == NULL)
+		return 1;
+
+	dump_toplevel(ast);
+	TransUnit tu;
+	trans_unit_init(&tu);
+	Builder builder;
+	builder_init(&builder);
+
+	ir_gen_function(&tu, &builder, ast);
+
+	dump_trans_unit(&tu);
 
 	return 0;
 }

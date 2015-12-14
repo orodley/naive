@@ -18,4 +18,6 @@ typedef  int64_t i64;
 #include <stdbool.h>
 #include <stddef.h>
 
+#define UNUSED(x) (void)x
+
 #endif
