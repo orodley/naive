@@ -1,13 +1,42 @@
+#include <assert.h>
+#include <string.h>
+#include <stdlib.h>
+
 #include "ir.h"
 #include "parse.h"
 
 static void ir_gen_statement(Builder *builder, ASTStatement *statement);
-static Instr *ir_gen_expression(Builder *builder, ASTExpression *expr);
+static Value ir_gen_expression(Builder *builder, ASTExpression *expr);
+
+static struct { const char *name; IrType type; } primitive_types[] =
+{
+	{ "int", { .bit_width = 32 } },
+};
+
+static IrType *look_up_type(ASTType *type_spec)
+{
+	for (u32 i = 0; i < ARRAY_SIZE(primitive_types); i++)
+		if (strcmp(type_spec->name, primitive_types[i].name) == 0)
+			return &primitive_types[i].type;
+
+	UNREACHABLE;
+}
 
 void ir_gen_function(TransUnit *tu, Builder *builder, ASTToplevel *ast)
 {
-	Function *f = trans_unit_add_function(
-			tu, ast->val.function_def.name, ast->val.function_def.arguments.size);
+	Array *arguments = &ast->val.function_def.arguments;
+	u32 arity = arguments->size;
+
+	IrType *arg_types = malloc(sizeof(*arg_types) * arity);
+	for (u32 i = 0; i < arity; i++) {
+		ASTVar *var = *(ASTVar **)array_ref(arguments, i);
+		arg_types[i] = *look_up_type(var->type);
+	}
+
+	IrType *return_type = look_up_type(ast->val.function_def.return_type);
+
+	Function *f = trans_unit_add_function(tu, ast->val.function_def.name,
+			return_type, arity, arg_types);
 	builder->function = f;
 	builder->current_block = &f->entry_block;
 
@@ -30,7 +59,7 @@ static void ir_gen_statement(Builder *builder, ASTStatement *statement)
 	}
 
 	case AST_RETURN_STATEMENT: {
-		Instr *value = ir_gen_expression(builder, statement->val.return_value);
+		Value value = ir_gen_expression(builder, statement->val.return_value);
 		Block *ret_block = &builder->function->ret_block;
 		build_branch(builder, ret_block, value);
 		break;
@@ -38,12 +67,12 @@ static void ir_gen_statement(Builder *builder, ASTStatement *statement)
 	}
 }
 
-static Instr *ir_gen_expression(Builder *builder, ASTExpression *expr)
+static Value ir_gen_expression(Builder *builder, ASTExpression *expr)
 {
 	UNUSED(builder);
 
 	switch (expr->type) {
 	case AST_INTEGER_LITERAL:
-		return build_const(builder, expr->val.integer_literal);
+		return value_const(expr->val.integer_literal);
 	}
 }

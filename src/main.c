@@ -41,6 +41,8 @@ int main(int argc, char *argv[])
 
 	ir_gen_function(&tu, &builder, ast);
 
+	putchar('\n');
+
 	dump_trans_unit(&tu);
 
 	return 0;

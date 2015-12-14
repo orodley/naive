@@ -19,5 +19,7 @@ typedef  int64_t i64;
 #include <stddef.h>
 
 #define UNUSED(x) (void)x
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
+#define UNREACHABLE assert(!"This should never be reached")
 
 #endif
