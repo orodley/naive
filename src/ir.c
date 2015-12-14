@@ -26,15 +26,25 @@ static inline void block_init(Block *block, const char *name,
 }
 
 Function *trans_unit_add_function(TransUnit *tu, const char *name,
-		IrType *return_type, u32 arity, IrType *arg_types)
+		IrType return_type, u32 arity, IrType *arg_types)
 {
 	Function *new_func = array_append(&tu->functions);
 
 	new_func->name = name;
 	block_init(&new_func->entry_block, "entry", arity, arg_types);
-	block_init(&new_func->ret_block, "ret", 1, return_type);
+	block_init(&new_func->ret_block, "ret", 1, &return_type);
 
 	return new_func;
+}
+
+static inline IrType function_return_type(Function *f)
+{
+	return f->ret_block.args[0].type;
+}
+
+static inline void dump_type(IrType type)
+{
+	printf("i%d", type.bit_width);
 }
 
 static void dump_value(Value value)
@@ -68,8 +78,18 @@ void dump_trans_unit(TransUnit *tu)
 	for (u32 i = 0; i < functions->size; i++) {
 		Function *f = array_ref(functions, i);
 
-		printf("%s(%d)\n", f->name, f->entry_block.arity);
-		puts("{");
+		dump_type(function_return_type(f));
+		printf(" %s(", f->name);
+		Arg *args = f->entry_block.args;
+		for (u32 i = 0; i < f->entry_block.arity; i++) {
+			IrType arg_type = args[i].type;
+			dump_type(arg_type);
+
+			if (i != f->entry_block.arity - 1)
+				fputs(", ", stdout);
+		}
+
+		puts(")\n{");
 
 		Block *block = &f->entry_block;
 		for (;;) {

@@ -13,11 +13,11 @@ static struct { const char *name; IrType type; } primitive_types[] =
 	{ "int", { .bit_width = 32 } },
 };
 
-static IrType *look_up_type(ASTType *type_spec)
+static IrType look_up_type(ASTType *type_spec)
 {
 	for (u32 i = 0; i < ARRAY_SIZE(primitive_types); i++)
 		if (strcmp(type_spec->name, primitive_types[i].name) == 0)
-			return &primitive_types[i].type;
+			return primitive_types[i].type;
 
 	UNREACHABLE;
 }
@@ -30,10 +30,10 @@ void ir_gen_function(TransUnit *tu, Builder *builder, ASTToplevel *ast)
 	IrType *arg_types = malloc(sizeof(*arg_types) * arity);
 	for (u32 i = 0; i < arity; i++) {
 		ASTVar *var = *(ASTVar **)array_ref(arguments, i);
-		arg_types[i] = *look_up_type(var->type);
+		arg_types[i] = look_up_type(var->type);
 	}
 
-	IrType *return_type = look_up_type(ast->val.function_def.return_type);
+	IrType return_type = look_up_type(ast->val.function_def.return_type);
 
 	Function *f = trans_unit_add_function(tu, ast->val.function_def.name,
 			return_type, arity, arg_types);

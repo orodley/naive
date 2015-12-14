@@ -85,7 +85,7 @@ typedef struct Arg
 
 void trans_unit_init(TransUnit *tu);
 Function *trans_unit_add_function(TransUnit *tu, const char *name,
-		IrType *return_type, u32 arity, IrType *arg_types);
+		IrType return_type, u32 arity, IrType *arg_types);
 void dump_trans_unit(TransUnit *tu);
 
 void builder_init(Builder *builder);
