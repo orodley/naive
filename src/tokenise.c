@@ -88,7 +88,7 @@ static inline void back_up(Reader *reader)
 	reader->position--;
 }
 
-// TODO: Replace with a finite state machine
+// @IMPROVE: Replace with a finite state machine
 void tokenise(Array *tokens, const char *input_filename)
 {
 	InputBuffer buffer = map_file_into_memory(input_filename);
@@ -96,7 +96,7 @@ void tokenise(Array *tokens, const char *input_filename)
 	if (buffer.buffer == NULL)
 		return;
 
-	// TODO: 500 tokens is a quick estimate of a reasonable minimum. We should
+	// @TUNE: 500 tokens is a quick estimate of a reasonable minimum. We should
 	// do some more thorough measurement and determine a good value for this.
 	array_init(tokens, sizeof(SourceToken), 500);
 

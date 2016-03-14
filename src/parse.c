@@ -8,7 +8,7 @@
 #include "parse.h"
 #include "tokenise.h"
 
-// TODO: Allocate everything from a pool. Then we can just free the whole pool
+// @TODO: Allocate everything from a pool. Then we can just free the whole pool
 // afterwards.
 
 typedef struct Reader
