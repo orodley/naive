@@ -2,9 +2,6 @@
 #include <stdio.h>
 #include "diagnostics.h"
 
-// TODO: We should pass some context for this so we can print line numbers and
-// stuff.
-
 static void v_issue_diagnostic(ErrorLevel err_level,
 		SourceLoc *context, const char *fmt, va_list varargs)
 {
