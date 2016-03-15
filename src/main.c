@@ -14,11 +14,11 @@ int main(int argc, char *argv[])
 
 	char *input_filename = argv[1];
 
-	Array tokens;
+	Array(SourceToken) tokens;
 	tokenise(&tokens, input_filename);
 
 	for (u32 i = 0; i < tokens.size; i++) {
-		SourceToken *source_token = array_ref(&tokens, i);
+		SourceToken *source_token = ARRAY_REF(&tokens, SourceToken, i);
 		u32 line = source_token->source_loc.line;
 		u32 column = source_token->source_loc.column;
 

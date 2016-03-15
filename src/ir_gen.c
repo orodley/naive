@@ -24,12 +24,12 @@ static IrType look_up_type(ASTType *type_spec)
 
 void ir_gen_function(TransUnit *tu, Builder *builder, ASTToplevel *ast)
 {
-	Array *arguments = &ast->val.function_def.arguments;
+	Array(ASTVar *) *arguments = &ast->val.function_def.arguments;
 	u32 arity = arguments->size;
 
 	IrType *arg_types = malloc(sizeof(*arg_types) * arity);
 	for (u32 i = 0; i < arity; i++) {
-		ASTVar *var = *(ASTVar **)array_ref(arguments, i);
+		ASTVar *var = *ARRAY_REF(arguments, ASTVar *, i);
 		arg_types[i] = look_up_type(var->type);
 	}
 
@@ -47,10 +47,10 @@ static void ir_gen_statement(Builder *builder, ASTStatement *statement)
 {
 	switch (statement->type) {
 	case AST_COMPOUND_STATEMENT: {
-		Array *statements = &statement->val.statements;
+		Array(ASTStatement *) *statements = &statement->val.statements;
 		for (u32 i = 0; i < statements->size; i++) {
 			ASTStatement *sub_statement =
-				*(ASTStatement **)array_ref(statements, i);
+				*ARRAY_REF(statements, ASTStatement *, i);
 
 			ir_gen_statement(builder, sub_statement);
 		}

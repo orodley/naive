@@ -99,12 +99,12 @@ typedef struct SourceLoc
 
 typedef struct SourceToken
 {
-	// This is deliberately at the start, so that pointers to SourceTokens can
-	// be treated as pointers to Tokens.
+	// @NOTE: This is deliberately at the start, so that pointers to
+	// SourceTokens can be treated as pointers to Tokens.
 	Token token;
 	SourceLoc source_loc;
 } SourceToken;
 
-void tokenise(Array *tokens, const char *input_filename);
+void tokenise(Array(SourceToken) *tokens, const char *input_filename);
 
 #endif

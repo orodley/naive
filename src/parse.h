@@ -45,7 +45,7 @@ typedef struct ASTStatement
 
 	union
 	{
-		Array statements;
+		Array(ASTStatement *) statements;
 		ASTExpression *return_value;
 	} val;
 } ASTStatement;
@@ -63,13 +63,13 @@ typedef struct ASTToplevel
 		{
 			ASTType *return_type;
 			char *name;
-			Array arguments;
+			Array(ASTVar *) arguments;
 			ASTStatement *body;
 		} function_def;
 	} val;
 } ASTToplevel;
 
 void dump_toplevel(ASTToplevel *ast);
-ASTToplevel *parse_toplevel(Array *tokens);
+ASTToplevel *parse_toplevel(Array(SourceToken) *tokens);
 
 #endif

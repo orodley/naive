@@ -89,7 +89,7 @@ static inline void back_up(Reader *reader)
 }
 
 // @IMPROVE: Replace with a finite state machine
-void tokenise(Array *tokens, const char *input_filename)
+void tokenise(Array(SourceToken) *tokens, const char *input_filename)
 {
 	InputBuffer buffer = map_file_into_memory(input_filename);
 
@@ -98,7 +98,7 @@ void tokenise(Array *tokens, const char *input_filename)
 
 	// @TUNE: 500 tokens is a quick estimate of a reasonable minimum. We should
 	// do some more thorough measurement and determine a good value for this.
-	array_init(tokens, sizeof(SourceToken), 500);
+	ARRAY_INIT(tokens, SourceToken, 500);
 
 	Reader reader = { buffer.buffer, 0, (u32)buffer.length, 1, 1 };
 	Reader *r = &reader;
@@ -107,7 +107,7 @@ void tokenise(Array *tokens, const char *input_filename)
 	bool read_token = true;
 	while (reader.position < reader.length) {
 		if (read_token) {
-			source_token = array_append(tokens);
+			source_token = ARRAY_APPEND(tokens, SourceToken);
 			source_token->token.type = TOK_INVALID;
 		}
 

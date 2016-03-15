@@ -6,7 +6,7 @@
 
 typedef struct TransUnit
 {
-	Array functions;
+	Array(Function) functions;
 } TransUnit;
 
 typedef struct Block
@@ -15,7 +15,7 @@ typedef struct Block
 
 	u32 arity;
 	struct Arg *args;
-	Array instrs;
+	Array(Instr) instrs;
 } Block;
 
 typedef struct Function

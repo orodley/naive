@@ -7,7 +7,7 @@
 
 void trans_unit_init(TransUnit *tu)
 {
-	array_init(&tu->functions, sizeof(Function), 10);
+	ARRAY_INIT(&tu->functions, Function, 10);
 }
 
 static inline void block_init(Block *block, const char *name,
@@ -22,13 +22,13 @@ static inline void block_init(Block *block, const char *name,
 		arg->type = arg_types[i];
 	}
 
-	array_init(&block->instrs, sizeof(Instr), 10);
+	ARRAY_INIT(&block->instrs, Instr, 10);
 }
 
 Function *trans_unit_add_function(TransUnit *tu, const char *name,
 		IrType return_type, u32 arity, IrType *arg_types)
 {
-	Function *new_func = array_append(&tu->functions);
+	Function *new_func = ARRAY_APPEND(&tu->functions, Function);
 
 	new_func->name = name;
 	block_init(&new_func->entry_block, "entry", arity, arg_types);
@@ -74,9 +74,9 @@ static void dump_instr(Instr *instr)
 
 void dump_trans_unit(TransUnit *tu)
 {
-	Array *functions = &tu->functions;
+	Array(Function) *functions = &tu->functions;
 	for (u32 i = 0; i < functions->size; i++) {
-		Function *f = array_ref(functions, i);
+		Function *f = ARRAY_REF(functions, Function, i);
 
 		dump_type(function_return_type(f));
 		printf(" %s(", f->name);
@@ -95,9 +95,9 @@ void dump_trans_unit(TransUnit *tu)
 		for (;;) {
 			printf("%s(%d):\n", block->name, block->arity);
 
-			Array *instrs = &block->instrs;
+			Array(Instr) *instrs = &block->instrs;
 			for (u32 i = 0; i < instrs->size; i++) {
-				Instr *instr = array_ref(instrs, i);
+				Instr *instr = ARRAY_REF(instrs, Instr, i);
 				putchar('\t');
 				dump_instr(instr);
 			}
@@ -105,7 +105,7 @@ void dump_trans_unit(TransUnit *tu)
 			if (instrs->size == 0)
 				break;
 
-			Instr *last_instr = array_ref(instrs, instrs->size - 1);
+			Instr *last_instr = ARRAY_REF(instrs, Instr, instrs->size - 1);
 			assert(last_instr->op == OP_BRANCH);
 			block = last_instr->val.branch.target_block;
 		}
@@ -124,7 +124,7 @@ void builder_init(Builder *builder)
 
 static inline Instr *append_instr(Block *block)
 {
-	Instr *instr = array_append(&block->instrs);
+	Instr *instr = ARRAY_APPEND(&block->instrs, Instr);
 	instr->id = block->instrs.size + block->arity - 1;
 	return instr;
 }

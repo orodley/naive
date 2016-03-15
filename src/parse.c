@@ -13,21 +13,21 @@
 
 typedef struct Reader
 {
-	Array *tokens;
+	Array(SourceToken) *tokens;
 	u32 index;
 } Reader;
 
 static Token *read_token(Reader *reader)
 {
-	Token *token = array_ref(reader->tokens, reader->index);
+	SourceToken *token = ARRAY_REF(reader->tokens, SourceToken, reader->index);
 	reader->index++;
 
-	return token;
+	return (Token *)token;
 }
 
 static inline Token *current_token(Reader *reader)
 {
-	return array_ref(reader->tokens, reader->index);
+	return (Token *)ARRAY_REF(reader->tokens, SourceToken, reader->index);
 }
 
 static inline bool expect_token(Reader *reader, TokenType type)
@@ -112,7 +112,7 @@ static ASTStatement *parse_statement(Reader *reader)
 
 // The input array consists of SourceToken*s, but we treat them as Token*s most
 // of the time.
-ASTToplevel *parse_toplevel(Array *tokens)
+ASTToplevel *parse_toplevel(Array(SourceToken) *tokens)
 {
 	Reader _reader = { tokens, 0 };
 	Reader *reader = &_reader;
@@ -136,8 +136,8 @@ ASTToplevel *parse_toplevel(Array *tokens)
 		return NULL;
 	}
 
-	Array *arguments = &result->val.function_def.arguments;
-	array_init(arguments, sizeof(ASTVar *), 3);
+	Array(ASTVar *) *arguments = &result->val.function_def.arguments;
+	ARRAY_INIT(arguments, ASTVar *, 3);
 
 	for (;;) {
 		ASTType *arg_type = parse_type(reader);
@@ -154,7 +154,7 @@ ASTToplevel *parse_toplevel(Array *tokens)
 		argument->name = identifier->val.symbol_or_string_literal;
 		argument->type = arg_type;
 
-		*(ASTVar **)array_append(arguments) = argument;
+		*ARRAY_APPEND(arguments, ASTVar *) = argument;
 
 		Token *comma_or_close_bracket = read_token(reader);
 		if (comma_or_close_bracket->type == TOK_RROUND)
@@ -172,8 +172,8 @@ ASTToplevel *parse_toplevel(Array *tokens)
 
 	ASTStatement *body = malloc(sizeof *body);
 	body->type = AST_COMPOUND_STATEMENT;
-	Array *statements = &body->val.statements;
-	array_init(statements, sizeof(ASTStatement *), 10);
+	Array(ASTStatement *) *statements = &body->val.statements;
+	ARRAY_INIT(statements, ASTStatement *, 10);
 
 	for (;;) {
 		if (current_token(reader)->type == TOK_RCURLY)
@@ -183,7 +183,7 @@ ASTToplevel *parse_toplevel(Array *tokens)
 		if (statement == NULL)
 			return NULL;
 
-		*(ASTStatement **)array_append(statements) = statement;
+		*ARRAY_APPEND(statements, ASTStatement *) = statement;
 	}
 
 	result->val.function_def.body = body;
@@ -211,9 +211,9 @@ static void dump_statement(ASTStatement *statement)
 	switch (statement->type) {
 	case AST_COMPOUND_STATEMENT:
 		fputs("COMPOUND_STATEMENT(", stdout);
-		Array *statements = &statement->val.statements;
+		Array(ASTStatement *) *statements = &statement->val.statements;
 		for (u32 i = 0; i < statements->size; i++) {
-			dump_statement(*(ASTStatement **)array_ref(statements, i));
+			dump_statement(*ARRAY_REF(statements, ASTStatement *, i));
 			fputs(i == statements->size - 1 ? "" : ", ", stdout);
 		}
 
@@ -238,9 +238,9 @@ void dump_toplevel(ASTToplevel *ast)
 		dump_type(ast->val.function_def.return_type);
 		printf(", %s, (", ast->val.function_def.name);
 
-		Array *args = &ast->val.function_def.arguments;
+		Array(ASTVar) *args = &ast->val.function_def.arguments;
 		for (u32 i = 0; i < args->size; i++) {
-			ASTVar *arg = *(ASTVar **)array_ref(args, i);
+			ASTVar *arg = *ARRAY_REF(args, ASTVar *, i);
 			dump_type(arg->type);
 			printf(" %s%s", arg->name, i == args->size - 1 ? "" : ", ");
 		}
