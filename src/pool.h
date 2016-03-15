@@ -21,5 +21,6 @@ typedef struct Pool
 
 void pool_init(Pool *pool, size_t entry_size);
 void *pool_alloc(Pool *pool, size_t size);
+void pool_free(Pool *pool);
 
 #endif

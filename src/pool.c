@@ -33,7 +33,7 @@ void *pool_alloc(Pool *pool, size_t size)
 	return entry->memory + entry->used - size;
 }
 
-void free_pool(Pool *pool)
+void pool_free(Pool *pool)
 {
 	PoolEntry *entry = pool->first_entry;
 

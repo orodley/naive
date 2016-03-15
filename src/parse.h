@@ -4,6 +4,7 @@
 #include "array.h"
 #include "misc.h"
 #include "tokenise.h"
+#include "pool.h"
 
 typedef struct ParseError
 {
@@ -70,6 +71,6 @@ typedef struct ASTToplevel
 } ASTToplevel;
 
 void dump_toplevel(ASTToplevel *ast);
-ASTToplevel *parse_toplevel(Array(SourceToken) *tokens);
+ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool);
 
 #endif

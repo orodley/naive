@@ -29,7 +29,9 @@ int main(int argc, char *argv[])
 			printf("\t%s\n", source_token->token.val.symbol_or_string_literal);
 	}
 
-	ASTToplevel *ast = parse_toplevel(&tokens);
+	Pool ast_pool;
+	pool_init(&ast_pool, 1024);
+	ASTToplevel *ast = parse_toplevel(&tokens, &ast_pool);
 	if (ast == NULL)
 		return 1;
 
@@ -40,6 +42,8 @@ int main(int argc, char *argv[])
 	builder_init(&builder);
 
 	ir_gen_function(&tu, &builder, ast);
+
+	pool_free(&ast_pool);
 
 	putchar('\n');
 
