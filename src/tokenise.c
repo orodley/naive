@@ -124,6 +124,7 @@ void tokenise(Array(SourceToken) *tokens, const char *input_filename)
 		switch (read_char(r)) {
 		case '0': case '1': case '2': case '3': case '4': case '5': case '6':
 		case '7': case '8': case '9': {
+			back_up(r);
 			i64 value = 0;
 
 			for (;;) {
