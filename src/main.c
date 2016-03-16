@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "array.h"
+#include "asm.h"
 #include "ir_gen.h"
 #include "misc.h"
 #include "tokenise.h"
@@ -36,6 +37,9 @@ int main(int argc, char *argv[])
 		return 1;
 
 	dump_toplevel(ast);
+	puts("\n");
+
+
 	TransUnit tu;
 	trans_unit_init(&tu);
 	Builder builder;
@@ -44,10 +48,15 @@ int main(int argc, char *argv[])
 	ir_gen_function(&tu, &builder, ast);
 
 	pool_free(&ast_pool);
-
-	putchar('\n');
-
 	dump_trans_unit(&tu);
+	puts("\n");
+
+
+	AsmModule asm_module;
+	init_asm_module(&asm_module);
+	generate_asm_module(&tu, &asm_module);
+
+	dump_asm_module(&asm_module);
 
 	return 0;
 }

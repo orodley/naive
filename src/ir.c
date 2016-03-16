@@ -2,12 +2,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "asm.h"
+#include "asm_gen.h"
 #include "ir.h"
 #include "misc.h"
 
 void trans_unit_init(TransUnit *tu)
 {
-	ARRAY_INIT(&tu->functions, Function, 10);
+	ARRAY_INIT(&tu->functions, IrFunction, 10);
 }
 
 static inline void block_init(Block *block, const char *name,
@@ -22,13 +24,13 @@ static inline void block_init(Block *block, const char *name,
 		arg->type = arg_types[i];
 	}
 
-	ARRAY_INIT(&block->instrs, Instr, 10);
+	ARRAY_INIT(&block->instrs, IrInstr, 10);
 }
 
-Function *trans_unit_add_function(TransUnit *tu, const char *name,
+IrFunction *trans_unit_add_function(TransUnit *tu, const char *name,
 		IrType return_type, u32 arity, IrType *arg_types)
 {
-	Function *new_func = ARRAY_APPEND(&tu->functions, Function);
+	IrFunction *new_func = ARRAY_APPEND(&tu->functions, IrFunction);
 
 	new_func->name = name;
 	block_init(&new_func->entry_block, "entry", arity, arg_types);
@@ -37,10 +39,7 @@ Function *trans_unit_add_function(TransUnit *tu, const char *name,
 	return new_func;
 }
 
-static inline IrType function_return_type(Function *f)
-{
-	return f->ret_block.args[0].type;
-}
+extern inline IrType function_return_type(IrFunction *f);
 
 static inline void dump_type(IrType type)
 {
@@ -61,7 +60,7 @@ static void dump_value(Value value)
 	}
 }
 
-static void dump_instr(Instr *instr)
+static void dump_instr(IrInstr *instr)
 {
 	switch (instr->op) {
 	case OP_BRANCH:
@@ -74,9 +73,9 @@ static void dump_instr(Instr *instr)
 
 void dump_trans_unit(TransUnit *tu)
 {
-	Array(Function) *functions = &tu->functions;
+	Array(IrFunction) *functions = &tu->functions;
 	for (u32 i = 0; i < functions->size; i++) {
-		Function *f = ARRAY_REF(functions, Function, i);
+		IrFunction *f = ARRAY_REF(functions, IrFunction, i);
 
 		dump_type(function_return_type(f));
 		printf(" %s(", f->name);
@@ -95,9 +94,9 @@ void dump_trans_unit(TransUnit *tu)
 		for (;;) {
 			printf("%s(%d):\n", block->name, block->arity);
 
-			Array(Instr) *instrs = &block->instrs;
+			Array(IrInstr) *instrs = &block->instrs;
 			for (u32 i = 0; i < instrs->size; i++) {
-				Instr *instr = ARRAY_REF(instrs, Instr, i);
+				IrInstr *instr = ARRAY_REF(instrs, IrInstr, i);
 				putchar('\t');
 				dump_instr(instr);
 			}
@@ -105,7 +104,7 @@ void dump_trans_unit(TransUnit *tu)
 			if (instrs->size == 0)
 				break;
 
-			Instr *last_instr = ARRAY_REF(instrs, Instr, instrs->size - 1);
+			IrInstr *last_instr = ARRAY_REF(instrs, IrInstr, instrs->size - 1);
 			assert(last_instr->op == OP_BRANCH);
 			block = last_instr->val.branch.target_block;
 		}
@@ -122,16 +121,16 @@ void builder_init(Builder *builder)
 	builder->function = NULL;
 }
 
-static inline Instr *append_instr(Block *block)
+static inline IrInstr *append_instr(Block *block)
 {
-	Instr *instr = ARRAY_APPEND(&block->instrs, Instr);
+	IrInstr *instr = ARRAY_APPEND(&block->instrs, IrInstr);
 	instr->id = block->instrs.size + block->arity - 1;
 	return instr;
 }
 
-Instr *build_branch(Builder *builder, Block *block, Value value)
+IrInstr *build_branch(Builder *builder, Block *block, Value value)
 {
-	Instr *i = append_instr(builder->current_block);
+	IrInstr *i = append_instr(builder->current_block);
 	i->op = OP_BRANCH;
 	i->val.branch.target_block = block;
 	i->val.branch.argument = value;
@@ -144,4 +143,12 @@ Value value_const(i64 constant)
 	Value value = { .kind = VALUE_CONST, .val = { .constant = constant } };
 
 	return value;
+}
+
+void generate_asm_module(TransUnit *trans_unit, AsmModule *asm_module)
+{
+	for (u32 i = 0; i < trans_unit->functions.size; i++) {
+		IrFunction *func = ARRAY_REF(&trans_unit->functions, IrFunction, i);
+		asm_gen_function(asm_module, func);
+	}
 }

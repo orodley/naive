@@ -35,7 +35,7 @@ void ir_gen_function(TransUnit *tu, Builder *builder, ASTToplevel *ast)
 
 	IrType return_type = look_up_type(ast->val.function_def.return_type);
 
-	Function *f = trans_unit_add_function(tu, ast->val.function_def.name,
+	IrFunction *f = trans_unit_add_function(tu, ast->val.function_def.name,
 			return_type, arity, arg_types);
 	builder->function = f;
 	builder->current_block = &f->entry_block;
