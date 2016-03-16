@@ -55,9 +55,7 @@ typedef struct Value
 
 	union
 	{
-		// @TODO: Should this be a u64? I think we might want to be signedness
-		// agnostic at this point.
-		i64 constant;
+		u64 constant;
 		struct IrInstr *instr;
 		struct Arg *arg;
 	} val;
@@ -71,7 +69,7 @@ typedef struct IrInstr
 
 	union
 	{
-		i64 constant;
+		u64 constant;
 		struct
 		{
 			Block *target_block;
@@ -100,7 +98,7 @@ void dump_trans_unit(TransUnit *tu);
 void builder_init(Builder *builder);
 IrInstr *build_branch(Builder *builder, Block *block, Value value);
 
-Value value_const(i64 value);
+Value value_const(u64 value);
 
 void generate_asm_module(TransUnit *trans_unit, AsmModule *asm_module);
 

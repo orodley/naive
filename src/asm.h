@@ -31,9 +31,8 @@ typedef struct AsmArg
 	union
 	{
 		Register reg;
-		// @TODO: u64?
-		i32 const32;
-		i64 const64;
+		u32 const32;
+		u64 const64;
 	} val;
 } AsmArg;
 

@@ -106,10 +106,10 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 			}
 			break;
 		case CONST32:
-			printf("%" PRId32, arg->val.const32);
+			printf("%" PRIu32, arg->val.const32);
 			break;
 		case CONST64:
-			printf("%" PRId64, arg->val.const64);
+			printf("%" PRIu64, arg->val.const64);
 			break;
 		}
 	}

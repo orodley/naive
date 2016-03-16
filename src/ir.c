@@ -138,7 +138,7 @@ IrInstr *build_branch(Builder *builder, Block *block, Value value)
 	return i;
 }
 
-Value value_const(i64 constant)
+Value value_const(u64 constant)
 {
 	Value value = { .kind = VALUE_CONST, .val = { .constant = constant } };
 

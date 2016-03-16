@@ -32,7 +32,7 @@ static void asm_gen_instr(
 		assert(ret_value->kind == VALUE_CONST);
 
 		i64 constant = ret_value->val.constant;
-		assert(constant >= INT32_MIN && constant <= INT32_MAX);
+		assert(constant == (constant & 0xFFFFFFFF));
 		emit_instr2(asm_func, MOV, asm_reg(EAX), asm_const32((i32)constant));
 		emit_instr0(asm_func, RET);
 
