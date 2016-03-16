@@ -21,7 +21,7 @@ typedef struct InputBuffer
 #define INVALID_INPUT_BUFFER ((InputBuffer) { NULL, 0 })
 
 // @PORT
-InputBuffer map_file_into_memory(const char *filename)
+static InputBuffer map_file_into_memory(const char *filename)
 {
 	int fd = open(filename, O_RDONLY);
 	if (fd == -1)
@@ -39,6 +39,13 @@ InputBuffer map_file_into_memory(const char *filename)
 	close(fd);
 
 	return (InputBuffer) { buffer, file_size };
+}
+
+// @PORT
+static void unmap_file(InputBuffer buffer)
+{
+	int ret = munmap(buffer.buffer, buffer.length);
+	assert(ret == 0);
 }
 
 
@@ -419,4 +426,6 @@ void tokenise(Array(SourceToken) *tokens, const char *input_filename)
 
 	if (!read_token)
 		array_delete_last(tokens);
+
+	unmap_file(buffer);
 }
