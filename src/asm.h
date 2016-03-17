@@ -5,14 +5,8 @@
 
 typedef struct AsmModule
 {
-	Array(AsmFunction) functions;
+	Array(AsmLine) lines;
 } AsmModule;
-
-typedef struct AsmFunction
-{
-	Array(AsmInstr) instrs;
-	const char *name;
-} AsmFunction;
 
 typedef enum Register
 {
@@ -41,19 +35,31 @@ typedef enum AsmOp
 	MOV, RET,
 } AsmOp;
 
-typedef struct AsmInstr
+typedef struct AsmLine
 {
-	AsmOp op;
+	enum
+	{
+		LABEL,
+		INSTR,
+	} type;
 
-	AsmArg args[2];
-} AsmInstr;
+	union
+	{
+		struct
+		{
+			AsmOp op;
+			AsmArg args[2];
+		} instr;
+
+		const char *label_name;
+	} val;
+} AsmLine;
 
 void init_asm_module(AsmModule *asm_module);
 
-void init_asm_func(AsmFunction *asm_func, const char *name);
-
-void emit_instr0(AsmFunction *asm_func, AsmOp op);
-void emit_instr2(AsmFunction *asm_func, AsmOp op, AsmArg arg1, AsmArg arg2);
+void emit_label(AsmModule *asm_module, const char *name);
+void emit_instr0(AsmModule *asm_module, AsmOp op);
+void emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2);
 
 AsmArg asm_reg(Register reg);
 AsmArg asm_const32(i32 constant);

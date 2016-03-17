@@ -3,33 +3,35 @@
 #include "array.h"
 #include "asm.h"
 
-static void dump_asm_function(AsmFunction *function);
-static void dump_asm_instr(AsmInstr *instr);
+static void dump_asm_line(AsmLine *line);
 static void dump_asm_args(AsmArg *args, u32 num_args);
 
 void init_asm_module(AsmModule *asm_module)
 {
-	ARRAY_INIT(&asm_module->functions, AsmFunction, 10);
+	ARRAY_INIT(&asm_module->lines, AsmLine, 10);
 }
 
-void init_asm_func(AsmFunction *asm_func, const char *name)
+void emit_label(AsmModule *asm_module, const char *name)
 {
-	ARRAY_INIT(&asm_func->instrs, AsmInstr, 25);
-	asm_func->name = name;
+	AsmLine *line = ARRAY_APPEND(&asm_module->lines, AsmLine);
+	line->type = LABEL;
+	line->val.label_name = name;
 }
 
-void emit_instr0(AsmFunction *asm_func, AsmOp op)
+void emit_instr0(AsmModule *asm_module, AsmOp op)
 {
-	AsmInstr *instr = ARRAY_APPEND(&asm_func->instrs, AsmInstr);
-	instr->op = op;
+	AsmLine *line = ARRAY_APPEND(&asm_module->lines, AsmLine);
+	line->type = INSTR;
+	line->val.instr.op = op;
 }
 
-void emit_instr2(AsmFunction *asm_func, AsmOp op, AsmArg arg1, AsmArg arg2)
+void emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2)
 {
-	AsmInstr *instr = ARRAY_APPEND(&asm_func->instrs, AsmInstr);
-	instr->op = op;
-	instr->args[0] = arg1;
-	instr->args[1] = arg2;
+	AsmLine *line = ARRAY_APPEND(&asm_module->lines, AsmLine);
+	line->type = INSTR;
+	line->val.instr.op = op;
+	line->val.instr.args[0] = arg1;
+	line->val.instr.args[1] = arg2;
 }
 
 AsmArg asm_reg(Register reg)
@@ -58,38 +60,31 @@ AsmArg asm_const32(i32 constant)
 
 void dump_asm_module(AsmModule *asm_module)
 {
-	for (u32 i = 0; i < asm_module->functions.size; i++) {
-		AsmFunction *function =
-			ARRAY_REF(&asm_module->functions, AsmFunction, i);
-		dump_asm_function(function);
+	for (u32 i = 0; i < asm_module->lines.size; i++) {
+		AsmLine *line = ARRAY_REF(&asm_module->lines, AsmLine, i);
+		dump_asm_line(line);
 	}
 }
 
-static void dump_asm_function(AsmFunction *function)
+static void dump_asm_line(AsmLine *line)
 {
-	printf("%s:\n", function->name);
-	for (u32 i = 0; i < function->instrs.size; i++) {
-		AsmInstr *instr =
-			ARRAY_REF(&function->instrs, AsmInstr, i);
-		dump_asm_instr(instr);
+	if (line->type == LABEL) {
+		printf("%s:\n", line->val.label_name);
+	} else {
+		putchar('\t');
+
+		switch (line->val.instr.op) {
+			case MOV:
+				fputs("mov ", stdout);
+				dump_asm_args(line->val.instr.args, 2);
+				break;
+			case RET:
+				fputs("ret", stdout);
+				break;
+		}
+
+		putchar('\n');
 	}
-}
-
-static void dump_asm_instr(AsmInstr *instr)
-{
-	putchar('\t');
-
-	switch (instr->op) {
-	case MOV:
-		fputs("mov ", stdout);
-		dump_asm_args(instr->args, 2);
-		break;
-	case RET:
-		fputs("ret", stdout);
-		break;
-	}
-
-	putchar('\n');
 }
 
 static void dump_asm_args(AsmArg *args, u32 num_args)

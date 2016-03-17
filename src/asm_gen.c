@@ -4,24 +4,23 @@
 #include "asm.h"
 
 static void asm_gen_instr(
-		IrFunction *ir_func, AsmFunction *asm_func, IrInstr *instr);
+		IrFunction *ir_func, AsmModule *asm_module, IrInstr *instr);
 
 void asm_gen_function(AsmModule *asm_module, IrFunction *ir_func)
 {
-	AsmFunction *asm_func = ARRAY_APPEND(&asm_module->functions, AsmFunction);
-	init_asm_func(asm_func, ir_func->name);
+	emit_label(asm_module, ir_func->name);
 
 	assert(function_return_type(ir_func).bit_width == 32);
 
 	Block *block = &ir_func->entry_block;
 	Array(IrInstr) *instrs = &block->instrs;
 	for (u32 i = 0; i < instrs->size; i++) {
-		asm_gen_instr(ir_func, asm_func, ARRAY_REF(instrs, IrInstr, i));
+		asm_gen_instr(ir_func, asm_module, ARRAY_REF(instrs, IrInstr, i));
 	}
 }
 
 static void asm_gen_instr(
-		IrFunction *ir_func, AsmFunction *asm_func, IrInstr *instr)
+		IrFunction *ir_func, AsmModule *asm_module, IrInstr *instr)
 {
 	switch (instr->op) {
 	case OP_BRANCH: {
@@ -33,8 +32,8 @@ static void asm_gen_instr(
 
 		i64 constant = ret_value->val.constant;
 		assert(constant == (constant & 0xFFFFFFFF));
-		emit_instr2(asm_func, MOV, asm_reg(EAX), asm_const32((i32)constant));
-		emit_instr0(asm_func, RET);
+		emit_instr2(asm_module, MOV, asm_reg(EAX), asm_const32((i32)constant));
+		emit_instr0(asm_module, RET);
 
 		break;
 	}
