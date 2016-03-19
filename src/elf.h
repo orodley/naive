@@ -1,5 +1,5 @@
-#ifndef ELF_H_
-#define ELF_H_
+#ifndef NAIVE_ELF_H_
+#define NAIVE_ELF_H_
 
 #include <stdio.h>
 

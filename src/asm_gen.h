@@ -1,5 +1,5 @@
-#ifndef ASM_GEN_H_
-#define ASM_GEN_H_
+#ifndef NAIVE_ASM_GEN_H_
+#define NAIVE_ASM_GEN_H_
 
 #include "asm.h"
 #include "ir.h"
