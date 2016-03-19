@@ -1,6 +1,8 @@
 #ifndef ASM_H_
 #define ASM_H_
 
+#include <stdio.h>
+
 #include "array.h"
 
 typedef struct AsmModule
@@ -65,5 +67,7 @@ AsmArg asm_reg(Register reg);
 AsmArg asm_const32(i32 constant);
 
 void dump_asm_module(AsmModule *asm_module);
+
+u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address);
 
 #endif

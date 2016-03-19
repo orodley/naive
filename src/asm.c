@@ -1,4 +1,6 @@
+#include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "array.h"
 #include "asm.h"
@@ -108,4 +110,55 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 			break;
 		}
 	}
+}
+
+static inline u32 write_byte(FILE *file, u8 byte)
+{
+	fwrite(&byte, 1, 1, file);
+	return 1;
+}
+
+static inline u32 write_i32(FILE *file, i32 x)
+{
+	u8 out[] = {
+		((u32)x >> 0) & 0xFF,
+		((u32)x >> 8) & 0xFF,
+		((u32)x >> 16) & 0xFF,
+		((u32)x >> 24) & 0xFF,
+	};
+
+	fwrite(out, 1, sizeof(out), file);
+	return sizeof(out);
+}
+
+u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address)
+{
+	u64 current_address = base_virtual_address;
+	u64 main_virtual_addr = 0;
+	for (u32 i = 0; i < asm_module->lines.size; i++) {
+		AsmLine *line = ARRAY_REF(&asm_module->lines, AsmLine, i);
+		if (line->type == LABEL) {
+			if (strcmp(line->val.label_name, "main") == 0)
+				main_virtual_addr = current_address;
+		} else {
+			assert(line->type == INSTR);
+			switch (line->val.instr.op) {
+			case MOV:
+				assert(line->val.instr.args[0].type == REGISTER);
+				assert(line->val.instr.args[0].val.reg == EAX);
+				assert(line->val.instr.args[1].type == CONST32);
+
+				current_address += write_byte(output_file, 0xB8);
+				current_address += write_i32(output_file, line->val.instr.args[1].val.const32);
+				break;
+			case RET:
+				current_address += write_byte(output_file, 0xC3);
+				break;
+			}
+		}
+	}
+
+	assert(main_virtual_addr != 0);
+
+	return main_virtual_addr;
 }

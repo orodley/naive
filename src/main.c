@@ -1,6 +1,17 @@
+// @PORT
+#define _POSIX_SOURCE
+
+#include <assert.h>
 #include <stdio.h>
+
+// @PORT
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "array.h"
 #include "asm.h"
+#include "elf.h"
 #include "ir_gen.h"
 #include "misc.h"
 #include "tokenise.h"
@@ -29,12 +40,13 @@ int main(int argc, char *argv[])
 		if (type == TOK_SYMBOL || type == TOK_STRING_LITERAL)
 			printf("\t%s\n", source_token->token.val.symbol_or_string_literal);
 	}
+	puts("\n");
 
 	Pool ast_pool;
 	pool_init(&ast_pool, 1024);
 	ASTToplevel *ast = parse_toplevel(&tokens, &ast_pool);
 	if (ast == NULL)
-		return 1;
+		return 2;
 
 	dump_toplevel(ast);
 	puts("\n");
@@ -57,6 +69,34 @@ int main(int argc, char *argv[])
 	generate_asm_module(&tu, &asm_module);
 
 	dump_asm_module(&asm_module);
+
+
+	FILE *output_file = fopen("a.out", "wb");
+	if (output_file == NULL) {
+		perror("Unable to open output file");
+		return 3;
+	}
+	write_elf_file(output_file, &asm_module);
+
+	// @PORT
+	int fd = fileno(output_file);
+	assert(fd != -1);
+
+	struct stat status;
+	if (fstat(fd, &status) == -1) {
+		perror("Unable to stat output file");
+		fclose(output_file);
+		return 4;
+	}
+
+	mode_t new_mode = (status.st_mode & 07777) | S_IXUSR;
+	if (fchmod(fd, new_mode) == -1) {
+		perror("Unable to change output file to executable");
+		fclose(output_file);
+		return 5;
+	}
+
+	fclose(output_file);
 
 	return 0;
 }
