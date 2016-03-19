@@ -1,7 +1,7 @@
 NAME := ncc
 CC ?= clang
 
-COMMON_CFLAGS := -c -std=c99 -Wall -Wextra -Wstrict-prototypes -Wformat
+COMMON_CFLAGS := $(CFLAGS) -c -std=c99 -Wall -Wextra -Wstrict-prototypes -Wformat
 
 ifneq (, $(shell which ccache))
 	ifeq ($(CC), clang)
