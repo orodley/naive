@@ -23,18 +23,105 @@ typedef struct ASTVar
 	char *name;
 } ASTVar;
 
-typedef struct ASTExpression
+#define AST_EXPR_TYPES \
+		X(AST_INT_LITERAL), \
+\
+		X(AST_STRUCT_DOT_FIELD), \
+		X(AST_STRUCT_ARROW_FIELD), \
+\
+		X(AST_INDEX), \
+		X(AST_POST_INCREMENT), \
+		X(AST_POST_DECREMENT), \
+\
+		X(AST_PRE_INCREMENT), \
+		X(AST_PRE_DECREMENT), \
+		X(AST_ADDRESS_OF), \
+		X(AST_DEREF), \
+		X(AST_UNARY_PLUS), \
+		X(AST_UNARY_MINUS), \
+		X(AST_BIT_NOT), \
+		X(AST_LOGICAL_NOT), \
+\
+		X(AST_CAST), \
+		X(AST_SIZEOF_EXPR), \
+		X(AST_SIZEOF_TYPE), \
+\
+		X(AST_MULTIPLY), \
+		X(AST_DIVIDE), \
+		X(AST_MODULO), \
+		X(AST_ADD), \
+		X(AST_MINUS), \
+		X(AST_LEFT_SHIFT), \
+		X(AST_RIGHT_SHIFT), \
+\
+		X(AST_LESS_THAN), \
+		X(AST_GREATER_THAN), \
+		X(AST_LESS_THAN_OR_EQUAL), \
+		X(AST_GREATER_THAN_OR_EQUAL), \
+		X(AST_EQUAL), \
+		X(AST_NOT_EQUAL), \
+\
+		X(AST_BIT_AND), \
+		X(AST_BIT_XOR), \
+		X(AST_BIT_OR), \
+\
+		X(AST_LOGICAL_AND), \
+		X(AST_LOGICAL_OR), \
+\
+		X(AST_CONDITIONAL), \
+\
+		X(AST_ASSIGN), \
+		X(AST_MULT_ASSIGN), \
+		X(AST_DIVIDE_ASSIGN), \
+		X(AST_MOD_ASSIGN), \
+		X(AST_PLUS_ASSIGN), \
+		X(AST_MINUS_ASSIGN), \
+		X(AST_LEFT_SHIFT_ASSIGN), \
+		X(AST_RIGHT_SHIFT_ASSIGN), \
+		X(AST_BIT_AND_ASSIGN), \
+		X(AST_BIT_XOR_ASSIGN), \
+		X(AST_BIT_OR_ASSIGN),
+
+#define X(x) x
+typedef enum ASTExprType
 {
-	enum
-	{
-		AST_INTEGER_LITERAL,
-	} type;
+	AST_EXPR_TYPES
+} ASTExprType;
+#undef X
+
+
+typedef struct ASTExpr
+{
+	ASTExprType type;
 
 	union
 	{
-		i64 integer_literal;
+		i64 int_literal;
+		struct ASTExpr *unary_arg;
+		ASTType *type;
+		struct
+		{
+			struct ASTExpr *arg1;
+			struct ASTExpr *arg2;
+		} binary_op;
+		struct
+		{
+			struct ASTExpr *arg1;
+			struct ASTExpr *arg2;
+			struct ASTExpr *arg3;
+		} ternary_op;
+		struct
+		{
+			struct ASTExpr *struct_value;
+			const char *field_name;
+		} struct_field;
+		struct
+		{
+			ASTType *cast_type;
+			struct ASTExpr *arg;
+		} cast;
 	} val;
-} ASTExpression;
+} ASTExpr;
 
 typedef struct ASTStatement
 {
@@ -47,7 +134,7 @@ typedef struct ASTStatement
 	union
 	{
 		Array(ASTStatement *) statements;
-		ASTExpression *return_value;
+		ASTExpr *return_value;
 	} val;
 } ASTStatement;
 

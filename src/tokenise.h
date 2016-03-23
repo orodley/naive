@@ -28,6 +28,7 @@ typedef enum TokenType
 	TOK_DIVIDE,
 	TOK_DIVIDE_ASSIGN,
 
+	// @TODO: Rename to TOK_MODULO{,_ASSIGN}
 	TOK_MOD,
 	TOK_MOD_ASSIGN,
 
@@ -45,6 +46,7 @@ typedef enum TokenType
 	TOK_ASSIGN,
 	TOK_EQUAL,
 
+	// @TODO: Rename to TOK_LOG_NOT
 	TOK_NOT,
 	TOK_NOT_EQUAL,
 

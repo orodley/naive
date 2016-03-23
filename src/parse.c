@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,9 +9,6 @@
 #include "parse.h"
 #include "pool.h"
 #include "tokenise.h"
-
-// @TODO: Allocate everything from a pool. Then we can just free the whole pool
-// afterwards.
 
 typedef struct Parser
 {
@@ -26,6 +24,17 @@ static Token *read_token(Parser *parser)
 	parser->index++;
 
 	return (Token *)token;
+}
+
+static inline void back_up(Parser *parser)
+{
+    parser->index--;
+}
+
+static inline void *revert(Parser *parser, u32 index)
+{
+    parser->index = index;
+    return NULL;
 }
 
 static inline Token *current_token(Parser *parser)
@@ -61,34 +70,266 @@ static inline SourceLoc *parser_context(Parser *parser)
 }
 
 
-static ASTType *parse_type(Parser *parser)
+typedef struct WhichResult
 {
-	Token *token = read_token(parser);
-	if (token->type == TOK_SYMBOL) {
-		ASTType *type_spec = pool_alloc(parser->pool, sizeof *type_spec);
-		type_spec->name = token->val.symbol_or_string_literal;
+	u32 which;
+	void *result;
+} WhichResult;
 
-		return type_spec;
-	} else {
-		issue_error(token_context(token), "Expected symbol");
-		return NULL;
-	}
+typedef struct OptResult
+{
+	void *result;
+} OptResult;
+
+static inline void *middle(Parser *parser, void *a, void *b, void *c)
+{
+	UNUSED(parser); UNUSED(a); UNUSED(c);
+
+	return b;
 }
 
-static ASTExpression *parse_expr(Parser *parser)
+static inline void *second(Parser *parser, void *a, void *b)
 {
-	Token *token = read_token(parser);
-	if (token->type != TOK_INT_LITERAL) {
-		issue_error(token_context(token), "Expected integer literal");
-		return NULL;
-	}
+	UNUSED(parser); UNUSED(a);
 
-	ASTExpression *expr = pool_alloc(parser->pool, sizeof *expr);
-	expr->type = AST_INTEGER_LITERAL;
-	expr->val.integer_literal = token->val.int_literal;
+	return b;
+}
+
+static ASTType *build_type(Parser *parser, Token *type_name)
+{
+	assert(type_name->type == TOK_SYMBOL);
+
+	ASTType *type = pool_alloc(parser->pool, sizeof *type);
+	type->name = type_name->val.symbol_or_string_literal;
+
+	return type;
+}
+
+static ASTExpr *build_constant(Parser *parser, Token *token)
+{
+	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
+	switch (token->type) {
+	case TOK_INT_LITERAL:
+		expr->type = AST_INT_LITERAL;
+		expr->val.int_literal = token->val.int_literal;
+		break;
+	default:
+		assert(!"Not implemented");
+	}
 
 	return expr;
 }
+
+static ASTExpr *build_postfix_expr(Parser *parser,
+		ASTExpr *curr, WhichResult *which)
+{
+	ASTExpr *next = pool_alloc(parser->pool, sizeof *next);
+	switch (which->which) {
+	case 0:
+		next->type = AST_INDEX;
+		next->val.binary_op.arg1 = curr;
+		next->val.binary_op.arg2 = which->result;
+		return next;
+	case 1:
+		// @TODO: Function call
+		return NULL;
+	case 2:
+		next->type = AST_STRUCT_DOT_FIELD;
+		next->val.struct_field.struct_value = curr;
+		next->val.struct_field.field_name = which->result;
+		return next;
+	case 3:
+		next->type = AST_STRUCT_ARROW_FIELD;
+		next->val.struct_field.struct_value = curr;
+		next->val.struct_field.field_name = which->result;
+		return next;
+	case 4:
+		next->type = AST_POST_INCREMENT;
+		next->val.unary_arg = curr;
+		return next;
+	case 5:
+		next->type =AST_POST_DECREMENT;
+		next->val.unary_arg = curr;
+		return next;
+	default:
+		UNREACHABLE;
+	}
+
+	return NULL;
+}
+
+static ASTExpr *build_compound_initializer(Parser *parser,
+		void *a, void *b, void *c, void *d, void *e, void *f, void *g)
+{
+	/// @TODO
+	UNUSED(parser);
+	UNUSED(a); UNUSED(b); UNUSED(c); UNUSED(d); UNUSED(e); UNUSED(f); UNUSED(g);
+	return NULL;
+}
+
+static Array(void *) *empty_array(Parser *parser)
+{
+	Array(void *) *array = pool_alloc(parser->pool, sizeof *array);
+	ARRAY_INIT(array, void *, 5);
+
+	return array;
+}
+
+static ASTExpr *build_arg_list(Parser *parser, Array(ASTExpr) *curr,
+		ASTExpr *next)
+{
+	// @TODO
+	UNUSED(parser); UNUSED(curr); UNUSED(next);
+	return NULL;
+}
+
+
+static ASTExpr *build_unary_expr(Parser *parser, Token *token,
+		ASTExpr *arg)
+{
+	ASTExpr *next = pool_alloc(parser->pool, sizeof *next);
+	next->val.unary_arg = arg;
+	switch (token->type) {
+	case TOK_INCREMENT: next->type = AST_PRE_INCREMENT; break;
+	case TOK_DECREMENT: next->type = AST_PRE_DECREMENT; break;
+	case TOK_AMPERSAND: next->type = AST_ADDRESS_OF; break;
+	case TOK_ASTERISK: next->type = AST_DEREF; break;
+	case TOK_PLUS: next->type = AST_UNARY_PLUS; break;
+	case TOK_MINUS: next->type = AST_UNARY_MINUS; break;
+	case TOK_BIT_NOT: next->type = AST_BIT_NOT; break;
+	case TOK_NOT: next->type = AST_LOGICAL_NOT; break;
+	default: UNREACHABLE;
+	}
+
+	return next;
+}
+
+static ASTExpr *build_sizeof_expr(
+		Parser *parser, Token *tok_sizeof, ASTExpr *arg)
+{
+	UNUSED(tok_sizeof);
+
+	ASTExpr *sizeof_expr = pool_alloc(parser->pool, sizeof *sizeof_expr);
+	sizeof_expr->type = AST_SIZEOF_EXPR;
+	sizeof_expr->val.unary_arg = arg;
+
+	return sizeof_expr;
+}
+
+static ASTExpr *build_sizeof_type(Parser *parser, Token *tok_sizeof,
+		Token *lround, ASTType *type, Token *rround)
+{
+	UNUSED(tok_sizeof);
+	UNUSED(lround);
+	UNUSED(rround);
+
+	ASTExpr *sizeof_type = pool_alloc(parser->pool, sizeof *sizeof_type);
+	sizeof_type->type = AST_SIZEOF_TYPE;
+	sizeof_type->val.type = type;
+
+	return sizeof_type;
+}
+
+static ASTExpr *build_cast_expr(Parser *parser, Token *lround,
+		ASTType *type, Token *rround, ASTExpr *arg)
+{
+	UNUSED(lround); UNUSED(rround);
+
+	ASTExpr *cast_expr = pool_alloc(parser->pool, sizeof *cast_expr);
+	cast_expr->type = AST_CAST;
+	cast_expr->val.cast.cast_type = type;
+	cast_expr->val.cast.arg = arg;
+
+	return cast_expr;
+}
+
+typedef struct BinaryTail
+{
+	Token *operator;
+	ASTExpr *tail_expr;
+} BinaryTail;
+
+static BinaryTail *build_binary_tail(Parser *parser,
+		Token *operator, ASTExpr *tail_expr)
+{
+	BinaryTail *binary_tail = pool_alloc(parser->pool, sizeof *binary_tail);
+	binary_tail->operator = operator;
+	binary_tail->tail_expr = tail_expr;
+
+	return binary_tail;
+}
+
+#define CASE2(token, ast_type) \
+	case TOK_##token: expr->type = AST_##ast_type; break;
+#define CASE1(operator) CASE2(operator, operator)
+
+static ASTExpr *build_binary_head(Parser *parser, ASTExpr *curr,
+		BinaryTail *tail)
+{
+	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
+	expr->val.binary_op.arg1 = curr;
+	expr->val.binary_op.arg2 = tail->tail_expr;
+
+	switch (tail->operator->type) {
+	CASE2(ASTERISK, MULTIPLY)
+	CASE2(DIVIDE, DIVIDE)
+	CASE2(MOD, MODULO)
+	CASE2(PLUS, ADD)
+	CASE1(MINUS)
+	CASE1(LEFT_SHIFT)
+	CASE1(RIGHT_SHIFT)
+	CASE1(LESS_THAN)
+	CASE1(GREATER_THAN)
+	CASE1(LESS_THAN_OR_EQUAL)
+	CASE1(GREATER_THAN_OR_EQUAL)
+	CASE1(EQUAL)
+	CASE1(NOT_EQUAL)
+	CASE2(AMPERSAND, BIT_AND)
+	CASE1(BIT_XOR)
+	CASE1(BIT_OR)
+	CASE1(LOGICAL_AND)
+	CASE1(LOGICAL_OR)
+	CASE1(ASSIGN)
+	CASE1(MULT_ASSIGN)
+	CASE1(DIVIDE_ASSIGN)
+	CASE1(MOD_ASSIGN)
+	CASE1(PLUS_ASSIGN)
+	CASE1(MINUS_ASSIGN)
+	CASE1(LEFT_SHIFT_ASSIGN)
+	CASE1(RIGHT_SHIFT_ASSIGN)
+	CASE1(BIT_AND_ASSIGN)
+	CASE1(BIT_XOR_ASSIGN)
+	CASE1(BIT_OR_ASSIGN)
+
+	default: UNREACHABLE;
+	}
+
+	return expr;
+}
+
+#undef CASE
+
+// @TODO: We actually want to use a fold for this, so we need
+// build_ternary_head and build_ternary_tail.
+static ASTExpr *build_conditional_expr(Parser *parser,
+		ASTExpr *condition, Token *q, ASTExpr *then_expr,
+		Token *colon, ASTExpr *else_expr)
+{
+	UNUSED(q);
+	UNUSED(colon);
+
+	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
+	expr->type = AST_CONDITIONAL;
+	expr->val.ternary_op.arg1 = condition;
+	expr->val.ternary_op.arg2 = then_expr;
+	expr->val.ternary_op.arg3 = else_expr;
+
+	return expr;
+}
+
+
+#include "parse.inc"
+
 
 static ASTStatement *parse_statement(Parser *parser)
 {
@@ -97,8 +338,8 @@ static ASTStatement *parse_statement(Parser *parser)
 		return NULL;
 	}
 
-	ASTExpression *expr = parse_expr(parser);
-	if (expr == NULL)
+	ASTExpr *e = expr(parser);
+	if (e == NULL)
 		return NULL;
 
 	if (!expect_token(parser, TOK_SEMICOLON)) {
@@ -108,7 +349,7 @@ static ASTStatement *parse_statement(Parser *parser)
 
 	ASTStatement *statement = pool_alloc(parser->pool, sizeof *statement);
 	statement->type = AST_RETURN_STATEMENT;
-	statement->val.return_value = expr;
+	statement->val.return_value = e;
 
 	return statement;
 }
@@ -123,7 +364,7 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 	ASTToplevel *result = pool_alloc(parser->pool, sizeof *result);
 	result->type = AST_FUNCTION_DEF;
 
-	ASTType *return_type = parse_type(parser);
+	ASTType *return_type = type_name(parser);
 	if (return_type == NULL)
 		return NULL;
 	result->val.function_def.return_type = return_type;
@@ -144,7 +385,7 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 	ARRAY_INIT(arguments, ASTVar *, 3);
 
 	for (;;) {
-		ASTType *arg_type = parse_type(parser);
+		ASTType *arg_type = type_name(parser);
 		if (arg_type == NULL)
 			return NULL;
 
@@ -201,13 +442,63 @@ static void dump_type(ASTType *type)
 	fputs(type->name, stdout);
 }
 
-static void dump_expr(ASTExpression *expr)
+#define X(x) #x
+static const char *expr_type_names[] = {
+	AST_EXPR_TYPES
+};
+#undef X
+
+static void dump_expr(ASTExpr *expr)
 {
+	printf("%s(", expr_type_names[expr->type]);
 	switch (expr->type) {
-	case AST_INTEGER_LITERAL:
-		printf("INTEGER_LITERAL(%" PRId64 ")", expr->val.integer_literal);
+	case AST_INT_LITERAL:
+		printf("%" PRId64, expr->val.int_literal);
 		break;
+	case AST_STRUCT_DOT_FIELD: case AST_STRUCT_ARROW_FIELD:
+		dump_expr(expr->val.struct_field.struct_value);
+		printf(", %s", expr->val.struct_field.field_name);
+		break;
+	case AST_INDEX: case AST_POST_INCREMENT: case AST_POST_DECREMENT:
+	case AST_PRE_INCREMENT: case AST_PRE_DECREMENT: case AST_ADDRESS_OF:
+	case AST_DEREF: case AST_UNARY_PLUS: case AST_UNARY_MINUS:
+	case AST_BIT_NOT: case AST_LOGICAL_NOT: case AST_SIZEOF_EXPR:
+		dump_expr(expr->val.unary_arg);
+		break;
+	case AST_CAST:
+		dump_type(expr->val.cast.cast_type);
+		fputs(", ", stdout);
+		dump_expr(expr->val.cast.arg);
+		break;
+	case AST_SIZEOF_TYPE:
+		dump_type(expr->val.type);
+		break;
+	case AST_MULTIPLY: case AST_DIVIDE: case AST_MODULO: case AST_ADD:
+	case AST_MINUS: case AST_LEFT_SHIFT: case AST_RIGHT_SHIFT:
+	case AST_LESS_THAN: case AST_GREATER_THAN: case AST_LESS_THAN_OR_EQUAL:
+	case AST_GREATER_THAN_OR_EQUAL: case AST_EQUAL: case AST_NOT_EQUAL:
+	case AST_BIT_AND: case AST_BIT_XOR: case AST_BIT_OR: case AST_LOGICAL_AND:
+	case AST_LOGICAL_OR: case AST_ASSIGN: case AST_MULT_ASSIGN:
+	case AST_DIVIDE_ASSIGN: case AST_MOD_ASSIGN: case AST_PLUS_ASSIGN:
+	case AST_MINUS_ASSIGN: case AST_LEFT_SHIFT_ASSIGN:
+	case AST_RIGHT_SHIFT_ASSIGN: case AST_BIT_AND_ASSIGN:
+	case AST_BIT_XOR_ASSIGN: case AST_BIT_OR_ASSIGN:
+		dump_expr(expr->val.binary_op.arg1);
+		fputs(", ", stdout);
+		dump_expr(expr->val.binary_op.arg2);
+		break;
+	case AST_CONDITIONAL:
+		dump_expr(expr->val.ternary_op.arg1);
+		fputs(", ", stdout);
+		dump_expr(expr->val.ternary_op.arg2);
+		fputs(", ", stdout);
+		dump_expr(expr->val.ternary_op.arg3);
+		break;
+	default:
+		UNREACHABLE;
 	}
+
+	putchar(')');
 }
 
 static void dump_statement(ASTStatement *statement)

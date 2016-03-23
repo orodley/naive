@@ -1,0 +1,128 @@
+primary_expr =
+    or(TOK_SYMBOL,
+        constant,
+        seq(middle, TOK_LROUND, expr, TOK_RROUND))
+
+constant =
+	seq(build_constant,
+		oneof(TOK_INT_LITERAL, TOK_FLOAT_LITERAL, TOK_STRING_LITERAL))
+
+postfix_expr =
+    or(fold(build_postfix_expr,
+			primary_expr,
+			which(seq(middle, TOK_LSQUARE, expr, TOK_RSQUARE),
+				seq(middle, TOK_LROUND, opt(argument_expr_list), TOK_RROUND),
+				seq(second, TOK_DOT, identifier),
+				seq(second, TOK_ARROW, identifier),
+				TOK_INCREMENT,
+				TOK_DECREMENT)),
+        seq(build_compound_initializer,
+			TOK_LROUND, type_name, TOK_RROUND, TOK_LCURLY,
+            initializer_list, opt(TOK_COMMA),
+            TOK_RCURLY))
+
+identifier = TOK_SYMBOL
+type_name = seq(build_type, TOK_SYMBOL)
+initializer_list = TOK_SYMBOL
+
+argument_expr_list =
+    fold(build_arg_list,
+		seq(empty_array),
+        seq(second, TOK_COMMA, assignment_expr))
+
+unary_expr =
+    or(postfix_expr,
+        seq(build_unary_expr, TOK_INCREMENT, unary_expr),
+        seq(build_unary_expr, TOK_DECREMENT, unary_expr),
+        seq(build_unary_expr, unary_operator, cast_expr),
+        seq(build_sizeof_expr, keyword(sizeof), unary_expr),
+        seq(build_sizeof_type, keyword(sizeof), TOK_LROUND, type_name, TOK_RROUND))
+
+unary_operator =
+    oneof(TOK_AMPERSAND, TOK_ASTERISK, TOK_PLUS, TOK_MINUS, TOK_BIT_NOT, TOK_NOT)
+
+cast_expr =
+    or(unary_expr,
+        seq(build_cast_expr, TOK_LROUND, type_name, TOK_RROUND, cast_expr))
+
+multiplicative_expr =
+    fold(build_binary_head,
+		cast_expr,
+		or(seq(build_binary_tail, TOK_ASTERISK, cast_expr),
+			seq(build_binary_tail, TOK_DIVIDE, cast_expr),
+			seq(build_binary_tail, TOK_MOD, cast_expr)))
+
+additive_expr =
+    fold(build_binary_head,
+		multiplicative_expr,
+		or(seq(build_binary_tail, TOK_PLUS, multiplicative_expr),
+			seq(build_binary_tail, TOK_MINUS, multiplicative_expr)))
+
+shift_expr =
+    fold(build_binary_head,
+		additive_expr,
+		or(seq(build_binary_tail, TOK_LEFT_SHIFT, additive_expr),
+			seq(build_binary_tail, TOK_RIGHT_SHIFT, additive_expr)))
+
+relational_expr =
+    fold(build_binary_head,
+		shift_expr,
+		or(seq(build_binary_tail, TOK_LESS_THAN, shift_expr),
+			seq(build_binary_tail, TOK_GREATER_THAN, shift_expr),
+			seq(build_binary_tail, TOK_LESS_THAN_OR_EQUAL, shift_expr),
+			seq(build_binary_tail, TOK_GREATER_THAN_OR_EQUAL, shift_expr)))
+
+equality_expr =
+    fold(build_binary_head,
+		relational_expr,
+        or(seq(build_binary_tail, TOK_EQUAL, relational_expr),
+			seq(build_binary_tail, TOK_NOT_EQUAL, relational_expr)))
+
+and_expr =
+    fold(build_binary_head,
+		equality_expr,
+		seq(build_binary_tail, TOK_AMPERSAND, equality_expr))
+
+xor_expr =
+	fold(build_binary_head,
+		and_expr,
+		seq(build_binary_tail, TOK_BIT_XOR, and_expr))
+
+or_expr =
+	fold(build_binary_head,
+		xor_expr,
+		seq(build_binary_tail, TOK_BIT_OR, xor_expr))
+
+logical_and_expr =
+    fold(build_binary_head,
+		or_expr,
+		seq(build_binary_tail, TOK_LOGICAL_AND, or_expr))
+
+logical_or_expr =
+    fold(build_binary_head,
+		logical_and_expr,
+		seq(build_binary_tail, TOK_LOGICAL_OR, logical_and_expr))
+
+
+conditional_expr =
+    or(logical_or_expr,
+        seq(build_conditional_expr,
+			logical_or_expr, TOK_QUESTION_MARK,
+            expr, TOK_COLON,
+            conditional_expr))
+
+assignment_expr =
+    fold(build_binary_head,
+		conditional_expr,
+        seq(build_binary_tail, assignment_operator, assignment_expr))
+
+assignment_operator =
+    oneof(TOK_ASSIGN, TOK_MULT_ASSIGN, TOK_DIVIDE_ASSIGN, TOK_MOD_ASSIGN,
+            TOK_PLUS_ASSIGN, TOK_MINUS_ASSIGN, TOK_LEFT_SHIFT_ASSIGN,
+            TOK_RIGHT_SHIFT_ASSIGN, TOK_BIT_AND_ASSIGN, TOK_BIT_XOR_ASSIGN,
+            TOK_BIT_OR_ASSIGN)
+
+expr =
+    fold(build_binary_head,
+		assignment_expr,
+        seq(build_binary_tail, TOK_COMMA, assignment_expr))

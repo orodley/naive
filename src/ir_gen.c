@@ -6,7 +6,7 @@
 #include "parse.h"
 
 static void ir_gen_statement(Builder *builder, ASTStatement *statement);
-static Value ir_gen_expression(Builder *builder, ASTExpression *expr);
+static Value ir_gen_expression(Builder *builder, ASTExpr *expr);
 
 static struct { const char *name; IrType type; } primitive_types[] =
 {
@@ -15,15 +15,21 @@ static struct { const char *name; IrType type; } primitive_types[] =
 
 static IrType look_up_type(ASTType *type_spec)
 {
-	for (u32 i = 0; i < ARRAY_SIZE(primitive_types); i++)
+	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(primitive_types); i++)
 		if (strcmp(type_spec->name, primitive_types[i].name) == 0)
 			return primitive_types[i].type;
 
 	UNREACHABLE;
 }
 
+int quux(int bar)
+{
+	return 2 * bar;
+}
+
 void ir_gen_function(TransUnit *tu, Builder *builder, ASTToplevel *ast)
 {
+	quux(3);
 	Array(ASTVar *) *arguments = &ast->val.function_def.arguments;
 	u32 arity = arguments->size;
 
@@ -67,12 +73,14 @@ static void ir_gen_statement(Builder *builder, ASTStatement *statement)
 	}
 }
 
-static Value ir_gen_expression(Builder *builder, ASTExpression *expr)
+static Value ir_gen_expression(Builder *builder, ASTExpr *expr)
 {
 	UNUSED(builder);
 
 	switch (expr->type) {
-	case AST_INTEGER_LITERAL:
-		return value_const(expr->val.integer_literal);
+	case AST_INT_LITERAL:
+		return value_const(expr->val.int_literal);
+	default:
+		assert(!"Not implemented");
 	}
 }
