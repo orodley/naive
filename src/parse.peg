@@ -1,5 +1,59 @@
+statement =
+	or(labeled_statement,
+		compound_statement,
+		expr_statement,
+		selection_statement,
+		iteration_statement,
+		jump_statement)
+
+labeled_statement =
+	or(seq(build_labeled_statement, identifier, TOK_COLON, statement),
+		seq(build_case_statement,
+			keyword(case), expr, TOK_COLON, statement),
+		seq(build_labeled_statement, keyword(default), TOK_COLON, statement))
+
+compound_statement =
+	seq(build_compound_statement, TOK_LCURLY, block_item_list, TOK_RCURLY)
+
+block_item_list =
+	fold(build_block_item_list,
+		seq(empty_array), or(decl, statement))
+
+expr_statement = seq(build_expr_statement, opt(expr), TOK_SEMICOLON)
+
+selection_statement =
+	or(seq(build_if_statement, keyword(if), TOK_LROUND, expr, TOK_RROUND,
+			statement, opt(seq(second, keyword(else), statement))),
+		seq(build_switch_statement, keyword(switch),
+			TOK_LROUND, expr, TOK_RROUND, statement))
+
+iteration_statement =
+	or(seq(build_while_statement,
+			keyword(while), TOK_LROUND, expr, TOK_RROUND, statement),
+		seq(build_do_while_statement, keyword(do), statement, keyword(while),
+			TOK_LROUND, expr, TOK_RROUND, TOK_SEMICOLON),
+		seq(build_for_statement, keyword(for), TOK_LROUND,
+			opt(expr), TOK_SEMICOLON, opt(expr), TOK_SEMICOLON, opt(expr),
+			TOK_RROUND, statement),
+		seq(build_for_decl_statement, keyword(for), TOK_LROUND,
+			decl, opt(expr), TOK_SEMICOLON, opt(expr),
+			TOK_RROUND, statement))
+
+jump_statement =
+	or(seq(build_goto_statement, keyword(goto), identifier),
+		seq(build_continue_statement, keyword(continue), TOK_SEMICOLON),
+		seq(build_break_statement, keyword(break), TOK_SEMICOLON),
+		seq(build_return_statement, keyword(return), opt(expr), TOK_SEMICOLON))
+
+
+decl =
+	seq(build_decl, type_name, identifier,
+		opt(seq(second, TOK_ASSIGN, expr)), TOK_SEMICOLON)
+	
+
+
 primary_expr =
-    or(TOK_SYMBOL,
+    or(identifier,
         constant,
         seq(middle, TOK_LROUND, expr, TOK_RROUND))
 
@@ -11,7 +65,7 @@ postfix_expr =
     or(fold(build_postfix_expr,
 			primary_expr,
 			which(seq(middle, TOK_LSQUARE, expr, TOK_RSQUARE),
-				seq(middle, TOK_LROUND, opt(argument_expr_list), TOK_RROUND),
+				seq(middle, TOK_LROUND, argument_expr_list, TOK_RROUND),
 				seq(second, TOK_DOT, identifier),
 				seq(second, TOK_ARROW, identifier),
 				TOK_INCREMENT,
@@ -21,7 +75,7 @@ postfix_expr =
             initializer_list, opt(TOK_COMMA),
             TOK_RCURLY))
 
-identifier = TOK_SYMBOL
+identifier = seq(build_identifier, TOK_SYMBOL)
 type_name = seq(build_type, TOK_SYMBOL)
 initializer_list = TOK_SYMBOL
 

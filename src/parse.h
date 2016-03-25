@@ -26,6 +26,8 @@ typedef struct ASTVar
 #define AST_EXPR_TYPES \
 		X(AST_INT_LITERAL), \
 \
+		X(AST_IDENTIFIER), \
+\
 		X(AST_STRUCT_DOT_FIELD), \
 		X(AST_STRUCT_ARROW_FIELD), \
 \
@@ -97,6 +99,7 @@ typedef struct ASTExpr
 	union
 	{
 		i64 int_literal;
+		const char *identifier;
 		struct ASTExpr *unary_arg;
 		ASTType *type;
 		struct
@@ -123,18 +126,66 @@ typedef struct ASTExpr
 	} val;
 } ASTExpr;
 
+#define AST_STATEMENT_TYPES \
+		X(AST_EMPTY_STATEMENT), \
+		X(AST_LABELED_STATEMENT), \
+		X(AST_CASE_STATEMENT), \
+		X(AST_COMPOUND_STATEMENT), \
+		X(AST_EXPR_STATEMENT), \
+		X(AST_IF_STATEMENT), \
+		X(AST_SWITCH_STATEMENT), \
+		X(AST_WHILE_STATEMENT), \
+		X(AST_DO_WHILE_STATEMENT), \
+		X(AST_FOR_STATEMENT), \
+		X(AST_GOTO_STATEMENT), \
+		X(AST_CONTINUE_STATEMENT), \
+		X(AST_BREAK_STATEMENT), \
+		X(AST_RETURN_STATEMENT)
+
+#define X(x) x
+typedef enum ASTStatementType
+{
+	AST_STATEMENT_TYPES
+} ASTStatementType;
+#undef X
+
 typedef struct ASTStatement
 {
-	enum
-	{
-		AST_COMPOUND_STATEMENT,
-		AST_RETURN_STATEMENT,
-	} type;
+	ASTStatementType type;
 
 	union
 	{
-		Array(ASTStatement *) statements;
-		ASTExpr *return_value;
+		struct
+		{
+			const char *label_name;
+			struct ASTStatement *statement;
+		} labeled_statement;
+		struct
+		{
+			ASTExpr *expr;
+			struct ASTStatement *statement;
+		} expr_and_statement;
+		struct
+		{
+			struct ASTStatement **statements;
+			u32 num_statements;
+		} compound_statement;
+		struct
+		{
+			ASTExpr *condition;
+			struct ASTStatement *then_statement;
+			struct ASTStatement *else_statement;
+		} if_statement;
+		// @TODO: For loops with declarations.
+		struct
+		{
+			ASTExpr *init_expr;
+			ASTExpr *condition;
+			ASTExpr *update_expr;
+			struct ASTStatement *body;
+		} for_statement;
+		const char *goto_label;
+		ASTExpr *expr;
 	} val;
 } ASTStatement;
 

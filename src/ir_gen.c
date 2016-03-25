@@ -53,23 +53,23 @@ static void ir_gen_statement(Builder *builder, ASTStatement *statement)
 {
 	switch (statement->type) {
 	case AST_COMPOUND_STATEMENT: {
-		Array(ASTStatement *) *statements = &statement->val.statements;
-		for (u32 i = 0; i < statements->size; i++) {
-			ASTStatement *sub_statement =
-				*ARRAY_REF(statements, ASTStatement *, i);
+		ASTStatement **statements = statement->val.compound_statement.statements;
+		for (u32 i = 0; i < statement->val.compound_statement.num_statements; i++) {
+			ASTStatement *sub_statement = statements[i];
 
 			ir_gen_statement(builder, sub_statement);
 		}
 
 		break;
 	}
-
 	case AST_RETURN_STATEMENT: {
-		Value value = ir_gen_expression(builder, statement->val.return_value);
+		Value value = ir_gen_expression(builder, statement->val.expr);
 		Block *ret_block = &builder->function->ret_block;
 		build_branch(builder, ret_block, value);
 		break;
 	}
+	default:
+		assert(!"Not implemented");
 	}
 }
 

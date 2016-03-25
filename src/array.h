@@ -22,6 +22,7 @@ typedef struct Array_
 void _array_init(Array_ *array, u32 element_size, u32 initial_capacity);
 void array_ensure_room(Array_ *array);
 void array_delete_last(Array_ *array);
+void array_free(Array_ *array);
 
 #define ARRAY_INIT(array, element_type, initial_capacity) \
 	_array_init((array), sizeof(element_type), (initial_capacity))

@@ -25,3 +25,8 @@ void array_delete_last(Array_ *array)
 {
 	array->size--;
 }
+
+void array_free(Array_ *array)
+{
+	free(array->elements);
+}

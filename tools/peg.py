@@ -263,11 +263,12 @@ parser->index = start;
             main = ''.join(
 """
 start = parser->index;
-void *_{0}_result = {0}(parser);
-if (_{0}_result == NULL)
+void *_{0}_result{1} = {0}(parser);
+if (_{0}_result{1} == NULL)
 \treturn revert(parser, start);
-""".format(p) for p in parser.args[1:])
-            result_args = ''.join(', _%s_result' % p for p in parser.args[1:])
+""".format(p, i) for i, p in enumerate(parser.args[1:]))
+            result_args = ''.join(', _%s_result%d' % (p, i) for i, p in
+                    enumerate(parser.args[1:]))
             epilogue = "\nreturn %s(parser%s);" % (parser.args[0], result_args)
 
             self.emit_function(parser.name, prologue + main + epilogue)
