@@ -93,7 +93,7 @@ unary_expr =
         seq(build_sizeof_type, keyword(sizeof), TOK_LROUND, type_name, TOK_RROUND))
 
 unary_operator =
-    oneof(TOK_AMPERSAND, TOK_ASTERISK, TOK_PLUS, TOK_MINUS, TOK_BIT_NOT, TOK_NOT)
+    oneof(TOK_AMPERSAND, TOK_ASTERISK, TOK_PLUS, TOK_MINUS, TOK_BIT_NOT, TOK_LOGICAL_NOT)
 
 cast_expr =
     or(unary_expr,
@@ -104,7 +104,7 @@ multiplicative_expr =
 		cast_expr,
 		or(seq(build_binary_tail, TOK_ASTERISK, cast_expr),
 			seq(build_binary_tail, TOK_DIVIDE, cast_expr),
-			seq(build_binary_tail, TOK_MOD, cast_expr)))
+			seq(build_binary_tail, TOK_MODULO, cast_expr)))
 
 additive_expr =
     fold(build_binary_head,
@@ -171,7 +171,7 @@ assignment_expr =
         seq(build_binary_tail, assignment_operator, assignment_expr))
 
 assignment_operator =
-    oneof(TOK_ASSIGN, TOK_MULT_ASSIGN, TOK_DIVIDE_ASSIGN, TOK_MOD_ASSIGN,
+    oneof(TOK_ASSIGN, TOK_MULT_ASSIGN, TOK_DIVIDE_ASSIGN, TOK_MODULO_ASSIGN,
             TOK_PLUS_ASSIGN, TOK_MINUS_ASSIGN, TOK_LEFT_SHIFT_ASSIGN,
             TOK_RIGHT_SHIFT_ASSIGN, TOK_BIT_AND_ASSIGN, TOK_BIT_XOR_ASSIGN,
             TOK_BIT_OR_ASSIGN)

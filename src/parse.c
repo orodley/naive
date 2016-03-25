@@ -208,7 +208,7 @@ static ASTExpr *build_unary_expr(Parser *parser, Token *token,
 	case TOK_PLUS: next->type = AST_UNARY_PLUS; break;
 	case TOK_MINUS: next->type = AST_UNARY_MINUS; break;
 	case TOK_BIT_NOT: next->type = AST_BIT_NOT; break;
-	case TOK_NOT: next->type = AST_LOGICAL_NOT; break;
+	case TOK_LOGICAL_NOT: next->type = AST_LOGICAL_NOT; break;
 	default: UNREACHABLE;
 	}
 
@@ -284,7 +284,7 @@ static ASTExpr *build_binary_head(Parser *parser, ASTExpr *curr,
 	switch (tail->operator->type) {
 	CASE2(ASTERISK, MULTIPLY)
 	CASE2(DIVIDE, DIVIDE)
-	CASE2(MOD, MODULO)
+	CASE1(MODULO)
 	CASE2(PLUS, ADD)
 	CASE1(MINUS)
 	CASE1(LEFT_SHIFT)
@@ -303,7 +303,7 @@ static ASTExpr *build_binary_head(Parser *parser, ASTExpr *curr,
 	CASE1(ASSIGN)
 	CASE1(MULT_ASSIGN)
 	CASE1(DIVIDE_ASSIGN)
-	CASE1(MOD_ASSIGN)
+	CASE1(MODULO_ASSIGN)
 	CASE1(PLUS_ASSIGN)
 	CASE1(MINUS_ASSIGN)
 	CASE1(LEFT_SHIFT_ASSIGN)
@@ -662,7 +662,7 @@ static void dump_expr(ASTExpr *expr)
 	case AST_GREATER_THAN_OR_EQUAL: case AST_EQUAL: case AST_NOT_EQUAL:
 	case AST_BIT_AND: case AST_BIT_XOR: case AST_BIT_OR: case AST_LOGICAL_AND:
 	case AST_LOGICAL_OR: case AST_ASSIGN: case AST_MULT_ASSIGN:
-	case AST_DIVIDE_ASSIGN: case AST_MOD_ASSIGN: case AST_PLUS_ASSIGN:
+	case AST_DIVIDE_ASSIGN: case AST_MODULO_ASSIGN: case AST_PLUS_ASSIGN:
 	case AST_MINUS_ASSIGN: case AST_LEFT_SHIFT_ASSIGN:
 	case AST_RIGHT_SHIFT_ASSIGN: case AST_BIT_AND_ASSIGN:
 	case AST_BIT_XOR_ASSIGN: case AST_BIT_OR_ASSIGN:

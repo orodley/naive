@@ -247,10 +247,10 @@ void tokenise(Array(SourceToken) *tokens, const char *input_filename)
 
 		case '%':
 			if (read_char(r) == '=') {
-				token->type = TOK_MOD_ASSIGN;
+				token->type = TOK_MODULO_ASSIGN;
 			} else {
 				back_up(r);
-				token->type = TOK_MOD;
+				token->type = TOK_MODULO;
 			}
 
 			break;
@@ -310,7 +310,7 @@ void tokenise(Array(SourceToken) *tokens, const char *input_filename)
 				token->type = TOK_NOT_EQUAL;
 			} else {
 				back_up(r);
-				token->type = TOK_NOT;
+				token->type = TOK_LOGICAL_NOT;
 			}
 
 			break;
@@ -428,4 +428,32 @@ void tokenise(Array(SourceToken) *tokens, const char *input_filename)
 		array_delete_last(tokens);
 
 	unmap_file(buffer);
+}
+
+#define X(x) #x
+static const char *token_type_names[] = {
+	TOKEN_TYPES
+};
+#undef X
+
+void dump_token(Token *token)
+{
+	fputs(token_type_names[token->type], stdout);
+	switch (token->type) {
+	case TOK_INT_LITERAL:
+		printf("(%" PRId64 ")", token->val.int_literal);
+		break;
+	case TOK_FLOAT_LITERAL:
+		printf("(%lf)", token->val.float_literal);
+		break;
+	case TOK_STRING_LITERAL:
+		// @TODO: Escape the resulting string
+		printf("(\"%s\")", token->val.symbol_or_string_literal);
+		break;
+	case TOK_SYMBOL:
+		printf("(%s)", token->val.symbol_or_string_literal);
+		break;
+	default:
+		break;
+	}
 }
