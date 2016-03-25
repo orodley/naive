@@ -431,7 +431,7 @@ void tokenise(Array(SourceToken) *tokens, const char *input_filename)
 }
 
 #define X(x) #x
-static const char *token_type_names[] = {
+const char *token_type_names[] = {
 	TOKEN_TYPES
 };
 #undef X

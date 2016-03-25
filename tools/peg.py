@@ -168,6 +168,10 @@ class CWriter(object):
 #include "misc.h"
 #include "parse.h"
 
+
+static u32 _longest_parse_length;
+static SourceLoc _longest_parse_pos;
+static Token _unexpected_token;
 """ % input_filename)
 
         for definition in self.definitions:
@@ -204,6 +208,12 @@ class CWriter(object):
 """
 Token *result = read_token(parser);
 if (result->type != %s) {
+\tif (parser->index > _longest_parse_length) {
+\t\t_longest_parse_length = parser->index;
+\t\t_longest_parse_pos = *parser_context(parser);
+\t\t_unexpected_token = *result;
+\t}
+\t
 \tback_up(parser);
 \treturn NULL;
 }
@@ -212,7 +222,19 @@ return result;""" % parser.args[0])
         elif parser.operator == 'keyword':
             self.emit_function(parser.name,
 """
-return expect_keyword(parser, "%s") ? (void *)1 : NULL;
+if (expect_keyword(parser, "%s")) {
+\treturn (void *)1;
+} else {
+\tif (parser->index > _longest_parse_length) {
+\t\t_longest_parse_length = parser->index;
+\t\t_longest_parse_pos = *parser_context(parser);
+\t\tback_up(parser);
+\t\t
+\t\t_unexpected_token = *current_token(parser);
+\t}
+\t
+\treturn NULL;
+}
 """ % parser.args[0])
         elif parser.operator == 'oneof':
             assert all(elem.startswith("TOK_") for elem in parser.args)
@@ -227,6 +249,11 @@ for (u32 i = 0; i < STATIC_ARRAY_LENGTH(%s); i++) {
 \t}
 }
 
+if (parser->index > _longest_parse_length) {
+\t_longest_parse_length = parser->index;
+\t_longest_parse_pos = *parser_context(parser);
+\t_unexpected_token.type = TOK_INVALID;
+}
 back_up(parser);
 return NULL;""" % (array_name, array_name))
         elif parser.operator in ('or', 'which'):

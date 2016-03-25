@@ -608,7 +608,10 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 
 	ASTStatement *body = statement(parser);
 	if (body == NULL) {
-		issue_error(parser_context(parser), "Expected function body");
+		if (_unexpected_token.type != TOK_INVALID) {
+			issue_error(&_longest_parse_pos, "Unexpected token %s",
+					token_type_names[_unexpected_token.type]);
+		}
 		return NULL;
 	}
 	result->val.function_def.body = body;
