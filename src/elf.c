@@ -3,7 +3,7 @@
 #include "asm.h"
 #include "misc.h"
 
-typedef enum ElfIdentIndex
+typedef enum ELFIdentIndex
 {
 	ELF_IDENT_MAGIC0,
 	ELF_IDENT_MAGIC1,
@@ -14,7 +14,7 @@ typedef enum ElfIdentIndex
 	ELF_IDENT_ELF_VERSION,
 
 	ELF_IDENT_NIDENT = 16,
-} ElfIdentIndex;
+} ELFIdentIndex;
 
 #define ELFCLASS64 2
 #define ELFDATA2LSB 1
@@ -24,7 +24,7 @@ typedef enum ElfIdentIndex
 // Specified by System V x86-64 spec
 #define EM_X86_64 62
 
-typedef struct ElfHeader
+typedef struct ELFHeader
 {
 	u8 identifier[ELF_IDENT_NIDENT];
 
@@ -45,7 +45,7 @@ typedef struct ElfHeader
 	u16 section_header_entries;
 
 	u16 section_header_table_string_table_index;
-} __attribute__((packed)) ElfHeader;
+} __attribute__((packed)) ELFHeader;
 
 #define PT_LOAD 1
 
@@ -53,7 +53,7 @@ typedef struct ElfHeader
 #define PF_W (1 << 1)
 #define PF_R (1 << 2)
 
-typedef struct ElfProgramHeader
+typedef struct ELFProgramHeader
 {
 	u32 type;
 	u32 flags;
@@ -63,9 +63,9 @@ typedef struct ElfProgramHeader
 	u64 segment_size_in_file;
 	u64 segment_size_in_process;
 	u64 alignment;
-} __attribute__((packed)) ElfProgramHeader;
+} __attribute__((packed)) ELFProgramHeader;
 
-typedef struct ElfSectionHeader
+typedef struct ELFSectionHeader
 {
 	u32 string_table_index_for_name;
 	u32 type;
@@ -77,7 +77,7 @@ typedef struct ElfSectionHeader
 	u32 misc_info;
 	u64 alignment;
 	u64 entry_size;
-} __attribute__((packed)) ElfSectionHeader;
+} __attribute__((packed)) ELFSectionHeader;
 
 #define SHN_UNDEF 0
 
@@ -85,7 +85,7 @@ static void write_crt0(FILE *output_file, i32 main_address_offset);
 
 void write_elf_file(FILE *output_file, AsmModule *asm_module)
 {
-	ElfHeader header;
+	ELFHeader header;
 
 	header.identifier[ELF_IDENT_MAGIC0] = 0x7F;
 	header.identifier[ELF_IDENT_MAGIC1] = 'E';
@@ -94,9 +94,9 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module)
 	header.identifier[ELF_IDENT_ELF_VERSION] = EV_CURRENT;
 	header.elf_version = EV_CURRENT;
 
-	header.header_size = sizeof(ElfHeader);
-	header.program_header_entry_size = sizeof(ElfProgramHeader);
-	header.section_header_entry_size = sizeof(ElfSectionHeader);
+	header.header_size = sizeof(ELFHeader);
+	header.program_header_entry_size = sizeof(ELFProgramHeader);
+	header.section_header_entry_size = sizeof(ELFSectionHeader);
 
 	header.identifier[ELF_IDENT_FILE_CLASS] = ELFCLASS64;
 	header.identifier[ELF_IDENT_DATA_ENCODING] = ELFDATA2LSB;
@@ -112,14 +112,14 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module)
 	header.section_header_entries = 0;
 	header.section_header_table_string_table_index = SHN_UNDEF;
 
-	header.program_header_table_location = sizeof(ElfHeader);
+	header.program_header_table_location = sizeof(ELFHeader);
 	header.program_header_entries = 1;
 
 	u32 first_segment_location =
 		header.program_header_table_location +
-		(header.program_header_entries * sizeof(ElfProgramHeader));
+		(header.program_header_entries * sizeof(ELFProgramHeader));
 
-	ElfProgramHeader executable_segment;
+	ELFProgramHeader executable_segment;
 	executable_segment.type = PT_LOAD;
 	executable_segment.segment_location = first_segment_location;
 	executable_segment.base_virtual_address = 0x8000000 + first_segment_location;
