@@ -1,3 +1,219 @@
+translation_unit = list(ASTToplevel, external_decl)
+
+external_decl = seq(build_toplevel, which(function_definition, decl))
+
+function_definition =
+	seq(build_function_definition, decl_specifiers, declarator,
+		opt(list(ASTDecl, decl)), compound_statement)
+
+build_function_definition =
+	build(ASTFunctionDef, 4,
+		specifiers, #0,
+		declarator, #1,
+		old_style_param_decls, "((OptResult *)#2)->result",
+		body, #3)
+
+decl_specifiers =
+	list(ASTDeclSpecifier,
+		or(storage_class_specifier,
+			type_specifier,
+			type_qualifier,
+			function_specifier))
+
+decl =
+	seq(build_decl, decl_specifiers, opt(init_declarator_list), TOK_SEMICOLON)
+
+build_decl =
+	build(ASTDecl, 3,
+		decl_specifiers, #0,
+		init_declarators, "((OptResult *)#1)->result")
+
+init_declarator_list = list(ASTInitDeclarator, init_declarator)
+
+init_declarator = seq(build_init_declarator, declarator, TOK_ASSIGN, initializer)
+
+build_init_declarator =
+	build(ASTInitDeclarator, 3,
+		declarator, #0,
+		initializer, #2)
+
+storage_class_specifier =
+	seq(build_storage_class_specifier,
+		which(keyword(typedef), keyword(extern), keyword(static),
+			keyword(auto), keyword(register)))
+
+type_specifier =
+	seq(build_type_specifier_decl_specifier,
+		or(seq(build_named_type, named_type),
+			struct_or_union_specifier,
+			enum_specifier))
+
+build_type_specifier_decl_specifier =
+	build(ASTDeclSpecifier, 1,
+		type, TYPE_SPECIFIER,
+		val.type_specifier, #0)
+
+build_named_type =
+	build(ASTTypeSpecifier, 1,
+		type, NAMED_TYPE_SPECIFIER,
+		val.name, "((Token *)#0)->val.symbol_or_string_literal")
+
+struct_or_union_specifier =
+	or(seq(build_struct_or_union_tagged_named_type, struct_or_union, TOK_SYMBOL),
+		seq(build_struct_or_union, struct_or_union, opt(TOK_SYMBOL),
+			TOK_LCURLY, list(ASTFieldDecl, field_decl), TOK_RCURLY))
+
+struct_or_union = which(keyword(struct), keyword(union))
+
+field_decl =
+	seq(build_field_decl, decl_specifiers,
+		field_declarator_list, TOK_SEMICOLON)
+
+build_field_decl =
+	build(ASTFieldDecl, 3,
+		decl_specifiers, #0,
+		field_declarators, #2)
+
+field_declarator_list = list(ASTFieldDeclarator, field_declarator, TOK_COMMA)
+
+field_declarator =
+	or(seq(build_bitfield_declarator, opt(declarator), TOK_COLON, expr),
+		seq(build_field_declarator, declarator))
+
+build_bitfield_declarator =
+	build(ASTFieldDeclarator, 3,
+		type, BITFIELD_FIELD_DECLARATOR,
+		val.bitfield.declarator, "((OptResult *)#0)->result",
+		val.bitfield.width, #2)
+
+build_field_declarator =
+	build(ASTFieldDeclarator, 1,
+		type, NORMAL_FIELD_DECLARATOR,
+		val.declarator, #0)
+
+enum_specifier =
+	or(seq(build_enum_tagged_named_type, keyword(enum), TOK_SYMBOL),
+		seq(build_enum, keyword(enum), opt(TOK_SYMBOL), TOK_LCURLY,
+			enumerator_list, opt(TOK_COMMA), TOK_RCURLY))
+
+enumerator_list = list(ASTEnumerator, enumerator, TOK_COMMA)
+
+enumerator =
+	seq(build_enumerator, TOK_SYMBOL, opt(seq(second, TOK_ASSIGN, expr)))
+
+build_enumerator =
+	build(ASTEnumerator, 2,
+		name, "((Token *)#0)->val.symbol_or_string_literal",
+		value, "((OptResult *)#1)->result")
+
+type_qualifier =
+	seq(build_type_qualifier,
+		or(keyword(const), keyword(restrict), keyword(volatile)))
+
+function_specifier = seq(build_function_specifier, keyword(inline))
+
+declarator =
+	or(seq(build_pointee_declarator, opt(pointer), direct_declarator),
+		seq(build_terminal_pointer, pointer))
+
+pointer =
+	fold(build_next_pointer,
+		seq(build_initial_pointer_result, single_pointer),
+		single_pointer)
+
+single_pointer =
+	seq(build_pointer, TOK_ASTERISK, opt(list(ASTDeclSpecifier, type_qualifier)))
+
+build_initial_pointer_result =
+	build(PointerResult, 1, first, #0, last, #0)
+
+build_pointer =
+	build(ASTDeclarator, 2,
+		type, POINTER_DECLARATOR,
+		val.pointer_declarator.decl_specifiers, "((OptResult *)#1)->result",
+		val.pointer_declarator.pointee, NULL)
+
+direct_declarator =
+	fold(build_sub_declarator,
+		or(seq(build_ident_declarator, TOK_SYMBOL),
+			seq(build_declarator, TOK_LROUND, declarator, TOK_RROUND)),
+		which(seq(middle, TOK_LSQUARE, expr, TOK_RSQUARE),
+			seq(middle, TOK_LROUND, parameter_type_list, TOK_RROUND)))
+
+build_ident_declarator =
+	build(ASTDirectDeclarator, 1,
+		type, IDENTIFIER_DECLARATOR,
+		val.name, "((Token *)#0)->val.symbol_or_string_literal")
+
+build_declarator =
+	build(ASTDirectDeclarator, 3,
+		type, DECLARATOR,
+		val.declarator, #1)
+
+parameter_type_list =
+	seq(first,
+		list(ASTParameterDecl, parameter_decl, TOK_COMMA),
+		opt(seq(ignore, TOK_COMMA, TOK_ELLIPSIS)))
+
+parameter_decl =
+	seq(build_parameter_decl, decl_specifiers, declarator)
+
+build_parameter_decl =
+	build(ASTParameterDecl, 2,
+		decl_specifiers, #0,
+		declarator, #1)
+
+type_name = seq(build_type_name, decl_specifiers, opt(direct_declarator))
+
+build_type_name =
+	build(ASTTypeName, 2,
+		decl_specifiers, #0,
+		declarator, "((OptResult *)#1)->result")
+
+initializer =
+	or(seq(build_expr_initializer, expr),
+		seq(build_brace_initializer, TOK_LCURLY, initializer_list,
+			opt(TOK_COMMA), TOK_RCURLY))
+
+build_expr_initializer =
+	build(ASTInitializer, 1,
+		type, EXPR_INITIALIZER,
+		val.expr, #0)
+
+build_brace_initializer =
+	build(ASTInitializer, 4,
+		type, BRACE_INITIALIZER,
+		val.initializer_elements, #1)
+
+initializer_list = list(ASTInitializerElement, initializer_element, TOK_COMMA)
+
+initializer_element =
+	seq(build_initializer_element,
+		opt(seq(first, designator_list, TOK_ASSIGN)),
+		initializer)
+
+build_initializer_element =
+	build(ASTInitializerElement, 2,
+		designators, "((OptResult *)#0)->result",
+		initializer, #1)
+
+designator_list = list(ASTDesignator, designator)
+
+designator =
+	or(seq(build_index_designator, TOK_LSQUARE, expr, TOK_RSQUARE),
+		seq(build_field_designator, TOK_DOT, TOK_SYMBOL))
+
+build_index_designator =
+	build(ASTDesignator, 3,
+		type, INDEX_DESIGNATOR,
+		val.index_expr, #1)
+
+build_field_designator =
+	build(ASTDesignator, 2,
+		type, FIELD_DESIGNATOR,
+		val.field_name, "((Token *)#1)->val.symbol_or_string_literal")
+
+
 statement =
 	or(labeled_statement,
 		compound_statement,
@@ -16,8 +232,7 @@ compound_statement =
 	seq(build_compound_statement, TOK_LCURLY, block_item_list, TOK_RCURLY)
 
 block_item_list =
-	fold(build_block_item_list,
-		seq(empty_array), or(decl, statement))
+	list(ASTBlockItem, seq(build_block_item, which(decl, statement)))
 
 expr_statement = seq(build_expr_statement, opt(expr), TOK_SEMICOLON)
 
@@ -46,11 +261,6 @@ jump_statement =
 		seq(build_return_statement, keyword(return), opt(expr), TOK_SEMICOLON))
 
 
-decl =
-	seq(build_decl, type_name, identifier,
-		opt(seq(second, TOK_ASSIGN, expr)), TOK_SEMICOLON)
-	
-
 
 primary_expr =
     or(identifier,
@@ -59,7 +269,7 @@ primary_expr =
 
 constant =
 	seq(build_constant,
-		oneof(TOK_INT_LITERAL, TOK_FLOAT_LITERAL, TOK_STRING_LITERAL))
+		or(TOK_INT_LITERAL, TOK_FLOAT_LITERAL, TOK_STRING_LITERAL))
 
 postfix_expr =
     or(fold(build_postfix_expr,
@@ -76,8 +286,6 @@ postfix_expr =
             TOK_RCURLY))
 
 identifier = seq(build_identifier, TOK_SYMBOL)
-type_name = seq(build_type, TOK_SYMBOL)
-initializer_list = TOK_SYMBOL
 
 argument_expr_list =
     fold(build_arg_list,
@@ -93,7 +301,7 @@ unary_expr =
         seq(build_sizeof_type, keyword(sizeof), TOK_LROUND, type_name, TOK_RROUND))
 
 unary_operator =
-    oneof(TOK_AMPERSAND, TOK_ASTERISK, TOK_PLUS, TOK_MINUS, TOK_BIT_NOT, TOK_LOGICAL_NOT)
+    or(TOK_AMPERSAND, TOK_ASTERISK, TOK_PLUS, TOK_MINUS, TOK_BIT_NOT, TOK_LOGICAL_NOT)
 
 cast_expr =
     or(unary_expr,
@@ -171,10 +379,10 @@ assignment_expr =
         seq(build_binary_tail, assignment_operator, assignment_expr))
 
 assignment_operator =
-    oneof(TOK_ASSIGN, TOK_MULT_ASSIGN, TOK_DIVIDE_ASSIGN, TOK_MODULO_ASSIGN,
-            TOK_PLUS_ASSIGN, TOK_MINUS_ASSIGN, TOK_LEFT_SHIFT_ASSIGN,
-            TOK_RIGHT_SHIFT_ASSIGN, TOK_BIT_AND_ASSIGN, TOK_BIT_XOR_ASSIGN,
-            TOK_BIT_OR_ASSIGN)
+    or(TOK_ASSIGN, TOK_MULT_ASSIGN, TOK_DIVIDE_ASSIGN, TOK_MODULO_ASSIGN,
+		TOK_PLUS_ASSIGN, TOK_MINUS_ASSIGN, TOK_LEFT_SHIFT_ASSIGN,
+		TOK_RIGHT_SHIFT_ASSIGN, TOK_BIT_AND_ASSIGN, TOK_BIT_XOR_ASSIGN,
+		TOK_BIT_OR_ASSIGN)
 
 expr =
     fold(build_binary_head,

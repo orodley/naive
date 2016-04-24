@@ -10,13 +10,63 @@
 #include "pool.h"
 #include "tokenise.h"
 
+typedef struct TypeTableEntry
+{
+	const char *type_name;
+} TypeTableEntry;
+
+typedef struct TypeTable
+{
+	Array(TypeTableEntry) entries;
+} TypeTable;
+
+static const char *builtin_types[] = {
+	"void", "char", "short", "int", "long", "float", "double",
+	"signed", "unsigned", "_Bool", "_Complex",
+};
+
+static void type_table_add_entry(TypeTable *table, TypeTableEntry entry)
+{
+	*ARRAY_APPEND(&table->entries, TypeTableEntry) = entry;
+}
+
+static void type_table_init(TypeTable *type_table)
+{
+	ARRAY_INIT(&type_table->entries, TypeTableEntry,
+			STATIC_ARRAY_LENGTH(builtin_types));
+	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(builtin_types); i++) {
+		TypeTableEntry entry = { .type_name = builtin_types[i] };
+		type_table_add_entry(type_table, entry);
+	}
+}
+
+static bool type_table_look_up_name(
+		TypeTable *type_table, const char *name, TypeTableEntry *out)
+{
+	for (u32 i = 0; i < type_table->entries.size; i++) {
+		TypeTableEntry *entry = ARRAY_REF(&type_table->entries, TypeTableEntry, i);
+		if (strcmp(entry->type_name, name) == 0) {
+			*out = *entry;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 typedef struct Parser
 {
+	Pool *pool;
+
 	Array(SourceToken) *tokens;
 	u32 index;
 
-	Pool *pool;
+	TypeTable defined_types;
 } Parser;
+
+// @TODO: Move the functions in this file that are only used by generated code. 
+// They could either just be directly in the header produced by peg.py, or in
+// a separate "support" file which is #included by the header.
 
 static Token *read_token(Parser *parser)
 {
@@ -40,16 +90,6 @@ static inline void *revert(Parser *parser, u32 index)
 static inline Token *current_token(Parser *parser)
 {
 	return (Token *)ARRAY_REF(parser->tokens, SourceToken, parser->index);
-}
-
-static inline bool expect_token(Parser *parser, TokenType type)
-{
-	if (current_token(parser)->type == type) {
-		read_token(parser);
-		return true;
-	}
-
-	return false;
 }
 
 static inline bool expect_keyword(Parser *parser, const char *keyword)
@@ -85,26 +125,30 @@ typedef struct OptResult
 
 static inline void *middle(Parser *parser, void *a, void *b, void *c)
 {
-	UNUSED(parser); UNUSED(a); UNUSED(c);
+	IGNORE(parser); IGNORE(a); IGNORE(c);
 
 	return b;
+}
+
+static inline void *first(Parser *parser, void *a, void *b)
+{
+	IGNORE(parser); IGNORE(b);
+
+	return a;
 }
 
 static inline void *second(Parser *parser, void *a, void *b)
 {
-	UNUSED(parser); UNUSED(a);
+	IGNORE(parser); IGNORE(a);
 
 	return b;
 }
 
-static ASTType *build_type(Parser *parser, Token *type_name)
+static inline void *ignore(Parser *parser, ...)
 {
-	assert(type_name->type == TOK_SYMBOL);
+	IGNORE(parser);
 
-	ASTType *type = pool_alloc(parser->pool, sizeof *type);
-	type->name = type_name->val.symbol_or_string_literal;
-
-	return type;
+	return NULL;
 }
 
 static ASTExpr *build_identifier(Parser *parser, Token *identifier_token)
@@ -173,8 +217,8 @@ static ASTExpr *build_compound_initializer(Parser *parser,
 		void *a, void *b, void *c, void *d, void *e, void *f, void *g)
 {
 	/// @TODO
-	UNUSED(parser);
-	UNUSED(a); UNUSED(b); UNUSED(c); UNUSED(d); UNUSED(e); UNUSED(f); UNUSED(g);
+	IGNORE(parser);
+	IGNORE(a); IGNORE(b); IGNORE(c); IGNORE(d); IGNORE(e); IGNORE(f); IGNORE(g);
 	return NULL;
 }
 
@@ -190,7 +234,7 @@ static ASTExpr *build_arg_list(Parser *parser, Array(ASTExpr) *curr,
 		ASTExpr *next)
 {
 	// @TODO
-	UNUSED(parser); UNUSED(curr); UNUSED(next);
+	IGNORE(parser); IGNORE(curr); IGNORE(next);
 	return NULL;
 }
 
@@ -218,7 +262,7 @@ static ASTExpr *build_unary_expr(Parser *parser, Token *token,
 static ASTExpr *build_sizeof_expr(
 		Parser *parser, Token *tok_sizeof, ASTExpr *arg)
 {
-	UNUSED(tok_sizeof);
+	IGNORE(tok_sizeof);
 
 	ASTExpr *sizeof_expr = pool_alloc(parser->pool, sizeof *sizeof_expr);
 	sizeof_expr->type = AST_SIZEOF_EXPR;
@@ -228,11 +272,11 @@ static ASTExpr *build_sizeof_expr(
 }
 
 static ASTExpr *build_sizeof_type(Parser *parser, Token *tok_sizeof,
-		Token *lround, ASTType *type, Token *rround)
+		Token *lround, ASTTypeName *type, Token *rround)
 {
-	UNUSED(tok_sizeof);
-	UNUSED(lround);
-	UNUSED(rround);
+	IGNORE(tok_sizeof);
+	IGNORE(lround);
+	IGNORE(rround);
 
 	ASTExpr *sizeof_type = pool_alloc(parser->pool, sizeof *sizeof_type);
 	sizeof_type->type = AST_SIZEOF_TYPE;
@@ -242,9 +286,9 @@ static ASTExpr *build_sizeof_type(Parser *parser, Token *tok_sizeof,
 }
 
 static ASTExpr *build_cast_expr(Parser *parser, Token *lround,
-		ASTType *type, Token *rround, ASTExpr *arg)
+		ASTTypeName *type, Token *rround, ASTExpr *arg)
 {
-	UNUSED(lround); UNUSED(rround);
+	IGNORE(lround); IGNORE(rround);
 
 	ASTExpr *cast_expr = pool_alloc(parser->pool, sizeof *cast_expr);
 	cast_expr->type = AST_CAST;
@@ -326,8 +370,8 @@ static ASTExpr *build_conditional_expr(Parser *parser,
 		ASTExpr *condition, Token *q, ASTExpr *then_expr,
 		Token *colon, ASTExpr *else_expr)
 {
-	UNUSED(q);
-	UNUSED(colon);
+	IGNORE(q);
+	IGNORE(colon);
 
 	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
 	expr->type = AST_CONDITIONAL;
@@ -339,10 +383,11 @@ static ASTExpr *build_conditional_expr(Parser *parser,
 	
 }
 
+
 ASTStatement *build_labeled_statement(Parser *parser, Token *label,
 		Token *colon, ASTStatement *statement)
 {
-	UNUSED(colon);
+	IGNORE(colon);
 
 	ASTStatement *labeled_statement =
 		pool_alloc(parser->pool, sizeof *labeled_statement);
@@ -356,8 +401,8 @@ ASTStatement *build_labeled_statement(Parser *parser, Token *label,
 ASTStatement *build_case_statement(Parser *parser, Token *case_keyword,
 		ASTExpr *case_value, Token *colon, ASTStatement *statement)
 {
-	UNUSED(case_keyword);
-	UNUSED(colon);
+	IGNORE(case_keyword);
+	IGNORE(colon);
 
 	ASTStatement *case_statement = pool_alloc(parser->pool, sizeof *case_statement);
 	case_statement->type = AST_CASE_STATEMENT;
@@ -368,40 +413,42 @@ ASTStatement *build_case_statement(Parser *parser, Token *case_keyword,
 }
 
 ASTStatement *build_compound_statement(Parser *parser, Token *lcurly,
-		Array(ASTStatement *) *statements, Token *rcurly)
+		ASTBlockItem *block_items, Token *rcurly)
 {
-	UNUSED(lcurly);
-	UNUSED(rcurly);
+	IGNORE(lcurly);
+	IGNORE(rcurly);
 
 	ASTStatement *compound_statement =
 		pool_alloc(parser->pool, sizeof *compound_statement);
 	compound_statement->type = AST_COMPOUND_STATEMENT;
-
-	size_t statements_mem_size = sizeof(ASTStatement *) * statements->size;
-	compound_statement->val.compound_statement.statements =
-		pool_alloc(parser->pool, statements_mem_size);
-	memcpy(compound_statement->val.compound_statement.statements,
-			statements->elements, statements_mem_size);
-	compound_statement->val.compound_statement.num_statements = statements->size;
-
-	array_free(statements);
+	compound_statement->val.block_items = block_items;
 
 	return compound_statement;
 }
 
-Array(ASTStatement *) *build_block_item_list(Parser *parser,
-		Array(ASTStatement *) *curr, ASTStatement *next)
+ASTBlockItem *build_block_item(Parser *parser, WhichResult *decl_or_statement)
 {
-	UNUSED(parser);
+	ASTBlockItem *result = pool_alloc(parser->pool, sizeof *result);
+	switch (decl_or_statement->which) {
+	case 0:
+		result->type = BLOCK_ITEM_DECL;
+		result->val.decl = decl_or_statement->result;
+		break;
+	case 1:
+		result->type = BLOCK_ITEM_STATEMENT;
+		result->val.statement = decl_or_statement->result;
+		break;
+	default:
+		UNREACHABLE;
+	}
 
-	*ARRAY_APPEND(curr, ASTStatement *) = next;
-	return curr;
+	return result;
 }
 
 ASTStatement *build_expr_statement(
 		Parser *parser, OptResult *opt_expr, Token *semicolon)
 {
-	UNUSED(semicolon);
+	IGNORE(semicolon);
 
 	ASTStatement *statement = pool_alloc(parser->pool, sizeof *statement);
 	if (opt_expr->result == NULL) {
@@ -419,7 +466,7 @@ ASTStatement *build_if_statement(Parser *parser, Token *if_token, Token *lround,
 		ASTExpr *condition, Token *rround, ASTStatement *then_statement,
 		OptResult *else_statement)
 {
-	UNUSED(if_token); UNUSED(lround); UNUSED(rround);
+	IGNORE(if_token); IGNORE(lround); IGNORE(rround);
 
 	ASTStatement *if_statement = pool_alloc(parser->pool, sizeof *if_statement);
 	if_statement->type = AST_IF_STATEMENT;
@@ -434,7 +481,7 @@ ASTStatement *build_if_statement(Parser *parser, Token *if_token, Token *lround,
 ASTStatement *build_switch_statement(Parser *parser, Token *switch_token,
 		Token *lround, ASTExpr *switch_expr, Token *rround, ASTStatement *body)
 {
-	UNUSED(switch_token); UNUSED(lround); UNUSED(rround);
+	IGNORE(switch_token); IGNORE(lround); IGNORE(rround);
 
 	ASTStatement *switch_statement = pool_alloc(parser->pool, sizeof *switch_statement);
 	switch_statement->type = AST_SWITCH_STATEMENT;
@@ -446,9 +493,9 @@ ASTStatement *build_switch_statement(Parser *parser, Token *switch_token,
 ASTStatement *build_while_statement(Parser *parser, Token *tok_while,
 		Token *lround, ASTExpr *condition, Token *rround, ASTStatement *body)
 {
-	UNUSED(tok_while);
-	UNUSED(lround);
-	UNUSED(rround);
+	IGNORE(tok_while);
+	IGNORE(lround);
+	IGNORE(rround);
 
 	ASTStatement *while_statement = pool_alloc(parser->pool, sizeof *while_statement);
 	while_statement->type = AST_WHILE_STATEMENT;
@@ -461,7 +508,7 @@ ASTStatement *build_do_while_statement(Parser *parser, Token *tok_do,
 		ASTStatement *body, Token *tok_while,
 		Token *lround, ASTExpr *condition, Token *rround, Token *semi)
 {
-	UNUSED(tok_do); UNUSED(tok_while); UNUSED(lround); UNUSED(rround); UNUSED(semi);
+	IGNORE(tok_do); IGNORE(tok_while); IGNORE(lround); IGNORE(rround); IGNORE(semi);
 
 	ASTStatement *do_while_statement =
 		pool_alloc(parser->pool, sizeof *do_while_statement);
@@ -475,7 +522,7 @@ ASTStatement *build_for_statement(Parser *parser, Token *tok_for, Token *lround,
 		OptResult *init, Token *semi1, OptResult *condition, Token *semi2,
 		OptResult *update, Token *rround, ASTStatement *body)
 {
-	UNUSED(tok_for); UNUSED(lround); UNUSED(semi1); UNUSED(semi2); UNUSED(rround);
+	IGNORE(tok_for); IGNORE(lround); IGNORE(semi1); IGNORE(semi2); IGNORE(rround);
 
 	ASTStatement *for_statement = pool_alloc(parser->pool, sizeof *for_statement);
 	for_statement->type = AST_FOR_STATEMENT;
@@ -496,7 +543,7 @@ ASTStatement *build_for_decl_statement(void *a, void *b, void *c, void *d,
 
 ASTStatement *build_goto_statement(Parser *parser, Token *tok_goto, Token *label)
 {
-	UNUSED(tok_goto);
+	IGNORE(tok_goto);
 
 	ASTStatement *goto_statement = pool_alloc(parser->pool, sizeof *goto_statement);
 	goto_statement->type = AST_GOTO_STATEMENT;
@@ -506,8 +553,8 @@ ASTStatement *build_goto_statement(Parser *parser, Token *tok_goto, Token *label
 
 ASTStatement *build_continue_statement(Parser *parser, Token *tok_cont, Token *semi)
 {
-	UNUSED(tok_cont);
-	UNUSED(semi);
+	IGNORE(tok_cont);
+	IGNORE(semi);
 
 	ASTStatement *continue_statement =
 		pool_alloc(parser->pool, sizeof *continue_statement);
@@ -517,8 +564,8 @@ ASTStatement *build_continue_statement(Parser *parser, Token *tok_cont, Token *s
 
 ASTStatement *build_break_statement(Parser *parser, Token *tok_break, Token *semi)
 {
-	UNUSED(tok_break);
-	UNUSED(semi);
+	IGNORE(tok_break);
+	IGNORE(semi);
 
 	ASTStatement *break_statement =
 		pool_alloc(parser->pool, sizeof *break_statement);
@@ -529,8 +576,8 @@ ASTStatement *build_break_statement(Parser *parser, Token *tok_break, Token *sem
 ASTStatement *build_return_statement(Parser *parser, Token *tok_return,
 		OptResult *expr, Token *semi)
 {
-	UNUSED(tok_return);
-	UNUSED(semi);
+	IGNORE(tok_return);
+	IGNORE(semi);
 
 	ASTStatement *return_statement =
 		pool_alloc(parser->pool, sizeof *return_statement);
@@ -539,11 +586,212 @@ ASTStatement *build_return_statement(Parser *parser, Token *tok_return,
 	return return_statement;
 }
 
-// @TODO
-void *build_decl(void *a, void *b, void *c, void *d, void *e)
+
+static ASTToplevel *build_toplevel(Parser *parser, WhichResult *function_def_or_decl)
 {
-	(void)a; (void)b; (void)c; (void)d; (void)e;
-	return NULL;
+	ASTToplevel *toplevel = pool_alloc(parser->pool, sizeof *toplevel);
+	switch (function_def_or_decl->which) {
+	case 0:
+		toplevel->type = FUNCTION_DEF;
+		toplevel->val.function_def = function_def_or_decl->result;
+		break;
+	case 1:
+		toplevel->type = DECL;
+		toplevel->val.decl = function_def_or_decl->result;
+		break;
+	default:
+		UNREACHABLE;
+	}
+
+	return toplevel;
+}
+
+static ASTDeclSpecifier *build_storage_class_specifier(Parser *parser, WhichResult *keyword)
+{
+	ASTDeclSpecifier *result = pool_alloc(parser->pool, sizeof *result);
+	result->type = STORAGE_CLASS_SPECIFIER;
+
+	ASTStorageClassSpecifier specifier;
+	switch (keyword->which) {
+	case 0: specifier = TYPEDEF_SPECIFIER; break;
+	case 1: specifier = EXTERN_SPECIFIER; break;
+	case 2: specifier = STATIC_SPECIFIER; break;
+	case 3: specifier = AUTO_SPECIFIER; break;
+	case 4: specifier = REGISTER_SPECIFIER; break;
+	default: UNREACHABLE;
+	}
+	result->val.storage_class_specifier = specifier;
+
+	return result;
+}
+
+static ASTDeclSpecifier *build_type_qualifier(Parser *parser, WhichResult *keyword)
+{
+	ASTDeclSpecifier *result = pool_alloc(parser->pool, sizeof *result);
+	result->type = TYPE_QUALIFIER;
+
+	ASTTypeQualifier qualifier;
+	switch (keyword->which) {
+	case 0: qualifier = CONST_QUALIFIER; break;
+	case 1: qualifier = RESTRICT_QUALIFIER; break;
+	case 2: qualifier = VOLATILE_QUALIFIER; break;
+	default: UNREACHABLE;
+	}
+	result->val.type_qualifier = qualifier;
+
+	return result;
+}
+
+static ASTDeclSpecifier *build_function_specifier(Parser *parser, Token *keyword)
+{
+	IGNORE(keyword);
+
+	ASTDeclSpecifier *result = pool_alloc(parser->pool, sizeof *result);
+	result->type = FUNCTION_SPECIFIER;
+	result->val.function_specifier = INLINE_SPECIFIER;
+
+	return result;
+}
+
+// @TODO: We currently don't add anything to the type table apart from builtin
+// types. We need to add typedefs and named tagged types as we go.
+static Token *named_type(Parser *parser)
+{
+	Token *token = read_token(parser);
+	if (token->type != TOK_SYMBOL) {
+		back_up(parser);
+		return NULL;
+	}
+
+	const char *name = token->val.symbol_or_string_literal;
+	TypeTableEntry entry;
+	if (!type_table_look_up_name(&parser->defined_types, name, &entry)) {
+		back_up(parser);
+		return NULL;
+	}
+
+	return token;
+}
+
+ASTTypeSpecifier *build_struct_or_union_tagged_named_type(
+		Parser *parser, WhichResult *keyword, Token *name)
+{
+	ASTTypeSpecifier *tagged_type = pool_alloc(parser->pool, sizeof *tagged_type);
+	tagged_type->type = keyword->which == 0 ?
+		STRUCT_TYPE_SPECIFIER :
+		UNION_TYPE_SPECIFIER;
+	tagged_type->val.struct_or_union_specifier.name = name->val.symbol_or_string_literal;
+	tagged_type->val.struct_or_union_specifier.fields = NULL;
+
+	return tagged_type;
+}
+
+ASTTypeSpecifier *build_enum_tagged_named_type(
+		Parser *parser, Token *keyword, Token *name)
+{
+	IGNORE(keyword);
+
+	ASTTypeSpecifier *tagged_type = pool_alloc(parser->pool, sizeof *tagged_type);
+	tagged_type->type = ENUM_TYPE_SPECIFIER;
+	tagged_type->val.enum_specifier.name = name->val.symbol_or_string_literal;
+	tagged_type->val.enum_specifier.enumerators = NULL;
+
+	return tagged_type;
+}
+
+ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
+		OptResult *name, Token *lcurly, ASTFieldDecl *fields, Token *rcurly)
+{
+	IGNORE(lcurly);
+	IGNORE(rcurly);
+
+	ASTTypeSpecifier *result = pool_alloc(parser->pool, sizeof *result);
+	result->type = keyword->which == 0 ?
+		STRUCT_TYPE_SPECIFIER :
+		UNION_TYPE_SPECIFIER;
+	result->val.struct_or_union_specifier.name = name->result;
+	result->val.struct_or_union_specifier.fields = fields;
+
+	return result;
+}
+
+ASTTypeSpecifier *build_enum(Parser *parser, Token *keyword, OptResult *name,
+		Token *lcurly, ASTEnumerator *enumerators, OptResult *comma, Token *rcurly)
+{
+	IGNORE(keyword); IGNORE(lcurly); IGNORE(comma); IGNORE(rcurly);
+
+	ASTTypeSpecifier *result = pool_alloc(parser->pool, sizeof *result);
+	result->type = ENUM_TYPE_SPECIFIER;
+	result->val.enum_specifier.name = name->result;
+	result->val.enum_specifier.enumerators = enumerators;
+
+	return result;
+}
+
+// @TODO: This feels unnecessary. Couldn't we just have the parser keep
+// wrapping the next thing in the input? This is complicated a bit because
+// 'pointer' is currently a separate parser to the thing after it.
+typedef struct PointerResult
+{
+	ASTDeclarator *first;
+	ASTDeclarator *last;
+} PointerResult;
+
+PointerResult *build_next_pointer(Parser *parser, PointerResult *pointers,
+		ASTDeclarator *pointer)
+{
+	IGNORE(parser);
+
+	pointers->last->val.pointer_declarator.pointee = pointer;
+	pointers->last = pointer;
+
+	return pointers;
+}
+
+ASTDeclarator *build_pointee_declarator(Parser *parser, OptResult *pointer,
+		ASTDirectDeclarator *declarator)
+{
+	ASTDeclarator *result = pool_alloc(parser->pool, sizeof *result);
+	result->type = DIRECT_DECLARATOR;
+	result->val.direct_declarator = declarator;
+
+	if (pointer->result == NULL)
+		return result;
+
+	PointerResult *pointer_result = pointer->result;
+	pointer_result->last->val.pointer_declarator.pointee = result;
+
+	return pointer_result->first;
+}
+
+ASTDeclarator *build_terminal_pointer(Parser *parser, PointerResult *pointer_result)
+{
+	IGNORE(parser);
+
+	pointer_result->last->val.pointer_declarator.pointee = NULL;
+	return pointer_result->first;
+}
+
+ASTDirectDeclarator *build_sub_declarator(Parser *parser,
+		ASTDirectDeclarator *declarator,
+		WhichResult *function_or_array_declarator)
+{
+	ASTDirectDeclarator *result = pool_alloc(parser->pool, sizeof *result);
+	switch (function_or_array_declarator->which) {
+	case 0:
+		result->type = ARRAY_DECLARATOR;
+		result->val.array_declarator.element_declarator = declarator;
+		result->val.array_declarator.array_length = function_or_array_declarator->result;
+		break;
+	case 1:
+		result->type = FUNCTION_DECLARATOR;
+		result->val.function_declarator.declarator = declarator;
+		result->val.function_declarator.parameters = function_or_array_declarator->result;
+		break;
+	default: UNREACHABLE;
+	}
+
+	return result;
 }
 
 #include "parse.inc"
@@ -554,75 +802,16 @@ void *build_decl(void *a, void *b, void *c, void *d, void *e)
 // of the time.
 ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 {
-	Parser _parser = { tokens, 0, ast_pool };
-	Parser *parser = &_parser;
+	Parser parser = { ast_pool, tokens, 0, { ARRAY_ZEROED } };
+	type_table_init(&parser.defined_types);
 
-	ASTToplevel *result = pool_alloc(parser->pool, sizeof *result);
-	result->type = AST_FUNCTION_DEF;
-
-	ASTType *return_type = type_name(parser);
-	if (return_type == NULL)
-		return NULL;
-	result->val.function_def.return_type = return_type;
-
-	Token *identifier = read_token(parser);
-	if (identifier->type != TOK_SYMBOL) {
-		issue_error(token_context(identifier), "Expected identifier");
-		return NULL;
+	ASTToplevel *result = translation_unit(&parser);
+	if (result == NULL && _unexpected_token.type != TOK_INVALID) {
+		issue_error(&_longest_parse_pos, "Unexpected token %s",
+				token_type_names[_unexpected_token.type]);
 	}
-	result->val.function_def.name = identifier->val.symbol_or_string_literal;
-
-	if (!expect_token(parser, TOK_LROUND)) {
-		issue_error(parser_context(parser), "Expected '('");
-		return NULL;
-	}
-
-	Array(ASTVar *) *arguments = &result->val.function_def.arguments;
-	ARRAY_INIT(arguments, ASTVar *, 3);
-
-	for (;;) {
-		ASTType *arg_type = type_name(parser);
-		if (arg_type == NULL)
-			return NULL;
-
-		Token *identifier = read_token(parser);
-		if (identifier->type != TOK_SYMBOL) {
-			issue_error(token_context(identifier), "Expected identifier");
-			return NULL;
-		}
-
-		ASTVar *argument = pool_alloc(parser->pool, sizeof *argument);
-		argument->name = identifier->val.symbol_or_string_literal;
-		argument->type = arg_type;
-
-		*ARRAY_APPEND(arguments, ASTVar *) = argument;
-
-		Token *comma_or_close_bracket = read_token(parser);
-		if (comma_or_close_bracket->type == TOK_RROUND)
-			break;
-		if (comma_or_close_bracket->type != TOK_COMMA) {
-			issue_error(token_context(comma_or_close_bracket), "Expected ')'");
-			return NULL;
-		}
-	}
-
-	ASTStatement *body = statement(parser);
-	if (body == NULL) {
-		if (_unexpected_token.type != TOK_INVALID) {
-			issue_error(&_longest_parse_pos, "Unexpected token %s",
-					token_type_names[_unexpected_token.type]);
-		}
-		return NULL;
-	}
-	result->val.function_def.body = body;
 
 	return result;
-}
-
-
-static void dump_type(ASTType *type)
-{
-	fputs(type->name, stdout);
 }
 
 #define X(x) #x
@@ -630,6 +819,13 @@ static const char *expr_type_names[] = {
 	AST_EXPR_TYPES
 };
 #undef X
+
+
+static void dump_type_name(ASTTypeName *type_name)
+{
+	IGNORE(type_name);
+	assert(!"Not implemented");
+}
 
 static void dump_expr(ASTExpr *expr)
 {
@@ -652,12 +848,11 @@ static void dump_expr(ASTExpr *expr)
 		dump_expr(expr->val.unary_arg);
 		break;
 	case AST_CAST:
-		dump_type(expr->val.cast.cast_type);
-		fputs(", ", stdout);
+		fputs("<some type>, ", stdout);
 		dump_expr(expr->val.cast.arg);
 		break;
 	case AST_SIZEOF_TYPE:
-		dump_type(expr->val.type);
+		dump_type_name(expr->val.type);
 		break;
 	case AST_MULTIPLY: case AST_DIVIDE: case AST_MODULO: case AST_ADD:
 	case AST_MINUS: case AST_LEFT_SHIFT: case AST_RIGHT_SHIFT:
@@ -706,11 +901,12 @@ static void dump_statement(ASTStatement *statement)
 		printf("%s, ", statement->val.labeled_statement.label_name);
 		break;
 	case AST_COMPOUND_STATEMENT: {
-		ASTStatement **statements = statement->val.compound_statement.statements;
-		u32 num_statements = statement->val.compound_statement.num_statements;
-		for (u32 i = 0; i < num_statements; i++) {
-			dump_statement(statements[i]);
-			fputs(i == num_statements - 1 ? "" : ", ", stdout);
+		ASTBlockItem *block_item = statement->val.block_items;
+		while (block_item != NULL) {
+			dump_statement(block_item->val.statement);
+			if (block_item->next == NULL)
+				fputs(", ", stdout);
+			block_item = block_item->next;
 		}
 		break;
 	}
@@ -759,23 +955,11 @@ static void dump_statement(ASTStatement *statement)
 void dump_toplevel(ASTToplevel *ast)
 {
 	switch (ast->type) {
-	case AST_FUNCTION_DEF:
-		fputs("FUNCTION_DEF(", stdout);
-		dump_type(ast->val.function_def.return_type);
-		printf(", %s, (", ast->val.function_def.name);
-
-		Array(ASTVar) *args = &ast->val.function_def.arguments;
-		for (u32 i = 0; i < args->size; i++) {
-			ASTVar *arg = *ARRAY_REF(args, ASTVar *, i);
-			dump_type(arg->type);
-			printf(" %s%s", arg->name, i == args->size - 1 ? "" : ", ");
-		}
-
-		fputs("), ", stdout);
-		dump_statement(ast->val.function_def.body);
-
-		puts(")");
-
+	case FUNCTION_DEF:
+		puts("FUNCTION_DEF");
+		dump_statement(ast->val.function_def->body);
 		break;
+	default:
+		assert(!"Not implemented");
 	}
 }

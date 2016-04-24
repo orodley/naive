@@ -33,7 +33,8 @@ HEADERS := $(shell find src -name '*.h')
 debug: debug/$(NAME) tags
 
 tags: $(DEBUG_OBJS) $(HEADERS)
-	ctags -R
+	@echo '(DEBUG) ctags'
+	@ctags -R --fields=+Sl --langmap=c:+.h
 
 debug/$(NAME): $(DEBUG_OBJS)
 	@echo '(DEBUG) CC $@'

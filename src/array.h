@@ -24,6 +24,7 @@ void array_ensure_room(Array_ *array);
 void array_delete_last(Array_ *array);
 void array_free(Array_ *array);
 
+#define ARRAY_ZEROED ((Array_){ 0, 0, 0, 0 })
 #define ARRAY_INIT(array, element_type, initial_capacity) \
 	_array_init((array), sizeof(element_type), (initial_capacity))
 #define ARRAY_REF(array, element_type, i) \

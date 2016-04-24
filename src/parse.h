@@ -12,17 +12,6 @@ typedef struct ParseError
 	const char *expected;
 } ParseError;
 
-typedef struct ASTType
-{
-	const char *name;
-} ASTType;
-
-typedef struct ASTVar
-{
-	ASTType *type;
-	char *name;
-} ASTVar;
-
 #define AST_EXPR_TYPES \
 		X(AST_INT_LITERAL), \
 \
@@ -101,7 +90,7 @@ typedef struct ASTExpr
 		i64 int_literal;
 		const char *identifier;
 		struct ASTExpr *unary_arg;
-		ASTType *type;
+		struct ASTTypeName *type;
 		struct
 		{
 			struct ASTExpr *arg1;
@@ -120,7 +109,7 @@ typedef struct ASTExpr
 		} struct_field;
 		struct
 		{
-			ASTType *cast_type;
+			struct ASTTypeName *cast_type;
 			struct ASTExpr *arg;
 		} cast;
 	} val;
@@ -165,11 +154,7 @@ typedef struct ASTStatement
 			ASTExpr *expr;
 			struct ASTStatement *statement;
 		} expr_and_statement;
-		struct
-		{
-			struct ASTStatement **statements;
-			u32 num_statements;
-		} compound_statement;
+		struct ASTBlockItem *block_items;
 		struct
 		{
 			ASTExpr *condition;
@@ -189,22 +174,264 @@ typedef struct ASTStatement
 	} val;
 } ASTStatement;
 
-typedef struct ASTToplevel
+typedef struct ASTBlockItem
+{
+	struct ASTBlockItem *next;
+
+	enum
+	{
+		BLOCK_ITEM_DECL,
+		BLOCK_ITEM_STATEMENT,
+	} type;
+
+	union 
+	{
+		struct ASTDecl *decl;
+		ASTStatement *statement;
+	} val;
+} ASTBlockItem;
+
+
+typedef struct ASTDesignator
+{
+	struct ASTDesignator *next;
+
+	enum
+	{
+		INDEX_DESIGNATOR,
+		FIELD_DESIGNATOR,
+	} type;
+
+	union
+	{
+		ASTExpr *index_expr;
+		const char *field_name;
+	} val;
+} ASTDesignator;
+
+typedef struct ASTInitializerElement
+{
+	struct ASTInitializerElement *next;
+
+	ASTDesignator *designators;
+	struct ASTInitializer *initializer;
+} ASTInitializerElement;
+
+typedef struct ASTInitializer
 {
 	enum
 	{
-		AST_FUNCTION_DEF,
+		EXPR_INITIALIZER,
+		BRACE_INITIALIZER,
+	} type;
+
+	union
+	{
+		ASTExpr *expr;
+		ASTInitializerElement *initializer_elements;
+	} val;
+} ASTInitializer;
+
+typedef struct ASTInitDeclarator
+{
+	struct ASTInitDeclarator *next;
+
+	struct ASTDeclarator *declarator;
+	ASTInitializer *initializer;
+} ASTInitDeclarator;
+
+typedef struct ASTDecl
+{
+	struct ASTDecl *next;
+
+	struct ASTDeclSpecifier *decl_specifiers;
+	ASTInitDeclarator *init_declarators;
+} ASTDecl;
+
+typedef struct ASTTypeName
+{
+	struct ASTDeclSpecifier *decl_specifiers;
+	struct ASTDirectDeclarator *declarator;
+} ASTTypeName;
+
+typedef struct ASTParameterDecl
+{
+	struct ASTParameterDecl *next;
+
+	struct ASTDeclSpecifier *decl_specifiers;
+	struct ASTDeclarator *declarator;
+} ASTParameterDecl;
+
+typedef struct ASTDirectDeclarator
+{
+	enum
+	{
+		DECLARATOR,
+		IDENTIFIER_DECLARATOR,
+		ARRAY_DECLARATOR,
+		FUNCTION_DECLARATOR,
+	} type;
+
+	union
+	{
+		const char *name;
+		struct ASTDeclarator *declarator;
+		struct
+		{
+			struct ASTDirectDeclarator *element_declarator;
+			ASTExpr *array_length;
+		} array_declarator;
+		struct
+		{
+			struct ASTDirectDeclarator *declarator;
+			ASTParameterDecl *parameters;
+		} function_declarator;
+	} val;
+} ASTDirectDeclarator;
+
+typedef struct ASTDeclarator
+{
+	enum
+	{
+		POINTER_DECLARATOR,
+		DIRECT_DECLARATOR,
 	} type;
 
 	union
 	{
 		struct
 		{
-			ASTType *return_type;
-			char *name;
-			Array(ASTVar *) arguments;
-			ASTStatement *body;
-		} function_def;
+			struct ASTDeclSpecifier *decl_specifiers;
+			struct ASTDeclarator *pointee;
+		} pointer_declarator;
+		ASTDirectDeclarator *direct_declarator;
+	} val;
+} ASTDeclarator;
+
+typedef enum ASTStorageClassSpecifier
+{
+	TYPEDEF_SPECIFIER,
+	EXTERN_SPECIFIER,
+	STATIC_SPECIFIER,
+	AUTO_SPECIFIER,
+	REGISTER_SPECIFIER,
+} ASTStorageClassSpecifier;
+
+typedef enum ASTTypeQualifier
+{
+	CONST_QUALIFIER,
+	RESTRICT_QUALIFIER,
+	VOLATILE_QUALIFIER,
+} ASTTypeQualifier;
+
+typedef enum ASTFunctionSpecifier
+{
+	INLINE_SPECIFIER,
+} ASTFunctionSpecifier;
+
+typedef struct ASTEnumerator
+{
+	struct ASTEnumerator *next;
+	const char *name;
+	ASTExpr *value;
+} ASTEnumerator;
+
+typedef struct ASTFieldDeclarator
+{
+	struct ASTFieldDeclarator *next;
+
+	enum
+	{
+		BITFIELD_FIELD_DECLARATOR,
+		NORMAL_FIELD_DECLARATOR,
+	} type;
+
+	union
+	{
+		struct
+		{
+			ASTDeclarator *declarator;
+			ASTExpr *width;
+		} bitfield;
+		ASTDeclarator *declarator;
+	} val;
+} ASTFieldDeclarator;
+
+typedef struct ASTFieldDecl
+{
+	struct ASTFieldDecl *next;
+
+	struct ASTDeclSpecifier *decl_specifiers;
+	ASTFieldDeclarator *field_declarators;
+} ASTFieldDecl;
+
+typedef struct ASTTypeSpecifier
+{
+	enum
+	{
+		NAMED_TYPE_SPECIFIER,
+		STRUCT_TYPE_SPECIFIER,
+		UNION_TYPE_SPECIFIER,
+		ENUM_TYPE_SPECIFIER,
+	} type;
+
+	union
+	{
+		const char *name;
+		struct
+		{
+			const char *name;
+			ASTFieldDecl *fields;
+		} struct_or_union_specifier;
+		struct
+		{
+			const char *name;
+			ASTEnumerator *enumerators;
+		} enum_specifier;
+	} val;
+} ASTTypeSpecifier;
+
+typedef struct ASTDeclSpecifier
+{
+	struct ASTDeclSpecifier *next;
+	enum
+	{
+		STORAGE_CLASS_SPECIFIER,
+		TYPE_SPECIFIER,
+		TYPE_QUALIFIER,
+		FUNCTION_SPECIFIER,
+	} type;
+
+	union
+	{
+		ASTStorageClassSpecifier storage_class_specifier;
+		ASTTypeSpecifier *type_specifier;
+		ASTTypeQualifier type_qualifier;
+		ASTFunctionSpecifier function_specifier;
+	} val;
+} ASTDeclSpecifier;
+
+typedef struct ASTFunctionDef
+{
+	ASTDeclSpecifier *specifiers;
+	ASTDeclarator *declarator;
+	ASTDecl *old_style_param_decls;
+	ASTStatement *body;
+} ASTFunctionDef;
+
+typedef struct ASTToplevel
+{
+	struct ASTToplevel *next;
+	enum
+	{
+		FUNCTION_DEF,
+		DECL,
+	} type;
+
+	union
+	{
+		ASTFunctionDef *function_def;
+		ASTDecl *decl;
 	} val;
 } ASTToplevel;
 
