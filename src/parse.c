@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include <stdlib.h>
 
 #include "array.h"
@@ -814,6 +815,40 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 	return result;
 }
 
+
+static int indent_level = 0;
+
+static inline void print_indent(void)
+{
+	for (int n = 0; n < indent_level; n++)
+		fputs("    ", stdout);
+}
+
+static void pretty_printf(const char *fmt, ...)
+{
+	size_t len = strlen(fmt);
+	if (len == 1 && fmt[len - 1] == ')') {
+		putchar('\n');
+
+		indent_level--;
+		print_indent();
+
+		puts(")");
+		return;
+	}
+
+	va_list varargs;
+	va_start(varargs, fmt);
+	vprintf(fmt, varargs);
+	va_end(varargs);
+
+	if (fmt[len - 1] == '(') {
+		indent_level++;
+		putchar('\n');
+		print_indent();
+	}
+}
+
 #define X(x) #x
 static const char *expr_type_names[] = {
 	AST_EXPR_TYPES
@@ -829,17 +864,17 @@ static void dump_type_name(ASTTypeName *type_name)
 
 static void dump_expr(ASTExpr *expr)
 {
-	printf("%s(", expr_type_names[expr->type]);
+	pretty_printf("%s(", expr_type_names[expr->type]);
 	switch (expr->type) {
 	case AST_INT_LITERAL:
-		printf("%" PRId64, expr->val.int_literal);
+		pretty_printf("%" PRId64, expr->val.int_literal);
 		break;
 	case AST_IDENTIFIER:
-		fputs(expr->val.identifier, stdout);
+		pretty_printf(expr->val.identifier);
 		break;
 	case AST_STRUCT_DOT_FIELD: case AST_STRUCT_ARROW_FIELD:
 		dump_expr(expr->val.struct_field.struct_value);
-		printf(", %s", expr->val.struct_field.field_name);
+		pretty_printf(", %s", expr->val.struct_field.field_name);
 		break;
 	case AST_INDEX: case AST_POST_INCREMENT: case AST_POST_DECREMENT:
 	case AST_PRE_INCREMENT: case AST_PRE_DECREMENT: case AST_ADDRESS_OF:
@@ -848,7 +883,7 @@ static void dump_expr(ASTExpr *expr)
 		dump_expr(expr->val.unary_arg);
 		break;
 	case AST_CAST:
-		fputs("<some type>, ", stdout);
+		pretty_printf("<some type>, ");
 		dump_expr(expr->val.cast.arg);
 		break;
 	case AST_SIZEOF_TYPE:
@@ -865,22 +900,22 @@ static void dump_expr(ASTExpr *expr)
 	case AST_RIGHT_SHIFT_ASSIGN: case AST_BIT_AND_ASSIGN:
 	case AST_BIT_XOR_ASSIGN: case AST_BIT_OR_ASSIGN:
 		dump_expr(expr->val.binary_op.arg1);
-		fputs(", ", stdout);
+		pretty_printf(", ");
 		dump_expr(expr->val.binary_op.arg2);
 		break;
 	case AST_CONDITIONAL:
 		dump_expr(expr->val.ternary_op.arg1);
-		fputs(", ", stdout);
+		pretty_printf(", ");
 		dump_expr(expr->val.ternary_op.arg2);
-		fputs(", ", stdout);
+		pretty_printf(", ");
 		dump_expr(expr->val.ternary_op.arg3);
 		break;
 	default:
-		printf("%d\n", expr->type);
+		pretty_printf("%d\n", expr->type);
 		UNREACHABLE;
 	}
 
-	putchar(')');
+	pretty_printf(")");
 }
 
 #define X(x) #x
@@ -891,21 +926,21 @@ static const char *statement_type_names[] = {
 
 static void dump_statement(ASTStatement *statement)
 {
-	printf("%s(", statement_type_names[statement->type]);
+	pretty_printf("%s(", statement_type_names[statement->type]);
 	switch (statement->type) {
 	case AST_EMPTY_STATEMENT:
 	case AST_CONTINUE_STATEMENT:
 	case AST_BREAK_STATEMENT:
 		break;
 	case AST_LABELED_STATEMENT:
-		printf("%s, ", statement->val.labeled_statement.label_name);
+		pretty_printf("%s, ", statement->val.labeled_statement.label_name);
 		break;
 	case AST_COMPOUND_STATEMENT: {
 		ASTBlockItem *block_item = statement->val.block_items;
 		while (block_item != NULL) {
 			dump_statement(block_item->val.statement);
-			if (block_item->next == NULL)
-				fputs(", ", stdout);
+			if (block_item->next != NULL)
+				pretty_printf(", ");
 			block_item = block_item->next;
 		}
 		break;
@@ -916,10 +951,10 @@ static void dump_statement(ASTStatement *statement)
 		break;
 	case AST_IF_STATEMENT:
 		dump_expr(statement->val.if_statement.condition);
-		fputs(", ", stdout);
+		pretty_printf(", ");
 		dump_statement(statement->val.if_statement.then_statement);
 		if (statement->val.if_statement.else_statement != NULL) {
-			fputs(", ", stdout);
+			pretty_printf(", ");
 			dump_statement(statement->val.if_statement.else_statement);
 		}
 		break;
@@ -928,38 +963,40 @@ static void dump_statement(ASTStatement *statement)
 	case AST_WHILE_STATEMENT:
 	case AST_DO_WHILE_STATEMENT:
 		dump_expr(statement->val.expr_and_statement.expr);
-		fputs(", ", stdout);
+		pretty_printf(", ");
 		dump_statement(statement->val.expr_and_statement.statement);
 		break;
 	case AST_FOR_STATEMENT:
 		// @TODO: For loops with decls.
 		if (statement->val.for_statement.init_expr != NULL)
 			dump_expr(statement->val.for_statement.init_expr);
-		fputs(", ", stdout);
+		pretty_printf(", ");
 		if (statement->val.for_statement.condition)
 			dump_expr(statement->val.for_statement.condition);
-		fputs(", ", stdout);
+		pretty_printf(", ");
 		if (statement->val.for_statement.update_expr != NULL)
 			dump_expr(statement->val.for_statement.update_expr);
 		break;
 	case AST_GOTO_STATEMENT:
-		fputs(statement->val.goto_label, stdout);
+		pretty_printf(statement->val.goto_label);
 		break;
 	default:
 		assert(!"Not implemented");
 	}
 
-	fputs(")", stdout);
+	pretty_printf(")");
 }
 
 void dump_toplevel(ASTToplevel *ast)
 {
 	switch (ast->type) {
 	case FUNCTION_DEF:
-		puts("FUNCTION_DEF");
+		pretty_printf("FUNCTION_DEF(");
 		dump_statement(ast->val.function_def->body);
 		break;
 	default:
 		assert(!"Not implemented");
 	}
+
+	pretty_printf(")");
 }
