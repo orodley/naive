@@ -137,7 +137,7 @@ static Token _unexpected_token;
 
     def emit_function(self, body, name, signature=None):
         if signature is None:
-            signature = 'static void *%s(Parser *parser)' % name
+            signature = 'static ParserResult %s(Parser *parser)' % name
         self.definitions.append(signature +
                 '\n{' +
                 '\t' + '\n\t'.join(body.split('\n')) +
@@ -162,10 +162,10 @@ if (result->type != %s) {
 \t}
 \t
 \tback_up(parser);
-\treturn NULL;
+\treturn failure;
 }
 
-return result;""" % parser, name)
+return success(result);""" % parser, name)
             else:
                 return parser
 
@@ -179,7 +179,7 @@ return result;""" % parser, name)
             return self.emit_function(
 """
 if (expect_keyword(parser, "%s")) {
-\treturn (void *)1;
+\treturn success((void *)1);
 } else {
 \tif (parser->index > _longest_parse_length) {
 \t\t_longest_parse_length = parser->index;
@@ -189,7 +189,7 @@ if (expect_keyword(parser, "%s")) {
 \t\t_unexpected_token = *current_token(parser);
 \t}
 \t
-\treturn NULL;
+\treturn failure;
 }
 """ % args[0], name)
         elif operator == 'build':
@@ -211,16 +211,16 @@ if (expect_keyword(parser, "%s")) {
         elif operator in ('or', 'which'):
             prologue = \
 """
-void *result; (void)result;
+ParserResult result; (void)result;
 u32 start; (void)start;
 """
             if operator == 'which':
                 ret_body = lambda i: \
 """\tWhichResult *which_result = pool_alloc(parser->pool, sizeof(*which_result));
 \twhich_result->which = %d;
-\twhich_result->result = result;
+\twhich_result->result = result.result;
 \t
-\treturn which_result;""" % i
+\treturn success(which_result);""" % i
             else:
                 ret_body = lambda i: "\treturn result;"
 
@@ -228,13 +228,13 @@ u32 start; (void)start;
 """
 start = parser->index;
 result = %s(parser);
-if (result != NULL) {
+if (result.success) {
 %s
 }
 parser->index = start;
 """ % (self.generate_parser(arg), ret_body(i)) for i, arg in enumerate(args))
 
-            epilogue = "return NULL;"
+            epilogue = "return failure;"
 
             return self.emit_function(prologue + main + epilogue, name)
         elif operator == 'seq':
@@ -243,30 +243,30 @@ parser->index = start;
             main = ''.join(
 """
 start = parser->index;
-void *_{0}_result{1} = {0}(parser);
-if (_{0}_result{1} == NULL)
+ParserResult _{0}_result{1} = {0}(parser);
+if (!_{0}_result{1}.success)
 \treturn revert(parser, start);
 """.format(p, i) for i, p in enumerate(args[1:]))
-            result_args = ''.join(', _%s_result%d' % (p, i) for i, p in
+            result_args = ''.join(', _%s_result%d.result' % (p, i) for i, p in
                     enumerate(args[1:]))
-            epilogue = "\nreturn %s(parser%s);" % (args[0], result_args)
+            epilogue = "\nreturn success(%s(parser%s));" % (args[0], result_args)
 
             return self.emit_function(prologue + main + epilogue, name)
         elif operator == 'fold':
             args = map(self.generate_parser, args)
             return self.emit_function(
 """
-void *initial = %s(parser);
-if (initial == NULL)
-\treturn NULL;
+ParserResult initial = %s(parser);
+if (!initial.success)
+\treturn failure;
 
-void *curr = initial;
+ParserResult curr = initial;
 for (;;) {
-\tvoid *next = %s(parser);
-\tif (next == NULL)
+\tParserResult next = %s(parser);
+\tif (!next.success)
 \t\treturn curr;
 \t
-\tcurr = %s(parser, curr, next);
+\tcurr = success(%s(parser, curr.result, next.result));
 }""" % (args[1], args[2], args[0]), name)
         elif operator == 'list':
             element_type = args[0]
@@ -274,7 +274,7 @@ for (;;) {
             if len(args) == 3:
                 seperator = \
 """
-\tif (%s(parser) == NULL)
+\tif (!%s(parser).success)
 \t\treturn first;
 """ % self.generate_parser(args[2])
             else:
@@ -282,28 +282,22 @@ for (;;) {
 
             return self.emit_function(
 """
-%s *first = %s(parser);
-if (first == NULL)
-\treturn NULL;
+ParserResult first = %s(parser);
+if (!first.success)
+\treturn success(NULL);
 
-%s *curr = first;
+%s *curr = first.result;
 for (;;) {%s
-\t%s *next = %s(parser);
-\tif (next == NULL)
+\tParserResult next = %s(parser);
+\tif (!next.success)
 \t\treturn first;
-\tcurr->next = next;
-\tcurr = next;
+\tcurr->next = next.result;
+\tcurr = next.result;
 }
-""" % (element_type, element_parser, element_type, seperator, element_type, element_parser), name)
+""" % (element_parser, element_type, seperator, element_parser), name)
         elif operator == 'opt':
             return self.emit_function(
-"""
-void *result = %s(parser);
-OptResult *opt = pool_alloc(parser->pool, sizeof(*opt));
-opt->result = result;
-
-return opt;
-""" % self.generate_parser(args[0]), name)
+"\nreturn success(%s(parser).result);" % self.generate_parser(args[0]), name)
         else:
             assert not "Unreachable"
 

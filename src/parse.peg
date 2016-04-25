@@ -10,7 +10,7 @@ build_function_definition =
 	build(ASTFunctionDef, 4,
 		specifiers, #0,
 		declarator, #1,
-		old_style_param_decls, "((OptResult *)#2)->result",
+		old_style_param_decls, #2,
 		body, #3)
 
 decl_specifiers =
@@ -26,7 +26,7 @@ decl =
 build_decl =
 	build(ASTDecl, 3,
 		decl_specifiers, #0,
-		init_declarators, "((OptResult *)#1)->result")
+		init_declarators, #1)
 
 init_declarator_list = list(ASTInitDeclarator, init_declarator)
 
@@ -83,7 +83,7 @@ field_declarator =
 build_bitfield_declarator =
 	build(ASTFieldDeclarator, 3,
 		type, BITFIELD_FIELD_DECLARATOR,
-		val.bitfield.declarator, "((OptResult *)#0)->result",
+		val.bitfield.declarator, #0,
 		val.bitfield.width, #2)
 
 build_field_declarator =
@@ -104,7 +104,7 @@ enumerator =
 build_enumerator =
 	build(ASTEnumerator, 2,
 		name, "((Token *)#0)->val.symbol_or_string_literal",
-		value, "((OptResult *)#1)->result")
+		value, #1)
 
 type_qualifier =
 	seq(build_type_qualifier,
@@ -130,7 +130,7 @@ build_initial_pointer_result =
 build_pointer =
 	build(ASTDeclarator, 2,
 		type, POINTER_DECLARATOR,
-		val.pointer_declarator.decl_specifiers, "((OptResult *)#1)->result",
+		val.pointer_declarator.decl_specifiers, #1,
 		val.pointer_declarator.pointee, NULL)
 
 direct_declarator =
@@ -168,7 +168,7 @@ type_name = seq(build_type_name, decl_specifiers, opt(direct_declarator))
 build_type_name =
 	build(ASTTypeName, 2,
 		decl_specifiers, #0,
-		declarator, "((OptResult *)#1)->result")
+		declarator, #1)
 
 initializer =
 	or(seq(build_expr_initializer, expr),
@@ -194,7 +194,7 @@ initializer_element =
 
 build_initializer_element =
 	build(ASTInitializerElement, 2,
-		designators, "((OptResult *)#0)->result",
+		designators, #0,
 		initializer, #1)
 
 designator_list = list(ASTDesignator, designator)
