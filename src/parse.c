@@ -974,6 +974,8 @@ static const char *statement_type_names[] = {
 };
 #undef X
 
+static void dump_decls(ASTDecl *decls);
+
 static void dump_statement(ASTStatement *statement)
 {
 	pretty_printf("%s(", statement_type_names[statement->type]);
@@ -988,7 +990,18 @@ static void dump_statement(ASTStatement *statement)
 	case COMPOUND_STATEMENT: {
 		ASTBlockItem *block_item = statement->val.block_items;
 		while (block_item != NULL) {
-			dump_statement(block_item->val.statement);
+			switch (block_item->type) {
+			case BLOCK_ITEM_STATEMENT:
+				pretty_printf("BLOCK_ITEM_STATEMENT(");
+				dump_statement(block_item->val.statement);
+				break;
+			case BLOCK_ITEM_DECL:
+				pretty_printf("BLOCK_ITEM_DECL(");
+				dump_decls(block_item->val.decl);
+				break;
+			}
+			pretty_printf(")");
+
 			if (block_item->next != NULL)
 				pretty_printf(",");
 			block_item = block_item->next;
