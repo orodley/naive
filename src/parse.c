@@ -1113,8 +1113,12 @@ static void dump_direct_declarator(ASTDirectDeclarator *declarator)
 		pretty_printf(",");
 		dump_parameter_decls(declarator->val.function_declarator.parameters);
 		break;
-	default:
-		UNIMPLEMENTED;
+	case ARRAY_DECLARATOR:
+		pretty_printf("ARRAY_DECLARATOR(");
+		dump_direct_declarator(declarator->val.array_declarator.element_declarator);
+		pretty_printf(",");
+		dump_expr(declarator->val.array_declarator.array_length);
+		break;
 	}
 
 	pretty_printf(")");
@@ -1157,8 +1161,12 @@ static void dump_init_declarators(ASTInitDeclarator *init_declarators)
 	while (init_declarators != NULL) {
 		pretty_printf("INIT_DECLARATOR(");
 		dump_declarator(init_declarators->declarator);
-		pretty_printf(",");
-		dump_initializer(init_declarators->initializer);
+
+		if (init_declarators->initializer != NULL) {
+			pretty_printf(",");
+			dump_initializer(init_declarators->initializer);
+		}
+
 		pretty_printf("),");
 		init_declarators = init_declarators->next;
 	}
