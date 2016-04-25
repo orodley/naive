@@ -710,7 +710,7 @@ ASTTypeSpecifier *build_enum_tagged_named_type(
 }
 
 ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
-		char *opt_name, Token *lcurly, ASTFieldDecl *fields, Token *rcurly)
+		Token *opt_name, Token *lcurly, ASTFieldDecl *fields, Token *rcurly)
 {
 	IGNORE(lcurly);
 	IGNORE(rcurly);
@@ -719,7 +719,12 @@ ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
 	result->type = keyword->which == 0 ?
 		STRUCT_TYPE_SPECIFIER :
 		UNION_TYPE_SPECIFIER;
-	result->val.struct_or_union_specifier.name = opt_name;
+	if (opt_name == NULL) {
+		result->val.struct_or_union_specifier.name = NULL;
+	} else {
+		result->val.struct_or_union_specifier.name =
+			opt_name->val.symbol_or_string_literal;
+	}
 	result->val.struct_or_union_specifier.fields = fields;
 
 	return result;
