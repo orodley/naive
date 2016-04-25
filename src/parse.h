@@ -71,7 +71,9 @@ typedef struct ParseError
 		X(RIGHT_SHIFT_ASSIGN_EXPR), \
 		X(BIT_AND_ASSIGN_EXPR), \
 		X(BIT_XOR_ASSIGN_EXPR), \
-		X(BIT_OR_ASSIGN_EXPR),
+		X(BIT_OR_ASSIGN_EXPR), \
+\
+		X(COMMA_EXPR),
 
 #define X(x) x
 typedef enum ASTExprType

@@ -364,6 +364,7 @@ static ASTExpr *build_binary_head(Parser *parser, ASTExpr *curr,
 	CASE1(BIT_AND_ASSIGN)
 	CASE1(BIT_XOR_ASSIGN)
 	CASE1(BIT_OR_ASSIGN)
+	CASE1(COMMA)
 
 	default: UNREACHABLE;
 	}
@@ -941,7 +942,7 @@ static void dump_expr(ASTExpr *expr)
 		case DIVIDE_ASSIGN_EXPR: case MODULO_ASSIGN_EXPR: case PLUS_ASSIGN_EXPR:
 		case MINUS_ASSIGN_EXPR: case LEFT_SHIFT_ASSIGN_EXPR:
 		case RIGHT_SHIFT_ASSIGN_EXPR: case BIT_AND_ASSIGN_EXPR:
-		case BIT_XOR_ASSIGN_EXPR: case BIT_OR_ASSIGN_EXPR:
+		case BIT_XOR_ASSIGN_EXPR: case BIT_OR_ASSIGN_EXPR: case COMMA_EXPR:
 			dump_expr(expr->val.binary_op.arg1);
 			pretty_printf(",");
 			dump_expr(expr->val.binary_op.arg2);
