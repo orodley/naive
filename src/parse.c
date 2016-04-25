@@ -1032,15 +1032,75 @@ static void dump_statement(ASTStatement *statement)
 	pretty_printf(")");
 }
 
+static void dump_declarator(ASTDeclarator *declarator);
+
+static void dump_field_declarators(ASTFieldDeclarator *field_declarators)
+{
+	while (field_declarators != NULL) {
+		switch (field_declarators->type) {
+		case NORMAL_FIELD_DECLARATOR:
+			pretty_printf("NORMAL_FIELD_DECLARATOR(");
+			dump_declarator(field_declarators->val.declarator);
+			pretty_printf(")");
+			break;
+		case BITFIELD_FIELD_DECLARATOR:
+			pretty_printf("BITFIELD_DECLARATOR(");
+			dump_declarator(field_declarators->val.bitfield.declarator);
+			pretty_printf(",");
+			dump_expr(field_declarators->val.bitfield.width);
+			pretty_printf(")");
+			break;
+		}
+
+		if (field_declarators->next != NULL)
+			pretty_printf(",");
+		field_declarators = field_declarators->next;
+	}
+}
+
+static void dump_decl_specifiers(ASTDeclSpecifier *specifiers);
+
+static void dump_struct_or_union_fields(ASTFieldDecl *fields)
+{
+	while (fields != NULL) {
+		pretty_printf("FIELD(");
+		if (fields->decl_specifiers != NULL) {
+			dump_decl_specifiers(fields->decl_specifiers);
+			pretty_printf(",");
+		}
+
+		pretty_printf("FIELD_DECLARATORS(");
+		dump_field_declarators(fields->field_declarators);
+		pretty_printf("))");
+
+		if (fields->next != NULL)
+			pretty_printf(",");
+		fields = fields->next;
+	}
+}
+
 static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 {
 	switch (type_specifier->type) {
 	case NAMED_TYPE_SPECIFIER:
-		pretty_printf("NAMED_TYPE_SPECIFIER(%s)", type_specifier->val.name);
+		pretty_printf("NAMED_TYPE_SPECIFIER(%s", type_specifier->val.name);
+		break;
+	case STRUCT_TYPE_SPECIFIER:
+		pretty_printf("STRUCT_TYPE_SPECIFIER(");
+
+		const char *name = type_specifier->val.struct_or_union_specifier.name;
+		if (name != NULL)
+			pretty_printf("%s,", name);
+
+		pretty_printf("STRUCT_FIELDS(");
+		dump_struct_or_union_fields(type_specifier->val.struct_or_union_specifier.fields);
+		pretty_printf(")");
 		break;
 	default:
 		UNIMPLEMENTED;
 	}
+
+	pretty_printf(")");
 }
 
 static void dump_decl_specifiers(ASTDeclSpecifier *specifiers)
@@ -1242,26 +1302,30 @@ void dump_toplevel(ASTToplevel *ast)
 {
 	assert(indent_level == 0);
 
-	switch (ast->type) {
-	case FUNCTION_DEF:
-		pretty_printf("FUNCTION_DEF(");
-		dump_decl_specifiers(ast->val.function_def->specifiers);
-		pretty_printf(",");
-		dump_declarator(ast->val.function_def->declarator);
-		pretty_printf(",");
-		dump_decls(ast->val.function_def->old_style_param_decls);
-		dump_statement(ast->val.function_def->body);
-		break;
-	case DECL:
-		pretty_printf("DECLS(");
-		dump_decls(ast->val.decl);
-		break;
+	while (ast != NULL) {
+		switch (ast->type) {
+		case FUNCTION_DEF:
+			pretty_printf("FUNCTION_DEF(");
+			dump_decl_specifiers(ast->val.function_def->specifiers);
+			pretty_printf(",");
+			dump_declarator(ast->val.function_def->declarator);
+			pretty_printf(",");
+			dump_decls(ast->val.function_def->old_style_param_decls);
+			dump_statement(ast->val.function_def->body);
+			break;
+		case DECL:
+			pretty_printf("DECLS(");
+			dump_decls(ast->val.decl);
+			break;
 
-	default:
-		UNIMPLEMENTED;
+		default:
+			UNIMPLEMENTED;
+		}
+
+		pretty_printf(")\n");
+
+		ast = ast->next;
 	}
-
-	pretty_printf(")");
 
 	assert(indent_level == 0);
 }

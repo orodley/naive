@@ -75,7 +75,7 @@ field_decl =
 build_field_decl =
 	build(ASTFieldDecl, 3,
 		decl_specifiers, #0,
-		field_declarators, #2)
+		field_declarators, #1)
 
 field_declarator_list = list(ASTFieldDeclarator, field_declarator, TOK_COMMA)
 
