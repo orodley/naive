@@ -108,7 +108,7 @@ build_enumerator =
 
 type_qualifier =
 	seq(build_type_qualifier,
-		or(keyword(const), keyword(restrict), keyword(volatile)))
+		which(keyword(const), keyword(restrict), keyword(volatile)))
 
 function_specifier = seq(build_function_specifier, keyword(inline))
 
