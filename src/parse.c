@@ -1090,7 +1090,7 @@ static void dump_parameter_decls(ASTParameterDecl *param_decls)
 		dump_decl_specifiers(param_decls->decl_specifiers);
 		pretty_printf(",");
 		dump_declarator(param_decls->declarator);
-		pretty_printf(")");
+		pretty_printf("),");
 
 		param_decls = param_decls->next;
 	}
