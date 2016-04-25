@@ -1138,23 +1138,45 @@ static void dump_declarator(ASTDeclarator *declarator)
 	pretty_printf(")");
 }
 
-static void dump_init_declarators(ASTInitDeclarator *init_declarators)
+static void dump_initializer(ASTInitializer *initializer)
 {
-	IGNORE(init_declarators);
+	switch (initializer->type) {
+	case EXPR_INITIALIZER:
+		pretty_printf("EXPR_INITIALIZER(");
+		dump_expr(initializer->val.expr);
+		break;
+	case BRACE_INITIALIZER:
+		UNIMPLEMENTED;
+	}
 
-	UNIMPLEMENTED;
+	pretty_printf(")");
 }
 
-static void dump_decls(ASTDecl *decl)
+static void dump_init_declarators(ASTInitDeclarator *init_declarators)
 {
-	while (decl != NULL) {
-		pretty_printf("DECL(");
-		dump_decl_specifiers(decl->decl_specifiers);
+	while (init_declarators != NULL) {
+		pretty_printf("INIT_DECLARATOR(");
+		dump_declarator(init_declarators->declarator);
 		pretty_printf(",");
-		dump_init_declarators(decl->init_declarators);
+		dump_initializer(init_declarators->initializer);
 		pretty_printf("),");
+		init_declarators = init_declarators->next;
+	}
+}
 
-		decl = decl->next;
+static void dump_decls(ASTDecl *decls)
+{
+	while (decls != NULL) {
+		pretty_printf("DECL(");
+		dump_decl_specifiers(decls->decl_specifiers);
+		pretty_printf(",");
+		dump_init_declarators(decls->init_declarators);
+		pretty_printf(")");
+
+		if (decls->next != NULL)
+			pretty_printf(",");
+
+		decls = decls->next;
 	}
 }
 
@@ -1173,7 +1195,7 @@ void dump_toplevel(ASTToplevel *ast)
 		dump_statement(ast->val.function_def->body);
 		break;
 	case DECL:
-		pretty_printf("DECL(");
+		pretty_printf("DECLS(");
 		dump_decls(ast->val.decl);
 		break;
 

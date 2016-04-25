@@ -1,1 +1,1 @@
-const int *foo;
+const int *foo = NULL;
