@@ -1146,6 +1146,47 @@ static void dump_declarator(ASTDeclarator *declarator)
 	pretty_printf(")");
 }
 
+static void dump_designators(ASTDesignator *designators)
+{
+	while (designators != NULL) {
+		switch (designators->type) {
+		case INDEX_DESIGNATOR:
+			pretty_printf("INDEX_DESIGNATOR(");
+			dump_expr(designators->val.index_expr);
+			break;
+		case FIELD_DESIGNATOR:
+			pretty_printf("FIELD_DESIGNATOR(%s", designators->val.field_name);
+			break;
+		}
+		pretty_printf(")");
+
+		if (designators->next != NULL)
+			pretty_printf(",");
+
+		designators = designators->next;
+	}
+
+}
+
+static void dump_initializer(ASTInitializer *initializer);
+
+static void dump_initializer_elements(ASTInitializerElement *elements)
+{
+	while (elements != NULL) {
+		pretty_printf("INITIALIZER_ELEMENT(");
+		pretty_printf("DESIGNATORS(");
+		dump_designators(elements->designators);
+		pretty_printf("),INITIALIZER(");
+		dump_initializer(elements->initializer);
+		pretty_printf("))");
+
+		if (elements->next != NULL)
+			pretty_printf(",");
+
+		elements = elements->next;
+	}
+}
+
 static void dump_initializer(ASTInitializer *initializer)
 {
 	switch (initializer->type) {
@@ -1154,7 +1195,9 @@ static void dump_initializer(ASTInitializer *initializer)
 		dump_expr(initializer->val.expr);
 		break;
 	case BRACE_INITIALIZER:
-		UNIMPLEMENTED;
+		pretty_printf("BRACE_INITIALIZER(");
+		dump_initializer_elements(initializer->val.initializer_elements);
+		break;
 	}
 
 	pretty_printf(")");
@@ -1171,7 +1214,10 @@ static void dump_init_declarators(ASTInitDeclarator *init_declarators)
 			dump_initializer(init_declarators->initializer);
 		}
 
-		pretty_printf("),");
+		pretty_printf(")");
+		if (init_declarators->next != NULL)
+			pretty_printf(",");
+
 		init_declarators = init_declarators->next;
 	}
 }
