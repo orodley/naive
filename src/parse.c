@@ -819,45 +819,69 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 
 static int indent_level = 0;
 
-#if 0
 static inline void print_indent(void)
 {
 	for (int n = 0; n < indent_level; n++)
 		fputs("    ", stdout);
 }
-#endif
 
 static void pretty_printf(const char *fmt, ...)
 {
-#if 0
-	size_t len = strlen(fmt);
-	if (len == 1 && fmt[len - 1] == ')') {
-		putchar('\n');
-
-		indent_level--;
-		print_indent();
-
-		puts(")");
-		return;
-	} else if (len == 2 && strcmp(fmt, ", ") == 0) {
-		puts(",");
-		print_indent();
-		return;
-	}
-#endif
-
 	va_list varargs;
 	va_start(varargs, fmt);
-	vprintf(fmt, varargs);
-	va_end(varargs);
 
-#if 0
-	if (fmt[len - 1] == '(') {
-		indent_level++;
-		putchar('\n');
-		print_indent();
+	for (int i = 0; fmt[i] != '\0'; i++) {
+		char c = fmt[i];
+		switch (c) {
+		case '%':
+			i++;
+			assert(fmt[i] != '\0');
+
+			switch (fmt[i]) {
+			case 's':;
+				// @NOTE: We assume we never need to do any formatting of
+				// stuff printed by '%s', as usually this is just identifiers
+				// and stuff, no control characters we'd indent based on.
+				char *str = va_arg(varargs, char *);
+				fputs(str, stdout);
+				break;
+			case '8':;
+				uint64_t x = va_arg(varargs, uint64_t);
+				printf("%" PRId64, x);
+				break;
+			default:
+				assert(!"Not implemented");
+			}
+			break;
+		case '(':
+			putchar('(');
+			indent_level++;
+
+			// @NOTE: We guess that if there's a format character afterwards
+			// the contents of the brackets are small enough that we shouldn't
+			// bother indenting.
+			if (fmt[i + 1] != '%') {
+				putchar('\n');
+				print_indent();
+			}
+
+			break;
+		case ',':
+			puts(",");
+			print_indent();
+			break;
+		case ')':
+			putchar(')');
+			indent_level--;
+			break;
+		default:
+			putchar(c);
+			break;
+		}
+
 	}
-#endif
+
+	va_end(varargs);
 }
 
 #define X(x) #x
@@ -875,55 +899,57 @@ static void dump_type_name(ASTTypeName *type_name)
 
 static void dump_expr(ASTExpr *expr)
 {
-	pretty_printf("%s(", expr_type_names[expr->type]);
-	switch (expr->type) {
-	case AST_INT_LITERAL:
-		pretty_printf("%" PRId64, expr->val.int_literal);
-		break;
-	case AST_IDENTIFIER:
-		pretty_printf(expr->val.identifier);
-		break;
-	case AST_STRUCT_DOT_FIELD: case AST_STRUCT_ARROW_FIELD:
-		dump_expr(expr->val.struct_field.struct_value);
-		pretty_printf(", %s", expr->val.struct_field.field_name);
-		break;
-	case AST_INDEX: case AST_POST_INCREMENT: case AST_POST_DECREMENT:
-	case AST_PRE_INCREMENT: case AST_PRE_DECREMENT: case AST_ADDRESS_OF:
-	case AST_DEREF: case AST_UNARY_PLUS: case AST_UNARY_MINUS:
-	case AST_BIT_NOT: case AST_LOGICAL_NOT: case AST_SIZEOF_EXPR:
-		dump_expr(expr->val.unary_arg);
-		break;
-	case AST_CAST:
-		pretty_printf("<some type>, ");
-		dump_expr(expr->val.cast.arg);
-		break;
-	case AST_SIZEOF_TYPE:
-		dump_type_name(expr->val.type);
-		break;
-	case AST_MULTIPLY: case AST_DIVIDE: case AST_MODULO: case AST_ADD:
-	case AST_MINUS: case AST_LEFT_SHIFT: case AST_RIGHT_SHIFT:
-	case AST_LESS_THAN: case AST_GREATER_THAN: case AST_LESS_THAN_OR_EQUAL:
-	case AST_GREATER_THAN_OR_EQUAL: case AST_EQUAL: case AST_NOT_EQUAL:
-	case AST_BIT_AND: case AST_BIT_XOR: case AST_BIT_OR: case AST_LOGICAL_AND:
-	case AST_LOGICAL_OR: case AST_ASSIGN: case AST_MULT_ASSIGN:
-	case AST_DIVIDE_ASSIGN: case AST_MODULO_ASSIGN: case AST_PLUS_ASSIGN:
-	case AST_MINUS_ASSIGN: case AST_LEFT_SHIFT_ASSIGN:
-	case AST_RIGHT_SHIFT_ASSIGN: case AST_BIT_AND_ASSIGN:
-	case AST_BIT_XOR_ASSIGN: case AST_BIT_OR_ASSIGN:
-		dump_expr(expr->val.binary_op.arg1);
-		pretty_printf(", ");
-		dump_expr(expr->val.binary_op.arg2);
-		break;
-	case AST_CONDITIONAL:
-		dump_expr(expr->val.ternary_op.arg1);
-		pretty_printf(", ");
-		dump_expr(expr->val.ternary_op.arg2);
-		pretty_printf(", ");
-		dump_expr(expr->val.ternary_op.arg3);
-		break;
-	default:
-		pretty_printf("%d\n", expr->type);
-		UNREACHABLE;
+	if (expr->type == AST_INT_LITERAL) {
+		pretty_printf("AST_INT_LITERAL(%8", expr->val.int_literal);
+	} else if (expr->type == AST_IDENTIFIER) {
+		pretty_printf("AST_IDENTIFIER(%s", expr->val.identifier);
+	} else {
+		pretty_printf("%s(", expr_type_names[expr->type]);
+		switch (expr->type) {
+		case AST_IDENTIFIER:
+			break;
+		case AST_STRUCT_DOT_FIELD: case AST_STRUCT_ARROW_FIELD:
+			dump_expr(expr->val.struct_field.struct_value);
+			pretty_printf(",%s", expr->val.struct_field.field_name);
+			break;
+		case AST_INDEX: case AST_POST_INCREMENT: case AST_POST_DECREMENT:
+		case AST_PRE_INCREMENT: case AST_PRE_DECREMENT: case AST_ADDRESS_OF:
+		case AST_DEREF: case AST_UNARY_PLUS: case AST_UNARY_MINUS:
+		case AST_BIT_NOT: case AST_LOGICAL_NOT: case AST_SIZEOF_EXPR:
+			dump_expr(expr->val.unary_arg);
+			break;
+		case AST_CAST:
+			pretty_printf("<some type>, ");
+			dump_expr(expr->val.cast.arg);
+			break;
+		case AST_SIZEOF_TYPE:
+			dump_type_name(expr->val.type);
+			break;
+		case AST_MULTIPLY: case AST_DIVIDE: case AST_MODULO: case AST_ADD:
+		case AST_MINUS: case AST_LEFT_SHIFT: case AST_RIGHT_SHIFT:
+		case AST_LESS_THAN: case AST_GREATER_THAN: case AST_LESS_THAN_OR_EQUAL:
+		case AST_GREATER_THAN_OR_EQUAL: case AST_EQUAL: case AST_NOT_EQUAL:
+		case AST_BIT_AND: case AST_BIT_XOR: case AST_BIT_OR: case AST_LOGICAL_AND:
+		case AST_LOGICAL_OR: case AST_ASSIGN: case AST_MULT_ASSIGN:
+		case AST_DIVIDE_ASSIGN: case AST_MODULO_ASSIGN: case AST_PLUS_ASSIGN:
+		case AST_MINUS_ASSIGN: case AST_LEFT_SHIFT_ASSIGN:
+		case AST_RIGHT_SHIFT_ASSIGN: case AST_BIT_AND_ASSIGN:
+		case AST_BIT_XOR_ASSIGN: case AST_BIT_OR_ASSIGN:
+			dump_expr(expr->val.binary_op.arg1);
+			pretty_printf(",");
+			dump_expr(expr->val.binary_op.arg2);
+			break;
+		case AST_CONDITIONAL:
+			dump_expr(expr->val.ternary_op.arg1);
+			pretty_printf(",");
+			dump_expr(expr->val.ternary_op.arg2);
+			pretty_printf(",");
+			dump_expr(expr->val.ternary_op.arg3);
+			break;
+		default:
+			printf("\n\nGot unknown expr type %d\n", expr->type);
+			UNREACHABLE;
+		}
 	}
 
 	pretty_printf(")");
@@ -944,14 +970,14 @@ static void dump_statement(ASTStatement *statement)
 	case AST_BREAK_STATEMENT:
 		break;
 	case AST_LABELED_STATEMENT:
-		pretty_printf("%s, ", statement->val.labeled_statement.label_name);
+		pretty_printf("%s,", statement->val.labeled_statement.label_name);
 		break;
 	case AST_COMPOUND_STATEMENT: {
 		ASTBlockItem *block_item = statement->val.block_items;
 		while (block_item != NULL) {
 			dump_statement(block_item->val.statement);
 			if (block_item->next != NULL)
-				pretty_printf(", ");
+				pretty_printf(",");
 			block_item = block_item->next;
 		}
 		break;
@@ -962,10 +988,10 @@ static void dump_statement(ASTStatement *statement)
 		break;
 	case AST_IF_STATEMENT:
 		dump_expr(statement->val.if_statement.condition);
-		pretty_printf(", ");
+		pretty_printf(",");
 		dump_statement(statement->val.if_statement.then_statement);
 		if (statement->val.if_statement.else_statement != NULL) {
-			pretty_printf(", ");
+			pretty_printf(",");
 			dump_statement(statement->val.if_statement.else_statement);
 		}
 		break;
@@ -974,17 +1000,17 @@ static void dump_statement(ASTStatement *statement)
 	case AST_WHILE_STATEMENT:
 	case AST_DO_WHILE_STATEMENT:
 		dump_expr(statement->val.expr_and_statement.expr);
-		pretty_printf(", ");
+		pretty_printf(",");
 		dump_statement(statement->val.expr_and_statement.statement);
 		break;
 	case AST_FOR_STATEMENT:
 		// @TODO: For loops with decls.
 		if (statement->val.for_statement.init_expr != NULL)
 			dump_expr(statement->val.for_statement.init_expr);
-		pretty_printf(", ");
+		pretty_printf(",");
 		if (statement->val.for_statement.condition)
 			dump_expr(statement->val.for_statement.condition);
-		pretty_printf(", ");
+		pretty_printf(",");
 		if (statement->val.for_statement.update_expr != NULL)
 			dump_expr(statement->val.for_statement.update_expr);
 		break;
@@ -1038,7 +1064,7 @@ static void dump_decl_specifiers(ASTDeclSpecifier *specifiers)
 		}
 
 		if (specifiers->next != NULL)
-			pretty_printf(", ");
+			pretty_printf(",");
 
 		specifiers = specifiers->next;
 	}
@@ -1054,7 +1080,7 @@ static void dump_parameter_decls(ASTParameterDecl *param_decls)
 	while (param_decls != NULL) {
 		pretty_printf("PARAM(");
 		dump_decl_specifiers(param_decls->decl_specifiers);
-		pretty_printf(", ");
+		pretty_printf(",");
 		dump_declarator(param_decls->declarator);
 		pretty_printf(")");
 
@@ -1077,7 +1103,7 @@ static void dump_direct_declarator(ASTDirectDeclarator *declarator)
 	case FUNCTION_DECLARATOR:
 		pretty_printf("FUNCTION_DECLARATOR(");
 		dump_direct_declarator(declarator->val.function_declarator.declarator);
-		pretty_printf(", ");
+		pretty_printf(",");
 		dump_parameter_decls(declarator->val.function_declarator.parameters);
 		break;
 	default:
@@ -1093,7 +1119,7 @@ static void dump_declarator(ASTDeclarator *declarator)
 	case POINTER_DECLARATOR:
 		pretty_printf("POINTER_DECLARATOR(");
 		dump_decl_specifiers(declarator->val.pointer_declarator.decl_specifiers);
-		pretty_printf(", ");
+		pretty_printf(",");
 		dump_declarator(declarator->val.pointer_declarator.pointee);
 		break;
 	case DIRECT_DECLARATOR:
@@ -1117,9 +1143,9 @@ static void dump_decls(ASTDecl *decl)
 	while (decl != NULL) {
 		pretty_printf("DECL(");
 		dump_decl_specifiers(decl->decl_specifiers);
-		pretty_printf(", ");
+		pretty_printf(",");
 		dump_init_declarators(decl->init_declarators);
-		pretty_printf("), ");
+		pretty_printf("),");
 
 		decl = decl->next;
 	}
@@ -1133,9 +1159,9 @@ void dump_toplevel(ASTToplevel *ast)
 	case FUNCTION_DEF:
 		pretty_printf("FUNCTION_DEF(");
 		dump_decl_specifiers(ast->val.function_def->specifiers);
-		pretty_printf(", ");
+		pretty_printf(",");
 		dump_declarator(ast->val.function_def->declarator);
-		pretty_printf(", ");
+		pretty_printf(",");
 		dump_decls(ast->val.function_def->old_style_param_decls);
 		dump_statement(ast->val.function_def->body);
 		break;
