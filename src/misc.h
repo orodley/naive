@@ -21,5 +21,6 @@ typedef  int64_t i64;
 #define IGNORE(x) (void)x
 #define STATIC_ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 #define UNREACHABLE assert(!"This should never be reached")
+#define UNIMPLEMENTED assert(!"Not implemented")
 
 #endif

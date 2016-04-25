@@ -178,7 +178,7 @@ static ASTExpr *build_constant(Parser *parser, Token *token)
 		expr->val.int_literal = token->val.int_literal;
 		break;
 	default:
-		assert(!"Not implemented");
+		UNIMPLEMENTED;
 	}
 
 	return expr;
@@ -861,7 +861,7 @@ static void pretty_printf(const char *fmt, ...)
 				printf("%" PRId64, x);
 				break;
 			default:
-				assert(!"Not implemented");
+				UNIMPLEMENTED;
 			}
 			break;
 		case '(':
@@ -905,7 +905,7 @@ static const char *expr_type_names[] = {
 static void dump_type_name(ASTTypeName *type_name)
 {
 	IGNORE(type_name);
-	assert(!"Not implemented");
+	UNIMPLEMENTED;
 }
 
 static void dump_expr(ASTExpr *expr)
@@ -1029,7 +1029,7 @@ static void dump_statement(ASTStatement *statement)
 		pretty_printf(statement->val.goto_label);
 		break;
 	default:
-		assert(!"Not implemented");
+		UNIMPLEMENTED;
 	}
 
 	pretty_printf(")");
@@ -1042,7 +1042,7 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 		pretty_printf("NAMED_TYPE_SPECIFIER(%s)", type_specifier->val.name);
 		break;
 	default:
-		assert(!"Not implemented");
+		UNIMPLEMENTED;
 	}
 }
 
@@ -1118,7 +1118,7 @@ static void dump_direct_declarator(ASTDirectDeclarator *declarator)
 		dump_parameter_decls(declarator->val.function_declarator.parameters);
 		break;
 	default:
-		assert(!"Not implemented");
+		UNIMPLEMENTED;
 	}
 
 	pretty_printf(")");
@@ -1146,7 +1146,7 @@ static void dump_init_declarators(ASTInitDeclarator *init_declarators)
 {
 	IGNORE(init_declarators);
 
-	assert(!"Not implemented");
+	UNIMPLEMENTED;
 }
 
 static void dump_decls(ASTDecl *decl)
@@ -1182,7 +1182,7 @@ void dump_toplevel(ASTToplevel *ast)
 		break;
 
 	default:
-		assert(!"Not implemented");
+		UNIMPLEMENTED;
 	}
 
 	pretty_printf(")");

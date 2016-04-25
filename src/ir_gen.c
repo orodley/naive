@@ -74,7 +74,7 @@ static void ir_gen_statement(Builder *builder, ASTStatement *statement)
 		break;
 	}
 	default:
-		assert(!"Not implemented");
+		UNIMPLEMENTED;
 	}
 	IGNORE(builder);
 	IGNORE(statement);
@@ -88,7 +88,7 @@ static Value ir_gen_expression(Builder *builder, ASTExpr *expr)
 	case AST_INT_LITERAL:
 		return value_const(expr->val.int_literal);
 	default:
-		assert(!"Not implemented");
+		UNIMPLEMENTED;
 	}
 }
 #endif
