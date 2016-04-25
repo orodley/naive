@@ -1116,8 +1116,11 @@ static void dump_direct_declarator(ASTDirectDeclarator *declarator)
 	case ARRAY_DECLARATOR:
 		pretty_printf("ARRAY_DECLARATOR(");
 		dump_direct_declarator(declarator->val.array_declarator.element_declarator);
-		pretty_printf(",");
-		dump_expr(declarator->val.array_declarator.array_length);
+		
+		if (declarator->val.array_declarator.array_length != NULL) {
+			pretty_printf(",");
+			dump_expr(declarator->val.array_declarator.array_length);
+		}
 		break;
 	}
 

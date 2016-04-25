@@ -140,7 +140,7 @@ direct_declarator =
 	fold(build_sub_declarator,
 		or(seq(build_ident_declarator, TOK_SYMBOL),
 			seq(build_declarator, TOK_LROUND, declarator, TOK_RROUND)),
-		which(seq(middle, TOK_LSQUARE, expr, TOK_RSQUARE),
+		which(seq(middle, TOK_LSQUARE, opt(expr), TOK_RSQUARE),
 			seq(middle, TOK_LROUND, parameter_type_list, TOK_RROUND)))
 
 build_ident_declarator =
