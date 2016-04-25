@@ -865,16 +865,9 @@ static void pretty_printf(const char *fmt, ...)
 			}
 			break;
 		case '(':
-			putchar('(');
+			puts("(");
 			indent_level++;
-
-			// @NOTE: We guess that if there's a format character afterwards
-			// the contents of the brackets are small enough that we shouldn't
-			// bother indenting.
-			if (fmt[i + 1] != '%') {
-				putchar('\n');
-				print_indent();
-			}
+			print_indent();
 
 			break;
 		case ',':
@@ -882,8 +875,11 @@ static void pretty_printf(const char *fmt, ...)
 			print_indent();
 			break;
 		case ')':
-			putchar(')');
+			putchar('\n');
 			indent_level--;
+			print_indent();
+			putchar(')');
+
 			break;
 		default:
 			putchar(c);
