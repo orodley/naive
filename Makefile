@@ -1,6 +1,6 @@
 NAME := ncc
 CC ?= clang
-PEG ?= tools/peg.py
+PEG ?= meta/peg.py
 
 COMMON_CFLAGS := $(CFLAGS) -c -std=c99 -Wall -Wextra -Wstrict-prototypes -Wformat -Isrc
 
