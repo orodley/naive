@@ -163,7 +163,7 @@ static inline void *ignore(Parser *parser, ...)
 static ASTExpr *build_identifier(Parser *parser, Token *identifier_token)
 {
 	ASTExpr *identifier = pool_alloc(parser->pool, sizeof *identifier);
-	identifier->type = AST_IDENTIFIER;
+	identifier->type = IDENTIFIER_EXPR;
 	identifier->val.identifier = identifier_token->val.symbol_or_string_literal;
 
 	return identifier;
@@ -174,7 +174,7 @@ static ASTExpr *build_constant(Parser *parser, Token *token)
 	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
 	switch (token->type) {
 	case TOK_INT_LITERAL:
-		expr->type = AST_INT_LITERAL;
+		expr->type = INT_LITERAL_EXPR;
 		expr->val.int_literal = token->val.int_literal;
 		break;
 	default:
@@ -190,7 +190,7 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 	ASTExpr *next = pool_alloc(parser->pool, sizeof *next);
 	switch (which->which) {
 	case 0:
-		next->type = AST_INDEX;
+		next->type = INDEX_EXPR;
 		next->val.binary_op.arg1 = curr;
 		next->val.binary_op.arg2 = which->result;
 		return next;
@@ -198,21 +198,21 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 		// @TODO: Function call
 		return NULL;
 	case 2:
-		next->type = AST_STRUCT_DOT_FIELD;
+		next->type = STRUCT_DOT_FIELD_EXPR;
 		next->val.struct_field.struct_value = curr;
 		next->val.struct_field.field_name = which->result;
 		return next;
 	case 3:
-		next->type = AST_STRUCT_ARROW_FIELD;
+		next->type = STRUCT_ARROW_FIELD_EXPR;
 		next->val.struct_field.struct_value = curr;
 		next->val.struct_field.field_name = which->result;
 		return next;
 	case 4:
-		next->type = AST_POST_INCREMENT;
+		next->type = POST_INCREMENT_EXPR;
 		next->val.unary_arg = curr;
 		return next;
 	case 5:
-		next->type =AST_POST_DECREMENT;
+		next->type = POST_DECREMENT_EXPR;
 		next->val.unary_arg = curr;
 		return next;
 	default:
@@ -254,14 +254,14 @@ static ASTExpr *build_unary_expr(Parser *parser, Token *token,
 	ASTExpr *next = pool_alloc(parser->pool, sizeof *next);
 	next->val.unary_arg = arg;
 	switch (token->type) {
-	case TOK_INCREMENT: next->type = AST_PRE_INCREMENT; break;
-	case TOK_DECREMENT: next->type = AST_PRE_DECREMENT; break;
-	case TOK_AMPERSAND: next->type = AST_ADDRESS_OF; break;
-	case TOK_ASTERISK: next->type = AST_DEREF; break;
-	case TOK_PLUS: next->type = AST_UNARY_PLUS; break;
-	case TOK_MINUS: next->type = AST_UNARY_MINUS; break;
-	case TOK_BIT_NOT: next->type = AST_BIT_NOT; break;
-	case TOK_LOGICAL_NOT: next->type = AST_LOGICAL_NOT; break;
+	case TOK_INCREMENT: next->type = PRE_INCREMENT_EXPR; break;
+	case TOK_DECREMENT: next->type = PRE_DECREMENT_EXPR; break;
+	case TOK_AMPERSAND: next->type = ADDRESS_OF_EXPR; break;
+	case TOK_ASTERISK: next->type = DEREF_EXPR; break;
+	case TOK_PLUS: next->type = UNARY_PLUS_EXPR; break;
+	case TOK_MINUS: next->type = UNARY_MINUS_EXPR; break;
+	case TOK_BIT_NOT: next->type = BIT_NOT_EXPR; break;
+	case TOK_LOGICAL_NOT: next->type = LOGICAL_NOT_EXPR; break;
 	default: UNREACHABLE;
 	}
 
@@ -274,7 +274,7 @@ static ASTExpr *build_sizeof_expr(
 	IGNORE(tok_sizeof);
 
 	ASTExpr *sizeof_expr = pool_alloc(parser->pool, sizeof *sizeof_expr);
-	sizeof_expr->type = AST_SIZEOF_EXPR;
+	sizeof_expr->type = SIZEOF_EXPR_EXPR;
 	sizeof_expr->val.unary_arg = arg;
 
 	return sizeof_expr;
@@ -288,7 +288,7 @@ static ASTExpr *build_sizeof_type(Parser *parser, Token *tok_sizeof,
 	IGNORE(rround);
 
 	ASTExpr *sizeof_type = pool_alloc(parser->pool, sizeof *sizeof_type);
-	sizeof_type->type = AST_SIZEOF_TYPE;
+	sizeof_type->type = SIZEOF_TYPE_EXPR;
 	sizeof_type->val.type = type;
 
 	return sizeof_type;
@@ -300,7 +300,7 @@ static ASTExpr *build_cast_expr(Parser *parser, Token *lround,
 	IGNORE(lround); IGNORE(rround);
 
 	ASTExpr *cast_expr = pool_alloc(parser->pool, sizeof *cast_expr);
-	cast_expr->type = AST_CAST;
+	cast_expr->type = CAST_EXPR;
 	cast_expr->val.cast.cast_type = type;
 	cast_expr->val.cast.arg = arg;
 
@@ -324,7 +324,7 @@ static BinaryTail *build_binary_tail(Parser *parser,
 }
 
 #define CASE2(token, ast_type) \
-	case TOK_##token: expr->type = AST_##ast_type; break;
+	case TOK_##token: expr->type = ast_type##_EXPR; break;
 #define CASE1(operator) CASE2(operator, operator)
 
 static ASTExpr *build_binary_head(Parser *parser, ASTExpr *curr,
@@ -384,7 +384,7 @@ static ASTExpr *build_conditional_expr(Parser *parser,
 	IGNORE(colon);
 
 	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
-	expr->type = AST_CONDITIONAL;
+	expr->type = CONDITIONAL_EXPR;
 	expr->val.ternary_op.arg1 = condition;
 	expr->val.ternary_op.arg2 = then_expr;
 	expr->val.ternary_op.arg3 = else_expr;
@@ -401,7 +401,7 @@ ASTStatement *build_labeled_statement(Parser *parser, Token *label,
 
 	ASTStatement *labeled_statement =
 		pool_alloc(parser->pool, sizeof *labeled_statement);
-	labeled_statement->type = AST_LABELED_STATEMENT;
+	labeled_statement->type = LABELED_STATEMENT;
 	labeled_statement->val.labeled_statement.label_name =
 		label->val.symbol_or_string_literal;
 	labeled_statement->val.labeled_statement.statement = statement;
@@ -415,7 +415,7 @@ ASTStatement *build_case_statement(Parser *parser, Token *case_keyword,
 	IGNORE(colon);
 
 	ASTStatement *case_statement = pool_alloc(parser->pool, sizeof *case_statement);
-	case_statement->type = AST_CASE_STATEMENT;
+	case_statement->type = CASE_STATEMENT;
 	case_statement->val.expr_and_statement.expr = case_value;
 	case_statement->val.expr_and_statement.statement = statement;
 
@@ -430,7 +430,7 @@ ASTStatement *build_compound_statement(Parser *parser, Token *lcurly,
 
 	ASTStatement *compound_statement =
 		pool_alloc(parser->pool, sizeof *compound_statement);
-	compound_statement->type = AST_COMPOUND_STATEMENT;
+	compound_statement->type = COMPOUND_STATEMENT;
 	compound_statement->val.block_items = block_items;
 
 	return compound_statement;
@@ -462,11 +462,11 @@ ASTStatement *build_expr_statement(
 
 	ASTStatement *statement = pool_alloc(parser->pool, sizeof *statement);
 	if (opt_expr == NULL) {
-		statement->type = AST_EMPTY_STATEMENT;
+		statement->type = EMPTY_STATEMENT;
 		return statement;
 	}
 
-	statement->type = AST_EXPR_STATEMENT;
+	statement->type = EXPR_STATEMENT;
 	statement->val.expr = opt_expr;
 	return statement;
 }
@@ -478,7 +478,7 @@ ASTStatement *build_if_statement(Parser *parser, Token *if_token, Token *lround,
 	IGNORE(if_token); IGNORE(lround); IGNORE(rround);
 
 	ASTStatement *if_statement = pool_alloc(parser->pool, sizeof *if_statement);
-	if_statement->type = AST_IF_STATEMENT;
+	if_statement->type = IF_STATEMENT;
 	if_statement->val.if_statement.condition = condition;
 	if_statement->val.if_statement.then_statement = then_statement;
 	// Potentially NULL if no else clause. This is fine as this is exactly what
@@ -493,7 +493,7 @@ ASTStatement *build_switch_statement(Parser *parser, Token *switch_token,
 	IGNORE(switch_token); IGNORE(lround); IGNORE(rround);
 
 	ASTStatement *switch_statement = pool_alloc(parser->pool, sizeof *switch_statement);
-	switch_statement->type = AST_SWITCH_STATEMENT;
+	switch_statement->type = SWITCH_STATEMENT;
 	switch_statement->val.expr_and_statement.expr = switch_expr;
 	switch_statement->val.expr_and_statement.statement = body;
 	return switch_statement;
@@ -507,7 +507,7 @@ ASTStatement *build_while_statement(Parser *parser, Token *tok_while,
 	IGNORE(rround);
 
 	ASTStatement *while_statement = pool_alloc(parser->pool, sizeof *while_statement);
-	while_statement->type = AST_WHILE_STATEMENT;
+	while_statement->type = WHILE_STATEMENT;
 	while_statement->val.expr_and_statement.expr = condition;
 	while_statement->val.expr_and_statement.statement = body;
 	return while_statement;
@@ -521,7 +521,7 @@ ASTStatement *build_do_while_statement(Parser *parser, Token *tok_do,
 
 	ASTStatement *do_while_statement =
 		pool_alloc(parser->pool, sizeof *do_while_statement);
-	do_while_statement->type = AST_DO_WHILE_STATEMENT;
+	do_while_statement->type = DO_WHILE_STATEMENT;
 	do_while_statement->val.expr_and_statement.expr = condition;
 	do_while_statement->val.expr_and_statement.statement = body;
 	return do_while_statement;
@@ -534,7 +534,7 @@ ASTStatement *build_for_statement(Parser *parser, Token *tok_for, Token *lround,
 	IGNORE(tok_for); IGNORE(lround); IGNORE(semi1); IGNORE(semi2); IGNORE(rround);
 
 	ASTStatement *for_statement = pool_alloc(parser->pool, sizeof *for_statement);
-	for_statement->type = AST_FOR_STATEMENT;
+	for_statement->type = FOR_STATEMENT;
 	for_statement->val.for_statement.init_expr = opt_init;
 	for_statement->val.for_statement.condition = opt_condition;
 	for_statement->val.for_statement.update_expr = opt_update;
@@ -555,7 +555,7 @@ ASTStatement *build_goto_statement(Parser *parser, Token *tok_goto, Token *label
 	IGNORE(tok_goto);
 
 	ASTStatement *goto_statement = pool_alloc(parser->pool, sizeof *goto_statement);
-	goto_statement->type = AST_GOTO_STATEMENT;
+	goto_statement->type = GOTO_STATEMENT;
 	goto_statement->val.goto_label = label->val.symbol_or_string_literal;
 	return goto_statement;
 }
@@ -567,7 +567,7 @@ ASTStatement *build_continue_statement(Parser *parser, Token *tok_cont, Token *s
 
 	ASTStatement *continue_statement =
 		pool_alloc(parser->pool, sizeof *continue_statement);
-	continue_statement->type = AST_CONTINUE_STATEMENT;
+	continue_statement->type = CONTINUE_STATEMENT;
 	return continue_statement;
 }
 
@@ -578,7 +578,7 @@ ASTStatement *build_break_statement(Parser *parser, Token *tok_break, Token *sem
 
 	ASTStatement *break_statement =
 		pool_alloc(parser->pool, sizeof *break_statement);
-	break_statement->type = AST_BREAK_STATEMENT;
+	break_statement->type = BREAK_STATEMENT;
 	return break_statement;
 }
 
@@ -590,7 +590,7 @@ ASTStatement *build_return_statement(Parser *parser, Token *tok_return,
 
 	ASTStatement *return_statement =
 		pool_alloc(parser->pool, sizeof *return_statement);
-	return_statement->type = AST_RETURN_STATEMENT;
+	return_statement->type = RETURN_STATEMENT;
 	return_statement->val.expr = opt_expr;
 	return return_statement;
 }
@@ -910,47 +910,47 @@ static void dump_type_name(ASTTypeName *type_name)
 
 static void dump_expr(ASTExpr *expr)
 {
-	if (expr->type == AST_INT_LITERAL) {
-		pretty_printf("AST_INT_LITERAL(%8", expr->val.int_literal);
-	} else if (expr->type == AST_IDENTIFIER) {
-		pretty_printf("AST_IDENTIFIER(%s", expr->val.identifier);
+	if (expr->type == INT_LITERAL_EXPR) {
+		pretty_printf("%s(%8", expr_type_names[expr->type], expr->val.int_literal);
+	} else if (expr->type == IDENTIFIER_EXPR) {
+		pretty_printf("%s(%s", expr_type_names[expr->type], expr->val.identifier);
 	} else {
 		pretty_printf("%s(", expr_type_names[expr->type]);
 		switch (expr->type) {
-		case AST_IDENTIFIER:
+		case IDENTIFIER_EXPR:
 			break;
-		case AST_STRUCT_DOT_FIELD: case AST_STRUCT_ARROW_FIELD:
+		case STRUCT_DOT_FIELD_EXPR: case STRUCT_ARROW_FIELD_EXPR:
 			dump_expr(expr->val.struct_field.struct_value);
 			pretty_printf(",%s", expr->val.struct_field.field_name);
 			break;
-		case AST_INDEX: case AST_POST_INCREMENT: case AST_POST_DECREMENT:
-		case AST_PRE_INCREMENT: case AST_PRE_DECREMENT: case AST_ADDRESS_OF:
-		case AST_DEREF: case AST_UNARY_PLUS: case AST_UNARY_MINUS:
-		case AST_BIT_NOT: case AST_LOGICAL_NOT: case AST_SIZEOF_EXPR:
+		case INDEX_EXPR: case POST_INCREMENT_EXPR: case POST_DECREMENT_EXPR:
+		case PRE_INCREMENT_EXPR: case PRE_DECREMENT_EXPR: case ADDRESS_OF_EXPR:
+		case DEREF_EXPR: case UNARY_PLUS_EXPR: case UNARY_MINUS_EXPR:
+		case BIT_NOT_EXPR: case LOGICAL_NOT_EXPR: case SIZEOF_EXPR_EXPR:
 			dump_expr(expr->val.unary_arg);
 			break;
-		case AST_CAST:
+		case CAST_EXPR:
 			pretty_printf("<some type>, ");
 			dump_expr(expr->val.cast.arg);
 			break;
-		case AST_SIZEOF_TYPE:
+		case SIZEOF_TYPE_EXPR:
 			dump_type_name(expr->val.type);
 			break;
-		case AST_MULTIPLY: case AST_DIVIDE: case AST_MODULO: case AST_ADD:
-		case AST_MINUS: case AST_LEFT_SHIFT: case AST_RIGHT_SHIFT:
-		case AST_LESS_THAN: case AST_GREATER_THAN: case AST_LESS_THAN_OR_EQUAL:
-		case AST_GREATER_THAN_OR_EQUAL: case AST_EQUAL: case AST_NOT_EQUAL:
-		case AST_BIT_AND: case AST_BIT_XOR: case AST_BIT_OR: case AST_LOGICAL_AND:
-		case AST_LOGICAL_OR: case AST_ASSIGN: case AST_MULT_ASSIGN:
-		case AST_DIVIDE_ASSIGN: case AST_MODULO_ASSIGN: case AST_PLUS_ASSIGN:
-		case AST_MINUS_ASSIGN: case AST_LEFT_SHIFT_ASSIGN:
-		case AST_RIGHT_SHIFT_ASSIGN: case AST_BIT_AND_ASSIGN:
-		case AST_BIT_XOR_ASSIGN: case AST_BIT_OR_ASSIGN:
+		case MULTIPLY_EXPR: case DIVIDE_EXPR: case MODULO_EXPR: case ADD_EXPR:
+		case MINUS_EXPR: case LEFT_SHIFT_EXPR: case RIGHT_SHIFT_EXPR:
+		case LESS_THAN_EXPR: case GREATER_THAN_EXPR: case LESS_THAN_OR_EQUAL_EXPR:
+		case GREATER_THAN_OR_EQUAL_EXPR: case EQUAL_EXPR: case NOT_EQUAL_EXPR:
+		case BIT_AND_EXPR: case BIT_XOR_EXPR: case BIT_OR_EXPR: case LOGICAL_AND_EXPR:
+		case LOGICAL_OR_EXPR: case ASSIGN_EXPR: case MULT_ASSIGN_EXPR:
+		case DIVIDE_ASSIGN_EXPR: case MODULO_ASSIGN_EXPR: case PLUS_ASSIGN_EXPR:
+		case MINUS_ASSIGN_EXPR: case LEFT_SHIFT_ASSIGN_EXPR:
+		case RIGHT_SHIFT_ASSIGN_EXPR: case BIT_AND_ASSIGN_EXPR:
+		case BIT_XOR_ASSIGN_EXPR: case BIT_OR_ASSIGN_EXPR:
 			dump_expr(expr->val.binary_op.arg1);
 			pretty_printf(",");
 			dump_expr(expr->val.binary_op.arg2);
 			break;
-		case AST_CONDITIONAL:
+		case CONDITIONAL_EXPR:
 			dump_expr(expr->val.ternary_op.arg1);
 			pretty_printf(",");
 			dump_expr(expr->val.ternary_op.arg2);
@@ -976,14 +976,14 @@ static void dump_statement(ASTStatement *statement)
 {
 	pretty_printf("%s(", statement_type_names[statement->type]);
 	switch (statement->type) {
-	case AST_EMPTY_STATEMENT:
-	case AST_CONTINUE_STATEMENT:
-	case AST_BREAK_STATEMENT:
+	case EMPTY_STATEMENT:
+	case CONTINUE_STATEMENT:
+	case BREAK_STATEMENT:
 		break;
-	case AST_LABELED_STATEMENT:
+	case LABELED_STATEMENT:
 		pretty_printf("%s,", statement->val.labeled_statement.label_name);
 		break;
-	case AST_COMPOUND_STATEMENT: {
+	case COMPOUND_STATEMENT: {
 		ASTBlockItem *block_item = statement->val.block_items;
 		while (block_item != NULL) {
 			dump_statement(block_item->val.statement);
@@ -993,11 +993,11 @@ static void dump_statement(ASTStatement *statement)
 		}
 		break;
 	}
-	case AST_EXPR_STATEMENT:
-	case AST_RETURN_STATEMENT:
+	case EXPR_STATEMENT:
+	case RETURN_STATEMENT:
 		dump_expr(statement->val.expr);
 		break;
-	case AST_IF_STATEMENT:
+	case IF_STATEMENT:
 		dump_expr(statement->val.if_statement.condition);
 		pretty_printf(",");
 		dump_statement(statement->val.if_statement.then_statement);
@@ -1006,15 +1006,15 @@ static void dump_statement(ASTStatement *statement)
 			dump_statement(statement->val.if_statement.else_statement);
 		}
 		break;
-	case AST_CASE_STATEMENT:
-	case AST_SWITCH_STATEMENT:
-	case AST_WHILE_STATEMENT:
-	case AST_DO_WHILE_STATEMENT:
+	case CASE_STATEMENT:
+	case SWITCH_STATEMENT:
+	case WHILE_STATEMENT:
+	case DO_WHILE_STATEMENT:
 		dump_expr(statement->val.expr_and_statement.expr);
 		pretty_printf(",");
 		dump_statement(statement->val.expr_and_statement.statement);
 		break;
-	case AST_FOR_STATEMENT:
+	case FOR_STATEMENT:
 		// @TODO: For loops with decls.
 		if (statement->val.for_statement.init_expr != NULL)
 			dump_expr(statement->val.for_statement.init_expr);
@@ -1025,7 +1025,7 @@ static void dump_statement(ASTStatement *statement)
 		if (statement->val.for_statement.update_expr != NULL)
 			dump_expr(statement->val.for_statement.update_expr);
 		break;
-	case AST_GOTO_STATEMENT:
+	case GOTO_STATEMENT:
 		pretty_printf(statement->val.goto_label);
 		break;
 	default:
