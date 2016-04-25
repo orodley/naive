@@ -62,9 +62,9 @@ build_named_type =
 		val.name, "((Token *)#0)->val.symbol_or_string_literal")
 
 struct_or_union_specifier =
-	or(seq(build_struct_or_union_tagged_named_type, struct_or_union, TOK_SYMBOL),
-		seq(build_struct_or_union, struct_or_union, opt(TOK_SYMBOL),
-			TOK_LCURLY, list(ASTFieldDecl, field_decl), TOK_RCURLY))
+	or(seq(build_struct_or_union, struct_or_union, opt(TOK_SYMBOL),
+			TOK_LCURLY, list(ASTFieldDecl, field_decl), TOK_RCURLY),
+		seq(build_struct_or_union_tagged_named_type, struct_or_union, TOK_SYMBOL))
 
 struct_or_union = which(keyword(struct), keyword(union))
 
@@ -95,9 +95,9 @@ build_field_declarator =
 		val.declarator, #0)
 
 enum_specifier =
-	or(seq(build_enum_tagged_named_type, keyword(enum), TOK_SYMBOL),
-		seq(build_enum, keyword(enum), opt(TOK_SYMBOL), TOK_LCURLY,
-			enumerator_list, opt(TOK_COMMA), TOK_RCURLY))
+	or(seq(build_enum, keyword(enum), opt(TOK_SYMBOL), TOK_LCURLY,
+			enumerator_list, opt(TOK_COMMA), TOK_RCURLY),
+		seq(build_enum_tagged_named_type, keyword(enum), TOK_SYMBOL))
 
 enumerator_list = list(ASTEnumerator, enumerator, TOK_COMMA)
 
