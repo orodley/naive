@@ -363,7 +363,8 @@ static ASTExpr *build_binary_head(Parser *parser, ASTExpr *curr,
 	return expr;
 }
 
-#undef CASE
+#undef CASE1
+#undef CASE2
 
 // @TODO: We actually want to use a fold for this, so we need
 // build_ternary_head and build_ternary_tail.
@@ -818,14 +819,17 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 
 static int indent_level = 0;
 
+#if 0
 static inline void print_indent(void)
 {
 	for (int n = 0; n < indent_level; n++)
 		fputs("    ", stdout);
 }
+#endif
 
 static void pretty_printf(const char *fmt, ...)
 {
+#if 0
 	size_t len = strlen(fmt);
 	if (len == 1 && fmt[len - 1] == ')') {
 		putchar('\n');
@@ -835,18 +839,25 @@ static void pretty_printf(const char *fmt, ...)
 
 		puts(")");
 		return;
+	} else if (len == 2 && strcmp(fmt, ", ") == 0) {
+		puts(",");
+		print_indent();
+		return;
 	}
+#endif
 
 	va_list varargs;
 	va_start(varargs, fmt);
 	vprintf(fmt, varargs);
 	va_end(varargs);
 
+#if 0
 	if (fmt[len - 1] == '(') {
 		indent_level++;
 		putchar('\n');
 		print_indent();
 	}
+#endif
 }
 
 #define X(x) #x
@@ -987,16 +998,157 @@ static void dump_statement(ASTStatement *statement)
 	pretty_printf(")");
 }
 
-void dump_toplevel(ASTToplevel *ast)
+static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 {
-	switch (ast->type) {
-	case FUNCTION_DEF:
-		pretty_printf("FUNCTION_DEF(");
-		dump_statement(ast->val.function_def->body);
+	switch (type_specifier->type) {
+	case NAMED_TYPE_SPECIFIER:
+		pretty_printf("NAMED_TYPE_SPECIFIER(%s)", type_specifier->val.name);
+		break;
+	default:
+		assert(!"Not implemented");
+	}
+}
+
+static void dump_decl_specifiers(ASTDeclSpecifier *specifiers)
+{
+	pretty_printf("DECL_SPECIFIER(");
+
+#define CASE(x) case x: pretty_printf(#x); break;
+	while (specifiers != NULL) {
+		switch (specifiers->type) {
+		case STORAGE_CLASS_SPECIFIER:
+			switch (specifiers->val.storage_class_specifier) {
+			CASE(TYPEDEF_SPECIFIER) CASE(EXTERN_SPECIFIER)
+			CASE(STATIC_SPECIFIER) CASE(AUTO_SPECIFIER) CASE(REGISTER_SPECIFIER)
+			}
+			break;
+		case TYPE_QUALIFIER:
+			switch (specifiers->val.type_qualifier) {
+			CASE(CONST_QUALIFIER) CASE(RESTRICT_QUALIFIER) CASE(VOLATILE_QUALIFIER)
+			}
+			break;
+#undef CASE
+		case FUNCTION_SPECIFIER:
+			assert(specifiers->val.function_specifier == INLINE_SPECIFIER);
+			pretty_printf("INLINE_SPECIFIER");
+			break;
+		case TYPE_SPECIFIER:
+			dump_type_specifier(specifiers->val.type_specifier);
+			break;
+		}
+
+		if (specifiers->next != NULL)
+			pretty_printf(", ");
+
+		specifiers = specifiers->next;
+	}
+
+	pretty_printf(")");
+}
+
+static void dump_declarator(ASTDeclarator *declarator);
+
+static void dump_parameter_decls(ASTParameterDecl *param_decls)
+{
+	pretty_printf("PARAM_DECLS(");
+	while (param_decls != NULL) {
+		pretty_printf("PARAM(");
+		dump_decl_specifiers(param_decls->decl_specifiers);
+		pretty_printf(", ");
+		dump_declarator(param_decls->declarator);
+		pretty_printf(")");
+
+		param_decls = param_decls->next;
+	}
+
+	pretty_printf(")");
+}
+
+static void dump_direct_declarator(ASTDirectDeclarator *declarator)
+{
+	switch (declarator->type) {
+	case DECLARATOR:
+		pretty_printf("DECLARATOR(");
+		dump_declarator(declarator->val.declarator);
+		break;
+	case IDENTIFIER_DECLARATOR:
+		pretty_printf("IDENTIFIER_DECLARATOR(%s", declarator->val.name);
+		break;
+	case FUNCTION_DECLARATOR:
+		pretty_printf("FUNCTION_DECLARATOR(");
+		dump_direct_declarator(declarator->val.function_declarator.declarator);
+		pretty_printf(", ");
+		dump_parameter_decls(declarator->val.function_declarator.parameters);
 		break;
 	default:
 		assert(!"Not implemented");
 	}
 
 	pretty_printf(")");
+}
+
+static void dump_declarator(ASTDeclarator *declarator)
+{
+	switch (declarator->type) {
+	case POINTER_DECLARATOR:
+		pretty_printf("POINTER_DECLARATOR(");
+		dump_decl_specifiers(declarator->val.pointer_declarator.decl_specifiers);
+		pretty_printf(", ");
+		dump_declarator(declarator->val.pointer_declarator.pointee);
+		break;
+	case DIRECT_DECLARATOR:
+		pretty_printf("DIRECT_DECLARATOR(");
+		dump_direct_declarator(declarator->val.direct_declarator);
+		break;
+	}
+
+	pretty_printf(")");
+}
+
+static void dump_init_declarators(ASTInitDeclarator *init_declarators)
+{
+	IGNORE(init_declarators);
+
+	assert(!"Not implemented");
+}
+
+static void dump_decls(ASTDecl *decl)
+{
+	while (decl != NULL) {
+		pretty_printf("DECL(");
+		dump_decl_specifiers(decl->decl_specifiers);
+		pretty_printf(", ");
+		dump_init_declarators(decl->init_declarators);
+		pretty_printf("), ");
+
+		decl = decl->next;
+	}
+}
+
+void dump_toplevel(ASTToplevel *ast)
+{
+	assert(indent_level == 0);
+
+	switch (ast->type) {
+	case FUNCTION_DEF:
+		pretty_printf("FUNCTION_DEF(");
+		dump_decl_specifiers(ast->val.function_def->specifiers);
+		pretty_printf(", ");
+		dump_declarator(ast->val.function_def->declarator);
+		pretty_printf(", ");
+		dump_decls(ast->val.function_def->old_style_param_decls);
+		dump_statement(ast->val.function_def->body);
+		break;
+	case DECL:
+		pretty_printf("DECL(");
+		dump_decls(ast->val.decl);
+		break;
+
+	default:
+		assert(!"Not implemented");
+	}
+
+	pretty_printf(")");
+
+	assert(indent_level == 0);
 }
