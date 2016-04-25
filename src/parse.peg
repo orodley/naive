@@ -174,7 +174,7 @@ build_type_name =
 		declarator, #1)
 
 initializer =
-	or(seq(build_expr_initializer, expr),
+	or(seq(build_expr_initializer, assignment_expr),
 		seq(build_brace_initializer, TOK_LCURLY, initializer_list,
 			opt(TOK_COMMA), TOK_RCURLY))
 
