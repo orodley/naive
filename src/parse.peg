@@ -30,12 +30,15 @@ build_decl =
 
 init_declarator_list = list(ASTInitDeclarator, init_declarator)
 
-init_declarator = seq(build_init_declarator, declarator, TOK_ASSIGN, initializer)
+init_declarator =
+	seq(build_init_declarator,
+		declarator,
+		opt(seq(second, TOK_ASSIGN, initializer)))
 
 build_init_declarator =
-	build(ASTInitDeclarator, 3,
+	build(ASTInitDeclarator, 2,
 		declarator, #0,
-		initializer, #2)
+		initializer, #1)
 
 storage_class_specifier =
 	seq(build_storage_class_specifier,
