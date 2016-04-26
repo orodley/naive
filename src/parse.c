@@ -528,15 +528,16 @@ ASTStatement *build_do_while_statement(Parser *parser, Token *tok_do,
 	return do_while_statement;
 }
 
-ASTStatement *build_for_statement(Parser *parser, Token *tok_for, Token *lround,
+ASTStatement *build_for_statement(Parser *parser, Token *keyword_for, Token *lround,
 		ASTExpr *opt_init, Token *semi1, ASTExpr *opt_condition, Token *semi2,
 		ASTExpr *opt_update, Token *rround, ASTStatement *body)
 {
-	IGNORE(tok_for); IGNORE(lround); IGNORE(semi1); IGNORE(semi2); IGNORE(rround);
+	IGNORE(keyword_for); IGNORE(lround); IGNORE(semi1); IGNORE(semi2); IGNORE(rround);
 
 	ASTStatement *for_statement = pool_alloc(parser->pool, sizeof *for_statement);
 	for_statement->type = FOR_STATEMENT;
-	for_statement->val.for_statement.init_expr = opt_init;
+	for_statement->val.for_statement.init_type = FOR_INIT_EXPR;
+	for_statement->val.for_statement.init.expr = opt_init;
 	for_statement->val.for_statement.condition = opt_condition;
 	for_statement->val.for_statement.update_expr = opt_update;
 	for_statement->val.for_statement.body = body;
@@ -544,11 +545,20 @@ ASTStatement *build_for_statement(Parser *parser, Token *tok_for, Token *lround,
 }
 
 // @TODO
-ASTStatement *build_for_decl_statement(void *a, void *b, void *c, void *d,
-		void *e, void *f, void *g, void *h, void *i)
+ASTStatement *build_for_decl_statement(Parser *parser, Token *keyword_for,
+		Token *lround, ASTDecl *init_decl, ASTExpr *opt_condition,
+		Token *semi2, ASTExpr *opt_update, Token *rround, ASTStatement *body)
 {
-	(void)a; (void)b; (void)c; (void)d; (void)e; (void)f; (void)g; (void)h; (void)i;
-	return NULL;
+	IGNORE(keyword_for); IGNORE(lround); IGNORE(semi2); IGNORE(rround);
+	ASTStatement *for_statement = pool_alloc(parser->pool, sizeof *for_statement);
+	for_statement->type = FOR_STATEMENT;
+	for_statement->val.for_statement.init_type = FOR_INIT_DECL;
+	for_statement->val.for_statement.init.decl = init_decl;
+	for_statement->val.for_statement.condition = opt_condition;
+	for_statement->val.for_statement.update_expr = opt_update;
+	for_statement->val.for_statement.body = body;
+
+	return for_statement;
 }
 
 ASTStatement *build_goto_statement(Parser *parser, Token *tok_goto, Token *label)
@@ -1030,9 +1040,15 @@ static void dump_statement(ASTStatement *statement)
 		dump_statement(statement->val.expr_and_statement.statement);
 		break;
 	case FOR_STATEMENT:
-		// @TODO: For loops with decls.
-		if (statement->val.for_statement.init_expr != NULL)
-			dump_expr(statement->val.for_statement.init_expr);
+		switch (statement->val.for_statement.init_type) {
+		case FOR_INIT_EXPR:
+			if (statement->val.for_statement.init.expr != NULL)
+				dump_expr(statement->val.for_statement.init.expr);
+			break;
+		case FOR_INIT_DECL:
+			dump_decls(statement->val.for_statement.init.decl);
+			break;
+		}
 		pretty_printf(",");
 		if (statement->val.for_statement.condition)
 			dump_expr(statement->val.for_statement.condition);

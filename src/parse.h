@@ -166,7 +166,16 @@ typedef struct ASTStatement
 		// @TODO: For loops with declarations.
 		struct
 		{
-			ASTExpr *init_expr;
+			enum
+			{
+				FOR_INIT_DECL,
+				FOR_INIT_EXPR,
+			} init_type;
+			union
+			{
+				struct ASTDecl *decl;
+				ASTExpr *expr;
+			} init;
 			ASTExpr *condition;
 			ASTExpr *update_expr;
 			struct ASTStatement *body;
