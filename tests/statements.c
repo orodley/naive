@@ -1,8 +1,7 @@
-int main(int foo)
+int main()
 {
-	//int i;
-	//int x;
-	for (i = 0; i < 20; i++) {
+	int x;
+	for (int i = 0; i < 20; i++) {
 		if (i % 3 == 0)
 			x = 23;
 		else if (i % 5 == 0)
