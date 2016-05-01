@@ -96,7 +96,7 @@ typedef struct Token
 
 typedef struct SourceLoc
 {
-	const char *filename;
+	char *filename;
 	u32 line;
 	u32 column;
 } SourceLoc;
@@ -111,7 +111,7 @@ typedef struct SourceToken
 
 extern const char *token_type_names[];
 
-void tokenise(Array(SourceToken) *tokens, const char *input_filename);
+void tokenise(Array(SourceToken) *tokens, char *input_filename);
 void dump_token(Token *token);
 
 #endif

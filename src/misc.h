@@ -23,4 +23,7 @@ typedef  int64_t i64;
 #define UNREACHABLE assert(!"This should never be reached")
 #define UNIMPLEMENTED assert(!"Not implemented")
 
+
+char *strndup(char *str, u32 length);
+
 #endif

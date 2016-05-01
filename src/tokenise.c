@@ -23,7 +23,7 @@ typedef struct InputBuffer
 #define INVALID_INPUT_BUFFER ((InputBuffer) { NULL, 0 })
 
 // @PORT
-static InputBuffer map_file_into_memory(const char *filename)
+static InputBuffer map_file_into_memory(char *filename)
 {
 	int fd = open(filename, O_RDONLY);
 	if (fd == -1)
@@ -48,6 +48,12 @@ static void unmap_file(InputBuffer buffer)
 {
 	int ret = munmap(buffer.buffer, buffer.length);
 	assert(ret == 0);
+}
+
+static inline bool is_valid(InputBuffer ib)
+{
+	return !((ib.buffer == INVALID_INPUT_BUFFER.buffer) &&
+		(ib.length == INVALID_INPUT_BUFFER.length));
 }
 
 
@@ -167,6 +173,17 @@ static void skip_whitespace_and_comments(Reader *reader, bool skip_newline)
 }
 
 
+static inline bool initial_ident_char(char c)
+{
+	return  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
+}
+
+static inline bool ident_char(char c)
+{
+	return initial_ident_char(c) || (c >= '0' && c <= '9');
+}
+
+
 static Token *append_token(Reader *reader, TokenType type)
 {
 	SourceToken *source_token = ARRAY_APPEND(reader->tokens, SourceToken);
@@ -178,339 +195,430 @@ static Token *append_token(Reader *reader, TokenType type)
 	return token;
 }
 
+static char *read_symbol(Reader *reader)
+{
+	u32 start_index = reader->position - 1;
+	for (;;) {
+		char c = peek_char(reader);
+		if (!ident_char(c))
+			break;
+
+		advance(reader);
+	}
+
+	u32 length = reader->position - start_index;
+	return strndup(reader->buffer.buffer + start_index, length);
+}
+
 static void handle_pp_directive(Reader *reader);
+static void tokenise_file(Reader *reader, char *input_filename);
 
 // @IMPROVE: Replace with a finite state machine
-void tokenise(Array(SourceToken) *tokens, const char *input_filename)
+void tokenise(Array(SourceToken) *tokens, char *input_filename)
 {
-	InputBuffer buffer = map_file_into_memory(input_filename);
-
-	if (buffer.buffer == NULL)
-		return;
 
 	// @TUNE: 500 tokens is a quick estimate of a reasonable minimum. We should
 	// do some more thorough measurement and determine a good value for this.
 	ARRAY_INIT(tokens, SourceToken, 500);
 
-	Reader reader = {
-		tokens,
-		buffer,
-		0,
-		(SourceLoc) { input_filename, 1, 1, },
-		true
-	};
-	Reader *r = &reader;
+	Reader reader;
+	reader.tokens = tokens;
 
-	while (!at_end(r)) {
-		skip_whitespace_and_comments(r, true);
-		if (at_end(r))
+	tokenise_file(&reader, input_filename);
+}
+
+static void tokenise_file(Reader *reader, char *input_filename)
+{
+	u32 old_position = reader->position;
+	SourceLoc old_source_loc = reader->source_loc;
+	InputBuffer old_buffer = reader->buffer;
+
+	InputBuffer buffer = map_file_into_memory(input_filename);
+	if (!is_valid(buffer)) {
+		issue_error(&reader->source_loc, "Failed to open input file: '%s'", input_filename);
+		return;
+	}
+
+	reader->buffer = buffer;
+	reader->position = 0;
+	reader->source_loc = (SourceLoc) { input_filename, 1, 1, };
+	reader->first_token_of_line = true;
+
+	if (buffer.buffer == NULL)
+		return;
+
+	while (!at_end(reader)) {
+		skip_whitespace_and_comments(reader, true);
+		if (at_end(reader))
 			break;
 
-		switch (read_char(r)) {
+		switch (read_char(reader)) {
 		case '0': case '1': case '2': case '3': case '4': case '5': case '6':
 		case '7': case '8': case '9': {
-			back_up(r);
+			back_up(reader);
 			i64 value = 0;
 
 			for (;;) {
-				char c = peek_char(r);
+				char c = peek_char(reader);
 				if (!(c >= '0' && c <= '9'))
 					break;
 
 				value *= 10;
 				value += c - '0';
-				advance(r);
+				advance(reader);
 			}
 
-			Token *token = append_token(r, TOK_INT_LITERAL);
+			Token *token = append_token(reader, TOK_INT_LITERAL);
 			token->val.int_literal = value;
 
 			break;
 		}
 		case '"': {
-			u32 start_index = reader.position;
+			u32 start_index = reader->position;
 			for (;;) {
-				char c = read_char(r);
+				char c = read_char(reader);
 
 				if (c == '\\')
-					advance(r);
+					advance(reader);
 				else if (c == '"')
 					break;
 			}
 
-			u32 size = ((reader.position - 1) - start_index) + 1;
+			u32 length = ((reader->position - 1) - start_index);
 
-			Token *token = append_token(r, TOK_STRING_LITERAL);
-			char *str = malloc(size);
-			strncpy(str, reader.buffer.buffer + start_index, size - 1);
-			str[size - 1] = '\0';
-
-			token->val.symbol_or_string_literal = str;
+			Token *token = append_token(reader, TOK_STRING_LITERAL);
+			token->val.symbol_or_string_literal = strndup(
+					buffer.buffer + start_index, length);
 
 			break;
 		}
 		case '+':
-			switch (read_char(r)) {
+			switch (read_char(reader)) {
 			case '+':
-				append_token(r, TOK_INCREMENT);
+				append_token(reader, TOK_INCREMENT);
 				break;
 			case '=':
-				append_token(r, TOK_PLUS_ASSIGN);
+				append_token(reader, TOK_PLUS_ASSIGN);
 				break;
 			default:
-				back_up(r);
-				append_token(r, TOK_PLUS);
+				back_up(reader);
+				append_token(reader, TOK_PLUS);
 			}
 
 			break;
 
 		case '-':
-			switch (read_char(r)) {
+			switch (read_char(reader)) {
 			case '-':
-				append_token(r, TOK_DECREMENT);
+				append_token(reader, TOK_DECREMENT);
 				break;
 			case '=':
-				append_token(r, TOK_MINUS_ASSIGN);
+				append_token(reader, TOK_MINUS_ASSIGN);
 				break;
 			case '>':
-				append_token(r, TOK_ARROW);
+				append_token(reader, TOK_ARROW);
 				break;
 			default:
-				back_up(r);
-				append_token(r, TOK_MINUS);
+				back_up(reader);
+				append_token(reader, TOK_MINUS);
 			}
 
 			break;
 
 		case '*':
-			if (read_char(r) == '=') {
-				append_token(r, TOK_MULT_ASSIGN);
+			if (read_char(reader) == '=') {
+				append_token(reader, TOK_MULT_ASSIGN);
 			} else {
-				back_up(r);
-				append_token(r, TOK_ASTERISK);
+				back_up(reader);
+				append_token(reader, TOK_ASTERISK);
 			}
 
 			break;
 
 		case '/':
-			if (read_char(r) == '=') {
-				append_token(r, TOK_DIVIDE_ASSIGN);
+			if (read_char(reader) == '=') {
+				append_token(reader, TOK_DIVIDE_ASSIGN);
 			} else {
-				back_up(r);
-				append_token(r, TOK_DIVIDE);
+				back_up(reader);
+				append_token(reader, TOK_DIVIDE);
 			}
 
 			break;
 
 		case '%':
-			if (read_char(r) == '=') {
-				append_token(r, TOK_MODULO_ASSIGN);
+			if (read_char(reader) == '=') {
+				append_token(reader, TOK_MODULO_ASSIGN);
 			} else {
-				back_up(r);
-				append_token(r, TOK_MODULO);
+				back_up(reader);
+				append_token(reader, TOK_MODULO);
 			}
 
 			break;
 
 		case '&':
-			switch (read_char(r)) {
+			switch (read_char(reader)) {
 			case '&':
-				append_token(r, TOK_LOGICAL_AND);
+				append_token(reader, TOK_LOGICAL_AND);
 				break;
 			case '=':
-				append_token(r, TOK_BIT_AND_ASSIGN);
+				append_token(reader, TOK_BIT_AND_ASSIGN);
 				break;
 			default:
-				back_up(r);
-				append_token(r, TOK_AMPERSAND);
+				back_up(reader);
+				append_token(reader, TOK_AMPERSAND);
 			}
 
 			break;
 
 		case '|':
-			switch (read_char(r)) {
+			switch (read_char(reader)) {
 			case '|':
-				append_token(r, TOK_LOGICAL_OR);
+				append_token(reader, TOK_LOGICAL_OR);
 				break;
 			case '=':
-				append_token(r, TOK_BIT_OR_ASSIGN);
+				append_token(reader, TOK_BIT_OR_ASSIGN);
 				break;
 			default:
-				back_up(r);
-				append_token(r, TOK_BIT_OR);
+				back_up(reader);
+				append_token(reader, TOK_BIT_OR);
 			}
 
 			break;
 
 		case '^':
-			if (read_char(r) == '=') {
-				append_token(r, TOK_BIT_XOR_ASSIGN);
+			if (read_char(reader) == '=') {
+				append_token(reader, TOK_BIT_XOR_ASSIGN);
 			} else {
-				back_up(r);
-				append_token(r, TOK_BIT_XOR);
+				back_up(reader);
+				append_token(reader, TOK_BIT_XOR);
 			}
 
 			break;
 
 		case '=':
-			if (read_char(r) == '=') {
-				append_token(r, TOK_EQUAL);
+			if (read_char(reader) == '=') {
+				append_token(reader, TOK_EQUAL);
 			} else {
-				back_up(r);
-				append_token(r, TOK_ASSIGN);
+				back_up(reader);
+				append_token(reader, TOK_ASSIGN);
 			}
 
 			break;
 
 		case '!':
-			if (read_char(r) == '=') {
-				append_token(r, TOK_NOT_EQUAL);
+			if (read_char(reader) == '=') {
+				append_token(reader, TOK_NOT_EQUAL);
 			} else {
-				back_up(r);
-				append_token(r, TOK_LOGICAL_NOT);
+				back_up(reader);
+				append_token(reader, TOK_LOGICAL_NOT);
 			}
 
 			break;
 
 		case '<':
-			switch (read_char(r)) {
+			switch (read_char(reader)) {
 			case '=':
-				append_token(r, TOK_LESS_THAN_OR_EQUAL);
+				append_token(reader, TOK_LESS_THAN_OR_EQUAL);
 				break;
 			case '<':
-				if (read_char(r) == '=') {
-					append_token(r, TOK_LEFT_SHIFT_ASSIGN);
+				if (read_char(reader) == '=') {
+					append_token(reader, TOK_LEFT_SHIFT_ASSIGN);
 				} else {
-					back_up(r);
-					append_token(r, TOK_LEFT_SHIFT);
+					back_up(reader);
+					append_token(reader, TOK_LEFT_SHIFT);
 				}
 				break;
 			default:
-				back_up(r);
-				append_token(r, TOK_LESS_THAN);
+				back_up(reader);
+				append_token(reader, TOK_LESS_THAN);
 			}
 
 			break;
 
 		case '>':
-			switch (read_char(r)) {
+			switch (read_char(reader)) {
 			case '=':
-				append_token(r, TOK_GREATER_THAN_OR_EQUAL);
+				append_token(reader, TOK_GREATER_THAN_OR_EQUAL);
 				break;
 			case '>':
-				if (read_char(r) == '=') {
-					append_token(r, TOK_RIGHT_SHIFT_ASSIGN);
+				if (read_char(reader) == '=') {
+					append_token(reader, TOK_RIGHT_SHIFT_ASSIGN);
 				} else {
-					back_up(r);
-					append_token(r, TOK_RIGHT_SHIFT);
+					back_up(reader);
+					append_token(reader, TOK_RIGHT_SHIFT);
 				}
 				break;
 			default:
-				back_up(r);
-				append_token(r, TOK_GREATER_THAN);
+				back_up(reader);
+				append_token(reader, TOK_GREATER_THAN);
 			}
 
 			break;
 
 		case '#':
-			if (read_char(r) == '#') {
-				append_token(r, TOK_DOUBLE_HASH);
+			if (read_char(reader) == '#') {
+				append_token(reader, TOK_DOUBLE_HASH);
 			} else {
-				back_up(r);
+				back_up(reader);
 
-				if (!reader.first_token_of_line) {
-					issue_error(&reader.source_loc,
+				if (!reader->first_token_of_line) {
+					issue_error(&reader->source_loc,
 							"Unexpected preprocessor directive");
 				} else {
-					handle_pp_directive(r);
+					handle_pp_directive(reader);
 				}
 			}
 
 			break;
 
 		case '.':
-			if (read_char(r) == '.') {
-				if (read_char(r) == '.') {
-					append_token(r, TOK_ELLIPSIS);
+			if (read_char(reader) == '.') {
+				if (read_char(reader) == '.') {
+					append_token(reader, TOK_ELLIPSIS);
 				} else {
-					back_up(r);
-					back_up(r);
-					append_token(r, TOK_DOT);
+					back_up(reader);
+					back_up(reader);
+					append_token(reader, TOK_DOT);
 				}
 			} else {
-				back_up(r);
-				append_token(r, TOK_DOT);
+				back_up(reader);
+				append_token(reader, TOK_DOT);
 			}
 
 			break;
 
-		case '~': append_token(r, TOK_BIT_NOT); break;
-		case '?': append_token(r, TOK_QUESTION_MARK); break;
-		case ':': append_token(r, TOK_COLON); break;
-		case ';': append_token(r, TOK_SEMICOLON); break;
-		case ',': append_token(r, TOK_COMMA); break;
+		case '~': append_token(reader, TOK_BIT_NOT); break;
+		case '?': append_token(reader, TOK_QUESTION_MARK); break;
+		case ':': append_token(reader, TOK_COLON); break;
+		case ';': append_token(reader, TOK_SEMICOLON); break;
+		case ',': append_token(reader, TOK_COMMA); break;
 
-		case '{': append_token(r, TOK_LCURLY); break;
-		case '}': append_token(r, TOK_RCURLY); break;
-		case '(': append_token(r, TOK_LROUND); break;
-		case ')': append_token(r, TOK_RROUND); break;
-		case '[': append_token(r, TOK_LSQUARE); break;
-		case ']': append_token(r, TOK_RSQUARE); break;
+		case '{': append_token(reader, TOK_LCURLY); break;
+		case '}': append_token(reader, TOK_RCURLY); break;
+		case '(': append_token(reader, TOK_LROUND); break;
+		case ')': append_token(reader, TOK_RROUND); break;
+		case '[': append_token(reader, TOK_LSQUARE); break;
+		case ']': append_token(reader, TOK_RSQUARE); break;
 
 		case '\n': case ' ': case '\t':
 			// skip_whitespace_and_comments should have moved us past these
 			UNREACHABLE;
 
 		default: {
-			u32 start_index = reader.position - 1;
-			for (;;) {
-				char c = peek_char(r);
-				if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
-							|| (c >= 'A' && c <= 'Z') || (c == '_')))
-					break;
-
-				advance(r);
-			}
-
-			u32 size = reader.position - start_index + 1;
-
-			Token *token = append_token(r, TOK_SYMBOL);
-			char *str = malloc(size);
-			strncpy(str, reader.buffer.buffer + start_index, size - 1);
-			str[size - 1] = '\0';
-
-			token->val.symbol_or_string_literal = str;
+			Token *token = append_token(reader, TOK_SYMBOL);
+			token->val.symbol_or_string_literal = read_symbol(reader);
 			break;
 		}
 		}
 
-		reader.first_token_of_line = false;
+		reader->first_token_of_line = false;
 	}
 
 	unmap_file(buffer);
+
+	reader->position = old_position;
+	reader->buffer = old_buffer;
+	reader->source_loc = old_source_loc;
 }
 
+
+static char *look_up_include_path(char *including_file, char *include_path)
+{
+	u32 including_file_length = strlen(including_file);
+	i32 i = including_file_length - 1;
+	for (; i >= 0 && including_file[i] != '/'; i--)
+		;
+
+	char *base_path;
+	u32 base_length;
+	// Path without any slashes
+	if (i == -1) {
+		base_path = "./";
+		base_length = 2;
+	} else {
+		base_path = including_file;
+		base_length = i + 1;
+	}
+
+	u32 include_path_length = strlen(include_path);
+	u32 result_length = base_length + include_path_length;
+	char *result = malloc(result_length + 1);
+	strncpy(result, base_path, base_length);
+	strncpy(result + base_length, include_path, include_path_length);
+	result[result_length] = '\0';
+
+	return result;
+}
 
 static void handle_pp_directive(Reader *reader)
 {
 	IGNORE(reader);
-	SourceToken directive;
+	skip_whitespace_and_comments(reader, false);
+	char c = read_char(reader);
+	// Empty directive
+	if (c == '\n')
+		return;
 
-	// @TODO: Preprocessing tokens are distinct from regular tokens, but there
-	// is a lot of overlap. The overlap should be factored out, and then used
-	// to read both types of tokens. For now we just pretend they're the same.
-	//read_token(reader, &directive);
-
-	if (directive.token.type != TOK_SYMBOL) {
-		// @TODO: Maybe we should skip to the next newline or something to try
-		// to re-sync when this happens?
-		issue_error(&directive.source_loc, "Expected identifier");
+	if (!initial_ident_char(c)) {
+		// @TODO: Sync to the next newline?
+		issue_error(&reader->source_loc, "Expected preprocessor directive");
 		return;
 	}
 
-	char *name = directive.token.val.symbol_or_string_literal;
-	if (strcmp(name, "include") == 0) {
+	char *directive = read_symbol(reader);
+	if (strcmp(directive, "if") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "ifdef") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "ifndef") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "elif") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "else") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "endif") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "include") == 0) {
+		skip_whitespace_and_comments(reader, false);
 
+		char c = read_char(reader);
+		if (c != '<' && c != '"') {
+			issue_error(&reader->source_loc, "Expected filename after #include");
+			return;
+		}
+
+		char terminator = c == '<' ? '>' : '"';
+		u32 start_index = reader->position;
+		while (read_char(reader) != terminator)
+			;
+		u32 end_index = reader->position - 1;
+		u32 length = end_index - start_index;
+
+		char *include_path = strndup(reader->buffer.buffer + start_index, length);
+		char *includee_path = look_up_include_path(reader->source_loc.filename, include_path);
+
+		tokenise_file(reader, includee_path);
+		
+		free(include_path);
+		free(includee_path);
+
+		skip_whitespace_and_comments(reader, false);
+		if (read_char(reader) != '\n') {
+			// @TODO: Resync to newline?
+			issue_error(&reader->source_loc, "Extraneous text after include path");
+		}
+	} else if (strcmp(directive, "define") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "undef") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "line") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "error") == 0) {
+		UNIMPLEMENTED;
+	} else if (strcmp(directive, "pragma") == 0) {
+		UNIMPLEMENTED;
+	} else {
+		issue_error(&reader->source_loc, "Invalid preprocessor directive: %s", directive);
 	}
 }
 
