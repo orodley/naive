@@ -20,7 +20,13 @@ typedef struct InputBuffer
 	size_t length;
 } InputBuffer;
 
-#define INVALID_INPUT_BUFFER ((InputBuffer) { NULL, 0 })
+#define INVALID_INPUT_BUFFER ((InputBuffer) { NULL, -1 })
+
+static inline bool is_valid(InputBuffer ib)
+{
+	return !((ib.buffer == INVALID_INPUT_BUFFER.buffer) &&
+		(ib.length == INVALID_INPUT_BUFFER.length));
+}
 
 // @PORT
 static InputBuffer map_file_into_memory(char *filename)
@@ -33,6 +39,9 @@ static InputBuffer map_file_into_memory(char *filename)
 
 	if (file_size == -1)
 		return INVALID_INPUT_BUFFER;
+
+	if (file_size == 0)
+		return (InputBuffer) { NULL, 0 };
 
 	char *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (buffer == MAP_FAILED)
@@ -48,12 +57,6 @@ static void unmap_file(InputBuffer buffer)
 {
 	int ret = munmap(buffer.buffer, buffer.length);
 	assert(ret == 0);
-}
-
-static inline bool is_valid(InputBuffer ib)
-{
-	return !((ib.buffer == INVALID_INPUT_BUFFER.buffer) &&
-		(ib.length == INVALID_INPUT_BUFFER.length));
 }
 
 
@@ -291,7 +294,7 @@ static void tokenise_file(Reader *reader, char *input_filename)
 
 	InputBuffer buffer = map_file_into_memory(input_filename);
 	if (!is_valid(buffer)) {
-		issue_error(&reader->source_loc, "Failed to open input file: '%s'", input_filename);
+		fprintf(stderr, "Failed to open input file: '%s'\n", input_filename);
 		return;
 	}
 
