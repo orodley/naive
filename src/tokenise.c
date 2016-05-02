@@ -57,6 +57,34 @@ static inline bool is_valid(InputBuffer ib)
 }
 
 
+typedef struct Macro
+{
+	char *name;
+	char *value;
+} Macro;
+
+static Macro *look_up_macro(Array(Macro) *macro_env, char *name)
+{
+	for (u32 i = 0; i < macro_env->size; i++) {
+		Macro *m = ARRAY_REF(macro_env, Macro, i);
+		if (strcmp(m->name, name) == 0) {
+			return m;
+		}
+	}
+
+	return NULL;
+}
+
+static void define_macro(Array(Macro) *macro_env, char *name, char *value)
+{
+	Macro *pre_existing = look_up_macro(macro_env, name);
+	if (pre_existing != NULL) {
+		pre_existing->value = value;
+	} else {
+		*ARRAY_APPEND(macro_env, Macro) = (Macro) { .name = name, .value = value};
+	}
+}
+
 typedef struct Reader
 {
 	Array(SourceToken) *tokens;
@@ -66,6 +94,8 @@ typedef struct Reader
 
 	SourceLoc source_loc;
 	bool first_token_of_line;
+
+	Array(Macro) macro_env;
 } Reader;
 
 static inline bool at_end(Reader *reader) {
@@ -212,19 +242,45 @@ static char *read_symbol(Reader *reader)
 
 static void handle_pp_directive(Reader *reader);
 static void tokenise_file(Reader *reader, char *input_filename);
+static void tokenise_reader(Reader *reader);
 
 // @IMPROVE: Replace with a finite state machine
 void tokenise(Array(SourceToken) *tokens, char *input_filename)
 {
-
-	// @TUNE: 500 tokens is a quick estimate of a reasonable minimum. We should
-	// do some more thorough measurement and determine a good value for this.
 	ARRAY_INIT(tokens, SourceToken, 500);
 
 	Reader reader;
 	reader.tokens = tokens;
+	ARRAY_INIT(&reader.macro_env, Macro, 10);
 
 	tokenise_file(&reader, input_filename);
+
+	for (u32 i = 0; i < reader.macro_env.size; i++) {
+		free(ARRAY_REF(&reader.macro_env, Macro, i)->name);
+		free(ARRAY_REF(&reader.macro_env, Macro, i)->value);
+	}
+	array_free(&reader.macro_env);
+}
+
+
+static void tokenise_string(Reader *reader, char *string)
+{
+	u32 old_position = reader->position;
+	SourceLoc old_source_loc = reader->source_loc;
+	InputBuffer old_buffer = reader->buffer;
+
+	InputBuffer buffer;
+	buffer.buffer = string;
+	buffer.length = strlen(string);
+	reader->buffer = buffer;
+	reader->position = 0;
+	reader->source_loc = (SourceLoc) { "<macro>", 1, 1 };
+
+	tokenise_reader(reader);
+
+	reader->position = old_position;
+	reader->buffer = old_buffer;
+	reader->source_loc = old_source_loc;
 }
 
 static void tokenise_file(Reader *reader, char *input_filename)
@@ -247,6 +303,17 @@ static void tokenise_file(Reader *reader, char *input_filename)
 	if (buffer.buffer == NULL)
 		return;
 
+	tokenise_reader(reader);
+
+	unmap_file(buffer);
+
+	reader->position = old_position;
+	reader->buffer = old_buffer;
+	reader->source_loc = old_source_loc;
+}
+
+static void tokenise_reader(Reader *reader)
+{
 	while (!at_end(reader)) {
 		skip_whitespace_and_comments(reader, true);
 		if (at_end(reader))
@@ -288,7 +355,7 @@ static void tokenise_file(Reader *reader, char *input_filename)
 
 			Token *token = append_token(reader, TOK_STRING_LITERAL);
 			token->val.symbol_or_string_literal = strndup(
-					buffer.buffer + start_index, length);
+					reader->buffer.buffer + start_index, length);
 
 			break;
 		}
@@ -505,20 +572,21 @@ static void tokenise_file(Reader *reader, char *input_filename)
 			UNREACHABLE;
 
 		default: {
-			Token *token = append_token(reader, TOK_SYMBOL);
-			token->val.symbol_or_string_literal = read_symbol(reader);
+			char *symbol = read_symbol(reader);
+			Macro *macro = look_up_macro(&reader->macro_env, symbol);
+
+			if (macro == NULL) {
+				Token *token = append_token(reader, TOK_SYMBOL);
+				token->val.symbol_or_string_literal = symbol;
+			} else {
+				tokenise_string(reader, macro->value);
+			}
 			break;
 		}
 		}
 
 		reader->first_token_of_line = false;
 	}
-
-	unmap_file(buffer);
-
-	reader->position = old_position;
-	reader->buffer = old_buffer;
-	reader->source_loc = old_source_loc;
 }
 
 
@@ -583,6 +651,7 @@ static void handle_pp_directive(Reader *reader)
 
 		char c = read_char(reader);
 		if (c != '<' && c != '"') {
+			// @TODO: Resync to newline?
 			issue_error(&reader->source_loc, "Expected filename after #include");
 			return;
 		}
@@ -608,7 +677,26 @@ static void handle_pp_directive(Reader *reader)
 			issue_error(&reader->source_loc, "Extraneous text after include path");
 		}
 	} else if (strcmp(directive, "define") == 0) {
-		UNIMPLEMENTED;
+		skip_whitespace_and_comments(reader, false);
+
+		char c = read_char(reader);
+		if (!initial_ident_char(c)) {
+			issue_error(&reader->source_loc, "Expected identifier after #define");
+			return;
+		}
+
+		char *macro_name = read_symbol(reader);
+
+		skip_whitespace_and_comments(reader, false);
+		Array(char) macro_value_chars;
+		ARRAY_INIT(&macro_value_chars, char, 10);
+		while ((c = read_char(reader)) != '\n')
+			*ARRAY_APPEND(&macro_value_chars, char) = c;
+
+		char *macro_value = strndup((char *)macro_value_chars.elements, macro_value_chars.size);
+		array_free(&macro_value_chars);
+
+		define_macro(&reader->macro_env, macro_name, macro_value);
 	} else if (strcmp(directive, "undef") == 0) {
 		UNIMPLEMENTED;
 	} else if (strcmp(directive, "line") == 0) {
