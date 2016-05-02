@@ -826,16 +826,14 @@ ASTDirectDeclarator *build_sub_declarator(Parser *parser,
 // of the time.
 ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 {
+	if (tokens->size == 0)
+		return NULL;
+
 	Parser parser = { ast_pool, tokens, 0, { ARRAY_ZEROED } };
 	type_table_init(&parser.defined_types);
 
-	// @TODO: Currently we don't distinguish between the translation unit simply
-	// being empty (and thus returning no toplevels) versus the parse failing.
-	// We actually can't do this because of the way 'list' works, but we can
-	// just check if the token stream is empty and issue a separate diagnostic
-	// for that.
 	ParserResult result = translation_unit(&parser);
-	if (!result.success && _unexpected_token.type != TOK_INVALID) {
+	if (result.result == NULL && _unexpected_token.type != TOK_INVALID) {
 		issue_error(&_longest_parse_pos, "Unexpected token %s",
 				token_type_names[_unexpected_token.type]);
 	}
