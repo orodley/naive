@@ -5,19 +5,17 @@
 
 void _array_init(Array_ *array, u32 element_size, u32 initial_capacity)
 {
-	array->element_size = element_size;
 	array->capacity = initial_capacity;
 	array->size = 0;
 
 	array->elements = malloc(element_size * initial_capacity);
 }
 
-void array_ensure_room(Array_ *array)
+void array_ensure_room(Array_ *array, u32 element_size)
 {
 	if (array->size >= array->capacity) {
-		u32 required_size = array->capacity * 2;
-		array->elements = realloc(array->elements,
-				required_size * array->element_size);
+		array->capacity *= 2;
+		array->elements = realloc(array->elements, array->capacity * element_size);
 	}
 }
 
