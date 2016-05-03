@@ -826,16 +826,20 @@ ASTDirectDeclarator *build_sub_declarator(Parser *parser,
 // of the time.
 ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 {
-	if (tokens->size == 0)
-		return NULL;
-
 	Parser parser = { ast_pool, tokens, 0, { ARRAY_ZEROED } };
 	type_table_init(&parser.defined_types);
 
 	ParserResult result = translation_unit(&parser);
-	if (result.result == NULL && _unexpected_token.type != TOK_INVALID) {
-		issue_error(&_longest_parse_pos, "Unexpected token %s",
-				token_type_names[_unexpected_token.type]);
+	if (parser.index != tokens->size) {
+		if (_unexpected_token.type != TOK_INVALID) {
+			issue_error(&_longest_parse_pos, "Unexpected token %s",
+					token_type_names[_unexpected_token.type]);
+		} else {
+			SourceLoc s = { "<unknown>", 0, 0 };
+			issue_error(&s, "Unknown error while parsing");
+		}
+
+		return NULL;
 	}
 
 	return result.result;
