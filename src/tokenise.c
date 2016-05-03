@@ -327,7 +327,55 @@ static void tokenise_reader(Reader *reader)
 			break;
 
 		switch (read_char(reader)) {
-		case '0': case '1': case '2': case '3': case '4': case '5': case '6':
+		case '0': {
+			char c = peek_char(reader);
+			u64 value = 0;
+			if (c == 'x') {
+				bool at_least_one_digit = false;
+				for (;;) {
+					advance(reader);
+					char c = peek_char(reader);
+					if (!((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+								|| (c >= '0' && c <= '9')))
+						break;
+
+					at_least_one_digit = true;
+					value *= 16;
+
+					if (c >= 'a' && c <= 'f')
+						value += c - 'a' + 10;
+					else if (c >= 'A' && c <= 'F')
+						value += c - 'A' + 10;
+					else
+						value += c - '0';
+				}
+
+				if (!at_least_one_digit) {
+					issue_error(&reader->source_loc,
+							"Hexadecimal literal must have at least one digit");
+				}
+			} else {
+				while (c >= '0' && c <= '9') {
+					if (c == '8' || c == '9') {
+						// @TODO: Skip past all numeric characters to resync?
+						issue_error(&reader->source_loc,
+								"Invalid digit '%c' in octal literal", c);
+						break;
+					} else {
+						value *= 8;
+						value += c - '0';
+
+						advance(reader);
+						c = peek_char(reader);
+					}
+				}
+			}
+
+			Token *token = append_token(reader, TOK_INT_LITERAL);
+			token->val.int_literal = value;
+			break;
+		}
+		case '1': case '2': case '3': case '4': case '5': case '6':
 		case '7': case '8': case '9': {
 			back_up(reader);
 			i64 value = 0;
