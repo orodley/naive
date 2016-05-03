@@ -96,6 +96,7 @@ typedef struct Reader
 	u32 position;
 
 	SourceLoc source_loc;
+	u32 last_line_length;
 	bool first_token_of_line;
 
 	Array(Macro) macro_env;
@@ -112,25 +113,27 @@ static inline char peek_char(Reader *reader)
 
 static inline void next_char(Reader *reader)
 {
+	reader->position++;
+
 	if (peek_char(reader) == '\n') {
 		reader->source_loc.line++;
-		reader->source_loc.column = 1;
+		reader->source_loc.column = 0;
 	} else {
 		reader->source_loc.column++;
 	}
-
-	reader->position++;
 }
 
 static inline void back_up(Reader *reader)
 {
-	// We should never need to back up over a newline. We assert that we don't
-	// because if we did we'd need to keep track of the previous lines length
-	// to preserve source information.
-	assert(peek_char(reader) != '\n');
+	if (peek_char(reader) == '\n') {
+		assert(reader->source_loc.line != 1);
 
-	reader->source_loc.column--;
-	reader->position--;
+		reader->source_loc.line--;
+		reader->source_loc.column = reader->last_line_length;
+	} else {
+		reader->source_loc.column--;
+		reader->position--;
+	}
 }
 
 static void advance(Reader *reader)
@@ -180,6 +183,7 @@ static void skip_whitespace_and_comments(Reader *reader, bool skip_newline)
 				}
 				break;
 			case '*':
+				advance(reader);
 				while (!at_end(reader)) {
 					if (read_char(reader) == '*') {
 						if (read_char(reader) == '/')
