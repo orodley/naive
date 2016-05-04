@@ -116,6 +116,7 @@ static inline void next_char(Reader *reader)
 	reader->position++;
 
 	if (peek_char(reader) == '\n') {
+		reader->last_line_length = reader->source_loc.column;
 		reader->source_loc.line++;
 		reader->source_loc.column = 0;
 	} else {
@@ -132,8 +133,9 @@ static inline void back_up(Reader *reader)
 		reader->source_loc.column = reader->last_line_length;
 	} else {
 		reader->source_loc.column--;
-		reader->position--;
 	}
+
+	reader->position--;
 }
 
 static void advance(Reader *reader)
@@ -319,6 +321,42 @@ static void tokenise_file(Reader *reader, char *input_filename)
 	reader->source_loc = old_source_loc;
 }
 
+
+static void read_int_literal_suffix(Reader *reader)
+{
+	// @TODO: Assign the type based on the suffix and the table in 6.4.4.1.5
+	bool read_length_suffix = false;
+	bool read_unsigned_suffix = false;
+
+	for (;;) {
+		char c = read_char(reader);
+		switch (c) {
+		case 'u': case 'U':
+			if (read_unsigned_suffix) {
+				issue_error(&reader->source_loc,
+						"Multiple 'u' suffixes on integer literal");
+			}
+
+			read_unsigned_suffix = true;
+			break;
+		case 'l': case 'L':
+			if (read_length_suffix) {
+				issue_error(&reader->source_loc,
+						"Multiple 'l'/'ll' suffixes on integer literal");
+			}
+
+			read_length_suffix = true;
+			if (peek_char(reader) == c) {
+				advance(reader);
+			}
+			break;
+		default:
+			back_up(reader);
+			return;
+		}
+	}
+}
+
 static void tokenise_reader(Reader *reader)
 {
 	while (!at_end(reader)) {
@@ -371,6 +409,8 @@ static void tokenise_reader(Reader *reader)
 				}
 			}
 
+			read_int_literal_suffix(reader);
+
 			Token *token = append_token(reader, TOK_INT_LITERAL);
 			token->val.int_literal = value;
 			break;
@@ -389,6 +429,8 @@ static void tokenise_reader(Reader *reader)
 				value += c - '0';
 				advance(reader);
 			}
+
+			read_int_literal_suffix(reader);
 
 			Token *token = append_token(reader, TOK_INT_LITERAL);
 			token->val.int_literal = value;
