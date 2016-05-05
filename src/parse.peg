@@ -166,7 +166,7 @@ build_parameter_decl =
 		decl_specifiers, #0,
 		declarator, #1)
 
-type_name = seq(build_type_name, decl_specifiers, opt(direct_declarator))
+type_name = seq(build_type_name, decl_specifiers, opt(declarator))
 
 build_type_name =
 	build(ASTTypeName, 2,

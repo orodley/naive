@@ -262,7 +262,7 @@ typedef struct ASTDecl
 typedef struct ASTTypeName
 {
 	struct ASTDeclSpecifier *decl_specifiers;
-	struct ASTDirectDeclarator *declarator;
+	struct ASTDeclarator *declarator;
 } ASTTypeName;
 
 typedef struct ASTParameterDecl
