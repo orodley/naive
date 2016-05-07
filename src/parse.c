@@ -1358,6 +1358,7 @@ void dump_toplevel(ASTToplevel *ast)
 			dump_declarator(ast->val.function_def->declarator);
 			pretty_printf(",");
 			dump_decls(ast->val.function_def->old_style_param_decls);
+			pretty_printf(",");
 			dump_statement(ast->val.function_def->body);
 			break;
 		case DECL:

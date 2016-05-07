@@ -268,7 +268,7 @@ for (;;) {
 \t
 \tcurr = success(%s(parser, curr.result, next.result));
 }""" % (args[1], args[2], args[0]), name)
-        elif operator == 'list':
+        elif operator == 'list' or operator == 'nonempty_list':
             element_type = args[0]
             element_parser = self.generate_parser(args[1])
             if len(args) == 3:
@@ -284,7 +284,7 @@ for (;;) {
 """
 ParserResult first = %s(parser);
 if (!first.success)
-\treturn success(NULL);
+\treturn %s;
 
 %s *curr = first.result;
 for (;;) {%s
@@ -294,7 +294,8 @@ for (;;) {%s
 \tcurr->next = next.result;
 \tcurr = next.result;
 }
-""" % (element_parser, element_type, seperator, element_parser), name)
+""" % (element_parser, "success(NULL)" if operator == 'list' else 'failure',
+    element_type, seperator, element_parser), name)
         elif operator == 'opt':
             return self.emit_function(
 "\nreturn success(%s(parser).result);" % self.generate_parser(args[0]), name)

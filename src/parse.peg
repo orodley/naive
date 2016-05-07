@@ -14,7 +14,7 @@ build_function_definition =
 		body, #3)
 
 decl_specifiers =
-	list(ASTDeclSpecifier,
+	nonempty_list(ASTDeclSpecifier,
 		or(storage_class_specifier,
 			type_specifier,
 			type_qualifier,
