@@ -178,7 +178,9 @@ static ASTExpr *build_constant(Parser *parser, Token *token)
 		expr->val.int_literal = token->val.int_literal;
 		break;
 	default:
-		UNIMPLEMENTED;
+		expr->type = STRING_LITERAL_EXPR;
+		expr->val.string_literal = token->val.symbol_or_string_literal;
+		break;
 	}
 
 	return expr;
@@ -928,64 +930,65 @@ static const char *expr_type_names[] = {
 
 static void dump_expr(ASTExpr *expr)
 {
-	if (expr->type == INT_LITERAL_EXPR) {
-		pretty_printf("%s(%8", expr_type_names[expr->type], expr->val.int_literal);
-	} else if (expr->type == IDENTIFIER_EXPR) {
-		pretty_printf("%s(%s", expr_type_names[expr->type], expr->val.identifier);
-	} else {
-		pretty_printf("%s(", expr_type_names[expr->type]);
-		switch (expr->type) {
-		case IDENTIFIER_EXPR:
-			break;
-		case STRUCT_DOT_FIELD_EXPR: case STRUCT_ARROW_FIELD_EXPR:
-			dump_expr(expr->val.struct_field.struct_value);
-			pretty_printf(",%s", expr->val.struct_field.field_name);
-			break;
-		case INDEX_EXPR: case POST_INCREMENT_EXPR: case POST_DECREMENT_EXPR:
-		case PRE_INCREMENT_EXPR: case PRE_DECREMENT_EXPR: case ADDRESS_OF_EXPR:
-		case DEREF_EXPR: case UNARY_PLUS_EXPR: case UNARY_MINUS_EXPR:
-		case BIT_NOT_EXPR: case LOGICAL_NOT_EXPR: case SIZEOF_EXPR_EXPR:
-			dump_expr(expr->val.unary_arg);
-			break;
-		case FUNCTION_CALL:
-			dump_expr(expr->val.function_call.callee);
-			pretty_printf(",ARGS(");
-			dump_args(expr->val.function_call.args);
-			pretty_printf(")");
-			break;
-		case CAST_EXPR:
-			dump_type_name(expr->val.cast.cast_type);
-			pretty_printf(",");
-			dump_expr(expr->val.cast.arg);
-			break;
-		case SIZEOF_TYPE_EXPR:
-			dump_type_name(expr->val.type);
-			break;
-		case MULTIPLY_EXPR: case DIVIDE_EXPR: case MODULO_EXPR: case ADD_EXPR:
-		case MINUS_EXPR: case LEFT_SHIFT_EXPR: case RIGHT_SHIFT_EXPR:
-		case LESS_THAN_EXPR: case GREATER_THAN_EXPR: case LESS_THAN_OR_EQUAL_EXPR:
-		case GREATER_THAN_OR_EQUAL_EXPR: case EQUAL_EXPR: case NOT_EQUAL_EXPR:
-		case BIT_AND_EXPR: case BIT_XOR_EXPR: case BIT_OR_EXPR: case LOGICAL_AND_EXPR:
-		case LOGICAL_OR_EXPR: case ASSIGN_EXPR: case MULT_ASSIGN_EXPR:
-		case DIVIDE_ASSIGN_EXPR: case MODULO_ASSIGN_EXPR: case PLUS_ASSIGN_EXPR:
-		case MINUS_ASSIGN_EXPR: case LEFT_SHIFT_ASSIGN_EXPR:
-		case RIGHT_SHIFT_ASSIGN_EXPR: case BIT_AND_ASSIGN_EXPR:
-		case BIT_XOR_ASSIGN_EXPR: case BIT_OR_ASSIGN_EXPR: case COMMA_EXPR:
-			dump_expr(expr->val.binary_op.arg1);
-			pretty_printf(",");
-			dump_expr(expr->val.binary_op.arg2);
-			break;
-		case CONDITIONAL_EXPR:
-			dump_expr(expr->val.ternary_op.arg1);
-			pretty_printf(",");
-			dump_expr(expr->val.ternary_op.arg2);
-			pretty_printf(",");
-			dump_expr(expr->val.ternary_op.arg3);
-			break;
-		default:
-			printf("\n\nGot unknown expr type %d\n", expr->type);
-			UNREACHABLE;
-		}
+	pretty_printf("%s(", expr_type_names[expr->type]);
+	switch (expr->type) {
+	case INT_LITERAL_EXPR:
+		pretty_printf("%8", expr->val.int_literal);
+		break;
+	case STRING_LITERAL_EXPR:
+		pretty_printf("%s", expr->val.string_literal);
+		break;
+	case IDENTIFIER_EXPR:
+		pretty_printf("%s", expr->val.identifier);
+		break;
+	case STRUCT_DOT_FIELD_EXPR: case STRUCT_ARROW_FIELD_EXPR:
+		dump_expr(expr->val.struct_field.struct_value);
+		pretty_printf(",%s", expr->val.struct_field.field_name);
+		break;
+	case INDEX_EXPR: case POST_INCREMENT_EXPR: case POST_DECREMENT_EXPR:
+	case PRE_INCREMENT_EXPR: case PRE_DECREMENT_EXPR: case ADDRESS_OF_EXPR:
+	case DEREF_EXPR: case UNARY_PLUS_EXPR: case UNARY_MINUS_EXPR:
+	case BIT_NOT_EXPR: case LOGICAL_NOT_EXPR: case SIZEOF_EXPR_EXPR:
+		dump_expr(expr->val.unary_arg);
+		break;
+	case FUNCTION_CALL:
+		dump_expr(expr->val.function_call.callee);
+		pretty_printf(",ARGS(");
+		dump_args(expr->val.function_call.args);
+		pretty_printf(")");
+		break;
+	case CAST_EXPR:
+		dump_type_name(expr->val.cast.cast_type);
+		pretty_printf(",");
+		dump_expr(expr->val.cast.arg);
+		break;
+	case SIZEOF_TYPE_EXPR:
+		dump_type_name(expr->val.type);
+		break;
+	case MULTIPLY_EXPR: case DIVIDE_EXPR: case MODULO_EXPR: case ADD_EXPR:
+	case MINUS_EXPR: case LEFT_SHIFT_EXPR: case RIGHT_SHIFT_EXPR:
+	case LESS_THAN_EXPR: case GREATER_THAN_EXPR: case LESS_THAN_OR_EQUAL_EXPR:
+	case GREATER_THAN_OR_EQUAL_EXPR: case EQUAL_EXPR: case NOT_EQUAL_EXPR:
+	case BIT_AND_EXPR: case BIT_XOR_EXPR: case BIT_OR_EXPR: case LOGICAL_AND_EXPR:
+	case LOGICAL_OR_EXPR: case ASSIGN_EXPR: case MULT_ASSIGN_EXPR:
+	case DIVIDE_ASSIGN_EXPR: case MODULO_ASSIGN_EXPR: case PLUS_ASSIGN_EXPR:
+	case MINUS_ASSIGN_EXPR: case LEFT_SHIFT_ASSIGN_EXPR:
+	case RIGHT_SHIFT_ASSIGN_EXPR: case BIT_AND_ASSIGN_EXPR:
+	case BIT_XOR_ASSIGN_EXPR: case BIT_OR_ASSIGN_EXPR: case COMMA_EXPR:
+		dump_expr(expr->val.binary_op.arg1);
+		pretty_printf(",");
+		dump_expr(expr->val.binary_op.arg2);
+		break;
+	case CONDITIONAL_EXPR:
+		dump_expr(expr->val.ternary_op.arg1);
+		pretty_printf(",");
+		dump_expr(expr->val.ternary_op.arg2);
+		pretty_printf(",");
+		dump_expr(expr->val.ternary_op.arg3);
+		break;
+	default:
+		printf("\n\nGot unknown expr type %d\n", expr->type);
+		UNREACHABLE;
 	}
 
 	pretty_printf(")");

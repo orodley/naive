@@ -14,6 +14,7 @@ typedef struct ParseError
 
 #define AST_EXPR_TYPES \
 		X(INT_LITERAL_EXPR), \
+		X(STRING_LITERAL_EXPR), \
 \
 		X(IDENTIFIER_EXPR), \
 \
@@ -91,7 +92,8 @@ typedef struct ASTExpr
 	union
 	{
 		i64 int_literal;
-		const char *identifier;
+		char *string_literal;
+		char *identifier;
 		struct ASTExpr *unary_arg;
 		struct ASTTypeName *type;
 		struct
@@ -113,7 +115,7 @@ typedef struct ASTExpr
 		struct
 		{
 			struct ASTExpr *struct_value;
-			const char *field_name;
+			char *field_name;
 		} struct_field;
 		struct
 		{
