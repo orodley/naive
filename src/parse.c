@@ -909,18 +909,25 @@ static void pretty_printf(const char *fmt, ...)
 	va_end(varargs);
 }
 
+
+
+static void dump_decl_specifiers(ASTDeclSpecifier *specifiers);
+static void dump_declarator(ASTDeclarator *declarator);
+
+static void dump_type_name(ASTTypeName *type_name)
+{
+	pretty_printf("TYPE_NAME(");
+	dump_decl_specifiers(type_name->decl_specifiers);
+	pretty_printf(",");
+	dump_declarator(type_name->declarator);
+	pretty_printf(")");
+}
+
 #define X(x) #x
 static const char *expr_type_names[] = {
 	AST_EXPR_TYPES
 };
 #undef X
-
-
-static void dump_type_name(ASTTypeName *type_name)
-{
-	IGNORE(type_name);
-	UNIMPLEMENTED;
-}
 
 static void dump_expr(ASTExpr *expr)
 {
@@ -944,7 +951,8 @@ static void dump_expr(ASTExpr *expr)
 			dump_expr(expr->val.unary_arg);
 			break;
 		case CAST_EXPR:
-			pretty_printf("<some type>, ");
+			dump_type_name(expr->val.cast.cast_type);
+			pretty_printf(",");
 			dump_expr(expr->val.cast.arg);
 			break;
 		case SIZEOF_TYPE_EXPR:
@@ -1068,8 +1076,6 @@ static void dump_statement(ASTStatement *statement)
 	pretty_printf(")");
 }
 
-static void dump_declarator(ASTDeclarator *declarator);
-
 static void dump_field_declarators(ASTFieldDeclarator *field_declarators)
 {
 	while (field_declarators != NULL) {
@@ -1093,8 +1099,6 @@ static void dump_field_declarators(ASTFieldDeclarator *field_declarators)
 		field_declarators = field_declarators->next;
 	}
 }
-
-static void dump_decl_specifiers(ASTDeclSpecifier *specifiers);
 
 static void dump_struct_or_union_fields(ASTFieldDecl *fields)
 {
@@ -1231,7 +1235,8 @@ static void dump_declarator(ASTDeclarator *declarator)
 		pretty_printf("POINTER_DECLARATOR(");
 		dump_decl_specifiers(declarator->val.pointer_declarator.decl_specifiers);
 		pretty_printf(",");
-		dump_declarator(declarator->val.pointer_declarator.pointee);
+		if (declarator->val.pointer_declarator.pointee != NULL)
+			dump_declarator(declarator->val.pointer_declarator.pointee);
 		break;
 	case DIRECT_DECLARATOR:
 		pretty_printf("DIRECT_DECLARATOR(");
