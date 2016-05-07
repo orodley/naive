@@ -155,13 +155,14 @@ static Token _unexpected_token;
 """
 Token *result = read_token(parser);
 if (result->type != %s) {
+\tback_up(parser);
+\t
 \tif (parser->index > _longest_parse_length) {
 \t\t_longest_parse_length = parser->index;
 \t\t_longest_parse_pos = *parser_context(parser);
 \t\t_unexpected_token = *result;
 \t}
 \t
-\tback_up(parser);
 \treturn failure;
 }
 
@@ -181,10 +182,11 @@ return success(result);""" % parser, name)
 if (expect_keyword(parser, "%s")) {
 \treturn success((void *)1);
 } else {
+\tback_up(parser);
+\t
 \tif (parser->index > _longest_parse_length) {
 \t\t_longest_parse_length = parser->index;
 \t\t_longest_parse_pos = *parser_context(parser);
-\t\tback_up(parser);
 \t\t
 \t\t_unexpected_token = *current_token(parser);
 \t}

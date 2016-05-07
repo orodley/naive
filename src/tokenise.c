@@ -223,11 +223,11 @@ static inline bool ident_char(char c)
 }
 
 
-static Token *append_token(Reader *reader, TokenType type)
+static Token *append_token(Reader *reader, SourceLoc source_loc, TokenType type)
 {
 	SourceToken *source_token = ARRAY_APPEND(reader->tokens, SourceToken);
 	source_token->token.type = TOK_INVALID;
-	source_token->source_loc = reader->source_loc;
+	source_token->source_loc = source_loc;
 
 	Token *token = (Token *)source_token;
 	token->type = type;
@@ -251,7 +251,7 @@ static char *read_symbol(Reader *reader)
 
 static void handle_pp_directive(Reader *reader);
 static void tokenise_file(Reader *reader, char *input_filename);
-static void tokenise_reader(Reader *reader);
+static void tokenise_aux(Reader *reader);
 
 // @IMPROVE: Replace with a finite state machine
 void tokenise(Array(SourceToken) *tokens, char *input_filename)
@@ -285,7 +285,7 @@ static void tokenise_string(Reader *reader, char *string)
 	reader->position = 0;
 	reader->source_loc = (SourceLoc) { "<macro>", 1, 1 };
 
-	tokenise_reader(reader);
+	tokenise_aux(reader);
 
 	reader->position = old_position;
 	reader->buffer = old_buffer;
@@ -312,7 +312,7 @@ static void tokenise_file(Reader *reader, char *input_filename)
 	if (buffer.buffer == NULL)
 		return;
 
-	tokenise_reader(reader);
+	tokenise_aux(reader);
 
 	unmap_file(buffer);
 
@@ -357,12 +357,14 @@ static void read_int_literal_suffix(Reader *reader)
 	}
 }
 
-static void tokenise_reader(Reader *reader)
+static void tokenise_aux(Reader *reader)
 {
 	while (!at_end(reader)) {
 		skip_whitespace_and_comments(reader, true);
 		if (at_end(reader))
 			break;
+
+		SourceLoc start_source_loc = reader->source_loc;
 
 		switch (read_char(reader)) {
 		case '0': {
@@ -411,7 +413,7 @@ static void tokenise_reader(Reader *reader)
 
 			read_int_literal_suffix(reader);
 
-			Token *token = append_token(reader, TOK_INT_LITERAL);
+			Token *token = append_token(reader, start_source_loc, TOK_INT_LITERAL);
 			token->val.int_literal = value;
 			break;
 		}
@@ -432,7 +434,7 @@ static void tokenise_reader(Reader *reader)
 
 			read_int_literal_suffix(reader);
 
-			Token *token = append_token(reader, TOK_INT_LITERAL);
+			Token *token = append_token(reader, start_source_loc, TOK_INT_LITERAL);
 			token->val.int_literal = value;
 
 			break;
@@ -450,7 +452,7 @@ static void tokenise_reader(Reader *reader)
 
 			u32 length = ((reader->position - 1) - start_index);
 
-			Token *token = append_token(reader, TOK_STRING_LITERAL);
+			Token *token = append_token(reader, start_source_loc, TOK_STRING_LITERAL);
 			token->val.symbol_or_string_literal = strndup(
 					reader->buffer.buffer + start_index, length);
 
@@ -459,14 +461,14 @@ static void tokenise_reader(Reader *reader)
 		case '+':
 			switch (read_char(reader)) {
 			case '+':
-				append_token(reader, TOK_INCREMENT);
+				append_token(reader, start_source_loc, TOK_INCREMENT);
 				break;
 			case '=':
-				append_token(reader, TOK_PLUS_ASSIGN);
+				append_token(reader, start_source_loc, TOK_PLUS_ASSIGN);
 				break;
 			default:
 				back_up(reader);
-				append_token(reader, TOK_PLUS);
+				append_token(reader, start_source_loc, TOK_PLUS);
 			}
 
 			break;
@@ -474,47 +476,47 @@ static void tokenise_reader(Reader *reader)
 		case '-':
 			switch (read_char(reader)) {
 			case '-':
-				append_token(reader, TOK_DECREMENT);
+				append_token(reader, start_source_loc, TOK_DECREMENT);
 				break;
 			case '=':
-				append_token(reader, TOK_MINUS_ASSIGN);
+				append_token(reader, start_source_loc, TOK_MINUS_ASSIGN);
 				break;
 			case '>':
-				append_token(reader, TOK_ARROW);
+				append_token(reader, start_source_loc, TOK_ARROW);
 				break;
 			default:
 				back_up(reader);
-				append_token(reader, TOK_MINUS);
+				append_token(reader, start_source_loc, TOK_MINUS);
 			}
 
 			break;
 
 		case '*':
 			if (read_char(reader) == '=') {
-				append_token(reader, TOK_MULT_ASSIGN);
+				append_token(reader, start_source_loc, TOK_MULT_ASSIGN);
 			} else {
 				back_up(reader);
-				append_token(reader, TOK_ASTERISK);
+				append_token(reader, start_source_loc, TOK_ASTERISK);
 			}
 
 			break;
 
 		case '/':
 			if (read_char(reader) == '=') {
-				append_token(reader, TOK_DIVIDE_ASSIGN);
+				append_token(reader, start_source_loc, TOK_DIVIDE_ASSIGN);
 			} else {
 				back_up(reader);
-				append_token(reader, TOK_DIVIDE);
+				append_token(reader, start_source_loc, TOK_DIVIDE);
 			}
 
 			break;
 
 		case '%':
 			if (read_char(reader) == '=') {
-				append_token(reader, TOK_MODULO_ASSIGN);
+				append_token(reader, start_source_loc, TOK_MODULO_ASSIGN);
 			} else {
 				back_up(reader);
-				append_token(reader, TOK_MODULO);
+				append_token(reader, start_source_loc, TOK_MODULO);
 			}
 
 			break;
@@ -522,14 +524,14 @@ static void tokenise_reader(Reader *reader)
 		case '&':
 			switch (read_char(reader)) {
 			case '&':
-				append_token(reader, TOK_LOGICAL_AND);
+				append_token(reader, start_source_loc, TOK_LOGICAL_AND);
 				break;
 			case '=':
-				append_token(reader, TOK_BIT_AND_ASSIGN);
+				append_token(reader, start_source_loc, TOK_BIT_AND_ASSIGN);
 				break;
 			default:
 				back_up(reader);
-				append_token(reader, TOK_AMPERSAND);
+				append_token(reader, start_source_loc, TOK_AMPERSAND);
 			}
 
 			break;
@@ -537,44 +539,44 @@ static void tokenise_reader(Reader *reader)
 		case '|':
 			switch (read_char(reader)) {
 			case '|':
-				append_token(reader, TOK_LOGICAL_OR);
+				append_token(reader, start_source_loc, TOK_LOGICAL_OR);
 				break;
 			case '=':
-				append_token(reader, TOK_BIT_OR_ASSIGN);
+				append_token(reader, start_source_loc, TOK_BIT_OR_ASSIGN);
 				break;
 			default:
 				back_up(reader);
-				append_token(reader, TOK_BIT_OR);
+				append_token(reader, start_source_loc, TOK_BIT_OR);
 			}
 
 			break;
 
 		case '^':
 			if (read_char(reader) == '=') {
-				append_token(reader, TOK_BIT_XOR_ASSIGN);
+				append_token(reader, start_source_loc, TOK_BIT_XOR_ASSIGN);
 			} else {
 				back_up(reader);
-				append_token(reader, TOK_BIT_XOR);
+				append_token(reader, start_source_loc, TOK_BIT_XOR);
 			}
 
 			break;
 
 		case '=':
 			if (read_char(reader) == '=') {
-				append_token(reader, TOK_EQUAL);
+				append_token(reader, start_source_loc, TOK_EQUAL);
 			} else {
 				back_up(reader);
-				append_token(reader, TOK_ASSIGN);
+				append_token(reader, start_source_loc, TOK_ASSIGN);
 			}
 
 			break;
 
 		case '!':
 			if (read_char(reader) == '=') {
-				append_token(reader, TOK_NOT_EQUAL);
+				append_token(reader, start_source_loc, TOK_NOT_EQUAL);
 			} else {
 				back_up(reader);
-				append_token(reader, TOK_LOGICAL_NOT);
+				append_token(reader, start_source_loc, TOK_LOGICAL_NOT);
 			}
 
 			break;
@@ -582,19 +584,19 @@ static void tokenise_reader(Reader *reader)
 		case '<':
 			switch (read_char(reader)) {
 			case '=':
-				append_token(reader, TOK_LESS_THAN_OR_EQUAL);
+				append_token(reader, start_source_loc, TOK_LESS_THAN_OR_EQUAL);
 				break;
 			case '<':
 				if (read_char(reader) == '=') {
-					append_token(reader, TOK_LEFT_SHIFT_ASSIGN);
+					append_token(reader, start_source_loc, TOK_LEFT_SHIFT_ASSIGN);
 				} else {
 					back_up(reader);
-					append_token(reader, TOK_LEFT_SHIFT);
+					append_token(reader, start_source_loc, TOK_LEFT_SHIFT);
 				}
 				break;
 			default:
 				back_up(reader);
-				append_token(reader, TOK_LESS_THAN);
+				append_token(reader, start_source_loc, TOK_LESS_THAN);
 			}
 
 			break;
@@ -602,26 +604,26 @@ static void tokenise_reader(Reader *reader)
 		case '>':
 			switch (read_char(reader)) {
 			case '=':
-				append_token(reader, TOK_GREATER_THAN_OR_EQUAL);
+				append_token(reader, start_source_loc, TOK_GREATER_THAN_OR_EQUAL);
 				break;
 			case '>':
 				if (read_char(reader) == '=') {
-					append_token(reader, TOK_RIGHT_SHIFT_ASSIGN);
+					append_token(reader, start_source_loc, TOK_RIGHT_SHIFT_ASSIGN);
 				} else {
 					back_up(reader);
-					append_token(reader, TOK_RIGHT_SHIFT);
+					append_token(reader, start_source_loc, TOK_RIGHT_SHIFT);
 				}
 				break;
 			default:
 				back_up(reader);
-				append_token(reader, TOK_GREATER_THAN);
+				append_token(reader, start_source_loc, TOK_GREATER_THAN);
 			}
 
 			break;
 
 		case '#':
 			if (read_char(reader) == '#') {
-				append_token(reader, TOK_DOUBLE_HASH);
+				append_token(reader, start_source_loc, TOK_DOUBLE_HASH);
 			} else {
 				back_up(reader);
 
@@ -638,31 +640,31 @@ static void tokenise_reader(Reader *reader)
 		case '.':
 			if (read_char(reader) == '.') {
 				if (read_char(reader) == '.') {
-					append_token(reader, TOK_ELLIPSIS);
+					append_token(reader, start_source_loc, TOK_ELLIPSIS);
 				} else {
 					back_up(reader);
 					back_up(reader);
-					append_token(reader, TOK_DOT);
+					append_token(reader, start_source_loc, TOK_DOT);
 				}
 			} else {
 				back_up(reader);
-				append_token(reader, TOK_DOT);
+				append_token(reader, start_source_loc, TOK_DOT);
 			}
 
 			break;
 
-		case '~': append_token(reader, TOK_BIT_NOT); break;
-		case '?': append_token(reader, TOK_QUESTION_MARK); break;
-		case ':': append_token(reader, TOK_COLON); break;
-		case ';': append_token(reader, TOK_SEMICOLON); break;
-		case ',': append_token(reader, TOK_COMMA); break;
+		case '~': append_token(reader, start_source_loc, TOK_BIT_NOT); break;
+		case '?': append_token(reader, start_source_loc, TOK_QUESTION_MARK); break;
+		case ':': append_token(reader, start_source_loc, TOK_COLON); break;
+		case ';': append_token(reader, start_source_loc, TOK_SEMICOLON); break;
+		case ',': append_token(reader, start_source_loc, TOK_COMMA); break;
 
-		case '{': append_token(reader, TOK_LCURLY); break;
-		case '}': append_token(reader, TOK_RCURLY); break;
-		case '(': append_token(reader, TOK_LROUND); break;
-		case ')': append_token(reader, TOK_RROUND); break;
-		case '[': append_token(reader, TOK_LSQUARE); break;
-		case ']': append_token(reader, TOK_RSQUARE); break;
+		case '{': append_token(reader, start_source_loc, TOK_LCURLY); break;
+		case '}': append_token(reader, start_source_loc, TOK_RCURLY); break;
+		case '(': append_token(reader, start_source_loc, TOK_LROUND); break;
+		case ')': append_token(reader, start_source_loc, TOK_RROUND); break;
+		case '[': append_token(reader, start_source_loc, TOK_LSQUARE); break;
+		case ']': append_token(reader, start_source_loc, TOK_RSQUARE); break;
 
 		case '\n': case ' ': case '\t':
 			// skip_whitespace_and_comments should have moved us past these
@@ -673,7 +675,7 @@ static void tokenise_reader(Reader *reader)
 			Macro *macro = look_up_macro(&reader->macro_env, symbol);
 
 			if (macro == NULL) {
-				Token *token = append_token(reader, TOK_SYMBOL);
+				Token *token = append_token(reader, start_source_loc, TOK_SYMBOL);
 				token->val.symbol_or_string_literal = symbol;
 			} else {
 				tokenise_string(reader, macro->value);
