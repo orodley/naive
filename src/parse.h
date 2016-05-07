@@ -21,6 +21,7 @@ typedef struct ParseError
 		X(STRUCT_ARROW_FIELD_EXPR), \
 \
 		X(INDEX_EXPR), \
+		X(FUNCTION_CALL), \
 		X(POST_INCREMENT_EXPR), \
 		X(POST_DECREMENT_EXPR), \
 \
@@ -95,6 +96,11 @@ typedef struct ASTExpr
 		struct ASTTypeName *type;
 		struct
 		{
+			struct ASTExpr *callee;
+			struct ASTArgument *args;
+		} function_call;
+		struct
+		{
 			struct ASTExpr *arg1;
 			struct ASTExpr *arg2;
 		} binary_op;
@@ -116,6 +122,12 @@ typedef struct ASTExpr
 		} cast;
 	} val;
 } ASTExpr;
+
+typedef struct ASTArgument
+{
+	ASTExpr *expr;
+	struct ASTArgument *next;
+} ASTArgument;
 
 #define AST_STATEMENT_TYPES \
 		X(EMPTY_STATEMENT), \

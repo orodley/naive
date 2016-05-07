@@ -290,10 +290,10 @@ postfix_expr =
 
 identifier = seq(build_identifier, TOK_SYMBOL)
 
-argument_expr_list =
-    fold(build_arg_list,
-		seq(empty_array),
-        seq(second, TOK_COMMA, assignment_expr))
+argument_expr_list = list(ASTArgument, seq(build_argument, assignment_expr), TOK_COMMA)
+
+build_argument = build(ASTArgument, 1, expr, #0, next, NULL)
+
 
 unary_expr =
     or(postfix_expr,

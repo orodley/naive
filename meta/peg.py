@@ -299,6 +299,7 @@ for (;;) {%s
             return self.emit_function(
 "\nreturn success(%s(parser).result);" % self.generate_parser(args[0]), name)
         else:
+            print "Unknown operator: " + operator
             assert not "Unreachable"
 
 def field_assigner(field_name, assigner_expr):

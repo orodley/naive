@@ -195,8 +195,10 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 		next->val.binary_op.arg2 = which->result;
 		return next;
 	case 1:
-		// @TODO: Function call
-		return NULL;
+		next->type = FUNCTION_CALL;
+		next->val.function_call.callee = curr;
+		next->val.function_call.args = which->result;
+		return next;
 	case 2:
 		next->type = STRUCT_DOT_FIELD_EXPR;
 		next->val.struct_field.struct_value = curr;
@@ -228,22 +230,6 @@ static ASTExpr *build_compound_initializer(Parser *parser,
 	/// @TODO
 	IGNORE(parser);
 	IGNORE(a); IGNORE(b); IGNORE(c); IGNORE(d); IGNORE(e); IGNORE(f); IGNORE(g);
-	return NULL;
-}
-
-static Array(void *) *empty_array(Parser *parser)
-{
-	Array(void *) *array = pool_alloc(parser->pool, sizeof *array);
-	ARRAY_INIT(array, void *, 5);
-
-	return array;
-}
-
-static ASTExpr *build_arg_list(Parser *parser, Array(ASTExpr) *curr,
-		ASTExpr *next)
-{
-	// @TODO
-	IGNORE(parser); IGNORE(curr); IGNORE(next);
 	return NULL;
 }
 
@@ -913,6 +899,7 @@ static void pretty_printf(const char *fmt, ...)
 
 static void dump_decl_specifiers(ASTDeclSpecifier *specifiers);
 static void dump_declarator(ASTDeclarator *declarator);
+static void dump_expr(ASTExpr *expr);
 
 static void dump_type_name(ASTTypeName *type_name)
 {
@@ -921,6 +908,16 @@ static void dump_type_name(ASTTypeName *type_name)
 	pretty_printf(",");
 	dump_declarator(type_name->declarator);
 	pretty_printf(")");
+}
+
+static void dump_args(ASTArgument *args)
+{
+	while (args != NULL) {
+		dump_expr(args->expr);
+		pretty_printf(",");
+
+		args = args->next;
+	}
 }
 
 #define X(x) #x
@@ -949,6 +946,12 @@ static void dump_expr(ASTExpr *expr)
 		case DEREF_EXPR: case UNARY_PLUS_EXPR: case UNARY_MINUS_EXPR:
 		case BIT_NOT_EXPR: case LOGICAL_NOT_EXPR: case SIZEOF_EXPR_EXPR:
 			dump_expr(expr->val.unary_arg);
+			break;
+		case FUNCTION_CALL:
+			dump_expr(expr->val.function_call.callee);
+			pretty_printf(",ARGS(");
+			dump_args(expr->val.function_call.args);
+			pretty_printf(")");
 			break;
 		case CAST_EXPR:
 			dump_type_name(expr->val.cast.cast_type);
