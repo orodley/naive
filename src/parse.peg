@@ -99,6 +99,12 @@ enum_specifier =
 			enumerator_list, opt(TOK_COMMA), TOK_RCURLY),
 		seq(build_enum_tagged_named_type, keyword(enum), TOK_SYMBOL))
 
+build_enum =
+	build(ASTTypeSpecifier, 6,
+		type, ENUM_TYPE_SPECIFIER,
+		val.enum_specifier.name, "((Token *)#1)->val.symbol_or_string_literal",
+		val.enum_specifier.enumerators, #3)
+
 enumerator_list = list(ASTEnumerator, enumerator, TOK_COMMA)
 
 enumerator =
@@ -109,11 +115,21 @@ build_enumerator =
 		name, "((Token *)#0)->val.symbol_or_string_literal",
 		value, #1)
 
+build_enum_tagged_named_type =
+	build(ASTTypeSpecifier, 2,
+		type, ENUM_TYPE_SPECIFIER,
+		val.enum_specifier.enumerators, NULL)
+
 type_qualifier =
 	seq(build_type_qualifier,
 		which(keyword(const), keyword(restrict), keyword(volatile)))
 
 function_specifier = seq(build_function_specifier, keyword(inline))
+
+build_function_specifier =
+	build(ASTDeclSpecifier, 1,
+		type, FUNCTION_SPECIFIER,
+		val.function_specifier, INLINE_SPECIFIER)
 
 declarator =
 	or(seq(build_pointee_declarator, opt(pointer), direct_declarator),
@@ -231,8 +247,25 @@ labeled_statement =
 			keyword(case), expr, TOK_COLON, statement),
 		seq(build_labeled_statement, keyword(default), TOK_COLON, statement))
 
+build_case_statement =
+	build(ASTStatement, 4,
+		type, CASE_STATEMENT,
+		val.expr_and_statement.expr, #1,
+		val.expr_and_statement.statement, #3)
+
+build_labeled_statement =
+	build(ASTStatement, 3,
+		type, LABELED_STATEMENT,
+		val.labeled_statement.label_name, "((Token *)#0)->val.symbol_or_string_literal",
+		val.labeled_statement.statement, #2)
+
 compound_statement =
 	seq(build_compound_statement, TOK_LCURLY, block_item_list, TOK_RCURLY)
+
+build_compound_statement =
+	build(ASTStatement, 3,
+		type, COMPOUND_STATEMENT,
+		val.block_items, #1)
 
 block_item_list =
 	list(ASTBlockItem, seq(build_block_item, which(decl, statement)))
@@ -244,6 +277,19 @@ selection_statement =
 			statement, opt(seq(second, keyword(else), statement))),
 		seq(build_switch_statement, keyword(switch),
 			TOK_LROUND, expr, TOK_RROUND, statement))
+
+build_if_statement =
+	build(ASTStatement, 6,
+		type, IF_STATEMENT,
+		val.if_statement.condition, #2,
+		val.if_statement.then_statement, #4,
+		val.if_statement.else_statement, #5)
+
+build_switch_statement =
+	build(ASTStatement, 5,
+		type, SWITCH_STATEMENT,
+		val.expr_and_statement.expr, #2,
+		val.expr_and_statement.statement, #4)
 
 iteration_statement =
 	or(seq(build_while_statement,
@@ -257,11 +303,55 @@ iteration_statement =
 			decl, opt(expr), TOK_SEMICOLON, opt(expr),
 			TOK_RROUND, statement))
 
+build_while_statement =
+	build(ASTStatement, 5,
+		type, WHILE_STATEMENT,
+		val.expr_and_statement.expr, #2,
+		val.expr_and_statement.statement, #4)
+
+build_do_while_statement =
+	build(ASTStatement, 7,
+		type, DO_WHILE_STATEMENT,
+		val.expr_and_statement.statement, #1,
+		val.expr_and_statement.expr, #4)
+
+build_for_statement =
+	build(ASTStatement, 9,
+		type, FOR_STATEMENT,
+		val.for_statement.init_type, FOR_INIT_EXPR,
+		val.for_statement.init.expr, #2,
+		val.for_statement.condition, #4,
+		val.for_statement.update_expr, #6,
+		val.for_statement.body, #8)
+
+build_for_decl_statement =
+	build(ASTStatement, 8,
+		type, FOR_STATEMENT,
+		val.for_statement.init_type, FOR_INIT_DECL,
+		val.for_statement.init.decl, #2,
+		val.for_statement.condition, #3,
+		val.for_statement.update_expr, #5,
+		val.for_statement.body, #7)
+
 jump_statement =
 	or(seq(build_goto_statement, keyword(goto), identifier),
 		seq(build_continue_statement, keyword(continue), TOK_SEMICOLON),
 		seq(build_break_statement, keyword(break), TOK_SEMICOLON),
 		seq(build_return_statement, keyword(return), opt(expr), TOK_SEMICOLON))
+
+build_goto_statement =
+	build(ASTStatement, 2,
+		type, GOTO_STATEMENT,
+		val.goto_label, "((Token *)#1)->val.symbol_or_string_literal")
+
+build_continue_statement = build(ASTStatement, 2, type, CONTINUE_STATEMENT)
+
+build_break_statement = build(ASTStatement, 2, type, BREAK_STATEMENT);
+
+build_return_statement =
+	build(ASTStatement, 3,
+		type, RETURN_STATEMENT,
+		val.expr, #1)
 
 
 
@@ -290,6 +380,11 @@ postfix_expr =
 
 identifier = seq(build_identifier, TOK_SYMBOL)
 
+build_identifier =
+	build(ASTExpr, 1,
+		type, IDENTIFIER_EXPR,
+		val.identifier, "((Token *)#0)->val.symbol_or_string_literal")
+
 argument_expr_list = list(ASTArgument, seq(build_argument, assignment_expr), TOK_COMMA)
 
 build_argument = build(ASTArgument, 1, expr, #0, next, NULL)
@@ -306,9 +401,30 @@ unary_expr =
 unary_operator =
     or(TOK_AMPERSAND, TOK_ASTERISK, TOK_PLUS, TOK_MINUS, TOK_BIT_NOT, TOK_LOGICAL_NOT)
 
+build_sizeof_expr =
+	build(ASTExpr, 2,
+		type, SIZEOF_EXPR_EXPR,
+		val.unary_arg, #1)
+
+build_sizeof_type =
+	build(ASTExpr, 4,
+		type, SIZEOF_TYPE_EXPR,
+		val.type, #2)
+
 cast_expr =
     or(unary_expr,
         seq(build_cast_expr, TOK_LROUND, type_name, TOK_RROUND, cast_expr))
+
+build_cast_expr =
+	build(ASTExpr, 4,
+		type, CAST_EXPR,
+		val.cast.cast_type, #1,
+		val.cast.arg, #3)
+
+build_binary_tail =
+	build(BinaryTail, 2,
+		operator, #0,
+		tail_expr, #1)
 
 multiplicative_expr =
     fold(build_binary_head,

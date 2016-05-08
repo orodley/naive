@@ -148,15 +148,6 @@ static inline void *ignore(Parser *parser, ...)
 	return NULL;
 }
 
-static ASTExpr *build_identifier(Parser *parser, Token *identifier_token)
-{
-	ASTExpr *identifier = pool_alloc(parser->pool, sizeof *identifier);
-	identifier->type = IDENTIFIER_EXPR;
-	identifier->val.identifier = identifier_token->val.symbol_or_string_literal;
-
-	return identifier;
-}
-
 static ASTExpr *build_constant(Parser *parser, Token *token)
 {
 	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
@@ -165,10 +156,12 @@ static ASTExpr *build_constant(Parser *parser, Token *token)
 		expr->type = INT_LITERAL_EXPR;
 		expr->val.int_literal = token->val.int_literal;
 		break;
-	default:
+	case TOK_STRING_LITERAL:
 		expr->type = STRING_LITERAL_EXPR;
 		expr->val.string_literal = token->val.symbol_or_string_literal;
 		break;
+	default:
+		UNREACHABLE;
 	}
 
 	return expr;
@@ -244,60 +237,11 @@ static ASTExpr *build_unary_expr(Parser *parser, Token *token,
 	return next;
 }
 
-static ASTExpr *build_sizeof_expr(
-		Parser *parser, Token *tok_sizeof, ASTExpr *arg)
-{
-	IGNORE(tok_sizeof);
-
-	ASTExpr *sizeof_expr = pool_alloc(parser->pool, sizeof *sizeof_expr);
-	sizeof_expr->type = SIZEOF_EXPR_EXPR;
-	sizeof_expr->val.unary_arg = arg;
-
-	return sizeof_expr;
-}
-
-static ASTExpr *build_sizeof_type(Parser *parser, Token *tok_sizeof,
-		Token *lround, ASTTypeName *type, Token *rround)
-{
-	IGNORE(tok_sizeof);
-	IGNORE(lround);
-	IGNORE(rround);
-
-	ASTExpr *sizeof_type = pool_alloc(parser->pool, sizeof *sizeof_type);
-	sizeof_type->type = SIZEOF_TYPE_EXPR;
-	sizeof_type->val.type = type;
-
-	return sizeof_type;
-}
-
-static ASTExpr *build_cast_expr(Parser *parser, Token *lround,
-		ASTTypeName *type, Token *rround, ASTExpr *arg)
-{
-	IGNORE(lround); IGNORE(rround);
-
-	ASTExpr *cast_expr = pool_alloc(parser->pool, sizeof *cast_expr);
-	cast_expr->type = CAST_EXPR;
-	cast_expr->val.cast.cast_type = type;
-	cast_expr->val.cast.arg = arg;
-
-	return cast_expr;
-}
-
 typedef struct BinaryTail
 {
 	Token *operator;
 	ASTExpr *tail_expr;
 } BinaryTail;
-
-static BinaryTail *build_binary_tail(Parser *parser,
-		Token *operator, ASTExpr *tail_expr)
-{
-	BinaryTail *binary_tail = pool_alloc(parser->pool, sizeof *binary_tail);
-	binary_tail->operator = operator;
-	binary_tail->tail_expr = tail_expr;
-
-	return binary_tail;
-}
 
 #define CASE2(token, ast_type) \
 	case TOK_##token: expr->type = ast_type##_EXPR; break;
@@ -371,48 +315,6 @@ static ASTExpr *build_conditional_expr(Parser *parser,
 }
 
 
-ASTStatement *build_labeled_statement(Parser *parser, Token *label,
-		Token *colon, ASTStatement *statement)
-{
-	IGNORE(colon);
-
-	ASTStatement *labeled_statement =
-		pool_alloc(parser->pool, sizeof *labeled_statement);
-	labeled_statement->type = LABELED_STATEMENT;
-	labeled_statement->val.labeled_statement.label_name =
-		label->val.symbol_or_string_literal;
-	labeled_statement->val.labeled_statement.statement = statement;
-	return labeled_statement;
-}
-
-ASTStatement *build_case_statement(Parser *parser, Token *case_keyword,
-		ASTExpr *case_value, Token *colon, ASTStatement *statement)
-{
-	IGNORE(case_keyword);
-	IGNORE(colon);
-
-	ASTStatement *case_statement = pool_alloc(parser->pool, sizeof *case_statement);
-	case_statement->type = CASE_STATEMENT;
-	case_statement->val.expr_and_statement.expr = case_value;
-	case_statement->val.expr_and_statement.statement = statement;
-
-	return case_statement;
-}
-
-ASTStatement *build_compound_statement(Parser *parser, Token *lcurly,
-		ASTBlockItem *block_items, Token *rcurly)
-{
-	IGNORE(lcurly);
-	IGNORE(rcurly);
-
-	ASTStatement *compound_statement =
-		pool_alloc(parser->pool, sizeof *compound_statement);
-	compound_statement->type = COMPOUND_STATEMENT;
-	compound_statement->val.block_items = block_items;
-
-	return compound_statement;
-}
-
 ASTBlockItem *build_block_item(Parser *parser, WhichResult *decl_or_statement)
 {
 	ASTBlockItem *result = pool_alloc(parser->pool, sizeof *result);
@@ -446,140 +348,6 @@ ASTStatement *build_expr_statement(
 	statement->type = EXPR_STATEMENT;
 	statement->val.expr = opt_expr;
 	return statement;
-}
-
-ASTStatement *build_if_statement(Parser *parser, Token *if_token, Token *lround,
-		ASTExpr *condition, Token *rround, ASTStatement *then_statement,
-		ASTStatement *opt_else_statement)
-{
-	IGNORE(if_token); IGNORE(lround); IGNORE(rround);
-
-	ASTStatement *if_statement = pool_alloc(parser->pool, sizeof *if_statement);
-	if_statement->type = IF_STATEMENT;
-	if_statement->val.if_statement.condition = condition;
-	if_statement->val.if_statement.then_statement = then_statement;
-	// Potentially NULL if no else clause. This is fine as this is exactly what
-	// a NULL 'else_statement' field indicates.
-	if_statement->val.if_statement.else_statement = opt_else_statement;
-	return if_statement;
-}
-
-ASTStatement *build_switch_statement(Parser *parser, Token *switch_token,
-		Token *lround, ASTExpr *switch_expr, Token *rround, ASTStatement *body)
-{
-	IGNORE(switch_token); IGNORE(lround); IGNORE(rround);
-
-	ASTStatement *switch_statement = pool_alloc(parser->pool, sizeof *switch_statement);
-	switch_statement->type = SWITCH_STATEMENT;
-	switch_statement->val.expr_and_statement.expr = switch_expr;
-	switch_statement->val.expr_and_statement.statement = body;
-	return switch_statement;
-}
-
-ASTStatement *build_while_statement(Parser *parser, Token *tok_while,
-		Token *lround, ASTExpr *condition, Token *rround, ASTStatement *body)
-{
-	IGNORE(tok_while);
-	IGNORE(lround);
-	IGNORE(rround);
-
-	ASTStatement *while_statement = pool_alloc(parser->pool, sizeof *while_statement);
-	while_statement->type = WHILE_STATEMENT;
-	while_statement->val.expr_and_statement.expr = condition;
-	while_statement->val.expr_and_statement.statement = body;
-	return while_statement;
-}
-
-ASTStatement *build_do_while_statement(Parser *parser, Token *tok_do,
-		ASTStatement *body, Token *tok_while,
-		Token *lround, ASTExpr *condition, Token *rround, Token *semi)
-{
-	IGNORE(tok_do); IGNORE(tok_while); IGNORE(lround); IGNORE(rround); IGNORE(semi);
-
-	ASTStatement *do_while_statement =
-		pool_alloc(parser->pool, sizeof *do_while_statement);
-	do_while_statement->type = DO_WHILE_STATEMENT;
-	do_while_statement->val.expr_and_statement.expr = condition;
-	do_while_statement->val.expr_and_statement.statement = body;
-	return do_while_statement;
-}
-
-ASTStatement *build_for_statement(Parser *parser, Token *keyword_for, Token *lround,
-		ASTExpr *opt_init, Token *semi1, ASTExpr *opt_condition, Token *semi2,
-		ASTExpr *opt_update, Token *rround, ASTStatement *body)
-{
-	IGNORE(keyword_for); IGNORE(lround); IGNORE(semi1); IGNORE(semi2); IGNORE(rround);
-
-	ASTStatement *for_statement = pool_alloc(parser->pool, sizeof *for_statement);
-	for_statement->type = FOR_STATEMENT;
-	for_statement->val.for_statement.init_type = FOR_INIT_EXPR;
-	for_statement->val.for_statement.init.expr = opt_init;
-	for_statement->val.for_statement.condition = opt_condition;
-	for_statement->val.for_statement.update_expr = opt_update;
-	for_statement->val.for_statement.body = body;
-	return for_statement;
-}
-
-// @TODO
-ASTStatement *build_for_decl_statement(Parser *parser, Token *keyword_for,
-		Token *lround, ASTDecl *init_decl, ASTExpr *opt_condition,
-		Token *semi2, ASTExpr *opt_update, Token *rround, ASTStatement *body)
-{
-	IGNORE(keyword_for); IGNORE(lround); IGNORE(semi2); IGNORE(rround);
-	ASTStatement *for_statement = pool_alloc(parser->pool, sizeof *for_statement);
-	for_statement->type = FOR_STATEMENT;
-	for_statement->val.for_statement.init_type = FOR_INIT_DECL;
-	for_statement->val.for_statement.init.decl = init_decl;
-	for_statement->val.for_statement.condition = opt_condition;
-	for_statement->val.for_statement.update_expr = opt_update;
-	for_statement->val.for_statement.body = body;
-
-	return for_statement;
-}
-
-ASTStatement *build_goto_statement(Parser *parser, Token *tok_goto, Token *label)
-{
-	IGNORE(tok_goto);
-
-	ASTStatement *goto_statement = pool_alloc(parser->pool, sizeof *goto_statement);
-	goto_statement->type = GOTO_STATEMENT;
-	goto_statement->val.goto_label = label->val.symbol_or_string_literal;
-	return goto_statement;
-}
-
-ASTStatement *build_continue_statement(Parser *parser, Token *tok_cont, Token *semi)
-{
-	IGNORE(tok_cont);
-	IGNORE(semi);
-
-	ASTStatement *continue_statement =
-		pool_alloc(parser->pool, sizeof *continue_statement);
-	continue_statement->type = CONTINUE_STATEMENT;
-	return continue_statement;
-}
-
-ASTStatement *build_break_statement(Parser *parser, Token *tok_break, Token *semi)
-{
-	IGNORE(tok_break);
-	IGNORE(semi);
-
-	ASTStatement *break_statement =
-		pool_alloc(parser->pool, sizeof *break_statement);
-	break_statement->type = BREAK_STATEMENT;
-	return break_statement;
-}
-
-ASTStatement *build_return_statement(Parser *parser, Token *tok_return,
-		ASTExpr *opt_expr, Token *semi)
-{
-	IGNORE(tok_return);
-	IGNORE(semi);
-
-	ASTStatement *return_statement =
-		pool_alloc(parser->pool, sizeof *return_statement);
-	return_statement->type = RETURN_STATEMENT;
-	return_statement->val.expr = opt_expr;
-	return return_statement;
 }
 
 
@@ -638,17 +406,6 @@ static ASTDeclSpecifier *build_type_qualifier(Parser *parser, WhichResult *keywo
 	return result;
 }
 
-static ASTDeclSpecifier *build_function_specifier(Parser *parser, Token *keyword)
-{
-	IGNORE(keyword);
-
-	ASTDeclSpecifier *result = pool_alloc(parser->pool, sizeof *result);
-	result->type = FUNCTION_SPECIFIER;
-	result->val.function_specifier = INLINE_SPECIFIER;
-
-	return result;
-}
-
 // @TODO: We currently don't add anything to the type table apart from builtin
 // types. We need to add typedefs and named tagged types as we go.
 static ParserResult named_type(Parser *parser)
@@ -682,19 +439,6 @@ ASTTypeSpecifier *build_struct_or_union_tagged_named_type(
 	return tagged_type;
 }
 
-ASTTypeSpecifier *build_enum_tagged_named_type(
-		Parser *parser, Token *keyword, Token *name)
-{
-	IGNORE(keyword);
-
-	ASTTypeSpecifier *tagged_type = pool_alloc(parser->pool, sizeof *tagged_type);
-	tagged_type->type = ENUM_TYPE_SPECIFIER;
-	tagged_type->val.enum_specifier.name = name->val.symbol_or_string_literal;
-	tagged_type->val.enum_specifier.enumerators = NULL;
-
-	return tagged_type;
-}
-
 ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
 		Token *opt_name, Token *lcurly, ASTFieldDecl *fields, Token *rcurly)
 {
@@ -712,19 +456,6 @@ ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
 			opt_name->val.symbol_or_string_literal;
 	}
 	result->val.struct_or_union_specifier.fields = fields;
-
-	return result;
-}
-
-ASTTypeSpecifier *build_enum(Parser *parser, Token *keyword, char *opt_name,
-		Token *lcurly, ASTEnumerator *enumerators, Token *opt_comma, Token *rcurly)
-{
-	IGNORE(keyword); IGNORE(lcurly); IGNORE(opt_comma); IGNORE(rcurly);
-
-	ASTTypeSpecifier *result = pool_alloc(parser->pool, sizeof *result);
-	result->type = ENUM_TYPE_SPECIFIER;
-	result->val.enum_specifier.name = opt_name;
-	result->val.enum_specifier.enumerators = enumerators;
 
 	return result;
 }
