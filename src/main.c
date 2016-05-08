@@ -19,12 +19,27 @@
 
 int main(int argc, char *argv[])
 {
-	if (argc != 2) {
-		fprintf(stderr, "Usage: %s <input file>\n", argv[0]);
+	if (argc == 1) {
+		fputs("Error: no input file given\n", stderr);
 		return 1;
 	}
 
-	char *input_filename = argv[1];
+	char *input_filename = NULL;
+
+	for (i32 i = 1; i < argc; i++) {
+		char *arg = argv[i];
+		if (arg[0] == '-') {
+			fprintf(stderr, "Error: Unknown command-line argument: %s\n", arg);
+			return 1;
+		} else {
+			if (input_filename == NULL) {
+				input_filename = arg;
+			} else {
+				fputs("Error: no input file given\n", stderr);
+				return 2;
+			}
+		}
+	}
 
 	Array(SourceToken) tokens;
 	tokenise(&tokens, input_filename);
@@ -44,7 +59,7 @@ int main(int argc, char *argv[])
 	pool_init(&ast_pool, 1024);
 	ASTToplevel *ast = parse_toplevel(&tokens, &ast_pool);
 	if (ast == NULL)
-		return 2;
+		return 3;
 
 	dump_toplevel(ast);
 	puts("\n");
@@ -72,7 +87,7 @@ int main(int argc, char *argv[])
 	FILE *output_file = fopen("a.out", "wb");
 	if (output_file == NULL) {
 		perror("Unable to open output file");
-		return 3;
+		return 4;
 	}
 	write_elf_file(output_file, &asm_module);
 
@@ -84,14 +99,14 @@ int main(int argc, char *argv[])
 	if (fstat(fd, &status) == -1) {
 		perror("Unable to stat output file");
 		fclose(output_file);
-		return 4;
+		return 5;
 	}
 
 	mode_t new_mode = (status.st_mode & 07777) | S_IXUSR;
 	if (fchmod(fd, new_mode) == -1) {
 		perror("Unable to change output file to executable");
 		fclose(output_file);
-		return 5;
+		return 6;
 	}
 
 	fclose(output_file);
