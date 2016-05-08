@@ -60,7 +60,7 @@ typedef struct Parser
 	Pool *pool;
 
 	Array(SourceToken) *tokens;
-	u32 index;
+	u32 position;
 
 	TypeTable defined_types;
 } Parser;
@@ -71,15 +71,15 @@ typedef struct Parser
 
 static Token *read_token(Parser *parser)
 {
-	SourceToken *token = ARRAY_REF(parser->tokens, SourceToken, parser->index);
-	parser->index++;
+	SourceToken *token = ARRAY_REF(parser->tokens, SourceToken, parser->position);
+	parser->position++;
 
 	return (Token *)token;
 }
 
 static inline void back_up(Parser *parser)
 {
-    parser->index--;
+    parser->position--;
 }
 
 typedef struct ParserResult
@@ -95,15 +95,15 @@ static inline ParserResult success(void *result)
 
 static ParserResult failure = { .result = NULL, .success = false };
 
-static inline ParserResult revert(Parser *parser, u32 index)
+static inline ParserResult revert(Parser *parser, u32 position)
 {
-    parser->index = index;
+    parser->position = position;
     return failure;
 }
 
 static inline Token *current_token(Parser *parser)
 {
-	return (Token *)ARRAY_REF(parser->tokens, SourceToken, parser->index);
+	return (Token *)ARRAY_REF(parser->tokens, SourceToken, parser->position);
 }
 
 static inline bool expect_keyword(Parser *parser, char *keyword)
@@ -818,7 +818,7 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 	type_table_init(&parser.defined_types);
 
 	ParserResult result = translation_unit(&parser);
-	if (parser.index != tokens->size) {
+	if (parser.position != tokens->size) {
 		if (_unexpected_token.type != TOK_INVALID) {
 			issue_error(&_longest_parse_pos, "Unexpected token %s",
 					token_type_names[_unexpected_token.type]);

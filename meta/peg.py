@@ -59,17 +59,17 @@ class Reader(object):
     def __init__(self, tokens):
         self.tokens = tokens
 
-        self.index = 0
+        self.position = 0
 
     def has_more(self):
-        return self.index != len(self.tokens)
+        return self.position != len(self.tokens)
 
     def at(self, offset):
-        return self.tokens[self.index + offset]
+        return self.tokens[self.position + offset]
 
     def read_token(self):
         #print self.at(0)
-        self.index += 1
+        self.position += 1
         return self.at(-1)
 
     def read_toplevel(self):
@@ -157,8 +157,8 @@ Token *result = read_token(parser);
 if (result->type != %s) {
 \tback_up(parser);
 \t
-\tif (parser->index > _longest_parse_length) {
-\t\t_longest_parse_length = parser->index;
+\tif (parser->position > _longest_parse_length) {
+\t\t_longest_parse_length = parser->position;
 \t\t_longest_parse_pos = *parser_context(parser);
 \t\t_unexpected_token = *result;
 \t}
@@ -184,8 +184,8 @@ if (expect_keyword(parser, "%s")) {
 } else {
 \tback_up(parser);
 \t
-\tif (parser->index > _longest_parse_length) {
-\t\t_longest_parse_length = parser->index;
+\tif (parser->position > _longest_parse_length) {
+\t\t_longest_parse_length = parser->position;
 \t\t_longest_parse_pos = *parser_context(parser);
 \t\t
 \t\t_unexpected_token = *current_token(parser);
@@ -228,12 +228,12 @@ u32 start; (void)start;
 
             main = ''.join(
 """
-start = parser->index;
+start = parser->position;
 result = %s(parser);
 if (result.success) {
 %s
 }
-parser->index = start;
+parser->position = start;
 """ % (self.generate_parser(arg), ret_body(i)) for i, arg in enumerate(args))
 
             epilogue = "return failure;"
@@ -244,7 +244,7 @@ parser->index = start;
             prologue = "\nu32 start; (void)start;"
             main = ''.join(
 """
-start = parser->index;
+start = parser->position;
 ParserResult _{0}_result{1} = {0}(parser);
 if (!_{0}_result{1}.success)
 \treturn revert(parser, start);
