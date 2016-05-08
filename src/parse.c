@@ -118,11 +118,6 @@ static inline SourceLoc *token_context(Token *token)
 	return &((SourceToken *)token)->source_loc;
 }
 
-static inline SourceLoc *parser_context(Parser *parser)
-{
-	return token_context(current_token(parser));
-}
-
 
 typedef struct WhichResult
 {

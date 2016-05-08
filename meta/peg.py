@@ -159,7 +159,7 @@ if (result->type != %s) {
 \t
 \tif (parser->position > _longest_parse_length) {
 \t\t_longest_parse_length = parser->position;
-\t\t_longest_parse_pos = *parser_context(parser);
+\t\t_longest_parse_pos = *token_context(result);
 \t\t_unexpected_token = *result;
 \t}
 \t
@@ -186,7 +186,7 @@ if (expect_keyword(parser, "%s")) {
 \t
 \tif (parser->position > _longest_parse_length) {
 \t\t_longest_parse_length = parser->position;
-\t\t_longest_parse_pos = *parser_context(parser);
+\t\t_longest_parse_pos = *token_context(current_token(parser));
 \t\t
 \t\t_unexpected_token = *current_token(parser);
 \t}
