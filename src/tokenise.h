@@ -88,7 +88,7 @@ typedef struct Token
 
 	union
 	{
-		i64 int_literal;
+		u64 int_literal;
 		double float_literal;
 		char *symbol_or_string_literal;
 	} val;

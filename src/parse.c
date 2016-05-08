@@ -859,7 +859,7 @@ static void pretty_printf(char *fmt, ...)
 				break;
 			case '8':;
 				uint64_t x = va_arg(varargs, uint64_t);
-				printf("%" PRId64, x);
+				printf("%" PRIu64, x);
 				break;
 			default:
 				UNIMPLEMENTED;

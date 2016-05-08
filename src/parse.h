@@ -91,7 +91,7 @@ typedef struct ASTExpr
 
 	union
 	{
-		i64 int_literal;
+		u64 int_literal;
 		char *string_literal;
 		char *identifier;
 		struct ASTExpr *unary_arg;

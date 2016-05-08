@@ -420,7 +420,7 @@ static void tokenise_aux(Reader *reader)
 		case '1': case '2': case '3': case '4': case '5': case '6':
 		case '7': case '8': case '9': {
 			back_up(reader);
-			i64 value = 0;
+			u64 value = 0;
 
 			for (;;) {
 				char c = peek_char(reader);
@@ -821,7 +821,7 @@ void dump_token(Token *token)
 	fputs(token_type_names[token->type], stdout);
 	switch (token->type) {
 	case TOK_INT_LITERAL:
-		printf("(%" PRId64 ")", token->val.int_literal);
+		printf("(%" PRIu64 ")", token->val.int_literal);
 		break;
 	case TOK_FLOAT_LITERAL:
 		printf("(%lf)", token->val.float_literal);
