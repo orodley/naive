@@ -11,3 +11,5 @@ char *strndup(char *str, u32 length)
 
 	return result;
 }
+
+extern inline bool streq(char *a, char *b);

@@ -13,7 +13,7 @@
 
 typedef struct TypeTableEntry
 {
-	const char *type_name;
+	char *type_name;
 } TypeTableEntry;
 
 typedef struct TypeTable
@@ -21,7 +21,7 @@ typedef struct TypeTable
 	Array(TypeTableEntry) entries;
 } TypeTable;
 
-static const char *builtin_types[] = {
+static char *builtin_types[] = {
 	"void", "char", "short", "int", "long", "float", "double",
 	"signed", "unsigned", "_Bool", "_Complex",
 };
@@ -42,11 +42,11 @@ static void type_table_init(TypeTable *type_table)
 }
 
 static bool type_table_look_up_name(
-		TypeTable *type_table, const char *name, TypeTableEntry *out)
+		TypeTable *type_table, char *name, TypeTableEntry *out)
 {
 	for (u32 i = 0; i < type_table->entries.size; i++) {
 		TypeTableEntry *entry = ARRAY_REF(&type_table->entries, TypeTableEntry, i);
-		if (strcmp(entry->type_name, name) == 0) {
+		if (streq(entry->type_name, name)) {
 			*out = *entry;
 			return true;
 		}
@@ -106,11 +106,11 @@ static inline Token *current_token(Parser *parser)
 	return (Token *)ARRAY_REF(parser->tokens, SourceToken, parser->index);
 }
 
-static inline bool expect_keyword(Parser *parser, const char *keyword)
+static inline bool expect_keyword(Parser *parser, char *keyword)
 {
 	Token *token = read_token(parser);
 	return (token->type == TOK_SYMBOL) &&
-		(strcmp(token->val.symbol_or_string_literal, keyword) == 0);
+		streq(token->val.symbol_or_string_literal, keyword);
 }
 
 static inline SourceLoc *token_context(Token *token)
@@ -671,7 +671,7 @@ static ParserResult named_type(Parser *parser)
 		return failure;
 	}
 
-	const char *name = token->val.symbol_or_string_literal;
+	char *name = token->val.symbol_or_string_literal;
 	TypeTableEntry entry;
 	if (!type_table_look_up_name(&parser->defined_types, name, &entry)) {
 		back_up(parser);
@@ -842,7 +842,7 @@ static inline void print_indent(void)
 		fputs("    ", stdout);
 }
 
-static void pretty_printf(const char *fmt, ...)
+static void pretty_printf(char *fmt, ...)
 {
 	va_list varargs;
 	va_start(varargs, fmt);
@@ -923,7 +923,7 @@ static void dump_args(ASTArgument *args)
 }
 
 #define X(x) #x
-static const char *expr_type_names[] = {
+static char *expr_type_names[] = {
 	AST_EXPR_TYPES
 };
 #undef X
@@ -995,7 +995,7 @@ static void dump_expr(ASTExpr *expr)
 }
 
 #define X(x) #x
-static const char *statement_type_names[] = {
+static char *statement_type_names[] = {
 	AST_STATEMENT_TYPES
 };
 #undef X
@@ -1134,7 +1134,7 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 	case STRUCT_TYPE_SPECIFIER:
 		pretty_printf("STRUCT_TYPE_SPECIFIER(");
 
-		const char *name = type_specifier->val.struct_or_union_specifier.name;
+		char *name = type_specifier->val.struct_or_union_specifier.name;
 		if (name != NULL)
 			pretty_printf("%s,", name);
 

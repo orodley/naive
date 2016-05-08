@@ -9,7 +9,7 @@
 static void ir_gen_statement(Builder *builder, ASTStatement *statement);
 static Value ir_gen_expression(Builder *builder, ASTExpr *expr);
 
-static struct { const char *name; IrType type; } primitive_types[] =
+static struct { char *name; IrType type; } primitive_types[] =
 {
 	{ "int", { .bit_width = 32 } },
 };
@@ -17,7 +17,7 @@ static struct { const char *name; IrType type; } primitive_types[] =
 static IrType look_up_type(ASTTypeName *type_name)
 {
 	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(primitive_types); i++)
-		if (strcmp(type_spec->name, primitive_types[i].name) == 0)
+		if (streq(type_spec->name, primitive_types[i].name))
 			return primitive_types[i].type;
 
 	UNREACHABLE;

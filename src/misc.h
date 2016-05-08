@@ -17,6 +17,7 @@ typedef  int64_t i64;
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <string.h>
 
 #define IGNORE(x) (void)x
 #define STATIC_ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
@@ -25,5 +26,10 @@ typedef  int64_t i64;
 
 
 char *strndup(char *str, u32 length);
+
+inline bool streq(char *a, char *b)
+{
+	return strcmp(a, b) == 0;
+}
 
 #endif

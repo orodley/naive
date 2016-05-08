@@ -13,7 +13,7 @@ void init_asm_module(AsmModule *asm_module)
 	ARRAY_INIT(&asm_module->lines, AsmLine, 10);
 }
 
-void emit_label(AsmModule *asm_module, const char *name)
+void emit_label(AsmModule *asm_module, char *name)
 {
 	AsmLine *line = ARRAY_APPEND(&asm_module->lines, AsmLine);
 	line->type = LABEL;
@@ -138,7 +138,7 @@ u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address)
 	for (u32 i = 0; i < asm_module->lines.size; i++) {
 		AsmLine *line = ARRAY_REF(&asm_module->lines, AsmLine, i);
 		if (line->type == LABEL) {
-			if (strcmp(line->val.label_name, "main") == 0)
+			if (streq(line->val.label_name, "main"))
 				main_virtual_addr = current_address;
 		} else {
 			assert(line->type == INSTR);

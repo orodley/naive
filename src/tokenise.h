@@ -109,7 +109,7 @@ typedef struct SourceToken
 	SourceLoc source_loc;
 } SourceToken;
 
-extern const char *token_type_names[];
+extern char *token_type_names[];
 
 void tokenise(Array(SourceToken) *tokens, char *input_filename);
 void dump_token(Token *token);

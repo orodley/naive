@@ -9,7 +9,7 @@
 typedef struct ParseError
 {
 	Token *encountered_token;
-	const char *expected;
+	char *expected;
 } ParseError;
 
 #define AST_EXPR_TYPES \
@@ -162,7 +162,7 @@ typedef struct ASTStatement
 	{
 		struct
 		{
-			const char *label_name;
+			char *label_name;
 			struct ASTStatement *statement;
 		} labeled_statement;
 		struct
@@ -194,7 +194,7 @@ typedef struct ASTStatement
 			ASTExpr *update_expr;
 			struct ASTStatement *body;
 		} for_statement;
-		const char *goto_label;
+		char *goto_label;
 		ASTExpr *expr;
 	} val;
 } ASTStatement;
@@ -230,7 +230,7 @@ typedef struct ASTDesignator
 	union
 	{
 		ASTExpr *index_expr;
-		const char *field_name;
+		char *field_name;
 	} val;
 } ASTDesignator;
 
@@ -299,7 +299,7 @@ typedef struct ASTDirectDeclarator
 
 	union
 	{
-		const char *name;
+		char *name;
 		struct ASTDeclarator *declarator;
 		struct
 		{
@@ -357,7 +357,7 @@ typedef enum ASTFunctionSpecifier
 typedef struct ASTEnumerator
 {
 	struct ASTEnumerator *next;
-	const char *name;
+	char *name;
 	ASTExpr *value;
 } ASTEnumerator;
 
@@ -402,15 +402,15 @@ typedef struct ASTTypeSpecifier
 
 	union
 	{
-		const char *name;
+		char *name;
 		struct
 		{
-			const char *name;
+			char *name;
 			ASTFieldDecl *fields;
 		} struct_or_union_specifier;
 		struct
 		{
-			const char *name;
+			char *name;
 			ASTEnumerator *enumerators;
 		} enum_specifier;
 	} val;

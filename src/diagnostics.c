@@ -3,7 +3,7 @@
 #include "diagnostics.h"
 
 static void v_issue_diagnostic(ErrorLevel err_level,
-		SourceLoc *context, const char *fmt, va_list varargs)
+		SourceLoc *context, char *fmt, va_list varargs)
 {
 	printf("%s:%d:%d: ", context->filename, context->line, context->column);
 	switch (err_level) {
@@ -20,7 +20,7 @@ static void v_issue_diagnostic(ErrorLevel err_level,
 }
 
 void issue_diagnostic(ErrorLevel err_level, SourceLoc *context,
-		const char *fmt, ...)
+		char *fmt, ...)
 {
 	va_list varargs;
 	va_start(varargs, fmt);
@@ -28,7 +28,7 @@ void issue_diagnostic(ErrorLevel err_level, SourceLoc *context,
 	va_end(varargs);
 }
 
-void issue_error(SourceLoc *context, const char *fmt, ...)
+void issue_error(SourceLoc *context, char *fmt, ...)
 {
 	va_list varargs;
 	va_start(varargs, fmt);
@@ -36,7 +36,7 @@ void issue_error(SourceLoc *context, const char *fmt, ...)
 	va_end(varargs);
 }
 
-void issue_warning(SourceLoc *context, const char *fmt, ...)
+void issue_warning(SourceLoc *context, char *fmt, ...)
 {
 	va_list varargs;
 	va_start(varargs, fmt);

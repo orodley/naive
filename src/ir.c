@@ -12,7 +12,7 @@ void trans_unit_init(TransUnit *tu)
 	ARRAY_INIT(&tu->functions, IrFunction, 10);
 }
 
-static inline void block_init(Block *block, const char *name,
+static inline void block_init(Block *block, char *name,
 		u32 arity, IrType *arg_types)
 {
 	block->name = name;
@@ -27,7 +27,7 @@ static inline void block_init(Block *block, const char *name,
 	ARRAY_INIT(&block->instrs, IrInstr, 10);
 }
 
-IrFunction *trans_unit_add_function(TransUnit *tu, const char *name,
+IrFunction *trans_unit_add_function(TransUnit *tu, char *name,
 		IrType return_type, u32 arity, IrType *arg_types)
 {
 	IrFunction *new_func = ARRAY_APPEND(&tu->functions, IrFunction);

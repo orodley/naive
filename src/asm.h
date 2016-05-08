@@ -53,13 +53,13 @@ typedef struct AsmLine
 			AsmArg args[2];
 		} instr;
 
-		const char *label_name;
+		char *label_name;
 	} val;
 } AsmLine;
 
 void init_asm_module(AsmModule *asm_module);
 
-void emit_label(AsmModule *asm_module, const char *name);
+void emit_label(AsmModule *asm_module, char *name);
 void emit_instr0(AsmModule *asm_module, AsmOp op);
 void emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2);
 

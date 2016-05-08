@@ -12,7 +12,7 @@ typedef struct TransUnit
 
 typedef struct Block
 {
-	const char *name;
+	char *name;
 
 	u32 arity;
 	struct Arg *args;
@@ -21,7 +21,7 @@ typedef struct Block
 
 typedef struct IrFunction
 {
-	const char *name;
+	char *name;
 
 	Block entry_block;
 	Block ret_block;
@@ -85,7 +85,7 @@ typedef struct Arg
 } Arg;
 
 void trans_unit_init(TransUnit *tu);
-IrFunction *trans_unit_add_function(TransUnit *tu, const char *name,
+IrFunction *trans_unit_add_function(TransUnit *tu, char *name,
 		IrType return_type, u32 arity, IrType *arg_types);
 
 static inline IrType function_return_type(IrFunction *f)

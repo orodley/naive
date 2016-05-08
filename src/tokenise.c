@@ -70,7 +70,7 @@ static Macro *look_up_macro(Array(Macro) *macro_env, char *name)
 {
 	for (u32 i = 0; i < macro_env->size; i++) {
 		Macro *m = ARRAY_REF(macro_env, Macro, i);
-		if (strcmp(m->name, name) == 0) {
+		if (streq(m->name, name)) {
 			return m;
 		}
 	}
@@ -733,19 +733,19 @@ static void handle_pp_directive(Reader *reader)
 	}
 
 	char *directive = read_symbol(reader);
-	if (strcmp(directive, "if") == 0) {
+	if (streq(directive, "if")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "ifdef") == 0) {
+	} else if (streq(directive, "ifdef")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "ifndef") == 0) {
+	} else if (streq(directive, "ifndef")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "elif") == 0) {
+	} else if (streq(directive, "elif")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "else") == 0) {
+	} else if (streq(directive, "else")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "endif") == 0) {
+	} else if (streq(directive, "endif")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "include") == 0) {
+	} else if (streq(directive, "include")) {
 		skip_whitespace_and_comments(reader, false);
 
 		char c = read_char(reader);
@@ -775,7 +775,7 @@ static void handle_pp_directive(Reader *reader)
 			// @TODO: Resync to newline?
 			issue_error(&reader->source_loc, "Extraneous text after include path");
 		}
-	} else if (strcmp(directive, "define") == 0) {
+	} else if (streq(directive, "define")) {
 		skip_whitespace_and_comments(reader, false);
 
 		char c = read_char(reader);
@@ -796,13 +796,13 @@ static void handle_pp_directive(Reader *reader)
 		array_free(&macro_value_chars);
 
 		define_macro(&reader->macro_env, macro_name, macro_value);
-	} else if (strcmp(directive, "undef") == 0) {
+	} else if (streq(directive, "undef")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "line") == 0) {
+	} else if (streq(directive, "line")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "error") == 0) {
+	} else if (streq(directive, "error")) {
 		UNIMPLEMENTED;
-	} else if (strcmp(directive, "pragma") == 0) {
+	} else if (streq(directive, "pragma")) {
 		UNIMPLEMENTED;
 	} else {
 		issue_error(&reader->source_loc, "Invalid preprocessor directive: %s", directive);
@@ -811,7 +811,7 @@ static void handle_pp_directive(Reader *reader)
 
 
 #define X(x) #x
-const char *token_type_names[] = {
+char *token_type_names[] = {
 	TOKEN_TYPES
 };
 #undef X
