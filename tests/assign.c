@@ -1,5 +1,5 @@
-int main(int foo)
+int main()
 {
-	x = foo;
+	int x = 2;
 	return x;
 }

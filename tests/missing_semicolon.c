@@ -1,4 +1,4 @@
-int main(int x)
+int main()
 {
 	return 34
 }
