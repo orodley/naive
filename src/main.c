@@ -76,8 +76,11 @@ int main(int argc, char *argv[])
 	if (ast == NULL)
 		return 3;
 
-	if (dump_ast)
+	if (dump_ast) {
+		if (dump_tokens)
+			puts("\n");
 		dump_toplevel(ast);
+	}
 
 	TransUnit tu;
 	trans_unit_init(&tu);
@@ -88,16 +91,22 @@ int main(int argc, char *argv[])
 
 	pool_free(&ast_pool);
 
-	if (dump_ir)
+	if (dump_ir) {
+		if (dump_tokens || dump_ast)
+			puts("\n");
 		dump_trans_unit(&tu);
+	}
 
 
 	AsmModule asm_module;
 	init_asm_module(&asm_module);
 	generate_asm_module(&tu, &asm_module);
 
-	if (dump_asm)
+	if (dump_asm) {
+		if (dump_tokens || dump_ast || dump_ir)
+			puts("\n");
 		dump_asm_module(&asm_module);
+	}
 
 
 	FILE *output_file = fopen("a.out", "wb");
