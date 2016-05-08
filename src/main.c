@@ -25,12 +25,26 @@ int main(int argc, char *argv[])
 	}
 
 	char *input_filename = NULL;
+	bool dump_tokens = false;
+	bool dump_ast = false;
+	bool dump_ir = false;
+	bool dump_asm = false;
 
 	for (i32 i = 1; i < argc; i++) {
 		char *arg = argv[i];
 		if (arg[0] == '-') {
-			fprintf(stderr, "Error: Unknown command-line argument: %s\n", arg);
-			return 1;
+			if (streq(arg, "-fdump-tokens")) {
+				dump_tokens = true;
+			} else if (streq(arg, "-fdump-ast")) {
+				dump_ast = true;
+			} else if (streq(arg, "-fdump-ir")) {
+				dump_ir = true;
+			} else if (streq(arg, "-fdump-asm")) {
+				dump_asm = true;
+			} else {
+				fprintf(stderr, "Error: Unknown command-line argument: %s\n", arg);
+				return 1;
+			}
 		} else {
 			if (input_filename == NULL) {
 				input_filename = arg;
@@ -44,16 +58,17 @@ int main(int argc, char *argv[])
 	Array(SourceToken) tokens;
 	tokenise(&tokens, input_filename);
 
-	for (u32 i = 0; i < tokens.size; i++) {
-		SourceToken *source_token = ARRAY_REF(&tokens, SourceToken, i);
-		u32 line = source_token->source_loc.line;
-		u32 column = source_token->source_loc.column;
+	if (dump_tokens) {
+		for (u32 i = 0; i < tokens.size; i++) {
+			SourceToken *source_token = ARRAY_REF(&tokens, SourceToken, i);
+			u32 line = source_token->source_loc.line;
+			u32 column = source_token->source_loc.column;
 
-		printf("%d:%d, ", line, column);
-		dump_token((Token *)source_token);
-		putchar('\n');
+			printf("%d:%d, ", line, column);
+			dump_token((Token *)source_token);
+			putchar('\n');
+		}
 	}
-	puts("\n");
 
 	Pool ast_pool;
 	pool_init(&ast_pool, 1024);
@@ -61,9 +76,8 @@ int main(int argc, char *argv[])
 	if (ast == NULL)
 		return 3;
 
-	dump_toplevel(ast);
-	puts("\n");
-
+	if (dump_ast)
+		dump_toplevel(ast);
 
 	TransUnit tu;
 	trans_unit_init(&tu);
@@ -73,15 +87,17 @@ int main(int argc, char *argv[])
 	ir_gen_function(&tu, &builder, ast);
 
 	pool_free(&ast_pool);
-	dump_trans_unit(&tu);
-	puts("\n");
+
+	if (dump_ir)
+		dump_trans_unit(&tu);
 
 
 	AsmModule asm_module;
 	init_asm_module(&asm_module);
 	generate_asm_module(&tu, &asm_module);
 
-	dump_asm_module(&asm_module);
+	if (dump_asm)
+		dump_asm_module(&asm_module);
 
 
 	FILE *output_file = fopen("a.out", "wb");
