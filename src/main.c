@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 	Builder builder;
 	builder_init(&builder);
 
-	ir_gen_function(&tu, &builder, ast);
+	ir_gen_toplevel(&tu, &builder, ast);
 
 	pool_free(&ast_pool);
 

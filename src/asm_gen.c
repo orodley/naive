@@ -10,7 +10,7 @@ void asm_gen_function(AsmModule *asm_module, IrFunction *ir_func)
 {
 	emit_label(asm_module, ir_func->name);
 
-	assert(function_return_type(ir_func).bit_width == 32);
+	assert(ir_function_return_type(ir_func).bit_width == 32);
 
 	Block *block = &ir_func->entry_block;
 	Array(IrInstr) *instrs = &block->instrs;

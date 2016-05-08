@@ -88,7 +88,7 @@ void trans_unit_init(TransUnit *tu);
 IrFunction *trans_unit_add_function(TransUnit *tu, char *name,
 		IrType return_type, u32 arity, IrType *arg_types);
 
-static inline IrType function_return_type(IrFunction *f)
+static inline IrType ir_function_return_type(IrFunction *f)
 {
 	return f->ret_block.args[0].type;
 }

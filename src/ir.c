@@ -39,7 +39,7 @@ IrFunction *trans_unit_add_function(TransUnit *tu, char *name,
 	return new_func;
 }
 
-extern inline IrType function_return_type(IrFunction *f);
+extern inline IrType ir_function_return_type(IrFunction *f);
 
 static inline void dump_type(IrType type)
 {
@@ -77,7 +77,7 @@ void dump_trans_unit(TransUnit *tu)
 	for (u32 i = 0; i < functions->size; i++) {
 		IrFunction *f = ARRAY_REF(functions, IrFunction, i);
 
-		dump_type(function_return_type(f));
+		dump_type(ir_function_return_type(f));
 		printf(" %s(", f->name);
 		Arg *args = f->entry_block.args;
 		for (u32 i = 0; i < f->entry_block.arity; i++) {
