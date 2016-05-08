@@ -106,13 +106,6 @@ static inline Token *current_token(Parser *parser)
 	return (Token *)ARRAY_REF(parser->tokens, SourceToken, parser->position);
 }
 
-static inline bool expect_keyword(Parser *parser, char *keyword)
-{
-	Token *token = read_token(parser);
-	return (token->type == TOK_SYMBOL) &&
-		streq(token->val.symbol_or_string_literal, keyword);
-}
-
 static inline SourceLoc *token_context(Token *token)
 {
 	return &((SourceToken *)token)->source_loc;
