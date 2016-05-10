@@ -193,7 +193,14 @@ static Value ir_gen_expression(Builder *builder, ASTExpr *expr)
 
 	switch (expr->type) {
 	case INT_LITERAL_EXPR:
-		return value_const(expr->val.int_literal);
+		// @TODO: Determine types of constants correctly.
+		return value_const((IrType) { .bit_width = 32 }, expr->val.int_literal);
+	case BIT_XOR_EXPR:
+		return build_binary_instr(
+				builder,
+				OP_BIT_XOR,
+				ir_gen_expression(builder, expr->val.binary_op.arg1),
+				ir_gen_expression(builder, expr->val.binary_op.arg2));
 	default:
 		UNIMPLEMENTED;
 	}

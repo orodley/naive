@@ -37,5 +37,7 @@ static void asm_gen_instr(
 
 		break;
 	}
+	default:
+		UNIMPLEMENTED;
 	}
 }

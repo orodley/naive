@@ -41,6 +41,7 @@ typedef struct IrType
 
 typedef enum IrOp
 {
+	OP_BIT_XOR,
 	OP_BRANCH,
 } IrOp;
 
@@ -52,6 +53,7 @@ typedef struct Value
 		VALUE_ARG,
 		VALUE_INSTR,
 	} kind;
+	IrType type;
 
 	union
 	{
@@ -73,8 +75,13 @@ typedef struct IrInstr
 		struct
 		{
 			Block *target_block;
-			struct Value argument;
+			Value argument;
 		} branch;
+		struct
+		{
+			Value arg1;
+			Value arg2;
+		} binary_op;
 	} val;
 } IrInstr;
 
@@ -98,7 +105,8 @@ void dump_trans_unit(TransUnit *tu);
 void builder_init(Builder *builder);
 IrInstr *build_branch(Builder *builder, Block *block, Value value);
 
-Value value_const(u64 value);
+Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2);
+Value value_const(IrType type, u64 constant);
 
 void generate_asm_module(TransUnit *trans_unit, AsmModule *asm_module);
 
