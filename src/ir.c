@@ -43,12 +43,27 @@ extern inline IrType ir_function_return_type(IrFunction *f);
 
 bool ir_type_eq(IrType a, IrType b)
 {
-	return a.bit_width == b.bit_width;
+	if (a.kind != b.kind)
+		return false;
+
+	switch (a.kind) {
+	case IR_INT:
+		return a.val.bit_width == b.val.bit_width;
+	case IR_POINTER:
+		return true;
+	}
 }
 
 static inline void dump_type(IrType type)
 {
-	printf("i%d", type.bit_width);
+	switch (type.kind) {
+	case IR_INT:
+		printf("i%d", type.val.bit_width);
+		break;
+	case IR_POINTER:
+		putchar('*');
+		break;
+	}
 }
 
 static void dump_value(Value value)
@@ -58,16 +73,35 @@ static void dump_value(Value value)
 		printf("%" PRId64, value.val.constant);
 		break;
 	case VALUE_ARG:
-		printf("#%d", value.val.arg->index);
+		printf("@%d", value.val.arg->index);
 		break;
 	case VALUE_INSTR:
 		printf("#%d", value.val.instr->id);
+		break;
 	}
 }
 
 static void dump_instr(IrInstr *instr)
 {
 	switch (instr->op) {
+	case OP_LOCAL:
+		fputs("local(", stdout);
+		dump_type(instr->val.type);
+		break;
+	case OP_LOAD:
+		fputs("load(", stdout);
+		dump_type(instr->val.load.type);
+		fputs(", ", stdout);
+		dump_value(instr->val.load.pointer);
+		break;
+	case OP_STORE:
+		fputs("store(", stdout);
+		dump_value(instr->val.store.pointer);
+		fputs(", ", stdout);
+		dump_value(instr->val.store.value);
+		fputs(", ", stdout);
+		dump_type(instr->val.store.type);
+		break;
 	case OP_BRANCH:
 		printf("branch(%s, ", instr->val.branch.target_block->name);
 		dump_value(instr->val.branch.argument);
@@ -75,7 +109,7 @@ static void dump_instr(IrInstr *instr)
 	case OP_BIT_XOR:
 		fputs("bit_xor(", stdout);
 		dump_value(instr->val.binary_op.arg1);
-		putchar(',');
+		fputs(", ", stdout);
 		dump_value(instr->val.binary_op.arg2);
 		break;
 	}
@@ -110,6 +144,8 @@ void dump_trans_unit(TransUnit *tu)
 			for (u32 i = 0; i < instrs->size; i++) {
 				IrInstr *instr = ARRAY_REF(instrs, IrInstr, i);
 				putchar('\t');
+				if (instr->op != OP_STORE && instr->op != OP_BRANCH)
+					printf("#%u = ", i);
 				dump_instr(instr);
 			}
 
@@ -136,7 +172,7 @@ void builder_init(Builder *builder)
 static inline IrInstr *append_instr(Block *block)
 {
 	IrInstr *instr = ARRAY_APPEND(&block->instrs, IrInstr);
-	instr->id = block->instrs.size + block->arity - 1;
+	instr->id = block->instrs.size - 1;
 	return instr;
 }
 
@@ -153,11 +189,14 @@ IrInstr *build_branch(Builder *builder, Block *block, Value value)
 static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 {
 	switch (op) {
+	case OP_LOCAL:
+	case OP_LOAD:
+	case OP_STORE:
+	case OP_BRANCH:
+		UNREACHABLE;
 	case OP_BIT_XOR:
 		return arg1 ^ arg2;
 		break;
-	case OP_BRANCH:
-		UNREACHABLE;
 	}
 }
 
@@ -168,6 +207,37 @@ static Value value_instr(IrInstr *instr)
 		.type = instr->type,
 		.val.instr = instr,
 	};
+}
+
+Value build_local(Builder *builder, IrType type)
+{
+	IrInstr *instr = append_instr(builder->current_block);
+	instr->type = (IrType) { .kind = IR_POINTER };
+	instr->op = OP_LOCAL;
+	instr->val.type = type;
+
+	return value_instr(instr);
+}
+
+Value build_load(Builder *builder, Value pointer, IrType type)
+{
+	IrInstr *instr = append_instr(builder->current_block);
+	instr->op = OP_LOAD;
+	instr->val.load.pointer = pointer;
+	instr->val.load.type = type;
+
+	return value_instr(instr);
+}
+
+Value build_store(Builder *builder, Value pointer, Value value, IrType type)
+{
+	IrInstr *instr = append_instr(builder->current_block);
+	instr->op = OP_STORE;
+	instr->val.store.pointer = pointer;
+	instr->val.store.type = type;
+	instr->val.store.value = value;
+
+	return value_instr(instr);
 }
 
 Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2)
@@ -194,7 +264,17 @@ Value value_const(IrType type, u64 constant)
 	Value value = {
 		.kind = VALUE_CONST,
 		.type = type,
-		.val = { .constant = constant }
+		.val.constant = constant,
+	};
+
+	return value;
+}
+
+Value value_arg(Arg *arg)
+{
+	Value value = {
+		.kind = VALUE_ARG,
+		.val.arg = arg,
 	};
 
 	return value;

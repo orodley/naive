@@ -36,14 +36,17 @@ typedef struct Builder
 
 typedef struct IrType
 {
-	u32 bit_width;
-} IrType;
+	enum
+	{
+		IR_INT,
+		IR_POINTER,
+	} kind;
 
-typedef enum IrOp
-{
-	OP_BIT_XOR,
-	OP_BRANCH,
-} IrOp;
+	union
+	{
+		u32 bit_width;
+	} val;
+} IrType;
 
 typedef struct Value
 {
@@ -62,6 +65,15 @@ typedef struct Value
 		struct Arg *arg;
 	} val;
 } Value;
+
+typedef enum IrOp
+{
+	OP_BIT_XOR,
+	OP_LOAD,
+	OP_STORE,
+	OP_BRANCH,
+	OP_LOCAL,
+} IrOp;
 
 typedef struct IrInstr
 {
@@ -82,6 +94,18 @@ typedef struct IrInstr
 			Value arg1;
 			Value arg2;
 		} binary_op;
+		struct
+		{
+			Value pointer;
+			IrType type;
+		} load;
+		struct
+		{
+			Value pointer;
+			Value value;
+			IrType type;
+		} store;
+		IrType type;
 	} val;
 } IrInstr;
 
@@ -105,8 +129,13 @@ void dump_trans_unit(TransUnit *tu);
 void builder_init(Builder *builder);
 IrInstr *build_branch(Builder *builder, Block *block, Value value);
 
-Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2);
 Value value_const(IrType type, u64 constant);
+Value value_arg(Arg *arg);
+
+Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2);
+Value build_local(Builder *builder, IrType type);
+Value build_load(Builder *builder, Value pointer, IrType type);
+Value build_store(Builder *builder, Value pointer, Value value, IrType type);
 
 void generate_asm_module(TransUnit *trans_unit, AsmModule *asm_module);
 
