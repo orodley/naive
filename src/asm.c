@@ -5,12 +5,45 @@
 #include "array.h"
 #include "asm.h"
 
+AsmArg asm_virtual_register(u32 n)
+{
+	AsmArg asm_arg = {
+		.type = REGISTER,
+		.val.reg.type = VIRTUAL_REGISTER,
+		.val.reg.val.register_number = n,
+	};
+
+	return asm_arg;
+}
+
+AsmArg asm_physical_register(PhysicalRegister reg)
+{
+	AsmArg asm_arg = {
+		.type = REGISTER,
+		.val.reg.type = PHYSICAL_REGISTER,
+		.val.reg.val.physical_register = reg,
+	};
+
+	return asm_arg;
+}
+
+AsmArg asm_const32(i32 constant)
+{
+	AsmArg asm_arg = {
+		.type = CONST32,
+		.val.const32 = constant,
+	};
+
+	return asm_arg;
+}
+
 static void dump_asm_line(AsmLine *line);
 static void dump_asm_args(AsmArg *args, u32 num_args);
 
 void init_asm_module(AsmModule *asm_module)
 {
 	ARRAY_INIT(&asm_module->lines, AsmLine, 10);
+	asm_module->next_virtual_register = 0;
 }
 
 void emit_label(AsmModule *asm_module, char *name)
@@ -27,37 +60,15 @@ void emit_instr0(AsmModule *asm_module, AsmOp op)
 	line->val.instr.op = op;
 }
 
-void emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2)
+AsmArg emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2)
 {
 	AsmLine *line = ARRAY_APPEND(&asm_module->lines, AsmLine);
 	line->type = INSTR;
 	line->val.instr.op = op;
 	line->val.instr.args[0] = arg1;
 	line->val.instr.args[1] = arg2;
-}
 
-AsmArg asm_reg(Register reg)
-{
-	AsmArg asm_arg = {
-		.type = REGISTER,
-		.val = {
-			.reg = reg,
-		},
-	};
-
-	return asm_arg;
-}
-
-AsmArg asm_const32(i32 constant)
-{
-	AsmArg asm_arg = {
-		.type = CONST32,
-		.val = {
-			.const32 = constant,
-		},
-	};
-
-	return asm_arg;
+	return asm_virtual_register(asm_module->next_virtual_register++);
 }
 
 void dump_asm_module(AsmModule *asm_module)
@@ -98,8 +109,15 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 		AsmArg *arg = &args[i];
 		switch (arg->type) {
 		case REGISTER:
-			switch (arg->val.reg) {
-			case EAX: fputs("eax", stdout); break;
+			switch (arg->val.reg.type) {
+			case PHYSICAL_REGISTER:
+				switch (arg->val.reg.val.physical_register) {
+				case EAX: fputs("eax", stdout); break;
+				}
+				break;
+			case VIRTUAL_REGISTER:
+				printf("#%u", arg->val.reg.val.register_number);
+				break;
 			}
 			break;
 		case CONST32:
@@ -118,7 +136,7 @@ static inline u32 write_byte(FILE *file, u8 byte)
 	return 1;
 }
 
-static inline u32 write_i32(FILE *file, i32 x)
+static inline u32 write_u32(FILE *file, u32 x)
 {
 	u8 out[] = {
 		((u32)x >> 0) & 0xFF,
@@ -145,11 +163,14 @@ u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address)
 			switch (line->val.instr.op) {
 			case MOV:
 				assert(line->val.instr.args[0].type == REGISTER);
-				assert(line->val.instr.args[0].val.reg == EAX);
+				assert(line->val.instr.args[0].val.reg.type == PHYSICAL_REGISTER);
+				assert(line->val.instr.args[0].val.reg.val.physical_register == EAX);
 				assert(line->val.instr.args[1].type == CONST32);
 
 				current_address += write_byte(output_file, 0xB8);
-				current_address += write_i32(output_file, line->val.instr.args[1].val.const32);
+				current_address += write_u32(
+						output_file,
+						line->val.instr.args[1].val.const32);
 				break;
 			case RET:
 				current_address += write_byte(output_file, 0xC3);

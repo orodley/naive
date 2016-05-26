@@ -33,7 +33,7 @@ static void asm_gen_instr(
 
 		i64 constant = ret_value->val.constant;
 		assert(constant == (constant & 0xFFFFFFFF));
-		emit_instr2(asm_module, MOV, asm_reg(EAX), asm_const32((i32)constant));
+		emit_instr2(asm_module, MOV, asm_physical_register(EAX), asm_const32((i32)constant));
 		emit_instr0(asm_module, RET);
 
 		break;

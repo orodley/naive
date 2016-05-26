@@ -8,11 +8,27 @@
 typedef struct AsmModule
 {
 	Array(AsmLine) lines;
+	u32 next_virtual_register;
 } AsmModule;
 
-typedef enum Register
+typedef enum PhysicalRegister
 {
 	EAX,
+} PhysicalRegister;
+
+typedef struct Register
+{
+	enum
+	{
+		PHYSICAL_REGISTER,
+		VIRTUAL_REGISTER,
+	} type;
+
+	union
+	{
+		u32 register_number;
+		PhysicalRegister physical_register;
+	} val;
 } Register;
 
 typedef struct AsmArg
@@ -61,9 +77,9 @@ void init_asm_module(AsmModule *asm_module);
 
 void emit_label(AsmModule *asm_module, char *name);
 void emit_instr0(AsmModule *asm_module, AsmOp op);
-void emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2);
+AsmArg emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2);
 
-AsmArg asm_reg(Register reg);
+AsmArg asm_physical_register(PhysicalRegister reg);
 AsmArg asm_const32(i32 constant);
 
 void dump_asm_module(AsmModule *asm_module);
