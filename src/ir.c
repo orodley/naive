@@ -279,11 +279,3 @@ Value value_arg(Arg *arg)
 
 	return value;
 }
-
-void generate_asm_module(TransUnit *trans_unit, AsmModule *asm_module)
-{
-	for (u32 i = 0; i < trans_unit->functions.size; i++) {
-		IrFunction *func = ARRAY_REF(&trans_unit->functions, IrFunction, i);
-		asm_gen_function(asm_module, func);
-	}
-}

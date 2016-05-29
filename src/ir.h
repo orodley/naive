@@ -137,6 +137,4 @@ Value build_local(Builder *builder, IrType type);
 Value build_load(Builder *builder, Value pointer, IrType type);
 Value build_store(Builder *builder, Value pointer, Value value, IrType type);
 
-void generate_asm_module(TransUnit *trans_unit, AsmModule *asm_module);
-
 #endif

@@ -11,6 +11,7 @@
 
 #include "array.h"
 #include "asm.h"
+#include "asm_gen.h"
 #include "elf.h"
 #include "ir_gen.h"
 #include "misc.h"
@@ -97,15 +98,13 @@ int main(int argc, char *argv[])
 		dump_trans_unit(&tu);
 	}
 
-
-	AsmModule asm_module;
-	init_asm_module(&asm_module);
-	generate_asm_module(&tu, &asm_module);
-
+	AsmBuilder asm_builder;
+	init_asm_builder(&asm_builder);
+	generate_asm_module(&asm_builder, &tu); 
 	if (dump_asm) {
 		if (dump_tokens || dump_ast || dump_ir)
 			puts("\n");
-		dump_asm_module(&asm_module);
+		dump_asm_module(&asm_builder.asm_module);
 	}
 
 
@@ -114,7 +113,9 @@ int main(int argc, char *argv[])
 		perror("Unable to open output file");
 		return 4;
 	}
-	write_elf_file(output_file, &asm_module);
+	write_elf_file(output_file, &asm_builder.asm_module);
+
+	free_asm_builder(&asm_builder);
 
 	// @PORT
 	int fd = fileno(output_file);

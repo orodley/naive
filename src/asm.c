@@ -8,6 +8,7 @@
 AsmArg asm_virtual_register(u32 n)
 {
 	AsmArg asm_arg = {
+		.is_deref = false,
 		.type = REGISTER,
 		.val.reg.type = VIRTUAL_REGISTER,
 		.val.reg.val.register_number = n,
@@ -19,6 +20,7 @@ AsmArg asm_virtual_register(u32 n)
 AsmArg asm_physical_register(PhysicalRegister reg)
 {
 	AsmArg asm_arg = {
+		.is_deref = false,
 		.type = REGISTER,
 		.val.reg.type = PHYSICAL_REGISTER,
 		.val.reg.val.physical_register = reg,
@@ -30,6 +32,7 @@ AsmArg asm_physical_register(PhysicalRegister reg)
 AsmArg asm_const32(i32 constant)
 {
 	AsmArg asm_arg = {
+		.is_deref = false,
 		.type = CONST32,
 		.val.const32 = constant,
 	};
@@ -37,67 +40,29 @@ AsmArg asm_const32(i32 constant)
 	return asm_arg;
 }
 
-static void dump_asm_line(AsmLine *line);
+AsmArg asm_deref(AsmArg asm_arg)
+{
+	asm_arg.is_deref = true;
+	return asm_arg;
+}
+
 static void dump_asm_args(AsmArg *args, u32 num_args);
 
-void init_asm_module(AsmModule *asm_module)
+static void dump_asm_instr(AsmInstr *instr)
 {
-	ARRAY_INIT(&asm_module->lines, AsmLine, 10);
-	asm_module->next_virtual_register = 0;
-}
+	putchar('\t');
 
-void emit_label(AsmModule *asm_module, char *name)
-{
-	AsmLine *line = ARRAY_APPEND(&asm_module->lines, AsmLine);
-	line->type = LABEL;
-	line->val.label_name = name;
-}
-
-void emit_instr0(AsmModule *asm_module, AsmOp op)
-{
-	AsmLine *line = ARRAY_APPEND(&asm_module->lines, AsmLine);
-	line->type = INSTR;
-	line->val.instr.op = op;
-}
-
-AsmArg emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2)
-{
-	AsmLine *line = ARRAY_APPEND(&asm_module->lines, AsmLine);
-	line->type = INSTR;
-	line->val.instr.op = op;
-	line->val.instr.args[0] = arg1;
-	line->val.instr.args[1] = arg2;
-
-	return asm_virtual_register(asm_module->next_virtual_register++);
-}
-
-void dump_asm_module(AsmModule *asm_module)
-{
-	for (u32 i = 0; i < asm_module->lines.size; i++) {
-		AsmLine *line = ARRAY_REF(&asm_module->lines, AsmLine, i);
-		dump_asm_line(line);
+	switch (instr->op) {
+		case MOV:
+			fputs("mov ", stdout);
+			dump_asm_args(instr->args, 2);
+			break;
+		case RET:
+			fputs("ret", stdout);
+			break;
 	}
-}
 
-static void dump_asm_line(AsmLine *line)
-{
-	if (line->type == LABEL) {
-		printf("%s:\n", line->val.label_name);
-	} else {
-		putchar('\t');
-
-		switch (line->val.instr.op) {
-			case MOV:
-				fputs("mov ", stdout);
-				dump_asm_args(line->val.instr.args, 2);
-				break;
-			case RET:
-				fputs("ret", stdout);
-				break;
-		}
-
-		putchar('\n');
-	}
+	putchar('\n');
 }
 
 static void dump_asm_args(AsmArg *args, u32 num_args)
@@ -130,6 +95,18 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 	}
 }
 
+void dump_asm_module(AsmModule *asm_module)
+{
+	for (u32 i = 0; i < asm_module->blocks.size; i++) {
+		AsmBlock *block = ARRAY_REF(&asm_module->blocks, AsmBlock, i);
+
+		for (u32 j = 0; j < block->instrs.size; j++) {
+			AsmInstr *instr = ARRAY_REF(&block->instrs, AsmInstr, j);
+			dump_asm_instr(instr);
+		}
+	}
+}
+
 static inline u32 write_byte(FILE *file, u8 byte)
 {
 	fwrite(&byte, 1, 1, file);
@@ -153,24 +130,24 @@ u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address)
 {
 	u64 current_address = base_virtual_address;
 	u64 main_virtual_addr = 0;
-	for (u32 i = 0; i < asm_module->lines.size; i++) {
-		AsmLine *line = ARRAY_REF(&asm_module->lines, AsmLine, i);
-		if (line->type == LABEL) {
-			if (streq(line->val.label_name, "main"))
-				main_virtual_addr = current_address;
-		} else {
-			assert(line->type == INSTR);
-			switch (line->val.instr.op) {
+
+	for (u32 i = 0; i < asm_module->blocks.size; i++) {
+		AsmBlock *block = ARRAY_REF(&asm_module->blocks, AsmBlock, i);
+
+		for (u32 j = 0; j < block->instrs.size; j++) {
+			AsmInstr *instr = ARRAY_REF(&block->instrs, AsmInstr, j);
+
+			switch (instr->op) {
 			case MOV:
-				assert(line->val.instr.args[0].type == REGISTER);
-				assert(line->val.instr.args[0].val.reg.type == PHYSICAL_REGISTER);
-				assert(line->val.instr.args[0].val.reg.val.physical_register == EAX);
-				assert(line->val.instr.args[1].type == CONST32);
+				assert(instr->args[0].type == REGISTER);
+				assert(instr->args[0].val.reg.type == PHYSICAL_REGISTER);
+				assert(instr->args[0].val.reg.val.physical_register == EAX);
+				assert(instr->args[1].type == CONST32);
 
 				current_address += write_byte(output_file, 0xB8);
 				current_address += write_u32(
 						output_file,
-						line->val.instr.args[1].val.const32);
+						instr->args[1].val.const32);
 				break;
 			case RET:
 				current_address += write_byte(output_file, 0xC3);

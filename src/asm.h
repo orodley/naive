@@ -5,12 +5,6 @@
 
 #include "array.h"
 
-typedef struct AsmModule
-{
-	Array(AsmLine) lines;
-	u32 next_virtual_register;
-} AsmModule;
-
 typedef enum PhysicalRegister
 {
 	EAX,
@@ -33,6 +27,8 @@ typedef struct Register
 
 typedef struct AsmArg
 {
+	bool is_deref;
+
 	enum
 	{
 		REGISTER,
@@ -53,34 +49,26 @@ typedef enum AsmOp
 	MOV, RET,
 } AsmOp;
 
-typedef struct AsmLine
+typedef struct AsmInstr
 {
-	enum
-	{
-		LABEL,
-		INSTR,
-	} type;
+	AsmOp op;
+	AsmArg args[2];
+} AsmInstr;
 
-	union
-	{
-		struct
-		{
-			AsmOp op;
-			AsmArg args[2];
-		} instr;
+typedef struct AsmBlock
+{
+	Array(AsmInstr) instrs;
+} AsmBlock;
 
-		char *label_name;
-	} val;
-} AsmLine;
-
-void init_asm_module(AsmModule *asm_module);
-
-void emit_label(AsmModule *asm_module, char *name);
-void emit_instr0(AsmModule *asm_module, AsmOp op);
-AsmArg emit_instr2(AsmModule *asm_module, AsmOp op, AsmArg arg1, AsmArg arg2);
+typedef struct AsmModule
+{
+	Array(AsmBlock) blocks;
+} AsmModule;
 
 AsmArg asm_physical_register(PhysicalRegister reg);
+AsmArg asm_virtual_register(u32 n);
 AsmArg asm_const32(i32 constant);
+AsmArg asm_deref(AsmArg asm_arg);
 
 void dump_asm_module(AsmModule *asm_module);
 
