@@ -51,12 +51,19 @@ typedef struct AsmArg
 	} val;
 } AsmArg;
 
+#define ASM_OPS \
+	X(MOV), \
+	X(RET), \
+	X(XOR), \
+	X(ADD), \
+	X(SUB),
+
+#define X(x) x
 typedef enum AsmOp
 {
-	MOV,
-	RET,
-	XOR,
+	ASM_OPS
 } AsmOp;
+#undef X
 
 typedef struct AsmInstr
 {

@@ -66,22 +66,22 @@ AsmArg asm_deref(AsmArg asm_arg)
 
 static void dump_asm_args(AsmArg *args, u32 num_args);
 
+#define X(x) #x
+static char *asm_op_names[] = {
+	ASM_OPS
+};
+#undef X
+
 static void dump_asm_instr(AsmInstr *instr)
 {
-	putchar('\t');
+	printf("\t%s", asm_op_names[instr->op]);
 
 	switch (instr->op) {
-		case MOV:
-			fputs("mov ", stdout);
-			dump_asm_args(instr->args, 2);
-			break;
-		case RET:
-			fputs("ret", stdout);
-			break;
-		case XOR:
-			fputs("xor ", stdout);
-			dump_asm_args(instr->args, 2);
-			break;
+	case MOV: case XOR: case ADD: case SUB:
+		putchar(' ');
+		dump_asm_args(instr->args, 2);
+		break;
+	case RET: break;
 	}
 
 	putchar('\n');
@@ -191,7 +191,7 @@ u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address)
 			case RET:
 				current_address += write_byte(output_file, 0xC3);
 				break;
-			case XOR:
+			case XOR: case ADD: case SUB:
 				UNIMPLEMENTED;
 			}
 		}

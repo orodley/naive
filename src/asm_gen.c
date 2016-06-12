@@ -34,18 +34,20 @@ void append_block(AsmBuilder *builder)
 	ARRAY_INIT(&builder->stack_slots, StackSlot, 5);
 }
 
-void emit_instr0(AsmBuilder *builder, AsmOp op)
+AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 {
 	AsmInstr *instr = ARRAY_APPEND(&builder->current_block->instrs, AsmInstr);
 	instr->op = op;
+	return instr;
 }
 
-void emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
+AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 {
 	AsmInstr *instr = ARRAY_APPEND(&builder->current_block->instrs, AsmInstr);
 	instr->op = op;
 	instr->args[0] = arg1;
 	instr->args[1] = arg2;
+	return instr;
 }
 
 static u32 size_of_ir_type(IrType type)
@@ -127,6 +129,8 @@ static void asm_gen_instr(
 		Value arg = instr->val.branch.argument;
 		assert(ir_type_eq(target_block->args[0].type, arg.type));
 
+		emit_instr2(builder, ADD, asm_physical_register(RSP),
+				asm_const32(builder->local_stack_usage));
 		emit_instr2(builder, MOV, asm_physical_register(EAX), asm_value(arg));
 		emit_instr0(builder, RET);
 
@@ -149,7 +153,7 @@ static void asm_gen_instr(
 		assert(slot != NULL);
 
 		emit_instr2(builder, MOV,
-				asm_deref(asm_offset_register(RSP, -slot->stack_offset)),
+				asm_deref(asm_offset_register(RSP, slot->stack_offset)),
 				asm_value(value));
 		break;
 	}
@@ -178,14 +182,13 @@ static void asm_gen_instr(
 
 		emit_instr2(builder, MOV,
 				asm_virtual_register(next_vreg(builder)),
-				asm_deref(asm_offset_register(RSP, -slot->stack_offset)));
+				asm_deref(asm_offset_register(RSP, slot->stack_offset)));
 		assign_vreg(builder, instr);
 		break;
 	}
 	}
 }
 
-// @TODO: Insert movs to reserve and free stack space.
 void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 {
 	append_block(builder);
@@ -208,10 +211,15 @@ void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 		vreg_info->val.arg.arg_num = i;
 	}
 
+	AsmInstr *reserve_stack = emit_instr2(builder, SUB,
+			asm_physical_register(RSP), asm_const32(0));
+
 	Array(IrInstr) *instrs = &block->instrs;
 	for (u32 i = 0; i < instrs->size; i++) {
 		asm_gen_instr(ir_func, builder, ARRAY_REF(instrs, IrInstr, i));
 	}
+
+	reserve_stack->args[1] = asm_const32(builder->local_stack_usage);
 }
 
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
