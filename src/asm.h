@@ -8,6 +8,7 @@
 typedef enum PhysicalRegister
 {
 	EAX,
+	RSP,
 } PhysicalRegister;
 
 typedef struct Register
@@ -32,6 +33,7 @@ typedef struct AsmArg
 	enum
 	{
 		REGISTER,
+		OFFSET_REGISTER,
 		CONST32,
 		CONST64,
 	} type;
@@ -39,6 +41,11 @@ typedef struct AsmArg
 	union
 	{
 		Register reg;
+		struct
+		{
+			Register reg;
+			u64 offset;
+		} offset_register;
 		u32 const32;
 		u64 const64;
 	} val;
@@ -46,7 +53,9 @@ typedef struct AsmArg
 
 typedef enum AsmOp
 {
-	MOV, RET,
+	MOV,
+	RET,
+	XOR,
 } AsmOp;
 
 typedef struct AsmInstr
@@ -65,8 +74,11 @@ typedef struct AsmModule
 	Array(AsmBlock) blocks;
 } AsmModule;
 
-AsmArg asm_physical_register(PhysicalRegister reg);
+void init_asm_block(AsmBlock *block);
+
 AsmArg asm_virtual_register(u32 n);
+AsmArg asm_physical_register(PhysicalRegister reg);
+AsmArg asm_offset_register(PhysicalRegister reg, u64 offset);
 AsmArg asm_const32(i32 constant);
 AsmArg asm_deref(AsmArg asm_arg);
 

@@ -5,6 +5,11 @@
 #include "array.h"
 #include "asm.h"
 
+void init_asm_block(AsmBlock *block)
+{
+	ARRAY_INIT(&block->instrs, AsmInstr, 20);
+}
+
 AsmArg asm_virtual_register(u32 n)
 {
 	AsmArg asm_arg = {
@@ -24,6 +29,19 @@ AsmArg asm_physical_register(PhysicalRegister reg)
 		.type = REGISTER,
 		.val.reg.type = PHYSICAL_REGISTER,
 		.val.reg.val.physical_register = reg,
+	};
+
+	return asm_arg;
+}
+
+AsmArg asm_offset_register(PhysicalRegister reg, u64 offset)
+{
+	AsmArg asm_arg = {
+		.is_deref = false,
+		.type = OFFSET_REGISTER,
+		.val.offset_register.reg.type = PHYSICAL_REGISTER,
+		.val.offset_register.reg.val.physical_register = reg,
+		.val.offset_register.offset = offset,
 	};
 
 	return asm_arg;
@@ -60,9 +78,28 @@ static void dump_asm_instr(AsmInstr *instr)
 		case RET:
 			fputs("ret", stdout);
 			break;
+		case XOR:
+			fputs("xor ", stdout);
+			dump_asm_args(instr->args, 2);
+			break;
 	}
 
 	putchar('\n');
+}
+
+static void dump_register(Register reg)
+{
+	switch (reg.type) {
+	case PHYSICAL_REGISTER:
+		switch (reg.val.physical_register) {
+		case EAX: fputs("eax", stdout); break;
+		case RSP: fputs("rsp", stdout); break;
+		}
+		break;
+	case VIRTUAL_REGISTER:
+		printf("#%u", reg.val.register_number);
+		break;
+	}
 }
 
 static void dump_asm_args(AsmArg *args, u32 num_args)
@@ -74,22 +111,24 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 		AsmArg *arg = &args[i];
 		switch (arg->type) {
 		case REGISTER:
-			switch (arg->val.reg.type) {
-			case PHYSICAL_REGISTER:
-				switch (arg->val.reg.val.physical_register) {
-				case EAX: fputs("eax", stdout); break;
-				}
-				break;
-			case VIRTUAL_REGISTER:
-				printf("#%u", arg->val.reg.val.register_number);
-				break;
-			}
+			dump_register(arg->val.reg);
+			break;
+		case OFFSET_REGISTER:
+			printf("%" PRIu64 "(", arg->val.offset_register.offset);
+			dump_register(arg->val.offset_register.reg);
+			putchar(')');
 			break;
 		case CONST32:
-			printf("%" PRIu32, arg->val.const32);
+			if ((i32)arg->val.const32 < 0)
+				printf("%" PRId32, (i32)arg->val.const32);
+			else
+				printf("%" PRIu32, arg->val.const32);
 			break;
 		case CONST64:
-			printf("%" PRIu64, arg->val.const64);
+			if ((i64)arg->val.const64 < 0)
+				printf("%" PRId64, (i64)arg->val.const64);
+			else
+				printf("%" PRIu64, arg->val.const64);
 			break;
 		}
 	}
@@ -152,6 +191,8 @@ u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address)
 			case RET:
 				current_address += write_byte(output_file, 0xC3);
 				break;
+			case XOR:
+				UNIMPLEMENTED;
 			}
 		}
 	}

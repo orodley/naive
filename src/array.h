@@ -20,6 +20,7 @@ void array_ensure_room(Array_ *array, u32 element_size);
 void array_delete_last(Array_ *array);
 void array_free(Array_ *array);
 
+#define ARRAY_IS_VALID(array) ((array)->elements != NULL)
 #define ARRAY_ZEROED ((Array_){ 0, 0, 0 })
 #define ARRAY_INIT(array, element_type, initial_capacity) \
 	_array_init((array), sizeof(element_type), (initial_capacity))

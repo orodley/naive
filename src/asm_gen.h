@@ -10,13 +10,32 @@ typedef struct StackSlot
 	u32 stack_offset;
 } StackSlot;
 
+typedef struct VRegInfo
+{
+	enum
+	{
+		INSTR,
+		ARG,
+	} source;
+
+	union
+	{
+		struct
+		{
+			Block *block;
+			u32 arg_num;
+		} arg;
+		IrInstr *defining_instr;
+	} val;
+} VRegInfo;
+
 typedef struct AsmBuilder
 {
 	AsmModule asm_module;
 	AsmBlock *current_block;
 
 	Array(StackSlot) stack_slots;
-	u32 next_virtual_register;
+	Array(VRegInfo) virtual_registers;
 	u32 local_stack_usage;
 } AsmBuilder;
 

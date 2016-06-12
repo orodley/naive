@@ -22,6 +22,7 @@ static inline void block_init(Block *block, char *name,
 		Arg *arg = &block->args[i];
 		arg->index = i;
 		arg->type = arg_types[i];
+		arg->virtual_register = -1;
 	}
 
 	ARRAY_INIT(&block->instrs, IrInstr, 10);
@@ -54,7 +55,7 @@ bool ir_type_eq(IrType a, IrType b)
 	}
 }
 
-static inline void dump_type(IrType type)
+void dump_ir_type(IrType type)
 {
 	switch (type.kind) {
 	case IR_INT:
@@ -86,11 +87,11 @@ static void dump_instr(IrInstr *instr)
 	switch (instr->op) {
 	case OP_LOCAL:
 		fputs("local(", stdout);
-		dump_type(instr->val.type);
+		dump_ir_type(instr->val.type);
 		break;
 	case OP_LOAD:
 		fputs("load(", stdout);
-		dump_type(instr->val.load.type);
+		dump_ir_type(instr->val.load.type);
 		fputs(", ", stdout);
 		dump_value(instr->val.load.pointer);
 		break;
@@ -100,7 +101,7 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		dump_value(instr->val.store.value);
 		fputs(", ", stdout);
-		dump_type(instr->val.store.type);
+		dump_ir_type(instr->val.store.type);
 		break;
 	case OP_BRANCH:
 		printf("branch(%s, ", instr->val.branch.target_block->name);
@@ -123,12 +124,12 @@ void dump_trans_unit(TransUnit *tu)
 	for (u32 i = 0; i < functions->size; i++) {
 		IrFunction *f = ARRAY_REF(functions, IrFunction, i);
 
-		dump_type(ir_function_return_type(f));
+		dump_ir_type(ir_function_return_type(f));
 		printf(" %s(", f->name);
 		Arg *args = f->entry_block.args;
 		for (u32 i = 0; i < f->entry_block.arity; i++) {
 			IrType arg_type = args[i].type;
-			dump_type(arg_type);
+			dump_ir_type(arg_type);
 
 			if (i != f->entry_block.arity - 1)
 				fputs(", ", stdout);
@@ -173,11 +174,15 @@ static inline IrInstr *append_instr(Block *block)
 {
 	IrInstr *instr = ARRAY_APPEND(&block->instrs, IrInstr);
 	instr->id = block->instrs.size - 1;
+	instr->virtual_register = -1;
 	return instr;
 }
 
+// @TODO: Currently this is limited to blocks of arity 1.
 IrInstr *build_branch(Builder *builder, Block *block, Value value)
 {
+	assert(ir_type_eq(block->args[0].type, value.type));
+
 	IrInstr *instr = append_instr(builder->current_block);
 	instr->op = OP_BRANCH;
 	instr->val.branch.target_block = block;
@@ -222,6 +227,7 @@ Value build_local(Builder *builder, IrType type)
 Value build_load(Builder *builder, Value pointer, IrType type)
 {
 	IrInstr *instr = append_instr(builder->current_block);
+	instr->type = type;
 	instr->op = OP_LOAD;
 	instr->val.load.pointer = pointer;
 	instr->val.load.type = type;
@@ -274,6 +280,7 @@ Value value_arg(Arg *arg)
 {
 	Value value = {
 		.kind = VALUE_ARG,
+		.type = arg->type,
 		.val.arg = arg,
 	};
 

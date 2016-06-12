@@ -80,6 +80,7 @@ typedef struct IrInstr
 	u32 id;
 	IrType type;
 	IrOp op;
+	i32 virtual_register; // used by asm_gen
 
 	union
 	{
@@ -113,6 +114,8 @@ typedef struct Arg
 {
 	u32 index;
 	IrType type;
+
+	i32 virtual_register; // used by asm_gen
 } Arg;
 
 void trans_unit_init(TransUnit *tu);
@@ -123,6 +126,9 @@ static inline IrType ir_function_return_type(IrFunction *f)
 {
 	return f->ret_block.args[0].type;
 }
+
+bool ir_type_eq(IrType a, IrType b);
+void dump_ir_type(IrType type);
 
 void dump_trans_unit(TransUnit *tu);
 
