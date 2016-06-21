@@ -110,7 +110,6 @@ class CWriter(object):
             self.generate_parser(named_parser[1], named_parser[0])
 
         output = []
-
         output.append("""
 // @NOTE: This is an automatically generated file! Do not edit it!
 //        It was generated from '%s', edit that instead.

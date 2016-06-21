@@ -5,11 +5,32 @@
 
 #include "array.h"
 
+// @TODO: We need to unify registers that overlap like rax, eax, al, ah.
+#define PHYSICAL_REGISTERS \
+	X(INVALID_REGISTER), \
+	X(RAX), \
+	X(RBX), \
+	X(RCX), \
+	X(RDX), \
+	X(RDI), \
+	X(RSI), \
+	X(RBP), \
+	X(RSP), \
+	X(R8), \
+	X(R9), \
+	X(R10), \
+	X(R11), \
+	X(R12), \
+	X(R13), \
+	X(R14), \
+	X(R15),
+
+#define X(x) x
 typedef enum PhysicalRegister
 {
-	EAX,
-	RSP,
+	PHYSICAL_REGISTERS
 } PhysicalRegister;
+#undef X
 
 typedef struct Register
 {
@@ -28,12 +49,16 @@ typedef struct Register
 
 typedef struct AsmArg
 {
+	// @TODO: This is kinda messy considering that OFFSET_REGISTER doesn't make
+	// sense if this isn't set.
 	bool is_deref;
 
 	enum
 	{
 		REGISTER,
 		OFFSET_REGISTER,
+		CONST8,
+		CONST16,
 		CONST32,
 		CONST64,
 	} type;
@@ -46,8 +71,7 @@ typedef struct AsmArg
 			Register reg;
 			u64 offset;
 		} offset_register;
-		u32 const32;
-		u64 const64;
+		u64 constant;
 	} val;
 } AsmArg;
 
@@ -68,6 +92,7 @@ typedef enum AsmOp
 typedef struct AsmInstr
 {
 	AsmOp op;
+	u32 num_args;
 	AsmArg args[2];
 } AsmInstr;
 

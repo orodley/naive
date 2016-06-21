@@ -1,6 +1,8 @@
 NAME := ncc
 CC ?= clang
+
 PEG ?= meta/peg.py
+ENC ?= meta/enc.py
 
 COMMON_CFLAGS := $(CFLAGS) -c -std=c99 -Wall -Wextra -Wstrict-prototypes -Wformat -Isrc
 
@@ -17,6 +19,7 @@ DEBUG_CFLAGS := $(COMMON_CFLAGS) -Werror -g -Idebug/src
 RELEASE_CFLAGS := $(COMMON_CFLAGS) -O3 -Irelease/src
 
 GEN_FILES := $(patsubst src/%.peg, src/%.inc, $(shell find src -name '*.peg'))
+GEN_FILES += $(patsubst src/%.enc, src/%.inc, $(shell find src -name '*.enc'))
 DEBUG_GEN_FILES := $(addprefix debug/, $(GEN_FILES))
 RELEASE_GEN_FILES := $(addprefix release/, $(GEN_FILES))
 
@@ -48,6 +51,10 @@ debug/%.inc: %.peg $(PEG)
 	@echo '(DEBUG) PEG $<'
 	@mkdir -p `dirname $@` && $(PEG) $< $@
 
+debug/%.inc: %.enc $(ENC)
+	@echo '(DEBUG) ENC $<'
+	@mkdir -p `dirname $@` && $(ENC) $< $@
+
 .PHONY: release
 release: release/$(NAME)
 
@@ -62,6 +69,10 @@ release/%.o: %.c $(HEADERS) $(RELEASE_GEN_FILES)
 release/%.inc: %.peg $(PEG)
 	@echo '(RELEASE) PEG $<'
 	@mkdir -p `dirname $@` && $(PEG) $< $@
+
+release/%.inc: %.enc $(ENC)
+	@echo '(RELEASE) ENC $<'
+	@mkdir -p `dirname $@` && $(ENC) $< $@
 
 .PHONY: clean
 clean:

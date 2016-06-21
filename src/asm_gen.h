@@ -12,6 +12,7 @@ typedef struct StackSlot
 
 typedef struct VRegInfo
 {
+	PhysicalRegister assigned_register;
 	enum
 	{
 		INSTR,

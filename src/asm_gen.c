@@ -38,6 +38,8 @@ AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 {
 	AsmInstr *instr = ARRAY_APPEND(&builder->current_block->instrs, AsmInstr);
 	instr->op = op;
+	instr->num_args = 0;
+
 	return instr;
 }
 
@@ -45,8 +47,10 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 {
 	AsmInstr *instr = ARRAY_APPEND(&builder->current_block->instrs, AsmInstr);
 	instr->op = op;
+	instr->num_args = 2;
 	instr->args[0] = arg1;
 	instr->args[1] = arg2;
+
 	return instr;
 }
 
@@ -101,6 +105,8 @@ static void assign_vreg(AsmBuilder *builder, IrInstr *instr)
 {
 	u32 vreg_number = next_vreg(builder);
 	VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
+
+	vreg_info->assigned_register = INVALID_REGISTER;
 	vreg_info->source = INSTR;
 	vreg_info->val.defining_instr = instr;
 
@@ -131,7 +137,7 @@ static void asm_gen_instr(
 
 		emit_instr2(builder, ADD, asm_physical_register(RSP),
 				asm_const32(builder->local_stack_usage));
-		emit_instr2(builder, MOV, asm_physical_register(EAX), asm_value(arg));
+		emit_instr2(builder, MOV, asm_physical_register(RAX), asm_value(arg));
 		emit_instr0(builder, RET);
 
 		break;
@@ -189,6 +195,65 @@ static void asm_gen_instr(
 	}
 }
 
+#if 0
+// We deliberately exclude RBP from this list, as we don't support omitting the
+// frame pointer and so we never use it for register allocation.
+static PhysicalRegister callee_save_registers[] = {
+	RBX, R12, R13, R14, R15,
+};
+#endif
+
+static PhysicalRegister caller_save_registers[] = {
+	RAX, RCX, RDX, RDI, RSI, R8, R9, R10, R11,
+};
+
+static void allocate_registers(AsmBuilder *builder)
+{
+	u32 reg_to_assign_index = 0;
+	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
+		VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
+
+		if (vreg->assigned_register == INVALID_REGISTER) {
+			assert(reg_to_assign_index <
+					STATIC_ARRAY_LENGTH(caller_save_registers));
+			vreg->assigned_register = caller_save_registers[reg_to_assign_index];
+			reg_to_assign_index++;
+		}
+	}
+
+	Array(AsmInstr) *instrs = &builder->current_block->instrs;
+	for (u32 i = 0; i < instrs->size; i++) {
+		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
+
+		for (u32 j = 0; j < instr->num_args; j++) {
+			AsmArg *arg = &instr->args[j];
+
+			Register *reg;
+			if (arg->type == REGISTER) {
+				reg = &arg->val.reg;
+			} else if (arg->type == OFFSET_REGISTER) {
+				reg = &arg->val.offset_register.reg;
+			} else {
+				continue;
+			}
+
+			if (reg->type == VIRTUAL_REGISTER) {
+				u32 reg_num = reg->val.register_number;
+				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
+						VRegInfo, reg_num);
+				PhysicalRegister phys_reg = vreg->assigned_register;
+
+				reg->type = PHYSICAL_REGISTER;
+				reg->val.physical_register = phys_reg;
+			}
+		}
+	}
+}
+
+static PhysicalRegister argument_registers[] = {
+	RDI, RSI, RDX, RCX, R8, R9,
+};
+
 void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 {
 	append_block(builder);
@@ -201,6 +266,7 @@ void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 
 	Block *block = &ir_func->entry_block;
 	Arg *args = block->args;
+	assert(block->arity <= STATIC_ARRAY_LENGTH(argument_registers));
 	for (u32 i = 0; i < block->arity; i++) {
 		u32 vreg = next_vreg(builder);
 		args[i].virtual_register = vreg;;
@@ -209,6 +275,7 @@ void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 		vreg_info->source = ARG;
 		vreg_info->val.arg.block = block;
 		vreg_info->val.arg.arg_num = i;
+		vreg_info->assigned_register = argument_registers[i];
 	}
 
 	AsmInstr *reserve_stack = emit_instr2(builder, SUB,
@@ -220,6 +287,8 @@ void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 	}
 
 	reserve_stack->args[1] = asm_const32(builder->local_stack_usage);
+
+	allocate_registers(builder);
 }
 
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)

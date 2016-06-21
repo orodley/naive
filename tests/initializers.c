@@ -7,7 +7,7 @@ struct Foo
 	} bar;
 };
 
-int foo(int a, int b)
+int foo()
 {
 	struct Foo foos[5][5] = {
 		[3][2] = {
@@ -16,5 +16,5 @@ int foo(int a, int b)
 		},
 	};
 
-	return 23;
-};
+	return foos[3][2].bar.b[2][4];
+}
