@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // @PORT
 #include <sys/types.h>
@@ -30,6 +31,7 @@ int main(int argc, char *argv[])
 	bool dump_ast = false;
 	bool dump_ir = false;
 	bool dump_asm = false;
+	bool do_link = true;
 
 	for (i32 i = 1; i < argc; i++) {
 		char *arg = argv[i];
@@ -42,6 +44,8 @@ int main(int argc, char *argv[])
 				dump_ir = true;
 			} else if (streq(arg, "-fdump-asm")) {
 				dump_asm = true;
+			} else if (streq(arg, "-c")) {
+				do_link = false;
 			} else {
 				fprintf(stderr, "Error: Unknown command-line argument: %s\n", arg);
 				return 1;
@@ -108,31 +112,43 @@ int main(int argc, char *argv[])
 	}
 
 
-	FILE *output_file = fopen("a.out", "wb");
+	char *output_filename;
+	if (do_link) {
+		output_filename = "a.out";
+	} else {
+		u32 input_filename_length = strlen(input_filename);
+		output_filename = malloc(input_filename_length);
+		strcpy(output_filename, input_filename);
+		output_filename[input_filename_length - 1] = 'o';
+	}
+
+	FILE *output_file = fopen(output_filename, "wb");
 	if (output_file == NULL) {
 		perror("Unable to open output file");
 		return 4;
 	}
-	write_elf_file(output_file, &asm_builder.asm_module);
+	write_elf_file(output_file, &asm_builder.asm_module, do_link);
 
 	free_asm_builder(&asm_builder);
 
-	// @PORT
-	int fd = fileno(output_file);
-	assert(fd != -1);
+	if (do_link) {
+		// @PORT
+		int fd = fileno(output_file);
+		assert(fd != -1);
 
-	struct stat status;
-	if (fstat(fd, &status) == -1) {
-		perror("Unable to stat output file");
-		fclose(output_file);
-		return 5;
-	}
+		struct stat status;
+		if (fstat(fd, &status) == -1) {
+			perror("Unable to stat output file");
+			fclose(output_file);
+			return 5;
+		}
 
-	mode_t new_mode = (status.st_mode & 07777) | S_IXUSR;
-	if (fchmod(fd, new_mode) == -1) {
-		perror("Unable to change output file to executable");
-		fclose(output_file);
-		return 6;
+		mode_t new_mode = (status.st_mode & 07777) | S_IXUSR;
+		if (fchmod(fd, new_mode) == -1) {
+			perror("Unable to change output file to executable");
+			fclose(output_file);
+			return 6;
+		}
 	}
 
 	fclose(output_file);

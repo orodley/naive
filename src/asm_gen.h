@@ -23,7 +23,7 @@ typedef struct VRegInfo
 	{
 		struct
 		{
-			Block *block;
+			IrBlock *block;
 			u32 arg_num;
 		} arg;
 		IrInstr *defining_instr;
@@ -33,7 +33,7 @@ typedef struct VRegInfo
 typedef struct AsmBuilder
 {
 	AsmModule asm_module;
-	AsmBlock *current_block;
+	AsmFunction *current_function;
 
 	Array(StackSlot) stack_slots;
 	Array(VRegInfo) virtual_registers;

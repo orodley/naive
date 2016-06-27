@@ -96,17 +96,26 @@ typedef struct AsmInstr
 	AsmArg args[2];
 } AsmInstr;
 
-typedef struct AsmBlock
+typedef struct AsmFunction
 {
 	Array(AsmInstr) instrs;
-} AsmBlock;
+	char *name;
+} AsmFunction;
 
 typedef struct AsmModule
 {
-	Array(AsmBlock) blocks;
+	Array(AsmFunction) functions;
 } AsmModule;
 
-void init_asm_block(AsmBlock *block);
+typedef struct AsmSymbol
+{
+	char *name;
+	u32 string_table_offset_for_name;
+	u32 offset;
+	u32 size;
+} AsmSymbol;
+
+void init_asm_function(AsmFunction *func, char *name);
 
 AsmArg asm_virtual_register(u32 n);
 AsmArg asm_physical_register(PhysicalRegister reg);
@@ -116,6 +125,7 @@ AsmArg asm_deref(AsmArg asm_arg);
 
 void dump_asm_module(AsmModule *asm_module);
 
-u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address);
+void assemble(AsmModule *asm_module, FILE *output_file,
+		Array(AsmSymbol) *symbols, u64 base_virtual_address);
 
 #endif

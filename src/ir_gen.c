@@ -247,7 +247,7 @@ static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *state
 	}
 	case RETURN_STATEMENT: {
 		Value value = ir_gen_expression(builder, scope, statement->val.expr);
-		Block *ret_block = &builder->function->ret_block;
+		IrBlock *ret_block = &builder->function->ret_block;
 		build_branch(builder, ret_block, value);
 		break;
 	}

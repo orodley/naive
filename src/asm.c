@@ -7,9 +7,10 @@
 #include "asm.h"
 #include "asm_gen.h"
 
-void init_asm_block(AsmBlock *block)
+void init_asm_function(AsmFunction *function, char *name)
 {
-	ARRAY_INIT(&block->instrs, AsmInstr, 20);
+	ARRAY_INIT(&function->instrs, AsmInstr, 20);
+	function->name = name;
 }
 
 AsmArg asm_virtual_register(u32 n)
@@ -181,8 +182,8 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 
 void dump_asm_module(AsmModule *asm_module)
 {
-	for (u32 i = 0; i < asm_module->blocks.size; i++) {
-		AsmBlock *block = ARRAY_REF(&asm_module->blocks, AsmBlock, i);
+	for (u32 i = 0; i < asm_module->functions.size; i++) {
+		AsmFunction *block = ARRAY_REF(&asm_module->functions, AsmFunction, i);
 
 		for (u32 j = 0; j < block->instrs.size; j++) {
 			AsmInstr *instr = ARRAY_REF(&block->instrs, AsmInstr, j);
@@ -428,21 +429,25 @@ static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
 // This is generated from "x64.enc", and defines the function "assemble_instr".
 #include "x64.inc"
 
-u64 assemble(AsmModule *asm_module, FILE *output_file, u64 base_virtual_address)
+void assemble(AsmModule *asm_module, FILE *output_file,
+		Array(AsmSymbol) *symbols, u64 base_virtual_address)
 {
-	u64 current_address = base_virtual_address;
-	u64 main_virtual_addr = 0;
+	u64 current_offset = base_virtual_address;
 
-	for (u32 i = 0; i < asm_module->blocks.size; i++) {
-		AsmBlock *block = ARRAY_REF(&asm_module->blocks, AsmBlock, i);
+	for (u32 i = 0; i < asm_module->functions.size; i++) {
+		AsmFunction *function = ARRAY_REF(&asm_module->functions, AsmFunction, i);
 
-		for (u32 j = 0; j < block->instrs.size; j++) {
-			AsmInstr *instr = ARRAY_REF(&block->instrs, AsmInstr, j);
-			current_address += assemble_instr(output_file, instr);
+		u32 function_offset = current_offset;
+		for (u32 j = 0; j < function->instrs.size; j++) {
+			AsmInstr *instr = ARRAY_REF(&function->instrs, AsmInstr, j);
+			current_offset += assemble_instr(output_file, instr);
 		}
+		u32 function_size = current_offset - function_offset;
+
+		AsmSymbol *symbol = ARRAY_APPEND(symbols, AsmSymbol);
+		symbol->name = function->name;
+		// Offset is relative to the start of the section.
+		symbol->offset = function_offset - base_virtual_address;
+		symbol->size = function_size;
 	}
-
-	assert(main_virtual_addr != 0);
-
-	return main_virtual_addr;
 }

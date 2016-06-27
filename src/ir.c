@@ -12,7 +12,7 @@ void trans_unit_init(TransUnit *tu)
 	ARRAY_INIT(&tu->functions, IrFunction, 10);
 }
 
-static inline void block_init(Block *block, char *name,
+static inline void block_init(IrBlock *block, char *name,
 		u32 arity, IrType *arg_types)
 {
 	block->name = name;
@@ -137,7 +137,7 @@ void dump_trans_unit(TransUnit *tu)
 
 		puts(")\n{");
 
-		Block *block = &f->entry_block;
+		IrBlock *block = &f->entry_block;
 		for (;;) {
 			printf("%s(%d):\n", block->name, block->arity);
 
@@ -170,7 +170,7 @@ void builder_init(Builder *builder)
 	builder->function = NULL;
 }
 
-static inline IrInstr *append_instr(Block *block)
+static inline IrInstr *append_instr(IrBlock *block)
 {
 	IrInstr *instr = ARRAY_APPEND(&block->instrs, IrInstr);
 	instr->id = block->instrs.size - 1;
@@ -179,7 +179,7 @@ static inline IrInstr *append_instr(Block *block)
 }
 
 // @TODO: Currently this is limited to blocks of arity 1.
-IrInstr *build_branch(Builder *builder, Block *block, Value value)
+IrInstr *build_branch(Builder *builder, IrBlock *block, Value value)
 {
 	assert(ir_type_eq(block->args[0].type, value.type));
 

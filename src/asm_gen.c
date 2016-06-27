@@ -6,7 +6,7 @@
 
 void init_asm_builder(AsmBuilder *builder)
 {
-	ARRAY_INIT(&builder->asm_module.blocks, AsmBlock, 10);
+	ARRAY_INIT(&builder->asm_module.functions, AsmFunction, 10);
 	builder->local_stack_usage = 0;
 	builder->stack_slots = ARRAY_ZEROED;
 	builder->virtual_registers = ARRAY_ZEROED;
@@ -14,19 +14,19 @@ void init_asm_builder(AsmBuilder *builder)
 
 void free_asm_builder(AsmBuilder *builder)
 {
-	for (u32 i = 0; i < builder->asm_module.blocks.size; i++)
-		array_free(ARRAY_REF(&builder->asm_module.blocks, Array(AsmBlock), i));
+	for (u32 i = 0; i < builder->asm_module.functions.size; i++)
+		array_free(ARRAY_REF(&builder->asm_module.functions, Array(AsmFunction), i));
 
-	array_free(&builder->asm_module.blocks);
+	array_free(&builder->asm_module.functions);
 	if (ARRAY_IS_VALID(&builder->stack_slots))
 		array_free(&builder->stack_slots);
 }
 
-void append_block(AsmBuilder *builder)
+static void append_function(AsmBuilder *builder, char *name)
 {
-	AsmBlock *new_block = ARRAY_APPEND(&builder->asm_module.blocks, AsmBlock);
-	init_asm_block(new_block);
-	builder->current_block = new_block;
+	AsmFunction *new_function = ARRAY_APPEND(&builder->asm_module.functions, AsmFunction);
+	init_asm_function(new_function, name);
+	builder->current_function = new_function;
 
 	builder->local_stack_usage = 0;
 	if (ARRAY_IS_VALID(&builder->stack_slots))
@@ -36,7 +36,7 @@ void append_block(AsmBuilder *builder)
 
 AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 {
-	AsmInstr *instr = ARRAY_APPEND(&builder->current_block->instrs, AsmInstr);
+	AsmInstr *instr = ARRAY_APPEND(&builder->current_function->instrs, AsmInstr);
 	instr->op = op;
 	instr->num_args = 0;
 
@@ -45,7 +45,7 @@ AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 
 AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 {
-	AsmInstr *instr = ARRAY_APPEND(&builder->current_block->instrs, AsmInstr);
+	AsmInstr *instr = ARRAY_APPEND(&builder->current_function->instrs, AsmInstr);
 	instr->op = op;
 	instr->num_args = 2;
 	instr->args[0] = arg1;
@@ -129,7 +129,7 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_BRANCH: {
-		Block *target_block = instr->val.branch.target_block;
+		IrBlock *target_block = instr->val.branch.target_block;
 		assert(target_block == &ir_func->ret_block);
 
 		Value arg = instr->val.branch.argument;
@@ -221,7 +221,7 @@ static void allocate_registers(AsmBuilder *builder)
 		}
 	}
 
-	Array(AsmInstr) *instrs = &builder->current_block->instrs;
+	Array(AsmInstr) *instrs = &builder->current_function->instrs;
 	for (u32 i = 0; i < instrs->size; i++) {
 		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
 
@@ -256,7 +256,7 @@ static PhysicalRegister argument_registers[] = {
 
 void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 {
-	append_block(builder);
+	append_function(builder, ir_func->name);
 
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
@@ -264,7 +264,7 @@ void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 	IrType return_type = ir_function_return_type(ir_func);
 	assert(return_type.kind == IR_INT && return_type.val.bit_width == 32);
 
-	Block *block = &ir_func->entry_block;
+	IrBlock *block = &ir_func->entry_block;
 	Arg *args = block->args;
 	assert(block->arity <= STATIC_ARRAY_LENGTH(argument_registers));
 	for (u32 i = 0; i < block->arity; i++) {

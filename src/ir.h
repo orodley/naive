@@ -10,27 +10,27 @@ typedef struct TransUnit
 	Array(IrFunction) functions;
 } TransUnit;
 
-typedef struct Block
+typedef struct IrBlock
 {
 	char *name;
 
 	u32 arity;
 	struct Arg *args;
 	Array(IrInstr) instrs;
-} Block;
+} IrBlock;
 
 typedef struct IrFunction
 {
 	char *name;
 
-	Block entry_block;
-	Block ret_block;
+	IrBlock entry_block;
+	IrBlock ret_block;
 } IrFunction;
 
 typedef struct Builder
 {
 	IrFunction *function;
-	Block *current_block;
+	IrBlock *current_block;
 } Builder;
 
 
@@ -87,7 +87,7 @@ typedef struct IrInstr
 		u64 constant;
 		struct
 		{
-			Block *target_block;
+			IrBlock *target_block;
 			Value argument;
 		} branch;
 		struct
@@ -133,7 +133,7 @@ void dump_ir_type(IrType type);
 void dump_trans_unit(TransUnit *tu);
 
 void builder_init(Builder *builder);
-IrInstr *build_branch(Builder *builder, Block *block, Value value);
+IrInstr *build_branch(Builder *builder, IrBlock *block, Value value);
 
 Value value_const(IrType type, u64 constant);
 Value value_arg(Arg *arg);

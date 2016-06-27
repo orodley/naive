@@ -5,6 +5,6 @@
 
 #include "asm.h"
 
-void write_elf_file(FILE *output_file, AsmModule *asm_module);
+void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link);
 
 #endif
