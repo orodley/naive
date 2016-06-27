@@ -264,32 +264,48 @@ static inline u32 write_mod_rm_byte(FILE *file, u8 mod, u8 reg, u8 rm)
 static u32 write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 {
 	if (arg->type == REGISTER) {
-		switch (get_register(arg)) {
-		case RAX: return write_mod_rm_byte(file, 0, reg_field, 0);
-		case RCX: return write_mod_rm_byte(file, 0, reg_field, 1);
-		case RDX: return write_mod_rm_byte(file, 0, reg_field, 2);
-		case RBX: return write_mod_rm_byte(file, 0, reg_field, 3);
-		case RSI: return write_mod_rm_byte(file, 0, reg_field, 6);
-		case RDI: return write_mod_rm_byte(file, 0, reg_field, 7);
-		case RSP: {
-			// Mod = 0, R/M = 4 means SIB addressing
-			u32 size = write_mod_rm_byte(file, 0, reg_field, 4);
-			// SIB byte, with RSP as base and no index/scale
-			size += write_u8(file, 0x24);
+		if (arg->is_deref) {
+			switch (get_register(arg)) {
+			case RAX: return write_mod_rm_byte(file, 0, reg_field, 0);
+			case RCX: return write_mod_rm_byte(file, 0, reg_field, 1);
+			case RDX: return write_mod_rm_byte(file, 0, reg_field, 2);
+			case RBX: return write_mod_rm_byte(file, 0, reg_field, 3);
+			case RSI: return write_mod_rm_byte(file, 0, reg_field, 6);
+			case RDI: return write_mod_rm_byte(file, 0, reg_field, 7);
+			case RSP: {
+				// Mod = 0, R/M = 4 means SIB addressing
+				u32 size = write_mod_rm_byte(file, 0, reg_field, 4);
+				// SIB byte, with RSP as base and no index/scale
+				size += write_u8(file, 0x24);
 
-			return size;
-		}
-		case RBP: {
-			// Mod = 1, R/M = 5 means RBP + disp8
-			u32 size = write_mod_rm_byte(file, 1, reg_field, 5);
-			// 0 displacement
-			size += write_u8(file, 0);
+				return size;
+			}
+			case RBP: {
+				// Mod = 1, R/M = 5 means RBP + disp8
+				u32 size = write_mod_rm_byte(file, 1, reg_field, 5);
+				// 0 displacement
+				size += write_u8(file, 0);
 
-			return size;
-		}
-		default: UNIMPLEMENTED;
+				return size;
+			}
+			default: UNIMPLEMENTED;
+			}
+		} else {
+			switch (get_register(arg)) {
+			case RAX: return write_mod_rm_byte(file, 3, reg_field, 0);
+			case RCX: return write_mod_rm_byte(file, 3, reg_field, 1);
+			case RDX: return write_mod_rm_byte(file, 3, reg_field, 2);
+			case RBX: return write_mod_rm_byte(file, 3, reg_field, 3);
+			case RSP: return write_mod_rm_byte(file, 3, reg_field, 4);
+			case RBP: return write_mod_rm_byte(file, 3, reg_field, 5);
+			case RSI: return write_mod_rm_byte(file, 3, reg_field, 6);
+			case RDI: return write_mod_rm_byte(file, 3, reg_field, 7);
+			default: UNIMPLEMENTED;
+			}
 		}
 	} else if (arg->type == OFFSET_REGISTER) {
+		assert(arg->is_deref);
+
 		u64 offset = arg->val.offset_register.offset;
 		u8 mod;
 		// @TODO: Negative numbers
