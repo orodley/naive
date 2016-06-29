@@ -1,0 +1,26 @@
+#!/bin/sh
+
+temp_asm=`mktemp`
+temp_bin=`mktemp`
+
+cat <<EOF > "$temp_asm"
+bits 64
+
+global foo
+section .text
+
+foo:
+EOF
+
+echo "$@" >> "$temp_asm"
+
+if nasm "$temp_asm" -o "$temp_bin"; then
+	hexdump "$temp_bin" -e '/1 "%02X "'
+	echo
+
+	rm "$temp_asm" "$temp_bin"
+	exit 0
+else
+	rm -f "$temp_asm" "$temp_bin"
+	exit 1
+fi
