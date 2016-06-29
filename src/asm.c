@@ -108,6 +108,10 @@ static void dump_asm_instr(AsmInstr *instr)
 		putchar(' ');
 		dump_asm_args(instr->args, 2);
 		break;
+	case PUSH: case POP:
+		putchar(' ');
+		dump_asm_args(instr->args, 1);
+		break;
 	case RET: break;
 	}
 
@@ -352,7 +356,7 @@ typedef enum ArgOrder { INVALID, RM, MR } ArgOrder;
 // Called into by the generated function "assemble_instr".
 static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
 		i32 rex_prefix, u8 opcode_num, bool reg_and_rm, i32 opcode_extension,
-		i32 immediate_size)
+		i32 immediate_size,  bool reg_in_opcode)
 {
 #if 0
 	puts("Encoding instr:");
@@ -363,6 +367,27 @@ static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
 
 	if (rex_prefix != -1)
 		size += write_u8(file, (u8)rex_prefix);
+
+	if (reg_in_opcode) {
+		assert(instr->num_args == 1);
+		u8 reg;
+		// @TODO: We do this like fifty times. Pull it out somewhere.
+		switch (get_register(instr->args)) {
+		case RAX: reg = 0; break;
+		case RCX: reg = 1; break;
+		case RDX: reg = 2; break;
+		case RBX: reg = 3; break;
+		case RSP: reg = 4; break;
+		case RBP: reg = 5; break;
+		case RSI: reg = 6; break;
+		case RDI: reg = 7; break;
+		default: UNIMPLEMENTED;
+		}
+
+		size += write_u8(file, opcode_num | reg);
+		return size;
+	}
+
 	size += write_u8(file, opcode_num);
 
 	if (reg_and_rm) {

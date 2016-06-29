@@ -80,7 +80,9 @@ typedef struct AsmArg
 	X(RET), \
 	X(XOR), \
 	X(ADD), \
-	X(SUB),
+	X(SUB), \
+	X(PUSH), \
+	X(POP)
 
 #define X(x) x
 typedef enum AsmOp

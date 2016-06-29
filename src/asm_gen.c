@@ -43,6 +43,16 @@ AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 	return instr;
 }
 
+AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmArg arg1)
+{
+	AsmInstr *instr = ARRAY_APPEND(&builder->current_function->instrs, AsmInstr);
+	instr->op = op;
+	instr->num_args = 1;
+	instr->args[0] = arg1;
+
+	return instr;
+}
+
 AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 {
 	AsmInstr *instr = ARRAY_APPEND(&builder->current_function->instrs, AsmInstr);
@@ -138,6 +148,7 @@ static void asm_gen_instr(
 		emit_instr2(builder, ADD, asm_physical_register(RSP),
 				asm_const32(builder->local_stack_usage));
 		emit_instr2(builder, MOV, asm_physical_register(RAX), asm_value(arg));
+		emit_instr1(builder, POP, asm_physical_register(RBP));
 		emit_instr0(builder, RET);
 
 		break;
@@ -278,6 +289,8 @@ void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 		vreg_info->assigned_register = argument_registers[i];
 	}
 
+	emit_instr1(builder, PUSH, asm_physical_register(RBP));
+	emit_instr2(builder, MOV, asm_physical_register(RBP), asm_physical_register(RSP));
 	AsmInstr *reserve_stack = emit_instr2(builder, SUB,
 			asm_physical_register(RSP), asm_const32(0));
 

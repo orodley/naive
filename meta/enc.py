@@ -14,13 +14,16 @@ pp = pprint.PrettyPrinter(indent=4)
 Instr = namedtuple('Instr', ['opcode', 'encodings'])
 Encoding = namedtuple('Encoding',
         ['args', 'arg_order', 'rex_prefix', 'opcode_num', 'reg_and_rm', 'opcode_extension',
-         'immediate_size'])
+         'immediate_size', 'reg_in_opcode'])
 
 def generate_encoder(input_filename, output_filename):
     instrs = {}
 
     with open(input_filename, 'r') as f:
         for line in f.readlines():
+            if line == '\n':
+                continue
+
             instr, encoding = line.rstrip('\n').split('=')
 
             instr_components = instr.replace(',', ' ').split()
@@ -36,13 +39,17 @@ def generate_encoder(input_filename, output_filename):
                 arg_order = 'INVALID'
 
             match = re.match(
-                    r' *(?:REX\.([WRXB]+) *\+ *)?([0-9a-fA-F]+) *(/.)? *(ib)?',
+                    r' *(?:REX\.(?P<prefix>[WRXB]+) *\+ *)?' +
+                    r'(?P<opcode>[0-9a-fA-F]+) *' +
+                    r'(?P<slash>/.)? *' +
+                    r'(?P<immediate>ib)? *' +
+                    r'(?P<reg_in_opcode>\+rd)? *',
                     encoding)
-            groups = match.groups()
+
             rex_prefix = -1
-            if groups[0]:
+            if match.group('prefix'):
                 rex_prefix = 0b01000000
-                for c in groups[0]:
+                for c in match.group('prefix'):
                     rex_prefix |= {
                         'W': 1 << 3,
                         'R': 1 << 2,
@@ -50,9 +57,9 @@ def generate_encoder(input_filename, output_filename):
                         'B': 1 << 0
                     }[c]
 
-            opcode_num = int(groups[1], 16)
+            opcode_num = int(match.group('opcode'), 16)
 
-            slash = groups[2]
+            slash = match.group('slash')
             if slash:
                 slash = slash[1]
 
@@ -63,13 +70,15 @@ def generate_encoder(input_filename, output_filename):
 
             reg_and_rm = slash == 'r'
 
-            if groups[3]:
+            if match.group('immediate'):
                 immediate_size = 8
             else:
                 immediate_size = -1
 
+            reg_in_opcode = bool(match.group('reg_in_opcode'))
+
             encoding = Encoding(args, arg_order, rex_prefix, opcode_num,
-                    reg_and_rm, opcode_extension, immediate_size)
+                    reg_and_rm, opcode_extension, immediate_size, reg_in_opcode)
             
             # @TODO: We should sort encodings by immediate size (ascending) so
             # that the smallest encoding gets selected automatically.
@@ -103,7 +112,8 @@ static u32 assemble_instr(FILE *output_file, AsmInstr *instr)
                         ', '.join(map(to_c_val,
                             [encoding.arg_order, encoding.rex_prefix,
                             encoding.opcode_num, encoding.reg_and_rm,
-                            encoding.opcode_extension, encoding.immediate_size]))))
+                            encoding.opcode_extension, encoding.immediate_size,
+                            encoding.reg_in_opcode]))))
 
         output.append("\t\tbreak;\n")
 
