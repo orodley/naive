@@ -108,6 +108,7 @@ static u32 assemble_instr(FILE *output_file, AsmInstr *instr)
         output.append("\t\tbreak;\n")
 
     output.append("""
+\tdefault: break;
 \t}
 \t
 \tfputs("Unimplemented instruction:\\n", stderr);
