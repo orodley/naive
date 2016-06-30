@@ -663,7 +663,7 @@ static void dump_expr(ASTExpr *expr)
 		dump_expr(expr->val.struct_field.struct_value);
 		pretty_printf(",%s", expr->val.struct_field.field_name);
 		break;
-	case INDEX_EXPR: case POST_INCREMENT_EXPR: case POST_DECREMENT_EXPR:
+	case POST_INCREMENT_EXPR: case POST_DECREMENT_EXPR:
 	case PRE_INCREMENT_EXPR: case PRE_DECREMENT_EXPR: case ADDRESS_OF_EXPR:
 	case DEREF_EXPR: case UNARY_PLUS_EXPR: case UNARY_MINUS_EXPR:
 	case BIT_NOT_EXPR: case LOGICAL_NOT_EXPR: case SIZEOF_EXPR_EXPR:
@@ -683,8 +683,8 @@ static void dump_expr(ASTExpr *expr)
 	case SIZEOF_TYPE_EXPR:
 		dump_type_name(expr->val.type);
 		break;
-	case MULTIPLY_EXPR: case DIVIDE_EXPR: case MODULO_EXPR: case ADD_EXPR:
-	case MINUS_EXPR: case LEFT_SHIFT_EXPR: case RIGHT_SHIFT_EXPR:
+	case INDEX_EXPR: case MULTIPLY_EXPR: case DIVIDE_EXPR: case MODULO_EXPR:
+	case ADD_EXPR: case MINUS_EXPR: case LEFT_SHIFT_EXPR: case RIGHT_SHIFT_EXPR:
 	case LESS_THAN_EXPR: case GREATER_THAN_EXPR: case LESS_THAN_OR_EQUAL_EXPR:
 	case GREATER_THAN_OR_EQUAL_EXPR: case EQUAL_EXPR: case NOT_EQUAL_EXPR:
 	case BIT_AND_EXPR: case BIT_XOR_EXPR: case BIT_OR_EXPR: case LOGICAL_AND_EXPR:
