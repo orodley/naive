@@ -185,7 +185,7 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 	case 2:
 		next->type = STRUCT_DOT_FIELD_EXPR;
 		next->val.struct_field.struct_value = curr;
-		next->val.struct_field.field_name = which->result;
+		next->val.struct_field.field_name = ((Token *)which->result)->val.symbol;
 		return next;
 	case 3:
 		next->type = STRUCT_ARROW_FIELD_EXPR;
