@@ -59,7 +59,7 @@ build_type_specifier_decl_specifier =
 build_named_type =
 	build(ASTTypeSpecifier, 1,
 		type, NAMED_TYPE_SPECIFIER,
-		val.name, "((Token *)#0)->val.symbol_or_string_literal")
+		val.name, "((Token *)#0)->val.symbol")
 
 struct_or_union_specifier =
 	or(seq(build_struct_or_union, struct_or_union, opt(TOK_SYMBOL),
@@ -102,7 +102,7 @@ enum_specifier =
 build_enum =
 	build(ASTTypeSpecifier, 6,
 		type, ENUM_TYPE_SPECIFIER,
-		val.enum_specifier.name, "((Token *)#1)->val.symbol_or_string_literal",
+		val.enum_specifier.name, "((Token *)#1)->val.symbol",
 		val.enum_specifier.enumerator_list, #3)
 
 enumerator_list = list(ASTEnumerator, enumerator, TOK_COMMA)
@@ -112,7 +112,7 @@ enumerator =
 
 build_enumerator =
 	build(ASTEnumerator, 2,
-		name, "((Token *)#0)->val.symbol_or_string_literal",
+		name, "((Token *)#0)->val.symbol",
 		value, #1)
 
 build_enum_tagged_named_type =
@@ -162,7 +162,7 @@ direct_declarator =
 build_ident_declarator =
 	build(ASTDirectDeclarator, 1,
 		type, IDENTIFIER_DECLARATOR,
-		val.name, "((Token *)#0)->val.symbol_or_string_literal")
+		val.name, "((Token *)#0)->val.symbol")
 
 build_declarator =
 	build(ASTDirectDeclarator, 3,
@@ -230,7 +230,7 @@ build_index_designator =
 build_field_designator =
 	build(ASTDesignator, 2,
 		type, FIELD_DESIGNATOR,
-		val.field_name, "((Token *)#1)->val.symbol_or_string_literal")
+		val.field_name, "((Token *)#1)->val.symbol")
 
 
 statement =
@@ -256,7 +256,7 @@ build_case_statement =
 build_labeled_statement =
 	build(ASTStatement, 3,
 		type, LABELED_STATEMENT,
-		val.labeled_statement.label_name, "((Token *)#0)->val.symbol_or_string_literal",
+		val.labeled_statement.label_name, "((Token *)#0)->val.symbol",
 		val.labeled_statement.statement, #2)
 
 compound_statement =
@@ -342,7 +342,7 @@ jump_statement =
 build_goto_statement =
 	build(ASTStatement, 2,
 		type, GOTO_STATEMENT,
-		val.goto_label, "((Token *)#1)->val.symbol_or_string_literal")
+		val.goto_label, "((Token *)#1)->val.symbol")
 
 build_continue_statement = build(ASTStatement, 2, type, CONTINUE_STATEMENT)
 
@@ -383,7 +383,7 @@ identifier = seq(build_identifier, TOK_SYMBOL)
 build_identifier =
 	build(ASTExpr, 1,
 		type, IDENTIFIER_EXPR,
-		val.identifier, "((Token *)#0)->val.symbol_or_string_literal")
+		val.identifier, "((Token *)#0)->val.symbol")
 
 argument_expr_list = list(ASTArgument, seq(build_argument, assignment_expr), TOK_COMMA)
 

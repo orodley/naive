@@ -453,7 +453,7 @@ static void tokenise_aux(Reader *reader)
 			u32 length = ((reader->position - 1) - start_index);
 
 			Token *token = append_token(reader, start_source_loc, TOK_STRING_LITERAL);
-			token->val.symbol_or_string_literal = strndup(
+			token->val.string_literal = strndup(
 					reader->buffer.buffer + start_index, length);
 
 			break;
@@ -676,7 +676,7 @@ static void tokenise_aux(Reader *reader)
 
 			if (macro == NULL) {
 				Token *token = append_token(reader, start_source_loc, TOK_SYMBOL);
-				token->val.symbol_or_string_literal = symbol;
+				token->val.symbol = symbol;
 			} else {
 				tokenise_string(reader, macro->value);
 			}
@@ -828,10 +828,10 @@ void dump_token(Token *token)
 		break;
 	case TOK_STRING_LITERAL:
 		// @TODO: Escape the resulting string
-		printf("(\"%s\")", token->val.symbol_or_string_literal);
+		printf("(\"%s\")", token->val.string_literal);
 		break;
 	case TOK_SYMBOL:
-		printf("(%s)", token->val.symbol_or_string_literal);
+		printf("(%s)", token->val.symbol);
 		break;
 	default:
 		break;

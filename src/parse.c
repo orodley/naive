@@ -158,7 +158,7 @@ static ASTExpr *build_constant(Parser *parser, Token *token)
 		break;
 	case TOK_STRING_LITERAL:
 		expr->type = STRING_LITERAL_EXPR;
-		expr->val.string_literal = token->val.symbol_or_string_literal;
+		expr->val.string_literal = token->val.string_literal;
 		break;
 	default:
 		UNREACHABLE;
@@ -416,7 +416,7 @@ static ParserResult named_type(Parser *parser)
 		return failure;
 	}
 
-	char *name = token->val.symbol_or_string_literal;
+	char *name = token->val.symbol;
 	TypeTableEntry entry;
 	if (!type_table_look_up_name(&parser->defined_types, name, &entry)) {
 		back_up(parser);
@@ -433,7 +433,7 @@ ASTTypeSpecifier *build_struct_or_union_tagged_named_type(
 	tagged_type->type = keyword->which == 0 ?
 		STRUCT_TYPE_SPECIFIER :
 		UNION_TYPE_SPECIFIER;
-	tagged_type->val.struct_or_union_specifier.name = name->val.symbol_or_string_literal;
+	tagged_type->val.struct_or_union_specifier.name = name->val.symbol;
 	tagged_type->val.struct_or_union_specifier.field_list = NULL;
 
 	return tagged_type;
@@ -452,8 +452,7 @@ ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
 	if (opt_name == NULL) {
 		result->val.struct_or_union_specifier.name = NULL;
 	} else {
-		result->val.struct_or_union_specifier.name =
-			opt_name->val.symbol_or_string_literal;
+		result->val.struct_or_union_specifier.name = opt_name->val.symbol;
 	}
 	result->val.struct_or_union_specifier.field_list = field_list;
 

@@ -179,7 +179,7 @@ return success(result);""" % parser, name)
             return self.emit_function(
 """
 Token *token = read_token(parser);
-if (token->type == TOK_SYMBOL && streq(token->val.symbol_or_string_literal, "%s")) {
+if (token->type == TOK_SYMBOL && streq(token->val.symbol, "%s")) {
 \treturn success((void *)1);
 } else {
 \tback_up(parser);

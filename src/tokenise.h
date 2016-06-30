@@ -90,7 +90,8 @@ typedef struct Token
 	{
 		u64 int_literal;
 		double float_literal;
-		char *symbol_or_string_literal;
+		char *symbol;
+		char *string_literal;
 	} val;
 } Token;
 
