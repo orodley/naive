@@ -99,7 +99,7 @@ typedef struct ASTExpr
 		struct
 		{
 			struct ASTExpr *callee;
-			struct ASTArgument *args;
+			struct ASTArgument *arg_list;
 		} function_call;
 		struct
 		{
@@ -170,7 +170,7 @@ typedef struct ASTStatement
 			ASTExpr *expr;
 			struct ASTStatement *statement;
 		} expr_and_statement;
-		struct ASTBlockItem *block_items;
+		struct ASTBlockItem *block_item_list;
 		struct
 		{
 			ASTExpr *condition;
@@ -238,7 +238,7 @@ typedef struct ASTInitializerElement
 {
 	struct ASTInitializerElement *next;
 
-	ASTDesignator *designators;
+	ASTDesignator *designator_list;
 	struct ASTInitializer *initializer;
 } ASTInitializerElement;
 
@@ -253,7 +253,7 @@ typedef struct ASTInitializer
 	union
 	{
 		ASTExpr *expr;
-		ASTInitializerElement *initializer_elements;
+		ASTInitializerElement *initializer_element_list;
 	} val;
 } ASTInitializer;
 
@@ -269,13 +269,13 @@ typedef struct ASTDecl
 {
 	struct ASTDecl *next;
 
-	struct ASTDeclSpecifier *decl_specifiers;
+	struct ASTDeclSpecifier *decl_specifier_list;
 	ASTInitDeclarator *init_declarators;
 } ASTDecl;
 
 typedef struct ASTTypeName
 {
-	struct ASTDeclSpecifier *decl_specifiers;
+	struct ASTDeclSpecifier *decl_specifier_list;
 	struct ASTDeclarator *declarator;
 } ASTTypeName;
 
@@ -283,7 +283,7 @@ typedef struct ASTParameterDecl
 {
 	struct ASTParameterDecl *next;
 
-	struct ASTDeclSpecifier *decl_specifiers;
+	struct ASTDeclSpecifier *decl_specifier_list;
 	struct ASTDeclarator *declarator;
 } ASTParameterDecl;
 
@@ -326,7 +326,7 @@ typedef struct ASTDeclarator
 	{
 		struct
 		{
-			struct ASTDeclSpecifier *decl_specifiers;
+			struct ASTDeclSpecifier *decl_specifier_list;
 			struct ASTDeclarator *pointee;
 		} pointer_declarator;
 		ASTDirectDeclarator *direct_declarator;
@@ -386,8 +386,8 @@ typedef struct ASTFieldDecl
 {
 	struct ASTFieldDecl *next;
 
-	struct ASTDeclSpecifier *decl_specifiers;
-	ASTFieldDeclarator *field_declarators;
+	struct ASTDeclSpecifier *decl_specifier_list;
+	ASTFieldDeclarator *field_declarator_list;
 } ASTFieldDecl;
 
 typedef struct ASTTypeSpecifier
@@ -406,12 +406,12 @@ typedef struct ASTTypeSpecifier
 		struct
 		{
 			char *name;
-			ASTFieldDecl *fields;
+			ASTFieldDecl *field_list;
 		} struct_or_union_specifier;
 		struct
 		{
 			char *name;
-			ASTEnumerator *enumerators;
+			ASTEnumerator *enumerator_list;
 		} enum_specifier;
 	} val;
 } ASTTypeSpecifier;
@@ -438,9 +438,9 @@ typedef struct ASTDeclSpecifier
 
 typedef struct ASTFunctionDef
 {
-	ASTDeclSpecifier *specifiers;
+	ASTDeclSpecifier *decl_specifier_list;
 	ASTDeclarator *declarator;
-	ASTDecl *old_style_param_decls;
+	ASTDecl *old_style_param_decl_list;
 	ASTStatement *body;
 } ASTFunctionDef;
 

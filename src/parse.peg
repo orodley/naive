@@ -8,9 +8,9 @@ function_definition =
 
 build_function_definition =
 	build(ASTFunctionDef, 4,
-		specifiers, #0,
+		decl_specifier_list, #0,
 		declarator, #1,
-		old_style_param_decls, #2,
+		old_style_param_decl_list, #2,
 		body, #3)
 
 decl_specifiers =
@@ -25,7 +25,7 @@ decl =
 
 build_decl =
 	build(ASTDecl, 3,
-		decl_specifiers, #0,
+		decl_specifier_list, #0,
 		init_declarators, #1)
 
 init_declarator_list = list(ASTInitDeclarator, init_declarator)
@@ -74,8 +74,8 @@ field_decl =
 
 build_field_decl =
 	build(ASTFieldDecl, 3,
-		decl_specifiers, #0,
-		field_declarators, #1)
+		decl_specifier_list, #0,
+		field_declarator_list, #1)
 
 field_declarator_list = list(ASTFieldDeclarator, field_declarator, TOK_COMMA)
 
@@ -103,7 +103,7 @@ build_enum =
 	build(ASTTypeSpecifier, 6,
 		type, ENUM_TYPE_SPECIFIER,
 		val.enum_specifier.name, "((Token *)#1)->val.symbol_or_string_literal",
-		val.enum_specifier.enumerators, #3)
+		val.enum_specifier.enumerator_list, #3)
 
 enumerator_list = list(ASTEnumerator, enumerator, TOK_COMMA)
 
@@ -118,7 +118,7 @@ build_enumerator =
 build_enum_tagged_named_type =
 	build(ASTTypeSpecifier, 2,
 		type, ENUM_TYPE_SPECIFIER,
-		val.enum_specifier.enumerators, NULL)
+		val.enum_specifier.enumerator_list, NULL)
 
 type_qualifier =
 	seq(build_type_qualifier,
@@ -149,7 +149,7 @@ build_initial_pointer_result =
 build_pointer =
 	build(ASTDeclarator, 2,
 		type, POINTER_DECLARATOR,
-		val.pointer_declarator.decl_specifiers, #1,
+		val.pointer_declarator.decl_specifier_list, #1,
 		val.pointer_declarator.pointee, NULL)
 
 direct_declarator =
@@ -179,14 +179,14 @@ parameter_decl =
 
 build_parameter_decl =
 	build(ASTParameterDecl, 2,
-		decl_specifiers, #0,
+		decl_specifier_list, #0,
 		declarator, #1)
 
 type_name = seq(build_type_name, decl_specifiers, opt(declarator))
 
 build_type_name =
 	build(ASTTypeName, 2,
-		decl_specifiers, #0,
+		decl_specifier_list, #0,
 		declarator, #1)
 
 initializer =
@@ -202,7 +202,7 @@ build_expr_initializer =
 build_brace_initializer =
 	build(ASTInitializer, 4,
 		type, BRACE_INITIALIZER,
-		val.initializer_elements, #1)
+		val.initializer_element_list, #1)
 
 initializer_list = list(ASTInitializerElement, initializer_element, TOK_COMMA)
 
@@ -213,7 +213,7 @@ initializer_element =
 
 build_initializer_element =
 	build(ASTInitializerElement, 2,
-		designators, #0,
+		designator_list, #0,
 		initializer, #1)
 
 designator_list = list(ASTDesignator, designator)
@@ -265,7 +265,7 @@ compound_statement =
 build_compound_statement =
 	build(ASTStatement, 3,
 		type, COMPOUND_STATEMENT,
-		val.block_items, #1)
+		val.block_item_list, #1)
 
 block_item_list =
 	list(ASTBlockItem, seq(build_block_item, which(decl, statement)))

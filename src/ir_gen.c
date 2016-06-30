@@ -106,7 +106,7 @@ typedef struct CDecl
 	CType type;
 } CDecl;
 
-static void decl_to_cdecl(ASTDeclSpecifier *decl_specifiers,
+static void decl_to_cdecl(ASTDeclSpecifier *decl_specifier_list,
 		ASTDeclarator *declarator, CDecl *cdecl)
 {
 	assert(declarator->type == DIRECT_DECLARATOR);
@@ -124,10 +124,10 @@ static void decl_to_cdecl(ASTDeclSpecifier *decl_specifiers,
 		UNIMPLEMENTED;
 	}
 
-	assert(decl_specifiers->next == NULL);
-	assert(decl_specifiers->type == TYPE_SPECIFIER);
+	assert(decl_specifier_list->next == NULL);
+	assert(decl_specifier_list->type == TYPE_SPECIFIER);
 
-	ASTTypeSpecifier *type_specifier = decl_specifiers->val.type_specifier;
+	ASTTypeSpecifier *type_specifier = decl_specifier_list->val.type_specifier;
 	assert(type_specifier->type == NAMED_TYPE_SPECIFIER);
 	if (streq(type_specifier->val.name, "int")) {
 		cdecl->type = (CType) {
@@ -152,7 +152,7 @@ static void cdecl_to_binding(Builder *builder, CDecl *cdecl, Binding *binding)
 static CType function_return_type(ASTFunctionDef *func)
 {
 	CDecl cdecl;
-	decl_to_cdecl(func->specifiers, func->declarator, &cdecl);
+	decl_to_cdecl(func->decl_specifier_list, func->declarator, &cdecl);
 
 	return cdecl.type;
 }
@@ -180,7 +180,7 @@ static void ir_gen_function(TransUnit *tu, Builder *builder, ASTFunctionDef *fun
 	IrType *arg_types = malloc(sizeof(*arg_types) * arity);
 	for (u32 i = 0; i < arity; i++) {
 		CDecl cdecl;
-		decl_to_cdecl(params->decl_specifiers, params->declarator, &cdecl);
+		decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
 		arg_types[i] = c_type_to_ir_type(&cdecl.type);
 
 		params = params->next;
@@ -204,7 +204,7 @@ static void ir_gen_function(TransUnit *tu, Builder *builder, ASTFunctionDef *fun
 		Binding *next_binding = ARRAY_APPEND(param_bindings, Binding);
 
 		CDecl cdecl;
-		decl_to_cdecl(params->decl_specifiers, params->declarator, &cdecl);
+		decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
 		cdecl_to_binding(builder, &cdecl, next_binding);
 
 		build_store(builder,
@@ -229,18 +229,18 @@ static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *state
 {
 	switch (statement->type) {
 	case COMPOUND_STATEMENT: {
-		ASTBlockItem *block_items = statement->val.block_items;
-		while (block_items != NULL) {
-			switch (block_items->type) {
+		ASTBlockItem *block_item_list = statement->val.block_item_list;
+		while (block_item_list != NULL) {
+			switch (block_item_list->type) {
 			case BLOCK_ITEM_DECL:
 				UNIMPLEMENTED;
 				break;
 			case BLOCK_ITEM_STATEMENT:
-				ir_gen_statement(builder, scope, block_items->val.statement);
+				ir_gen_statement(builder, scope, block_item_list->val.statement);
 				break;
 			}
 
-			block_items = block_items->next;
+			block_item_list = block_item_list->next;
 		}
 
 		break;

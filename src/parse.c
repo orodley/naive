@@ -180,7 +180,7 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 	case 1:
 		next->type = FUNCTION_CALL;
 		next->val.function_call.callee = curr;
-		next->val.function_call.args = which->result;
+		next->val.function_call.arg_list = which->result;
 		return next;
 	case 2:
 		next->type = STRUCT_DOT_FIELD_EXPR;
@@ -434,13 +434,13 @@ ASTTypeSpecifier *build_struct_or_union_tagged_named_type(
 		STRUCT_TYPE_SPECIFIER :
 		UNION_TYPE_SPECIFIER;
 	tagged_type->val.struct_or_union_specifier.name = name->val.symbol_or_string_literal;
-	tagged_type->val.struct_or_union_specifier.fields = NULL;
+	tagged_type->val.struct_or_union_specifier.field_list = NULL;
 
 	return tagged_type;
 }
 
 ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
-		Token *opt_name, Token *lcurly, ASTFieldDecl *fields, Token *rcurly)
+		Token *opt_name, Token *lcurly, ASTFieldDecl *field_list, Token *rcurly)
 {
 	IGNORE(lcurly);
 	IGNORE(rcurly);
@@ -455,7 +455,7 @@ ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
 		result->val.struct_or_union_specifier.name =
 			opt_name->val.symbol_or_string_literal;
 	}
-	result->val.struct_or_union_specifier.fields = fields;
+	result->val.struct_or_union_specifier.field_list = field_list;
 
 	return result;
 }
@@ -618,14 +618,14 @@ static void pretty_printf(char *fmt, ...)
 
 
 
-static void dump_decl_specifiers(ASTDeclSpecifier *specifiers);
+static void dump_decl_specifier_list(ASTDeclSpecifier *decl_specifier_list);
 static void dump_declarator(ASTDeclarator *declarator);
 static void dump_expr(ASTExpr *expr);
 
 static void dump_type_name(ASTTypeName *type_name)
 {
 	pretty_printf("TYPE_NAME(");
-	dump_decl_specifiers(type_name->decl_specifiers);
+	dump_decl_specifier_list(type_name->decl_specifier_list);
 	pretty_printf(",");
 	dump_declarator(type_name->declarator);
 	pretty_printf(")");
@@ -673,7 +673,7 @@ static void dump_expr(ASTExpr *expr)
 	case FUNCTION_CALL:
 		dump_expr(expr->val.function_call.callee);
 		pretty_printf(",ARGS(");
-		dump_args(expr->val.function_call.args);
+		dump_args(expr->val.function_call.arg_list);
 		pretty_printf(")");
 		break;
 	case CAST_EXPR:
@@ -733,7 +733,7 @@ static void dump_statement(ASTStatement *statement)
 		pretty_printf("%s,", statement->val.labeled_statement.label_name);
 		break;
 	case COMPOUND_STATEMENT: {
-		ASTBlockItem *block_item = statement->val.block_items;
+		ASTBlockItem *block_item = statement->val.block_item_list;
 		while (block_item != NULL) {
 			switch (block_item->type) {
 			case BLOCK_ITEM_STATEMENT:
@@ -801,46 +801,46 @@ static void dump_statement(ASTStatement *statement)
 	pretty_printf(")");
 }
 
-static void dump_field_declarators(ASTFieldDeclarator *field_declarators)
+static void dump_field_declarator_list(ASTFieldDeclarator *field_declarator_list)
 {
-	while (field_declarators != NULL) {
-		switch (field_declarators->type) {
+	while (field_declarator_list != NULL) {
+		switch (field_declarator_list->type) {
 		case NORMAL_FIELD_DECLARATOR:
 			pretty_printf("NORMAL_FIELD_DECLARATOR(");
-			dump_declarator(field_declarators->val.declarator);
+			dump_declarator(field_declarator_list->val.declarator);
 			pretty_printf(")");
 			break;
 		case BITFIELD_FIELD_DECLARATOR:
 			pretty_printf("BITFIELD_DECLARATOR(");
-			dump_declarator(field_declarators->val.bitfield.declarator);
+			dump_declarator(field_declarator_list->val.bitfield.declarator);
 			pretty_printf(",");
-			dump_expr(field_declarators->val.bitfield.width);
+			dump_expr(field_declarator_list->val.bitfield.width);
 			pretty_printf(")");
 			break;
 		}
 
-		if (field_declarators->next != NULL)
+		if (field_declarator_list->next != NULL)
 			pretty_printf(",");
-		field_declarators = field_declarators->next;
+		field_declarator_list = field_declarator_list->next;
 	}
 }
 
-static void dump_struct_or_union_fields(ASTFieldDecl *fields)
+static void dump_struct_or_union_field_list(ASTFieldDecl *field_list)
 {
-	while (fields != NULL) {
+	while (field_list != NULL) {
 		pretty_printf("FIELD(");
-		if (fields->decl_specifiers != NULL) {
-			dump_decl_specifiers(fields->decl_specifiers);
+		if (field_list->decl_specifier_list != NULL) {
+			dump_decl_specifier_list(field_list->decl_specifier_list);
 			pretty_printf(",");
 		}
 
-		pretty_printf("FIELD_DECLARATORS(");
-		dump_field_declarators(fields->field_declarators);
+		pretty_printf("FIELD_DECLARATOR_LIST(");
+		dump_field_declarator_list(field_list->field_declarator_list);
 		pretty_printf("))");
 
-		if (fields->next != NULL)
+		if (field_list->next != NULL)
 			pretty_printf(",");
-		fields = fields->next;
+		field_list = field_list->next;
 	}
 }
 
@@ -857,8 +857,9 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 		if (name != NULL)
 			pretty_printf("%s,", name);
 
-		pretty_printf("STRUCT_FIELDS(");
-		dump_struct_or_union_fields(type_specifier->val.struct_or_union_specifier.fields);
+		pretty_printf("STRUCT_FIELD_LIST(");
+		dump_struct_or_union_field_list(
+				type_specifier->val.struct_or_union_specifier.field_list);
 		pretty_printf(")");
 		break;
 	default:
@@ -868,38 +869,38 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 	pretty_printf(")");
 }
 
-static void dump_decl_specifiers(ASTDeclSpecifier *specifiers)
+static void dump_decl_specifier_list(ASTDeclSpecifier *decl_specifier_list)
 {
 	pretty_printf("DECL_SPECIFIER(");
 
 #define CASE(x) case x: pretty_printf(#x); break;
-	while (specifiers != NULL) {
-		switch (specifiers->type) {
+	while (decl_specifier_list != NULL) {
+		switch (decl_specifier_list->type) {
 		case STORAGE_CLASS_SPECIFIER:
-			switch (specifiers->val.storage_class_specifier) {
+			switch (decl_specifier_list->val.storage_class_specifier) {
 			CASE(TYPEDEF_SPECIFIER) CASE(EXTERN_SPECIFIER)
 			CASE(STATIC_SPECIFIER) CASE(AUTO_SPECIFIER) CASE(REGISTER_SPECIFIER)
 			}
 			break;
 		case TYPE_QUALIFIER:
-			switch (specifiers->val.type_qualifier) {
+			switch (decl_specifier_list->val.type_qualifier) {
 			CASE(CONST_QUALIFIER) CASE(RESTRICT_QUALIFIER) CASE(VOLATILE_QUALIFIER)
 			}
 			break;
 #undef CASE
 		case FUNCTION_SPECIFIER:
-			assert(specifiers->val.function_specifier == INLINE_SPECIFIER);
+			assert(decl_specifier_list->val.function_specifier == INLINE_SPECIFIER);
 			pretty_printf("INLINE_SPECIFIER");
 			break;
 		case TYPE_SPECIFIER:
-			dump_type_specifier(specifiers->val.type_specifier);
+			dump_type_specifier(decl_specifier_list->val.type_specifier);
 			break;
 		}
 
-		if (specifiers->next != NULL)
+		if (decl_specifier_list->next != NULL)
 			pretty_printf(",");
 
-		specifiers = specifiers->next;
+		decl_specifier_list = decl_specifier_list->next;
 	}
 
 	pretty_printf(")");
@@ -912,7 +913,7 @@ static void dump_parameter_decls(ASTParameterDecl *param_decls)
 	pretty_printf("PARAM_DECLS(");
 	while (param_decls != NULL) {
 		pretty_printf("PARAM(");
-		dump_decl_specifiers(param_decls->decl_specifiers);
+		dump_decl_specifier_list(param_decls->decl_specifier_list);
 		pretty_printf(",");
 		dump_declarator(param_decls->declarator);
 		pretty_printf("),");
@@ -958,7 +959,7 @@ static void dump_declarator(ASTDeclarator *declarator)
 	switch (declarator->type) {
 	case POINTER_DECLARATOR:
 		pretty_printf("POINTER_DECLARATOR(");
-		dump_decl_specifiers(declarator->val.pointer_declarator.decl_specifiers);
+		dump_decl_specifier_list(declarator->val.pointer_declarator.decl_specifier_list);
 		pretty_printf(",");
 		if (declarator->val.pointer_declarator.pointee != NULL)
 			dump_declarator(declarator->val.pointer_declarator.pointee);
@@ -972,44 +973,44 @@ static void dump_declarator(ASTDeclarator *declarator)
 	pretty_printf(")");
 }
 
-static void dump_designators(ASTDesignator *designators)
+static void dump_designator_list(ASTDesignator *designator_list)
 {
-	while (designators != NULL) {
-		switch (designators->type) {
+	while (designator_list != NULL) {
+		switch (designator_list->type) {
 		case INDEX_DESIGNATOR:
 			pretty_printf("INDEX_DESIGNATOR(");
-			dump_expr(designators->val.index_expr);
+			dump_expr(designator_list->val.index_expr);
 			break;
 		case FIELD_DESIGNATOR:
-			pretty_printf("FIELD_DESIGNATOR(%s", designators->val.field_name);
+			pretty_printf("FIELD_DESIGNATOR(%s", designator_list->val.field_name);
 			break;
 		}
 		pretty_printf(")");
 
-		if (designators->next != NULL)
+		if (designator_list->next != NULL)
 			pretty_printf(",");
 
-		designators = designators->next;
+		designator_list = designator_list->next;
 	}
 
 }
 
 static void dump_initializer(ASTInitializer *initializer);
 
-static void dump_initializer_elements(ASTInitializerElement *elements)
+static void dump_initializer_element_list(ASTInitializerElement *element_list)
 {
-	while (elements != NULL) {
+	while (element_list != NULL) {
 		pretty_printf("INITIALIZER_ELEMENT(");
-		pretty_printf("DESIGNATORS(");
-		dump_designators(elements->designators);
+		pretty_printf("DESIGNATOR_LIST(");
+		dump_designator_list(element_list->designator_list);
 		pretty_printf("),INITIALIZER(");
-		dump_initializer(elements->initializer);
+		dump_initializer(element_list->initializer);
 		pretty_printf("))");
 
-		if (elements->next != NULL)
+		if (element_list->next != NULL)
 			pretty_printf(",");
 
-		elements = elements->next;
+		element_list = element_list->next;
 	}
 }
 
@@ -1022,7 +1023,7 @@ static void dump_initializer(ASTInitializer *initializer)
 		break;
 	case BRACE_INITIALIZER:
 		pretty_printf("BRACE_INITIALIZER(");
-		dump_initializer_elements(initializer->val.initializer_elements);
+		dump_initializer_element_list(initializer->val.initializer_element_list);
 		break;
 	}
 
@@ -1052,7 +1053,7 @@ static void dump_decls(ASTDecl *decls)
 {
 	while (decls != NULL) {
 		pretty_printf("DECL(");
-		dump_decl_specifiers(decls->decl_specifiers);
+		dump_decl_specifier_list(decls->decl_specifier_list);
 		pretty_printf(",");
 		dump_init_declarators(decls->init_declarators);
 		pretty_printf(")");
@@ -1072,11 +1073,11 @@ void dump_toplevel(ASTToplevel *ast)
 		switch (ast->type) {
 		case FUNCTION_DEF:
 			pretty_printf("FUNCTION_DEF(");
-			dump_decl_specifiers(ast->val.function_def->specifiers);
+			dump_decl_specifier_list(ast->val.function_def->decl_specifier_list);
 			pretty_printf(",");
 			dump_declarator(ast->val.function_def->declarator);
 			pretty_printf(",");
-			dump_decls(ast->val.function_def->old_style_param_decls);
+			dump_decls(ast->val.function_def->old_style_param_decl_list);
 			pretty_printf(",");
 			dump_statement(ast->val.function_def->body);
 			break;
