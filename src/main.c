@@ -117,9 +117,20 @@ int main(int argc, char *argv[])
 		output_filename = "a.out";
 	} else {
 		u32 input_filename_length = strlen(input_filename);
-		output_filename = malloc(input_filename_length);
+		output_filename = malloc(input_filename_length); // @LEAK
 		strcpy(output_filename, input_filename);
 		output_filename[input_filename_length - 1] = 'o';
+
+		u32 last_slash = input_filename_length - 1;
+		for (; last_slash != 0; last_slash--) {
+			if (output_filename[last_slash] == '/')
+				break;
+		}
+
+		if (last_slash != 0) {
+			output_filename[last_slash - 1] = '.';
+			output_filename += last_slash - 1;
+		}
 	}
 
 	FILE *output_file = fopen(output_filename, "wb");
