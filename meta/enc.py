@@ -13,8 +13,8 @@ pp = pprint.PrettyPrinter(indent=4)
 
 Instr = namedtuple('Instr', ['opcode', 'encodings'])
 Encoding = namedtuple('Encoding',
-        ['args', 'arg_order', 'rex_prefix', 'opcode_num', 'reg_and_rm', 'opcode_extension',
-         'immediate_size', 'reg_in_opcode'])
+        ['args', 'arg_order', 'rex_prefix', 'opcode_size', 'opcode',
+         'reg_and_rm', 'opcode_extension', 'immediate_size', 'reg_in_opcode'])
 
 def generate_encoder(input_filename, output_filename):
     instrs = {}
@@ -28,7 +28,7 @@ def generate_encoder(input_filename, output_filename):
 
             instr_components = instr.replace(',', ' ').split()
             assert 1 <= len(instr_components) <= 3
-            opcode = instr_components[0]
+            instr_name = instr_components[0]
             args = instr_components[1:]
 
             if args == ['r64', 'r/m64']:
@@ -40,7 +40,7 @@ def generate_encoder(input_filename, output_filename):
 
             match = re.match(
                     r' *(?:REX\.(?P<prefix>[WRXB]+) *\+ *)?' +
-                    r'(?P<opcode>[0-9a-fA-F]+) *' +
+                    r'(?P<opcode>[0-9a-fA-F ]+)' +
                     r'(?P<slash>/.)? *' +
                     r'(?P<immediate>ib)? *' +
                     r'(?P<reg_in_opcode>\+rd)? *',
@@ -57,7 +57,9 @@ def generate_encoder(input_filename, output_filename):
                         'B': 1 << 0
                     }[c]
 
-            opcode_num = int(match.group('opcode'), 16)
+            opcode_str = match.group('opcode').replace(' ', '')
+            opcode = [int(a + b, 16) for a, b in zip(opcode_str[0::2], opcode_str[1::2])]
+            opcode_size = len(opcode)
 
             slash = match.group('slash')
             if slash:
@@ -77,19 +79,24 @@ def generate_encoder(input_filename, output_filename):
 
             reg_in_opcode = bool(match.group('reg_in_opcode'))
 
-            encoding = Encoding(args, arg_order, rex_prefix, opcode_num,
+            encoding = Encoding(args, arg_order, rex_prefix, opcode_size, opcode,
                     reg_and_rm, opcode_extension, immediate_size, reg_in_opcode)
             
             # @TODO: We should sort encodings by immediate size (ascending) so
             # that the smallest encoding gets selected automatically.
-            if opcode not in instrs:
-                instrs[opcode] = Instr(opcode, [])
-            instrs[opcode].encodings.append(encoding)
+            if instr_name not in instrs:
+                instrs[instr_name] = Instr(instr_name, [])
+            instrs[instr_name].encodings.append(encoding)
 
     output = []
     output.append("""
 // @NOTE: This is an automatically generated file! Do not edit it!
 //        It was generated from '%s', edit that instead
+
+typedef struct Bytes_
+{
+    u8 bytes[4];
+} Bytes_;
 
 static u32 assemble_instr(FILE *output_file, AsmInstr *instr)
 {
@@ -111,9 +118,9 @@ static u32 assemble_instr(FILE *output_file, AsmInstr *instr)
                     % (indent,
                         ', '.join(map(to_c_val,
                             [encoding.arg_order, encoding.rex_prefix,
-                            encoding.opcode_num, encoding.reg_and_rm,
-                            encoding.opcode_extension, encoding.immediate_size,
-                            encoding.reg_in_opcode]))))
+                            encoding.opcode_size, encoding.opcode,
+                            encoding.reg_and_rm, encoding.opcode_extension,
+                            encoding.immediate_size, encoding.reg_in_opcode]))))
 
         output.append("\t\tbreak;\n")
 
@@ -149,6 +156,8 @@ def to_c_val(x):
         return hex(x) if x >= 0 else str(x)
     if isinstance(x, str):
         return x
+    if isinstance(x, list):
+        return '((Bytes_){ .bytes = {' + ', '.join(map(to_c_val, x)) + '} }).bytes'
 
     assert False
 

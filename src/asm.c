@@ -353,10 +353,15 @@ static u32 write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 
 typedef enum ArgOrder { INVALID, RM, MR } ArgOrder;
 
+static inline u32 write_bytes(FILE *file, u32 size, u8 *bytes)
+{
+	return fwrite(bytes, 1, size, file);
+}
+
 // Called into by the generated function "assemble_instr".
 static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
-		i32 rex_prefix, u8 opcode_num, bool reg_and_rm, i32 opcode_extension,
-		i32 immediate_size,  bool reg_in_opcode)
+		i32 rex_prefix, u32 opcode_size, u8 opcode[], bool reg_and_rm,
+		i32 opcode_extension, i32 immediate_size,  bool reg_in_opcode)
 {
 #if 0
 	puts("Encoding instr:");
@@ -384,11 +389,12 @@ static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
 		default: UNIMPLEMENTED;
 		}
 
-		size += write_u8(file, opcode_num | reg);
+		assert(opcode_size == 1);
+		size += write_u8(file, opcode[0] | reg);
 		return size;
 	}
 
-	size += write_u8(file, opcode_num);
+	size += write_bytes(file, opcode_size, opcode);
 
 	if (reg_and_rm) {
 		AsmArg *register_operand;
