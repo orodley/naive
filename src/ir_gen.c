@@ -271,6 +271,14 @@ static Value ir_gen_expression(Builder *builder, Scope *scope, ASTExpr *expr)
 				OP_BIT_XOR,
 				ir_gen_expression(builder, scope, expr->val.binary_op.arg1),
 				ir_gen_expression(builder, scope, expr->val.binary_op.arg2));
+	case MULTIPLY_EXPR:
+		return build_binary_instr(
+				builder,
+				// @TODO: generate fmuls for float operands
+				// @TODO: and muls for unsigned operands
+				OP_IMUL,
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg1),
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg2));
 	case IDENTIFIER_EXPR: {
 		Binding *binding = binding_for_name(scope, expr->val.identifier);
 		return build_load(builder, binding->address, c_type_to_ir_type(&binding->type));

@@ -104,7 +104,7 @@ static void dump_asm_instr(AsmInstr *instr)
 		putchar(tolower(op_name[i]));
 
 	switch (instr->op) {
-	case MOV: case XOR: case ADD: case SUB:
+	case MOV: case XOR: case ADD: case SUB: case IMUL:
 		putchar(' ');
 		dump_asm_args(instr->args, 2);
 		break;

@@ -174,15 +174,6 @@ static void asm_gen_instr(
 				asm_value(value));
 		break;
 	}
-	case OP_BIT_XOR: {
-		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), arg1);
-		emit_instr2(builder, XOR, asm_virtual_register(next_vreg(builder)), arg2);
-
-		assign_vreg(builder, instr);
-		break;
-	}
 	case OP_LOAD: {
 		Value pointer = instr->val.load.pointer;
 		IrType type = instr->val.load.type;
@@ -200,6 +191,24 @@ static void asm_gen_instr(
 		emit_instr2(builder, MOV,
 				asm_virtual_register(next_vreg(builder)),
 				asm_deref(asm_offset_register(RSP, slot->stack_offset)));
+		assign_vreg(builder, instr);
+		break;
+	}
+	case OP_BIT_XOR: {
+		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
+		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), arg1);
+		emit_instr2(builder, XOR, asm_virtual_register(next_vreg(builder)), arg2);
+
+		assign_vreg(builder, instr);
+		break;
+	}
+	case OP_IMUL: {
+		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
+		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), arg1);
+		emit_instr2(builder, IMUL, asm_virtual_register(next_vreg(builder)), arg2);
+
 		assign_vreg(builder, instr);
 		break;
 	}

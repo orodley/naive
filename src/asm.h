@@ -82,7 +82,8 @@ typedef struct AsmArg
 	X(ADD), \
 	X(SUB), \
 	X(PUSH), \
-	X(POP)
+	X(POP), \
+	X(IMUL)
 
 #define X(x) x
 typedef enum AsmOp

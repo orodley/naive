@@ -113,6 +113,12 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		dump_value(instr->val.binary_op.arg2);
 		break;
+	case OP_IMUL:
+		fputs("imul(", stdout);
+		dump_value(instr->val.binary_op.arg1);
+		fputs(", ", stdout);
+		dump_value(instr->val.binary_op.arg2);
+		break;
 	}
 
 	puts(")");
@@ -194,13 +200,13 @@ IrInstr *build_branch(Builder *builder, IrBlock *block, Value value)
 static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 {
 	switch (op) {
-	case OP_LOCAL:
-	case OP_LOAD:
-	case OP_STORE:
-	case OP_BRANCH:
+	case OP_LOCAL: case OP_LOAD: case OP_STORE: case OP_BRANCH:
 		UNREACHABLE;
 	case OP_BIT_XOR:
 		return arg1 ^ arg2;
+		break;
+	case OP_IMUL:
+		return arg1 * arg2;
 		break;
 	}
 }

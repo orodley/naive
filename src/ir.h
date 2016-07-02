@@ -69,6 +69,8 @@ typedef struct Value
 typedef enum IrOp
 {
 	OP_BIT_XOR,
+	OP_IMUL,
+
 	OP_LOAD,
 	OP_STORE,
 	OP_BRANCH,
