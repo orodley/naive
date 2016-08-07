@@ -71,6 +71,17 @@ AsmArg asm_const32(i32 constant)
 	return asm_arg;
 }
 
+AsmArg asm_global(u32 global_id)
+{
+	AsmArg asm_arg = {
+		.is_deref = false,
+		.type = GLOBAL,
+		.val.global_id = global_id,
+	};
+
+	return asm_arg;
+}
+
 static inline bool asm_arg_is_const(AsmArg asm_arg)
 {
 	return (asm_arg.type == CONST8) || (asm_arg.type == CONST16) ||
@@ -84,11 +95,18 @@ static bool is_const_and_fits(AsmArg asm_arg, u32 bits)
 		return false;
 
 	u64 constant = asm_arg.val.constant;
-	u64 mask = (1 << bits) - 1;
-	return (constant & mask) == constant;
+	u64 truncated;
+
+	// Handle this case specially, as 1 << 64 - 1 doesn't work to get a 64-bit
+	// mask.
+	if (bits == 64)
+		truncated = constant;
+	else
+		truncated = constant & ((1ull << bits) - 1);
+	return truncated == constant;
 }
 
-static void dump_asm_args(AsmArg *args, u32 num_args);
+static void dump_asm_args(AsmModule *module, AsmArg *args, u32 num_args);
 
 #define X(x) #x
 static char *asm_op_names[] = {
@@ -96,7 +114,7 @@ static char *asm_op_names[] = {
 };
 #undef X
 
-static void dump_asm_instr(AsmInstr *instr)
+static void dump_asm_instr(AsmModule *asm_module, AsmInstr *instr)
 {
 	putchar('\t');
 	char *op_name = asm_op_names[instr->op];
@@ -106,13 +124,16 @@ static void dump_asm_instr(AsmInstr *instr)
 	switch (instr->op) {
 	case MOV: case XOR: case ADD: case SUB: case IMUL:
 		putchar(' ');
-		dump_asm_args(instr->args, 2);
+		dump_asm_args(asm_module, instr->args, 2);
 		break;
-	case PUSH: case POP:
+	case PUSH: case POP: case CALL:
 		putchar(' ');
-		dump_asm_args(instr->args, 1);
+		dump_asm_args(asm_module, instr->args, 1);
 		break;
-	case RET: break;
+	case RET:
+		// Print an extra newline, to visually separate functions
+		putchar('\n');
+		break;
 	}
 
 	putchar('\n');
@@ -139,7 +160,7 @@ static void dump_register(Register reg)
 	}
 }
 
-static void dump_asm_args(AsmArg *args, u32 num_args)
+static void dump_asm_args(AsmModule *asm_module, AsmArg *args, u32 num_args)
 {
 	for (u32 i = 0; i < num_args; i++) {
 		if (i != 0)
@@ -178,6 +199,11 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 			else
 				printf("%" PRIu64, (i64)arg->val.constant);
 			break;
+		case GLOBAL:
+			printf("$%s", ARRAY_REF(&asm_module->globals,
+								AsmGlobal,
+								arg->val.global_id)->name);
+			break;
 		}
 		if (arg->is_deref)
 			putchar(']');
@@ -191,13 +217,15 @@ void dump_asm_module(AsmModule *asm_module)
 
 		for (u32 j = 0; j < block->instrs.size; j++) {
 			AsmInstr *instr = ARRAY_REF(&block->instrs, AsmInstr, j);
-			dump_asm_instr(instr);
+			dump_asm_instr(asm_module, instr);
 		}
 	}
 }
 
 // @TODO: Probably easier to have these not return the amount of bytes written,
-// and instead just ftell to determine how much was written.
+// and instead just ftell to determine how much was written. We already do this
+// for GlobalReferences, as we don't get passed the current location in
+// encode_instr.
 
 static inline u32 write_u8(FILE *file, u8 x)
 {
@@ -205,6 +233,7 @@ static inline u32 write_u8(FILE *file, u8 x)
 	return 1;
 }
 
+#if 0
 static inline u32 write_u16(FILE *file, u16 x)
 {
 	u8 out[] = {
@@ -215,6 +244,7 @@ static inline u32 write_u16(FILE *file, u16 x)
 	fwrite(out, 1, sizeof out, file);
 	return sizeof out;
 }
+#endif
 
 static inline u32 write_u32(FILE *file, u32 x)
 {
@@ -229,6 +259,7 @@ static inline u32 write_u32(FILE *file, u32 x)
 	return sizeof out;
 }
 
+#if 0
 static inline u32 write_u64(FILE *file, u64 x)
 {
 	u8 out[] = {
@@ -244,6 +275,17 @@ static inline u32 write_u64(FILE *file, u64 x)
 
 	fwrite(out, 1, sizeof out, file);
 	return sizeof out;
+}
+#endif
+
+static inline u32 write_int(FILE *file, u64 x, u32 size)
+{
+	for (u32 n = 0; n < size; n ++) {
+		u8 byte = (x >> (n * 8)) & 0xFF;
+		fwrite(&byte, 1, 1, file);
+	}
+
+	return size;
 }
 
 static inline PhysicalRegister get_register(AsmArg *arg)
@@ -358,14 +400,14 @@ static inline u32 write_bytes(FILE *file, u32 size, u8 *bytes)
 	return fwrite(bytes, 1, size, file);
 }
 
-// Called into by the generated function "assemble_instr".
-static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
-		i32 rex_prefix, u32 opcode_size, u8 opcode[], bool reg_and_rm,
-		i32 opcode_extension, i32 immediate_size,  bool reg_in_opcode)
+// Called by the generated function "assemble_instr".
+static u32 encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
+		ArgOrder arg_order, i32 rex_prefix, u32 opcode_size, u8 opcode[],
+		bool reg_and_rm, i32 opcode_extension, i32 immediate_size, bool reg_in_opcode)
 {
 #if 0
 	puts("Encoding instr:");
-	dump_asm_instr(instr);
+	dump_asm_instr(asm_module, instr);
 #endif
 
 	u32 size = 0;
@@ -374,7 +416,6 @@ static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
 		size += write_u8(file, (u8)rex_prefix);
 
 	if (reg_in_opcode) {
-		assert(instr->num_args == 1);
 		u8 reg;
 		// @TODO: We do this like fifty times. Pull it out somewhere.
 		switch (get_register(instr->args)) {
@@ -391,10 +432,9 @@ static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
 
 		assert(opcode_size == 1);
 		size += write_u8(file, opcode[0] | reg);
-		return size;
+	} else {
+		size += write_bytes(file, opcode_size, opcode);
 	}
-
-	size += write_bytes(file, opcode_size, opcode);
 
 	if (reg_and_rm) {
 		AsmArg *register_operand;
@@ -437,21 +477,38 @@ static u32 encode_instr(FILE *file, AsmInstr *instr, ArgOrder arg_order,
 	// @TODO: This seems kinda redundant considering we already encode the
 	// immediate size in AsmArg.
 	if (immediate_size != -1) {
+		AsmArg* immediate_arg = NULL;
+		for (u32 i = 0; i < instr->num_args; i++) {
+			if (asm_arg_is_const(instr->args[i]) || instr->args[i].type == GLOBAL) {
+				// Check that we only have one immediate.
+				assert(immediate_arg == NULL);
+				immediate_arg = instr->args + i;
+			}
+		}
+		assert(immediate_arg != NULL);
+
 		u64 immediate;
-		if (asm_arg_is_const(instr->args[0])) {
-			immediate = instr->args[0].val.constant;
+		if (asm_arg_is_const(*immediate_arg)) {
+			immediate = immediate_arg->val.constant;
+		} else if (immediate_arg->type == GLOBAL) {
+			GlobalReference *ref =
+				ARRAY_APPEND(&asm_module->global_references, GlobalReference);
+
+			long location = ftell(file);
+			assert(location != -1);
+
+			ref->file_location = (u32)location;
+			ref->size_bytes = 4;
+			ref->global_id = immediate_arg->val.global_id;
+
+			// Dummy value, gets patched later.
+			immediate = 0;
 		} else {
-			assert(asm_arg_is_const(instr->args[1]));
-			immediate = instr->args[1].val.constant;
+			assert(asm_arg_is_const(*immediate_arg));
+			immediate = immediate_arg->val.constant;
 		}
 
-		switch (immediate_size) {
-		case  8: size += write_u8 (file,  (u8)immediate); break;
-		case 16: size += write_u16(file, (u16)immediate); break;
-		case 32: size += write_u32(file, (u32)immediate); break;
-		case 64: size += write_u64(file, (u64)immediate); break;
-		default: UNREACHABLE;
-		}
+		size += write_int(file, immediate, immediate_size);
 	}
 
 	return size;
@@ -464,6 +521,8 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 		Array(AsmSymbol) *symbols, u64 base_virtual_address)
 {
 	u64 current_offset = base_virtual_address;
+	long initial_file_location = ftell(output_file);
+	assert(initial_file_location != -1);
 
 	for (u32 i = 0; i < asm_module->functions.size; i++) {
 		AsmFunction *function = ARRAY_REF(&asm_module->functions, AsmFunction, i);
@@ -471,7 +530,7 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 		u32 function_offset = current_offset;
 		for (u32 j = 0; j < function->instrs.size; j++) {
 			AsmInstr *instr = ARRAY_REF(&function->instrs, AsmInstr, j);
-			current_offset += assemble_instr(output_file, instr);
+			current_offset += assemble_instr(output_file, asm_module, instr);
 		}
 		u32 function_size = current_offset - function_offset;
 
@@ -481,4 +540,26 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 		symbol->offset = function_offset - base_virtual_address;
 		symbol->size = function_size;
 	}
+	long final_file_position = ftell(output_file);
+	assert(final_file_position != -1);
+
+	for (u32 i = 0; i < asm_module->global_references.size; i++) {
+		GlobalReference *ref =
+			ARRAY_REF(&asm_module->global_references, GlobalReference, i);
+
+		int ret = fseek(output_file, ref->file_location, SEEK_SET);
+		assert(ret == 0);
+
+		AsmSymbol *referenced_symbol = ARRAY_REF(symbols, AsmSymbol, ref->global_id);
+
+		// Relative accesses are relative to the start of the next instruction,
+		// so we add on the size of the reference itself first.
+		u32 position_in_section =
+			(ref->file_location + ref->size_bytes) - initial_file_location;
+		i32 offset = (i32)referenced_symbol->offset - (i32)position_in_section;
+		write_int(output_file, (u64)offset, ref->size_bytes);
+	}
+
+	int ret = fseek(output_file, final_file_position, SEEK_SET);
+	assert(ret == 0);
 }

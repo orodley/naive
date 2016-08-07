@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
 	TransUnit tu;
 	trans_unit_init(&tu);
 	Builder builder;
-	builder_init(&builder);
+	builder_init(&builder, &tu);
 
 	ir_gen_toplevel(&tu, &builder, ast);
 
@@ -105,12 +105,14 @@ int main(int argc, char *argv[])
 	AsmBuilder asm_builder;
 	init_asm_builder(&asm_builder);
 	generate_asm_module(&asm_builder, &tu); 
+
+	trans_unit_free(&tu);
+
 	if (dump_asm) {
 		if (dump_tokens || dump_ast || dump_ir)
 			puts("\n");
 		dump_asm_module(&asm_builder.asm_module);
 	}
-
 
 	char *output_filename;
 	if (do_link) {

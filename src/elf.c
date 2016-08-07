@@ -255,13 +255,13 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 
 		{
 			ELF64Symbol undef_symbol;
-			ZERO_STRUCT(undef_symbol);
+			ZERO_STRUCT(&undef_symbol);
 			fwrite(&undef_symbol, sizeof undef_symbol, 1, output_file);
 		}
 
 		{
 			ELF64Symbol file_symbol;
-			ZERO_STRUCT(file_symbol);
+			ZERO_STRUCT(&file_symbol);
 			// We write out the filename right at the start just above. This is
 			// 1 rather than 0 as the string table starts with '\0'.
 			file_symbol.strtab_index_for_name = 1;
@@ -276,7 +276,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 			AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
 
 			ELF64Symbol elf_symbol;
-			ZERO_STRUCT(elf_symbol);
+			ZERO_STRUCT(&elf_symbol);
 			elf_symbol.strtab_index_for_name = symbol->string_table_offset_for_name;
 			elf_symbol.type_and_binding = (STB_GLOBAL << 4) | STT_FUNC;
 			elf_symbol.section = text_section_index;
@@ -293,7 +293,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		// NULL header
 		{
 			ELFSectionHeader null_header;
-			ZERO_STRUCT(null_header);
+			ZERO_STRUCT(&null_header);
 			null_header.type = SHT_NULL;
 			fwrite(&null_header, sizeof null_header, 1, output_file);
 		}
@@ -301,7 +301,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		// .shstrtab
 		{
 			ELFSectionHeader shstrtab_header;
-			ZERO_STRUCT(shstrtab_header);
+			ZERO_STRUCT(&shstrtab_header);
 			shstrtab_header.shstrtab_index_for_name = shstrtab_name;
 			shstrtab_header.type = SHT_STRTAB;
 			shstrtab_header.section_location = first_section_offset;
@@ -312,7 +312,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		// .text
 		{
 			ELFSectionHeader text_header;
-			ZERO_STRUCT(text_header);
+			ZERO_STRUCT(&text_header);
 			text_header.shstrtab_index_for_name = text_name;
 			text_header.type = SHT_PROGBITS;
 			text_header.flags = SHF_ALLOC | SHF_EXECINSTR;
@@ -325,7 +325,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		// .strtab
 		{
 			ELFSectionHeader strtab_header;
-			ZERO_STRUCT(strtab_header);
+			ZERO_STRUCT(&strtab_header);
 			strtab_header.shstrtab_index_for_name = strtab_name;
 			strtab_header.type = SHT_STRTAB;
 			strtab_header.section_location = strtab_offset;
@@ -336,7 +336,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		// .symtab
 		{
 			ELFSectionHeader symtab_header;
-			ZERO_STRUCT(symtab_header);
+			ZERO_STRUCT(&symtab_header);
 			symtab_header.shstrtab_index_for_name = symtab_name;
 			symtab_header.type = SHT_SYMTAB;
 			// For symbol tables, this field contains 1 + the index of the last

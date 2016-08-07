@@ -9,6 +9,7 @@
 typedef enum CTypeType
 {
 	INTEGER_TYPE,
+	FUNCTION_TYPE,
 } CTypeType;
 
 typedef struct CType
@@ -29,14 +30,25 @@ typedef struct CType
 			} type;
 			bool is_signed;
 		} integer;
+		struct
+		{
+			struct CType *return_type;
+			struct CType *arg_type_array;
+			u32 arity;
+		} function;
 	} val;
 } CType;
+
+typedef struct Term
+{
+	CType ctype;
+	Value value;
+} Term;
 
 typedef struct Binding
 {
 	char *name;
-	CType type;
-	Value address;
+	Term term;
 } Binding;
 
 typedef struct Scope
@@ -58,46 +70,6 @@ Binding *binding_for_name(Scope *scope, char *name)
 	} else {
 		return NULL;
 	}
-}
-
-static void ir_gen_function(TransUnit *tu, Builder *builder, ASTFunctionDef *func);
-static void ir_gen_toplevel_decl(TransUnit *tu, Builder *builder, ASTDecl *decl);
-static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *statement);
-static Value ir_gen_expression(Builder *builder, Scope *scope, ASTExpr *expr);
-
-void ir_gen_toplevel(TransUnit *tu, Builder *builder, ASTToplevel *toplevel)
-{
-	while (toplevel != NULL) {
-		switch (toplevel->type) {
-		case FUNCTION_DEF:
-			ir_gen_function(tu, builder, toplevel->val.function_def);
-			break;
-		case DECL:
-			ir_gen_toplevel_decl(tu, builder, toplevel->val.decl);
-			break;
-		}
-
-		toplevel = toplevel->next;
-	}
-}
-
-
-static IrType c_type_to_ir_type(CType *ctype)
-{
-	assert(ctype->type == INTEGER_TYPE);
-	u32 bit_width;
-	switch (ctype->val.integer.type) {
-	case INT:
-		bit_width = 32;
-		break;
-	default:
-		UNIMPLEMENTED;
-	}
-
-	return (IrType) {
-		.kind = IR_INT,
-		.val.bit_width = bit_width,
-	};
 }
 
 typedef struct CDecl
@@ -140,15 +112,6 @@ static void decl_to_cdecl(ASTDeclSpecifier *decl_specifier_list,
 	}
 }
 
-static void cdecl_to_binding(Builder *builder, CDecl *cdecl, Binding *binding)
-{
-	binding->name = cdecl->name;
-	binding->type = cdecl->type;
-
-	IrType ir_type = c_type_to_ir_type(&cdecl->type);
-	binding->address = build_local(builder, ir_type);
-}
-
 static CType function_return_type(ASTFunctionDef *func)
 {
 	CDecl cdecl;
@@ -157,72 +120,145 @@ static CType function_return_type(ASTFunctionDef *func)
 	return cdecl.type;
 }
 
-static void ir_gen_function(TransUnit *tu, Builder *builder, ASTFunctionDef *func)
+static IrType c_type_to_ir_type(CType *ctype)
 {
-	CType return_c_type = function_return_type(func);
-	IrType return_ir_type = c_type_to_ir_type(&return_c_type);
+	switch (ctype->type) {
+	case INTEGER_TYPE: {
+		u32 bit_width;
+		switch (ctype->val.integer.type) {
+		case INT:
+			bit_width = 32;
+			break;
+		default:
+			UNIMPLEMENTED;
+		}
 
-	assert(func->declarator->type == DIRECT_DECLARATOR);
-	ASTDirectDeclarator *direct_declarator = func->declarator->val.direct_declarator;
-	assert(direct_declarator->type == FUNCTION_DECLARATOR);
-
-	ASTParameterDecl *first_param = direct_declarator->val.function_declarator.parameters;
-	ASTParameterDecl *params = first_param;
-
-	u32 arity = 0;
-	while (params != NULL) {
-		arity++;
-		params = params->next;
+		return (IrType) {
+			.kind = IR_INT,
+			.val.bit_width = bit_width,
+		};
 	}
-
-	params = first_param;
-
-	IrType *arg_types = malloc(sizeof(*arg_types) * arity);
-	for (u32 i = 0; i < arity; i++) {
-		CDecl cdecl;
-		decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
-		arg_types[i] = c_type_to_ir_type(&cdecl.type);
-
-		params = params->next;
+	case FUNCTION_TYPE:
+		return (IrType) { .kind = FUNCTION_TYPE };
 	}
-
-	IrFunction *f = trans_unit_add_function(
-			tu,
-			direct_declarator->val.function_declarator.declarator->val.name,
-			return_ir_type, arity, arg_types);
-
-	builder->function = f;
-	builder->current_block = &f->entry_block;
-
-	Scope scope;
-	scope.parent_scope = NULL;
-	Array(Binding)* param_bindings = &scope.bindings;
-	ARRAY_INIT(param_bindings, Binding, 5);
-
-	params = first_param;
-	for (u32 i = 0; params != NULL; i++, params = params->next) {
-		Binding *next_binding = ARRAY_APPEND(param_bindings, Binding);
-
-		CDecl cdecl;
-		decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
-		cdecl_to_binding(builder, &cdecl, next_binding);
-
-		build_store(builder,
-				next_binding->address,
-				value_arg(&f->entry_block.args[i]),
-				c_type_to_ir_type(&cdecl.type));
-	}
-
-	free(arg_types);
-
-	ir_gen_statement(builder, &scope, func->body);
 }
 
-static void ir_gen_toplevel_decl(TransUnit *tu, Builder *builder, ASTDecl *decl)
+static void cdecl_to_binding(Builder *builder, CDecl *cdecl, Binding *binding)
 {
-	IGNORE(tu); IGNORE(builder); IGNORE(decl);
+	IrType ir_type = c_type_to_ir_type(&cdecl->type);
 
-	UNIMPLEMENTED;
+	binding->name = cdecl->name;
+	binding->term.ctype = cdecl->type;
+	binding->term.value = build_local(builder, ir_type);
+}
+
+static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *statement);
+static Term ir_gen_expression(Builder *builder, Scope *scope, ASTExpr *expr);
+
+void ir_gen_toplevel(TransUnit *tu, Builder *builder, ASTToplevel *toplevel)
+{
+	Scope global_scope;
+	global_scope.parent_scope = NULL;
+	Array(Binding)* global_bindings = &global_scope.bindings;
+	ARRAY_INIT(global_bindings, Binding, 10);
+
+	while (toplevel != NULL) {
+		IrGlobal *global;
+		CType global_type;
+		ZERO_STRUCT(&global_type);
+
+		switch (toplevel->type) {
+		case FUNCTION_DEF: {
+			ASTFunctionDef *func = toplevel->val.function_def;
+			CType return_c_type = function_return_type(func);
+			IrType return_ir_type = c_type_to_ir_type(&return_c_type);
+
+			assert(func->declarator->type == DIRECT_DECLARATOR);
+			ASTDirectDeclarator *direct_declarator =
+				func->declarator->val.direct_declarator;
+			assert(direct_declarator->type == FUNCTION_DECLARATOR);
+
+			ASTParameterDecl *first_param =
+				direct_declarator->val.function_declarator.parameters;
+			ASTParameterDecl *params = first_param;
+
+			u32 arity = 0;
+			while (params != NULL) {
+				arity++;
+				params = params->next;
+			}
+
+			params = first_param;
+
+			IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
+			CType *arg_c_types = pool_alloc(
+					&builder->trans_unit->pool,
+					sizeof(*arg_c_types) * arity);
+
+			for (u32 i = 0; i < arity; i++) {
+				CDecl cdecl;
+				decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
+				arg_ir_types[i] = c_type_to_ir_type(&cdecl.type);
+				arg_c_types[i] = cdecl.type;
+
+				params = params->next;
+			}
+
+			global = trans_unit_add_function(
+					tu,
+					direct_declarator->val.function_declarator.declarator->val.name,
+					return_ir_type, arity, arg_ir_types);
+
+			free(arg_ir_types);
+
+			assert(global->kind == IR_GLOBAL_FUNCTION);
+			IrFunction *f = &global->val.function;
+
+			builder->current_function = f;
+			builder->current_block = &f->entry_block;
+
+			Scope scope;
+			scope.parent_scope = &global_scope;
+			Array(Binding)* param_bindings = &scope.bindings;
+			ARRAY_INIT(param_bindings, Binding, 5);
+
+			params = first_param;
+			for (u32 i = 0; params != NULL; i++, params = params->next) {
+				Binding *next_binding = ARRAY_APPEND(param_bindings, Binding);
+
+				CDecl cdecl;
+				decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
+				cdecl_to_binding(builder, &cdecl, next_binding);
+
+				build_store(builder,
+						next_binding->term.value,
+						value_arg(&f->entry_block.args[i]),
+						c_type_to_ir_type(&cdecl.type));
+			}
+
+			ir_gen_statement(builder, &scope, func->body);
+
+			CType *pool_alloced_return_c_type = pool_alloc(&tu->pool,
+					sizeof *pool_alloced_return_c_type);
+			*pool_alloced_return_c_type = return_c_type;
+
+			global_type.type = FUNCTION_TYPE;
+			global_type.val.function.arity = arity;
+			global_type.val.function.arg_type_array = arg_c_types;
+			global_type.val.function.return_type = pool_alloced_return_c_type;
+
+			break;
+		}
+		case DECL: UNIMPLEMENTED;
+		}
+
+		Binding *binding = ARRAY_APPEND(global_bindings, Binding);
+		binding->name = global->name;
+		binding->term.ctype = global_type;
+		binding->term.value = value_global(global);
+
+		toplevel = toplevel->next;
+	}
 }
 
 static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *statement)
@@ -246,9 +282,9 @@ static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *state
 		break;
 	}
 	case RETURN_STATEMENT: {
-		Value value = ir_gen_expression(builder, scope, statement->val.expr);
-		IrBlock *ret_block = &builder->function->ret_block;
-		build_branch(builder, ret_block, value);
+		Term term = ir_gen_expression(builder, scope, statement->val.expr);
+		IrBlock *ret_block = &builder->current_function->ret_block;
+		build_branch(builder, ret_block, term.value);
 		break;
 	}
 	default:
@@ -256,32 +292,106 @@ static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *state
 	}
 }
 
-static Value ir_gen_expression(Builder *builder, Scope *scope, ASTExpr *expr)
+static Term ir_gen_expression(Builder *builder, Scope *scope, ASTExpr *expr)
 {
 	IGNORE(builder);
 
 	switch (expr->type) {
-	case INT_LITERAL_EXPR:
+	case INT_LITERAL_EXPR: {
 		// @TODO: Determine types of constants correctly.
-		return value_const((IrType) { .kind = IR_INT, .val.bit_width = 32 },
+		CType result_type = {
+			.type = INTEGER_TYPE,
+			.val.integer.type = INT,
+			.val.integer.is_signed = true,
+		};
+
+		Value value = value_const(
+				(IrType) { .kind = IR_INT, .val.bit_width = 32 },
 				expr->val.int_literal);
-	case BIT_XOR_EXPR:
-		return build_binary_instr(
+
+		return (Term) { .ctype = result_type, .value = value };
+	}
+	case BIT_XOR_EXPR: {
+		// @TODO: Determine type correctly.
+		CType result_type = {
+			.type = INTEGER_TYPE,
+			.val.integer.type = INT,
+			.val.integer.is_signed = true,
+		};
+
+		Value value = build_binary_instr(
 				builder,
 				OP_BIT_XOR,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg1),
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg2));
-	case MULTIPLY_EXPR:
-		return build_binary_instr(
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg1).value,
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg2).value);
+
+		return (Term) { .ctype = result_type, .value = value };
+	}
+	case MULTIPLY_EXPR: {
+		// @TODO: Determine type correctly.
+		CType result_type = {
+			.type = INTEGER_TYPE,
+			.val.integer.type = INT,
+			.val.integer.is_signed = true,
+		};
+
+		Value value = build_binary_instr(
 				builder,
 				// @TODO: generate fmuls for float operands
 				// @TODO: and muls for unsigned operands
 				OP_IMUL,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg1),
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg2));
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg1).value,
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg2).value);
+
+		return (Term) { .ctype = result_type, .value = value };
+	}
 	case IDENTIFIER_EXPR: {
 		Binding *binding = binding_for_name(scope, expr->val.identifier);
-		return build_load(builder, binding->address, c_type_to_ir_type(&binding->type));
+		assert(binding != NULL);
+		Value value;
+
+		// Functions implicitly have their address taken.
+		if (binding->term.ctype.type == FUNCTION_TYPE) {
+			value = binding->term.value;
+		} else {
+			value = build_load(
+					builder,
+					binding->term.value,
+					c_type_to_ir_type(&binding->term.ctype));
+		}
+
+		return (Term) { .ctype = binding->term.ctype, .value = value };
+	}
+	case FUNCTION_CALL_EXPR: {
+		Term callee = ir_gen_expression(builder, scope, expr->val.function_call.callee);
+
+		u32 arity = 0;
+		ASTArgument *arg = expr->val.function_call.arg_list;
+		while (arg != NULL) {
+			arity++;
+			arg = arg->next;
+		}
+
+		assert(callee.ctype.type == FUNCTION_TYPE);
+
+		CType *return_type = callee.ctype.val.function.return_type;
+		Value *arg_array = pool_alloc(&builder->trans_unit->pool,
+				arity * sizeof(*arg_array));
+
+		arg = expr->val.function_call.arg_list;
+		for (u32 i = 0; arg != NULL; i++, arg = arg->next) {
+			Term arg_term = ir_gen_expression(builder, scope, arg->expr);
+			arg_array[i] = arg_term.value;
+		}
+
+		Value value = build_call(
+				builder,
+				callee.value,
+				c_type_to_ir_type(return_type),
+				arity,
+				arg_array);
+
+		return (Term) { .ctype = *return_type, .value = value };
 	}
 	default:
 		UNIMPLEMENTED;

@@ -47,6 +47,13 @@ typedef struct Register
 	} val;
 } Register;
 
+typedef struct AsmGlobal
+{
+	char *name;
+	i32 offset;
+	u32 id;
+} AsmGlobal;
+
 typedef struct AsmArg
 {
 	// @TODO: This is kinda messy considering that OFFSET_REGISTER doesn't make
@@ -57,10 +64,14 @@ typedef struct AsmArg
 	{
 		REGISTER,
 		OFFSET_REGISTER,
+
+		// @TODO: Do we want to encode the size of the immediate here rather
+		// than just having one type for all constants? Seems unnecessary.
 		CONST8,
 		CONST16,
 		CONST32,
 		CONST64,
+		GLOBAL,
 	} type;
 
 	union
@@ -72,12 +83,14 @@ typedef struct AsmArg
 			u64 offset;
 		} offset_register;
 		u64 constant;
+		u32 global_id;
 	} val;
 } AsmArg;
 
 #define ASM_OPS \
 	X(MOV), \
 	X(RET), \
+	X(CALL), \
 	X(XOR), \
 	X(ADD), \
 	X(SUB), \
@@ -105,9 +118,19 @@ typedef struct AsmFunction
 	char *name;
 } AsmFunction;
 
+typedef struct GlobalReference
+{
+	u32 global_id;
+	u32 file_location;
+	u32 size_bytes;
+} GlobalReference;
+
 typedef struct AsmModule
 {
 	Array(AsmFunction) functions;
+	Array(AsmGlobal) globals;
+
+	Array(GlobalReference) global_references;
 } AsmModule;
 
 typedef struct AsmSymbol
@@ -125,6 +148,7 @@ AsmArg asm_physical_register(PhysicalRegister reg);
 AsmArg asm_offset_register(PhysicalRegister reg, u64 offset);
 AsmArg asm_const32(i32 constant);
 AsmArg asm_deref(AsmArg asm_arg);
+AsmArg asm_global(u32 global_id);
 
 void dump_asm_module(AsmModule *asm_module);
 

@@ -38,12 +38,18 @@ def generate_encoder(input_filename, output_filename):
             else:
                 arg_order = 'INVALID'
 
+            # @TODO: We treat 'i' immediates the same as 'c' immediates. It's
+            # not entirely clear whether they are actually encoded the same, as
+            # the manual says that 'i' operands follow the opcode, ModR/M and
+            # SIB, and that 'c' operands follow the opcode. Look into this
+            # further if there is an opcode with a 'c' immediate and ModR/M or
+            # SIB bytes.
             match = re.match(
-                    r' *(?:REX\.(?P<prefix>[WRXB]+) *\+ *)?' +
-                    r'(?P<opcode>[0-9a-fA-F ]+)' +
+                    r' *(?:REX\.(?P<prefix>[WRXB]+) *\+ *)? *' +
+                    r'(?P<opcode>([0-9a-fA-F]+|\[[0-9a-fA-F ]+\])) *' +
                     r'(?P<slash>/.)? *' +
-                    r'(?P<immediate>ib)? *' +
-                    r'(?P<reg_in_opcode>\+rd)? *',
+                    r'(?P<reg_in_opcode>\+rd)? *' +
+                    r'(?P<immediate>[ic][bdo])? *',
                     encoding)
 
             rex_prefix = -1
@@ -57,7 +63,7 @@ def generate_encoder(input_filename, output_filename):
                         'B': 1 << 0
                     }[c]
 
-            opcode_str = match.group('opcode').replace(' ', '')
+            opcode_str = match.group('opcode').strip('[]').replace(' ', '')
             opcode = [int(a + b, 16) for a, b in zip(opcode_str[0::2], opcode_str[1::2])]
             opcode_size = len(opcode)
 
@@ -72,8 +78,13 @@ def generate_encoder(input_filename, output_filename):
 
             reg_and_rm = slash == 'r'
 
-            if match.group('immediate'):
-                immediate_size = 8
+            immediate = match.group('immediate')
+            if immediate:
+                immediate_size = {
+                    'b': 1,
+                    'd': 4,
+                    'o': 8,
+                }[immediate[1]]
             else:
                 immediate_size = -1
 
@@ -98,7 +109,7 @@ typedef struct Bytes_
     u8 bytes[4];
 } Bytes_;
 
-static u32 assemble_instr(FILE *output_file, AsmInstr *instr)
+static u32 assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *instr)
 {
 \tswitch (instr->op) {
 """ % input_filename)
@@ -114,7 +125,7 @@ static u32 assemble_instr(FILE *output_file, AsmInstr *instr)
                 output.append("\t\tif (%s)" % ' && '.join(
                     arg_condition(arg, i) for i, arg in enumerate(encoding.args)))
                 indent = '\n\t\t\t'
-            output.append("%sreturn encode_instr(output_file, instr, %s);\n"
+            output.append("%sreturn encode_instr(output_file, asm_module, instr, %s);\n"
                     % (indent,
                         ', '.join(map(to_c_val,
                             [encoding.arg_order, encoding.rex_prefix,
@@ -129,7 +140,7 @@ static u32 assemble_instr(FILE *output_file, AsmInstr *instr)
 \t}
 \t
 \tfputs("Unimplemented instruction:\\n", stderr);
-\tdump_asm_instr(instr);
+\tdump_asm_instr(asm_module, instr);
 \t
 \tUNIMPLEMENTED;
 }
@@ -145,6 +156,10 @@ def arg_condition(arg, i):
         return '(instr->args[%d].type == REGISTER) && !instr->args[%d].is_deref' % (i, i)
     if arg == 'imm8':
         return '(is_const_and_fits(instr->args[%d], 8))' % i
+    if arg == 'imm64':
+        return '(is_const_and_fits(instr->args[%d], 64))' % i
+    if arg == 'sym':
+        return '(instr->args[%d].type == GLOBAL)' % i
 
     assert False
 

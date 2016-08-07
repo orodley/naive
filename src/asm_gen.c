@@ -7,6 +7,9 @@
 void init_asm_builder(AsmBuilder *builder)
 {
 	ARRAY_INIT(&builder->asm_module.functions, AsmFunction, 10);
+	ARRAY_INIT(&builder->asm_module.globals, AsmGlobal, 10);
+	ARRAY_INIT(&builder->asm_module.global_references, GlobalReference, 10);
+
 	builder->local_stack_usage = 0;
 	builder->stack_slots = ARRAY_ZEROED;
 	builder->virtual_registers = ARRAY_ZEROED;
@@ -16,10 +19,14 @@ void free_asm_builder(AsmBuilder *builder)
 {
 	for (u32 i = 0; i < builder->asm_module.functions.size; i++)
 		array_free(ARRAY_REF(&builder->asm_module.functions, Array(AsmFunction), i));
-
 	array_free(&builder->asm_module.functions);
+	array_free(&builder->asm_module.globals);
+	array_free(&builder->asm_module.global_references);
+
 	if (ARRAY_IS_VALID(&builder->stack_slots))
 		array_free(&builder->stack_slots);
+	if (ARRAY_IS_VALID(&builder->virtual_registers))
+		array_free(&builder->virtual_registers);
 }
 
 static void append_function(AsmBuilder *builder, char *name)
@@ -69,7 +76,7 @@ static u32 size_of_ir_type(IrType type)
 	switch (type.kind) {
 	case IR_INT:
 		return type.val.bit_width;
-	case IR_POINTER:
+	case IR_POINTER: case IR_FUNCTION:
 		return 8;
 	}
 }
@@ -108,6 +115,8 @@ static AsmArg asm_value(Value value)
 		assert(vreg != -1);
 		return asm_virtual_register(vreg);
 	}
+	case VALUE_GLOBAL:
+		return asm_global(value.val.global_id);
 	}
 }
 
@@ -122,6 +131,10 @@ static void assign_vreg(AsmBuilder *builder, IrInstr *instr)
 
 	instr->virtual_register = vreg_number;
 }
+
+static PhysicalRegister argument_registers[] = {
+	RDI, RSI, RDX, RCX, R8, R9,
+};
 
 static void asm_gen_instr(
 		IrFunction *ir_func, AsmBuilder *builder, IrInstr *instr)
@@ -191,6 +204,26 @@ static void asm_gen_instr(
 		emit_instr2(builder, MOV,
 				asm_virtual_register(next_vreg(builder)),
 				asm_deref(asm_offset_register(RSP, slot->stack_offset)));
+		assign_vreg(builder, instr);
+		break;
+	}
+	case OP_CALL: {
+		// @TODO: Save caller save registers. We could just push and pop
+		// everything and rely on some later pass to eliminate saves of
+		// registers that aren't live across the call, but that seems a little
+		// messy.
+		u32 arity = instr->val.call.arity;
+		assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
+		for (u32 i = 0; i < arity; i++) {
+			AsmArg arg_current_reg = asm_value(instr->val.call.arg_array[i]);
+			AsmArg arg_target_reg = asm_physical_register(argument_registers[i]);
+			emit_instr2(builder, MOV, arg_target_reg, arg_current_reg);
+		}
+
+		emit_instr1(builder, CALL, asm_value(instr->val.call.callee));
+		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)),
+				asm_physical_register(RAX));
+
 		assign_vreg(builder, instr);
 		break;
 	}
@@ -270,13 +303,11 @@ static void allocate_registers(AsmBuilder *builder)
 	}
 }
 
-static PhysicalRegister argument_registers[] = {
-	RDI, RSI, RDX, RCX, R8, R9,
-};
-
-void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
+void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 {
-	append_function(builder, ir_func->name);
+	assert(ir_global->kind == IR_GLOBAL_FUNCTION);
+	IrFunction *ir_func = &ir_global->val.function;
+	append_function(builder, ir_global->name);
 
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
@@ -315,8 +346,19 @@ void asm_gen_function(AsmBuilder *builder, IrFunction *ir_func)
 
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 {
-	for (u32 i = 0; i < trans_unit->functions.size; i++) {
-		IrFunction *func = ARRAY_REF(&trans_unit->functions, IrFunction, i);
-		asm_gen_function(builder, func);
+	for (u32 i = 0; i < trans_unit->globals.size; i++) {
+		IrGlobal *ir_global = ARRAY_REF(&trans_unit->globals, IrGlobal, i);
+		AsmGlobal *asm_global = ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal);
+
+		asm_global->name = ir_global->name;
+		asm_global->offset = 0;
+		asm_global->id = i;
+
+		switch (ir_global->kind) {
+		case IR_GLOBAL_FUNCTION:
+			asm_gen_function(builder, ir_global);
+			break;
+		case IR_GLOBAL_SCALAR: UNIMPLEMENTED;
+		}
 	}
 }

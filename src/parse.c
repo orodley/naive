@@ -178,7 +178,7 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 		next->val.binary_op.arg2 = which->result;
 		return next;
 	case 1:
-		next->type = FUNCTION_CALL;
+		next->type = FUNCTION_CALL_EXPR;
 		next->val.function_call.callee = curr;
 		next->val.function_call.arg_list = which->result;
 		return next;
@@ -669,7 +669,7 @@ static void dump_expr(ASTExpr *expr)
 	case BIT_NOT_EXPR: case LOGICAL_NOT_EXPR: case SIZEOF_EXPR_EXPR:
 		dump_expr(expr->val.unary_arg);
 		break;
-	case FUNCTION_CALL:
+	case FUNCTION_CALL_EXPR:
 		dump_expr(expr->val.function_call.callee);
 		pretty_printf(",ARGS(");
 		dump_args(expr->val.function_call.arg_list);

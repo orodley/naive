@@ -8,7 +8,7 @@ COMMON_CFLAGS := $(CFLAGS) -c -std=c99 -Wall -Wextra -Wstrict-prototypes -Wforma
 
 ifneq (, $(shell which ccache))
 	ifeq ($(CC), clang)
-		COMMON_CFLAGS += -fcolor-diagnostics
+		COMMON_CFLAGS += -fcolor-diagnostics -Wno-parentheses-equality
 	endif
 
 	# CCACHE_CPP2 avoids warnings from compiling pre-preproccessed files

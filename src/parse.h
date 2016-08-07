@@ -22,7 +22,7 @@ typedef struct ParseError
 		X(STRUCT_ARROW_FIELD_EXPR), \
 \
 		X(INDEX_EXPR), \
-		X(FUNCTION_CALL), \
+		X(FUNCTION_CALL_EXPR), \
 		X(POST_INCREMENT_EXPR), \
 		X(POST_DECREMENT_EXPR), \
 \
