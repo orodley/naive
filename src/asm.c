@@ -223,31 +223,26 @@ void dump_asm_module(AsmModule *asm_module)
 	}
 }
 
-// @TODO: Probably easier to have these not return the amount of bytes written,
-// and instead just ftell to determine how much was written. We already do this
-// for GlobalReferences, as we don't get passed the current location in
-// encode_instr.
-
-static inline u32 write_u8(FILE *file, u8 x)
+static inline void write_u8(FILE *file, u8 x)
 {
-	fwrite(&x, 1, 1, file);
-	return 1;
+	size_t items_written = fwrite(&x, 1, 1, file);
+	assert(items_written == 1);
 }
 
 #if 0
-static inline u32 write_u16(FILE *file, u16 x)
+static inline void write_u16(FILE *file, u16 x)
 {
 	u8 out[] = {
 		(x >> 0) & 0xFF,
 		(x >> 8) & 0xFF,
 	};
 
-	fwrite(out, 1, sizeof out, file);
-	return sizeof out;
+	size_t items_written = fwrite(out, 1, sizeof out, file);
+	assert(items_written == sizeof out);
 }
 #endif
 
-static inline u32 write_u32(FILE *file, u32 x)
+static inline void write_u32(FILE *file, u32 x)
 {
 	u8 out[] = {
 		(x >>  0) & 0xFF,
@@ -256,12 +251,12 @@ static inline u32 write_u32(FILE *file, u32 x)
 		(x >> 24) & 0xFF,
 	};
 
-	fwrite(out, 1, sizeof out, file);
-	return sizeof out;
+	size_t items_written = fwrite(out, 1, sizeof out, file);
+	assert(items_written == sizeof out);
 }
 
 #if 0
-static inline u32 write_u64(FILE *file, u64 x)
+static inline void write_u64(FILE *file, u64 x)
 {
 	u8 out[] = {
 		(x >>  0) & 0xFF,
@@ -274,19 +269,18 @@ static inline u32 write_u64(FILE *file, u64 x)
 		(x >> 56) & 0xFF,
 	};
 
-	fwrite(out, 1, sizeof out, file);
-	return sizeof out;
+	size_t items_written = fwrite(out, 1, sizeof out, file);
+	assert(items_written == sizeof out);
 }
 #endif
 
-static inline u32 write_int(FILE *file, u64 x, u32 size)
+static inline void write_int(FILE *file, u64 x, u32 size)
 {
 	for (u32 n = 0; n < size; n ++) {
 		u8 byte = (x >> (n * 8)) & 0xFF;
-		fwrite(&byte, 1, 1, file);
+		size_t items_written = fwrite(&byte, 1, 1, file);
+		assert(items_written == 1);
 	}
-
-	return size;
 }
 
 static inline PhysicalRegister get_register(AsmArg *arg)
@@ -303,51 +297,51 @@ static inline PhysicalRegister get_register(AsmArg *arg)
 	return reg.val.physical_register;
 }
 
-static inline u32 write_mod_rm_byte(FILE *file, u8 mod, u8 reg, u8 rm)
+static inline void write_mod_rm_byte(FILE *file, u8 mod, u8 reg, u8 rm)
 {
 	u8 mod_rm_byte = (mod << 6) | (reg << 3) | rm;
-	return write_u8(file, mod_rm_byte);
+	write_u8(file, mod_rm_byte);
 }
 
-static u32 write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
+static void write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 {
 	if (arg->type == REGISTER) {
 		if (arg->is_deref) {
 			switch (get_register(arg)) {
-			case RAX: return write_mod_rm_byte(file, 0, reg_field, 0);
-			case RCX: return write_mod_rm_byte(file, 0, reg_field, 1);
-			case RDX: return write_mod_rm_byte(file, 0, reg_field, 2);
-			case RBX: return write_mod_rm_byte(file, 0, reg_field, 3);
-			case RSI: return write_mod_rm_byte(file, 0, reg_field, 6);
-			case RDI: return write_mod_rm_byte(file, 0, reg_field, 7);
+			case RAX: write_mod_rm_byte(file, 0, reg_field, 0); return;
+			case RCX: write_mod_rm_byte(file, 0, reg_field, 1); return;
+			case RDX: write_mod_rm_byte(file, 0, reg_field, 2); return;
+			case RBX: write_mod_rm_byte(file, 0, reg_field, 3); return;
+			case RSI: write_mod_rm_byte(file, 0, reg_field, 6); return;
+			case RDI: write_mod_rm_byte(file, 0, reg_field, 7); return;
 			case RSP: {
 				// Mod = 0, R/M = 4 means SIB addressing
-				u32 size = write_mod_rm_byte(file, 0, reg_field, 4);
+				write_mod_rm_byte(file, 0, reg_field, 4);
 				// SIB byte, with RSP as base and no index/scale
-				size += write_u8(file, 0x24);
+				write_u8(file, 0x24);
 
-				return size;
+				return;
 			}
 			case RBP: {
 				// Mod = 1, R/M = 5 means RBP + disp8
-				u32 size = write_mod_rm_byte(file, 1, reg_field, 5);
+				write_mod_rm_byte(file, 1, reg_field, 5);
 				// 0 displacement
-				size += write_u8(file, 0);
+				write_u8(file, 0);
 
-				return size;
+				return;
 			}
 			default: UNIMPLEMENTED;
 			}
 		} else {
 			switch (get_register(arg)) {
-			case RAX: return write_mod_rm_byte(file, 3, reg_field, 0);
-			case RCX: return write_mod_rm_byte(file, 3, reg_field, 1);
-			case RDX: return write_mod_rm_byte(file, 3, reg_field, 2);
-			case RBX: return write_mod_rm_byte(file, 3, reg_field, 3);
-			case RSP: return write_mod_rm_byte(file, 3, reg_field, 4);
-			case RBP: return write_mod_rm_byte(file, 3, reg_field, 5);
-			case RSI: return write_mod_rm_byte(file, 3, reg_field, 6);
-			case RDI: return write_mod_rm_byte(file, 3, reg_field, 7);
+			case RAX: write_mod_rm_byte(file, 3, reg_field, 0); return;
+			case RCX: write_mod_rm_byte(file, 3, reg_field, 1); return;
+			case RDX: write_mod_rm_byte(file, 3, reg_field, 2); return;
+			case RBX: write_mod_rm_byte(file, 3, reg_field, 3); return;
+			case RSP: write_mod_rm_byte(file, 3, reg_field, 4); return;
+			case RBP: write_mod_rm_byte(file, 3, reg_field, 5); return;
+			case RSI: write_mod_rm_byte(file, 3, reg_field, 6); return;
+			case RDI: write_mod_rm_byte(file, 3, reg_field, 7); return;
 			default: UNIMPLEMENTED;
 			}
 		}
@@ -364,19 +358,18 @@ static u32 write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 		else
 			assert(!"Offset too large!");
 
-		u32 size = 0;
 		switch (get_register(arg)) {
-		case RAX: size += write_mod_rm_byte(file, mod, reg_field, 0); break;
-		case RCX: size += write_mod_rm_byte(file, mod, reg_field, 1); break;
-		case RDX: size += write_mod_rm_byte(file, mod, reg_field, 2); break;
-		case RBX: size += write_mod_rm_byte(file, mod, reg_field, 3); break;
-		case RBP: size += write_mod_rm_byte(file, mod, reg_field, 5); break;
-		case RSI: size += write_mod_rm_byte(file, mod, reg_field, 6); break;
-		case RDI: size += write_mod_rm_byte(file, mod, reg_field, 7); break;
+		case RAX: write_mod_rm_byte(file, mod, reg_field, 0); break;
+		case RCX: write_mod_rm_byte(file, mod, reg_field, 1); break;
+		case RDX: write_mod_rm_byte(file, mod, reg_field, 2); break;
+		case RBX: write_mod_rm_byte(file, mod, reg_field, 3); break;
+		case RBP: write_mod_rm_byte(file, mod, reg_field, 5); break;
+		case RSI: write_mod_rm_byte(file, mod, reg_field, 6); break;
+		case RDI: write_mod_rm_byte(file, mod, reg_field, 7); break;
 		case RSP:
 			// Same as above: SIB addressing
-			size += write_mod_rm_byte(file, mod, reg_field, 4);
-			size += write_u8(file, 0x24);
+			write_mod_rm_byte(file, mod, reg_field, 4);
+			write_u8(file, 0x24);
 			break;
 		default:
 			UNIMPLEMENTED;
@@ -384,11 +377,9 @@ static u32 write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 
 		// Displacement byte/dword
 		if (mod == 1)
-			size += write_u8(file, (u8)offset);
+			write_u8(file, (u8)offset);
 		else
-			size += write_u32(file, (u32)offset);
-
-		return size;
+			write_u32(file, (u32)offset);
 	} else {
 		UNIMPLEMENTED;
 	}
@@ -396,13 +387,14 @@ static u32 write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 
 typedef enum ArgOrder { INVALID, RM, MR } ArgOrder;
 
-static inline u32 write_bytes(FILE *file, u32 size, u8 *bytes)
+static inline void write_bytes(FILE *file, u32 size, u8 *bytes)
 {
-	return fwrite(bytes, 1, size, file);
+	size_t items_written = fwrite(bytes, 1, size, file);
+	assert(items_written == size);
 }
 
 // Called by the generated function "assemble_instr".
-static u32 encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
+static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		ArgOrder arg_order, i32 rex_prefix, u32 opcode_size, u8 opcode[],
 		bool reg_and_rm, i32 opcode_extension, i32 immediate_size, bool reg_in_opcode)
 {
@@ -411,10 +403,8 @@ static u32 encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 	dump_asm_instr(asm_module, instr);
 #endif
 
-	u32 size = 0;
-
 	if (rex_prefix != -1)
-		size += write_u8(file, (u8)rex_prefix);
+		write_u8(file, (u8)rex_prefix);
 
 	if (reg_in_opcode) {
 		u8 reg;
@@ -432,9 +422,9 @@ static u32 encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		}
 
 		assert(opcode_size == 1);
-		size += write_u8(file, opcode[0] | reg);
+		write_u8(file, opcode[0] | reg);
 	} else {
-		size += write_bytes(file, opcode_size, opcode);
+		write_bytes(file, opcode_size, opcode);
 	}
 
 	if (reg_and_rm) {
@@ -462,9 +452,9 @@ static u32 encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		case RDI: reg = 7; break;
 		default: UNIMPLEMENTED;
 		}
-		size += write_mod_rm_arg(file, memory_operand, reg);
+		write_mod_rm_arg(file, memory_operand, reg);
 	} else if (opcode_extension != -1) {
-		size += write_mod_rm_arg(file, instr->args, opcode_extension);
+		write_mod_rm_arg(file, instr->args, opcode_extension);
 	} else {
 		// @NOTE: I'm not sure this is true in general, but it seems like there
 		// are three cases:
@@ -506,10 +496,8 @@ static u32 encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 			immediate = immediate_arg->val.constant;
 		}
 
-		size += write_int(file, immediate, immediate_size);
+		write_int(file, immediate, immediate_size);
 	}
-
-	return size;
 }
 
 // This is generated from "x64.enc", and defines the function "assemble_instr".
@@ -527,7 +515,10 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 		u32 function_offset = current_offset;
 		for (u32 j = 0; j < function->instrs.size; j++) {
 			AsmInstr *instr = ARRAY_REF(&function->instrs, AsmInstr, j);
-			current_offset += assemble_instr(output_file, asm_module, instr);
+			assemble_instr(output_file, asm_module, instr);
+
+			current_offset = base_virtual_address +
+				checked_ftell(output_file) - initial_file_location;
 		}
 		u32 function_size = current_offset - function_offset;
 

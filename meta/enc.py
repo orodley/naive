@@ -109,7 +109,7 @@ typedef struct Bytes_
     u8 bytes[4];
 } Bytes_;
 
-static u32 assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *instr)
+static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *instr)
 {
 \tswitch (instr->op) {
 """ % input_filename)
@@ -122,16 +122,20 @@ static u32 assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *in
             if len(encoding.args) == 0:
                 indent = '\t\t'
             else:
-                output.append("\t\tif (%s)" % ' && '.join(
+                output.append("\t\tif (%s) {\n" % ' && '.join(
                     arg_condition(arg, i) for i, arg in enumerate(encoding.args)))
-                indent = '\n\t\t\t'
-            output.append("%sreturn encode_instr(output_file, asm_module, instr, %s);\n"
+                indent = '\t\t\t'
+            output.append(("%sencode_instr(output_file, asm_module, instr, %s);\n" +
+                           "%sreturn;\n")
                     % (indent,
                         ', '.join(map(to_c_val,
                             [encoding.arg_order, encoding.rex_prefix,
                             encoding.opcode_size, encoding.opcode,
                             encoding.reg_and_rm, encoding.opcode_extension,
-                            encoding.immediate_size, encoding.reg_in_opcode]))))
+                            encoding.immediate_size, encoding.reg_in_opcode])),
+                        indent))
+            if len(encoding.args) != 0:
+                output.append("\t\t}\n")
 
         output.append("\t\tbreak;\n")
 
