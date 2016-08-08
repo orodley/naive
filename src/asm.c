@@ -303,17 +303,33 @@ static inline void write_mod_rm_byte(FILE *file, u8 mod, u8 reg, u8 rm)
 	write_u8(file, mod_rm_byte);
 }
 
+static u32 encoded_register_number(PhysicalRegister reg)
+{
+	switch (reg) {
+	case RAX: return 0;
+	case RCX: return 1;
+	case RDX: return 2;
+	case RBX: return 3;
+	case RSP: return 4;
+	case RBP: return 5;
+	case RSI: return 6;
+	case RDI: return 7;
+	default: UNIMPLEMENTED;
+	}
+}
+
 static void write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 {
 	if (arg->type == REGISTER) {
+		PhysicalRegister reg = get_register(arg);
+
 		if (arg->is_deref) {
-			switch (get_register(arg)) {
-			case RAX: write_mod_rm_byte(file, 0, reg_field, 0); return;
-			case RCX: write_mod_rm_byte(file, 0, reg_field, 1); return;
-			case RDX: write_mod_rm_byte(file, 0, reg_field, 2); return;
-			case RBX: write_mod_rm_byte(file, 0, reg_field, 3); return;
-			case RSI: write_mod_rm_byte(file, 0, reg_field, 6); return;
-			case RDI: write_mod_rm_byte(file, 0, reg_field, 7); return;
+			switch (reg) {
+			case RAX: case RCX: case RDX: case RBX: case RSI: case RDI: {
+				u8 encoded_reg = encoded_register_number(reg);
+				write_mod_rm_byte(file, 0, reg_field, encoded_reg);
+				return;
+			}
 			case RSP: {
 				// Mod = 0, R/M = 4 means SIB addressing
 				write_mod_rm_byte(file, 0, reg_field, 4);
@@ -333,17 +349,9 @@ static void write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 			default: UNIMPLEMENTED;
 			}
 		} else {
-			switch (get_register(arg)) {
-			case RAX: write_mod_rm_byte(file, 3, reg_field, 0); return;
-			case RCX: write_mod_rm_byte(file, 3, reg_field, 1); return;
-			case RDX: write_mod_rm_byte(file, 3, reg_field, 2); return;
-			case RBX: write_mod_rm_byte(file, 3, reg_field, 3); return;
-			case RSP: write_mod_rm_byte(file, 3, reg_field, 4); return;
-			case RBP: write_mod_rm_byte(file, 3, reg_field, 5); return;
-			case RSI: write_mod_rm_byte(file, 3, reg_field, 6); return;
-			case RDI: write_mod_rm_byte(file, 3, reg_field, 7); return;
-			default: UNIMPLEMENTED;
-			}
+			u8 encoded_reg = encoded_register_number(reg);
+			write_mod_rm_byte(file, 3, reg_field, encoded_reg);
+			return;
 		}
 	} else if (arg->type == OFFSET_REGISTER) {
 		assert(arg->is_deref);
@@ -358,14 +366,14 @@ static void write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 		else
 			assert(!"Offset too large!");
 
-		switch (get_register(arg)) {
-		case RAX: write_mod_rm_byte(file, mod, reg_field, 0); break;
-		case RCX: write_mod_rm_byte(file, mod, reg_field, 1); break;
-		case RDX: write_mod_rm_byte(file, mod, reg_field, 2); break;
-		case RBX: write_mod_rm_byte(file, mod, reg_field, 3); break;
-		case RBP: write_mod_rm_byte(file, mod, reg_field, 5); break;
-		case RSI: write_mod_rm_byte(file, mod, reg_field, 6); break;
-		case RDI: write_mod_rm_byte(file, mod, reg_field, 7); break;
+		PhysicalRegister reg = get_register(arg);
+
+		switch (reg) {
+		case RAX: case RCX: case RDX: case RBX: case RBP: case RSI: case RDI: {
+			u8 encoded_reg = encoded_register_number(reg);
+			write_mod_rm_byte(file, mod, reg_field, encoded_reg);
+			return;
+		}
 		case RSP:
 			// Same as above: SIB addressing
 			write_mod_rm_byte(file, mod, reg_field, 4);
@@ -407,21 +415,8 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		write_u8(file, (u8)rex_prefix);
 
 	if (reg_in_opcode) {
-		u8 reg;
-		// @TODO: We do this like fifty times. Pull it out somewhere.
-		switch (get_register(instr->args)) {
-		case RAX: reg = 0; break;
-		case RCX: reg = 1; break;
-		case RDX: reg = 2; break;
-		case RBX: reg = 3; break;
-		case RSP: reg = 4; break;
-		case RBP: reg = 5; break;
-		case RSI: reg = 6; break;
-		case RDI: reg = 7; break;
-		default: UNIMPLEMENTED;
-		}
-
 		assert(opcode_size == 1);
+		u8 reg = encoded_register_number(get_register(instr->args));
 		write_u8(file, opcode[0] | reg);
 	} else {
 		write_bytes(file, opcode_size, opcode);
@@ -439,19 +434,7 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		}
 
 		PhysicalRegister r_register = get_register(register_operand);
-
-		u8 reg;
-		switch (r_register) {
-		case RAX: reg = 0; break;
-		case RCX: reg = 1; break;
-		case RDX: reg = 2; break;
-		case RBX: reg = 3; break;
-		case RSP: reg = 4; break;
-		case RBP: reg = 5; break;
-		case RSI: reg = 6; break;
-		case RDI: reg = 7; break;
-		default: UNIMPLEMENTED;
-		}
+		u8 reg = encoded_register_number(r_register);
 		write_mod_rm_arg(file, memory_operand, reg);
 	} else if (opcode_extension != -1) {
 		write_mod_rm_arg(file, instr->args, opcode_extension);
