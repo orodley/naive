@@ -7,6 +7,7 @@
 #include "diagnostics.h"
 #include "misc.h"
 #include "tokenise.h"
+#include "util.h"
 
 // @PORT
 #include <unistd.h>

@@ -1,7 +1,6 @@
 #include <stdlib.h>
-#include <string.h>
 
-#include "misc.h"
+#include "util.h"
 
 char *strndup(char *str, u32 length)
 {
@@ -13,3 +12,5 @@ char *strndup(char *str, u32 length)
 }
 
 extern inline bool streq(char *a, char *b);
+
+extern inline u64 checked_ftell(FILE *file);

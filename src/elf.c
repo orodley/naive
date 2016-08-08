@@ -3,6 +3,7 @@
 
 #include "asm.h"
 #include "misc.h"
+#include "util.h"
 
 typedef enum ELFIdentIndex
 {
@@ -170,12 +171,12 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		}
 		assert(main_virtual_addr != 0);
 
-		i32 crt_offset = ftell(output_file) - first_segment_location;
+		i32 crt_offset = checked_ftell(output_file) - first_segment_location;
 		header.entry_point_virtual_address =
 			executable_segment_header.base_virtual_address + crt_offset;
 		write_crt0(output_file, main_virtual_addr - header.entry_point_virtual_address);
 
-		u32 executable_segment_size = ftell(output_file) - first_segment_location;
+		u32 executable_segment_size = checked_ftell(output_file) - first_segment_location;
 		executable_segment_header.segment_size_in_file =
 			executable_segment_header.segment_size_in_process = executable_segment_size;
 
@@ -204,7 +205,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		u32 text_section_index = 2;
 		u32 strtab_section_index = 3;
 
-		assert(ftell(output_file) == 0);
+		assert(checked_ftell(output_file) == 0);
 		fwrite(&header, sizeof header, 1, output_file);
 
 		u32 first_section_offset = header.section_header_table_location +
@@ -212,7 +213,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		fseek(output_file, first_section_offset, SEEK_SET);
 
 		// .shstrtab
-		u32 shstrtab_offset = ftell(output_file);
+		u32 shstrtab_offset = checked_ftell(output_file);
 		//                          0          1           2          3
 		//                          0 1234567890 123456 78901234 5678901
 		char shstrtab_contents[] = "\0.shstrtab\0.text\0.strtab\0.symtab";
@@ -221,18 +222,18 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 		u32 strtab_name = 17;
 		u32 symtab_name = 25;
 		fwrite(shstrtab_contents, sizeof shstrtab_contents, 1, output_file);
-		u32 shstrtab_size = ftell(output_file) - shstrtab_offset;
+		u32 shstrtab_size = checked_ftell(output_file) - shstrtab_offset;
 
 		// .text
-		u32 text_offset = ftell(output_file);
+		u32 text_offset = checked_ftell(output_file);
 		u32 base_virtual_address = 0;
 		Array(AsmSymbol) symbols;
 		ARRAY_INIT(&symbols, AsmSymbol, 10);
 		assemble(asm_module, output_file, &symbols, base_virtual_address);
-		u32 text_size = ftell(output_file) - text_offset;
+		u32 text_size = checked_ftell(output_file) - text_offset;
 
 		// .strtab
-		u32 strtab_offset = ftell(output_file);
+		u32 strtab_offset = checked_ftell(output_file);
 		fputc('\0', output_file);
 
 		// @TODO: Pass the file name through so we have it here
@@ -242,16 +243,16 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 
 		for (u32 i = 0; i < symbols.size; i++) {
 			AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
-			u32 current_strtab_position = ftell(output_file) - strtab_offset;
+			u32 current_strtab_position = checked_ftell(output_file) - strtab_offset;
 			symbol->string_table_offset_for_name = current_strtab_position;
 
 			fputs(symbol->name, output_file);
 			fputc('\0', output_file);
 		}
-		u32 strtab_size = ftell(output_file) - strtab_offset;
+		u32 strtab_size = checked_ftell(output_file) - strtab_offset;
 
 		// .symtab
-		u32 symtab_offset = ftell(output_file);
+		u32 symtab_offset = checked_ftell(output_file);
 
 		{
 			ELF64Symbol undef_symbol;
@@ -285,7 +286,7 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link)
 
 			fwrite(&elf_symbol, sizeof elf_symbol, 1, output_file);
 		}
-		u32 symtab_size = ftell(output_file) - symtab_offset;
+		u32 symtab_size = checked_ftell(output_file) - symtab_offset;
 
 		// Then write the corresponding section headers
 		fseek(output_file, header.section_header_table_location, SEEK_SET);

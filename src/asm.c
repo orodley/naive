@@ -6,6 +6,7 @@
 #include "array.h"
 #include "asm.h"
 #include "asm_gen.h"
+#include "util.h"
 
 void init_asm_function(AsmFunction *function, char *name)
 {
@@ -494,10 +495,7 @@ static u32 encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 			GlobalReference *ref =
 				ARRAY_APPEND(&asm_module->global_references, GlobalReference);
 
-			long location = ftell(file);
-			assert(location != -1);
-
-			ref->file_location = (u32)location;
+			ref->file_location = (u32)checked_ftell(file);
 			ref->size_bytes = 4;
 			ref->global_id = immediate_arg->val.global_id;
 
@@ -521,8 +519,7 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 		Array(AsmSymbol) *symbols, u64 base_virtual_address)
 {
 	u64 current_offset = base_virtual_address;
-	long initial_file_location = ftell(output_file);
-	assert(initial_file_location != -1);
+	u64 initial_file_location = checked_ftell(output_file);
 
 	for (u32 i = 0; i < asm_module->functions.size; i++) {
 		AsmFunction *function = ARRAY_REF(&asm_module->functions, AsmFunction, i);
@@ -540,8 +537,7 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 		symbol->offset = function_offset - base_virtual_address;
 		symbol->size = function_size;
 	}
-	long final_file_position = ftell(output_file);
-	assert(final_file_position != -1);
+	u64 final_file_position = checked_ftell(output_file);
 
 	for (u32 i = 0; i < asm_module->global_references.size; i++) {
 		GlobalReference *ref =

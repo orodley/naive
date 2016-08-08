@@ -18,6 +18,7 @@
 #include "misc.h"
 #include "tokenise.h"
 #include "parse.h"
+#include "util.h"
 
 int main(int argc, char *argv[])
 {

@@ -5,6 +5,7 @@
 #include "array.h"
 #include "ir.h"
 #include "parse.h"
+#include "util.h"
 
 typedef enum CTypeType
 {

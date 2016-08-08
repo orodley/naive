@@ -10,6 +10,7 @@
 #include "parse.h"
 #include "pool.h"
 #include "tokenise.h"
+#include "util.h"
 
 typedef struct TypeTableEntry
 {

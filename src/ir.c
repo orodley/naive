@@ -6,6 +6,7 @@
 #include "asm_gen.h"
 #include "ir.h"
 #include "misc.h"
+#include "util.h"
 
 void trans_unit_init(TransUnit *trans_unit)
 {
