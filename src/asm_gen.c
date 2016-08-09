@@ -99,7 +99,7 @@ static inline u32 next_vreg(AsmBuilder *builder)
 	return builder->virtual_registers.size;
 }
 
-static AsmArg asm_value(Value value)
+static AsmArg asm_value(IrValue value)
 {
 	switch (value.kind) {
 	case VALUE_CONST:
@@ -155,7 +155,7 @@ static void asm_gen_instr(
 		IrBlock *target_block = instr->val.branch.target_block;
 		assert(target_block == &ir_func->ret_block);
 
-		Value arg = instr->val.branch.argument;
+		IrValue arg = instr->val.branch.argument;
 		assert(ir_type_eq(target_block->args[0].type, arg.type));
 
 		emit_instr2(builder, ADD, asm_physical_register(RSP),
@@ -167,8 +167,8 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_STORE: {
-		Value pointer = instr->val.store.pointer;
-		Value value = instr->val.store.value;
+		IrValue pointer = instr->val.store.pointer;
+		IrValue value = instr->val.store.value;
 		IrType type = instr->val.store.type;
 
 		assert(ir_type_eq(value.type, type));
@@ -188,7 +188,7 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_LOAD: {
-		Value pointer = instr->val.load.pointer;
+		IrValue pointer = instr->val.load.pointer;
 		IrType type = instr->val.load.type;
 
 		assert(type.kind == IR_INT);

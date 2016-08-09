@@ -84,7 +84,7 @@ void dump_ir_type(IrType type)
 	}
 }
 
-static void dump_value(TransUnit *trans_unit, Value value)
+static void dump_value(TransUnit *trans_unit, IrValue value)
 {
 	switch (value.kind) {
 	case VALUE_CONST: 
@@ -227,7 +227,7 @@ static inline IrInstr *append_instr(IrBuilder *builder)
 }
 
 // @TODO: Currently this is limited to blocks of arity 1.
-IrInstr *build_branch(IrBuilder *builder, IrBlock *block, Value value)
+IrInstr *build_branch(IrBuilder *builder, IrBlock *block, IrValue value)
 {
 	assert(ir_type_eq(block->args[0].type, value.type));
 
@@ -253,16 +253,16 @@ static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 	}
 }
 
-static Value value_instr(IrInstr *instr)
+static IrValue value_instr(IrInstr *instr)
 {
-	return (Value) {
+	return (IrValue) {
 		.kind = VALUE_INSTR,
 		.type = instr->type,
 		.val.instr = instr,
 	};
 }
 
-Value build_local(IrBuilder *builder, IrType type)
+IrValue build_local(IrBuilder *builder, IrType type)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->type = (IrType) { .kind = IR_POINTER };
@@ -272,7 +272,7 @@ Value build_local(IrBuilder *builder, IrType type)
 	return value_instr(instr);
 }
 
-Value build_load(IrBuilder *builder, Value pointer, IrType type)
+IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->type = type;
@@ -283,7 +283,7 @@ Value build_load(IrBuilder *builder, Value pointer, IrType type)
 	return value_instr(instr);
 }
 
-Value build_store(IrBuilder *builder, Value pointer, Value value, IrType type)
+IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType type)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_STORE;
@@ -294,7 +294,7 @@ Value build_store(IrBuilder *builder, Value pointer, Value value, IrType type)
 	return value_instr(instr);
 }
 
-Value build_binary_instr(IrBuilder *builder, IrOp op, Value arg1, Value arg2)
+IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2)
 {
 	assert(ir_type_eq(arg1.type, arg2.type));
 
@@ -313,8 +313,8 @@ Value build_binary_instr(IrBuilder *builder, IrOp op, Value arg1, Value arg2)
 	return value_instr(instr);
 }
 
-Value build_call(IrBuilder *builder, Value callee, IrType return_type, u32 arity,
-		Value *arg_array)
+IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 arity,
+		IrValue *arg_array)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_CALL;
@@ -327,9 +327,9 @@ Value build_call(IrBuilder *builder, Value callee, IrType return_type, u32 arity
 	return value_instr(instr);
 }
 
-Value value_const(IrType type, u64 constant)
+IrValue value_const(IrType type, u64 constant)
 {
-	Value value = {
+	IrValue value = {
 		.kind = VALUE_CONST,
 		.type = type,
 		.val.constant = constant,
@@ -338,9 +338,9 @@ Value value_const(IrType type, u64 constant)
 	return value;
 }
 
-Value value_arg(IrArg *arg)
+IrValue value_arg(IrArg *arg)
 {
-	Value value = {
+	IrValue value = {
 		.kind = VALUE_ARG,
 		.type = arg->type,
 		.val.arg = arg,
@@ -349,9 +349,9 @@ Value value_arg(IrArg *arg)
 	return value;
 }
 
-Value value_global(IrGlobal *global)
+IrValue value_global(IrGlobal *global)
 {
-	Value value = {
+	IrValue value = {
 		.kind = VALUE_GLOBAL,
 		.type = global->ir_type,
 		.val.global_id = global->id,

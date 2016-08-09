@@ -43,7 +43,7 @@ typedef struct CType
 typedef struct Term
 {
 	CType ctype;
-	Value value;
+	IrValue value;
 } Term;
 
 typedef struct Binding
@@ -306,7 +306,7 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 			.val.integer.is_signed = true,
 		};
 
-		Value value = value_const(
+		IrValue value = value_const(
 				(IrType) { .kind = IR_INT, .val.bit_width = 32 },
 				expr->val.int_literal);
 
@@ -320,7 +320,7 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 			.val.integer.is_signed = true,
 		};
 
-		Value value = build_binary_instr(
+		IrValue value = build_binary_instr(
 				builder,
 				OP_BIT_XOR,
 				ir_gen_expression(builder, scope, expr->val.binary_op.arg1).value,
@@ -336,7 +336,7 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 			.val.integer.is_signed = true,
 		};
 
-		Value value = build_binary_instr(
+		IrValue value = build_binary_instr(
 				builder,
 				// @TODO: generate fmuls for float operands
 				// @TODO: and muls for unsigned operands
@@ -349,7 +349,7 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 	case IDENTIFIER_EXPR: {
 		Binding *binding = binding_for_name(scope, expr->val.identifier);
 		assert(binding != NULL);
-		Value value;
+		IrValue value;
 
 		// Functions implicitly have their address taken.
 		if (binding->term.ctype.type == FUNCTION_TYPE) {
@@ -376,7 +376,7 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 		assert(callee.ctype.type == FUNCTION_TYPE);
 
 		CType *return_type = callee.ctype.val.function.return_type;
-		Value *arg_array = pool_alloc(&builder->trans_unit->pool,
+		IrValue *arg_array = pool_alloc(&builder->trans_unit->pool,
 				arity * sizeof(*arg_array));
 
 		arg = expr->val.function_call.arg_list;
@@ -385,7 +385,7 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 			arg_array[i] = arg_term.value;
 		}
 
-		Value value = build_call(
+		IrValue value = build_call(
 				builder,
 				callee.value,
 				c_type_to_ir_type(return_type),

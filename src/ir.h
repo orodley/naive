@@ -69,7 +69,7 @@ typedef struct IrBuilder
 } IrBuilder;
 
 
-typedef struct Value
+typedef struct IrValue
 {
 	enum
 	{
@@ -91,7 +91,7 @@ typedef struct Value
 		// @TODO: Make this into a pointer instead?
 		u32 global_id;
 	} val;
-} Value;
+} IrValue;
 
 typedef enum IrOp
 {
@@ -119,29 +119,29 @@ typedef struct IrInstr
 		struct
 		{
 			IrBlock *target_block;
-			Value argument;
+			IrValue argument;
 		} branch;
 		struct
 		{
-			Value arg1;
-			Value arg2;
+			IrValue arg1;
+			IrValue arg2;
 		} binary_op;
 		struct
 		{
-			Value pointer;
+			IrValue pointer;
 			IrType type;
 		} load;
 		struct
 		{
-			Value pointer;
-			Value value;
+			IrValue pointer;
+			IrValue value;
 			IrType type;
 		} store;
 		struct
 		{
-			Value callee;
+			IrValue callee;
 			u32 arity;
-			Value *arg_array;
+			IrValue *arg_array;
 			IrType return_type;
 		} call;
 		IrType type;
@@ -172,17 +172,17 @@ void dump_ir_type(IrType type);
 void dump_trans_unit(TransUnit *tu);
 
 void builder_init(IrBuilder *builder, TransUnit *tu);
-IrInstr *build_branch(IrBuilder *builder, IrBlock *block, Value value);
+IrInstr *build_branch(IrBuilder *builder, IrBlock *block, IrValue value);
 
-Value value_const(IrType type, u64 constant);
-Value value_arg(IrArg *arg);
-Value value_global(IrGlobal *global);
+IrValue value_const(IrType type, u64 constant);
+IrValue value_arg(IrArg *arg);
+IrValue value_global(IrGlobal *global);
 
-Value build_binary_instr(IrBuilder *builder, IrOp op, Value arg1, Value arg2);
-Value build_local(IrBuilder *builder, IrType type);
-Value build_load(IrBuilder *builder, Value pointer, IrType type);
-Value build_store(IrBuilder *builder, Value pointer, Value value, IrType type);
-Value build_call(IrBuilder *builder, Value callee, IrType return_type, u32 arity,
-		Value *arg_array);
+IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2);
+IrValue build_local(IrBuilder *builder, IrType type);
+IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type);
+IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType type);
+IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 arity,
+		IrValue *arg_array);
 
 #endif
