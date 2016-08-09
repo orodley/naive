@@ -18,7 +18,7 @@ typedef struct IrBlock
 	char *name;
 
 	u32 arity;
-	struct Arg *args;
+	struct IrArg *args;
 	Array(IrInstr *) instrs;
 } IrBlock;
 
@@ -87,7 +87,7 @@ typedef struct Value
 	{
 		u64 constant;
 		struct IrInstr *instr;
-		struct Arg *arg;
+		struct IrArg *arg;
 		// @TODO: Make this into a pointer instead?
 		u32 global_id;
 	} val;
@@ -148,13 +148,13 @@ typedef struct IrInstr
 	} val;
 } IrInstr;
 
-typedef struct Arg
+typedef struct IrArg
 {
 	u32 index;
 	IrType type;
 
 	i32 virtual_register; // used by asm_gen
-} Arg;
+} IrArg;
 
 void trans_unit_init(TransUnit *tu);
 void trans_unit_free(TransUnit *trans_unit);
@@ -175,7 +175,7 @@ void builder_init(IrBuilder *builder, TransUnit *tu);
 IrInstr *build_branch(IrBuilder *builder, IrBlock *block, Value value);
 
 Value value_const(IrType type, u64 constant);
-Value value_arg(Arg *arg);
+Value value_arg(IrArg *arg);
 Value value_global(IrGlobal *global);
 
 Value build_binary_instr(IrBuilder *builder, IrOp op, Value arg1, Value arg2);

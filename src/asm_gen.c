@@ -316,7 +316,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	assert(return_type.kind == IR_INT && return_type.val.bit_width == 32);
 
 	IrBlock *block = &ir_func->entry_block;
-	Arg *args = block->args;
+	IrArg *args = block->args;
 	assert(block->arity <= STATIC_ARRAY_LENGTH(argument_registers));
 	for (u32 i = 0; i < block->arity; i++) {
 		u32 vreg = next_vreg(builder);

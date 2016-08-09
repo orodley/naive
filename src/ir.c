@@ -29,7 +29,7 @@ static inline void block_init(IrBlock *block, char *name,
 	block->arity = arity;
 	block->args = malloc(sizeof(*block->args) * arity);
 	for (u32 i = 0; i < arity; i++) {
-		Arg *arg = &block->args[i];
+		IrArg *arg = &block->args[i];
 		arg->index = i;
 		arg->type = arg_types[i];
 		arg->virtual_register = -1;
@@ -164,7 +164,7 @@ void dump_trans_unit(TransUnit *trans_unit)
 
 			dump_ir_type(ir_function_return_type(f));
 			printf(" %s(", global->name);
-			Arg *args = f->entry_block.args;
+			IrArg *args = f->entry_block.args;
 			for (u32 i = 0; i < f->entry_block.arity; i++) {
 				IrType arg_type = args[i].type;
 				dump_ir_type(arg_type);
@@ -338,7 +338,7 @@ Value value_const(IrType type, u64 constant)
 	return value;
 }
 
-Value value_arg(Arg *arg)
+Value value_arg(IrArg *arg)
 {
 	Value value = {
 		.kind = VALUE_ARG,
