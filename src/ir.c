@@ -208,13 +208,13 @@ void dump_trans_unit(TransUnit *trans_unit)
 	}
 }
 
-void builder_init(Builder *builder, TransUnit *trans_unit)
+void builder_init(IrBuilder *builder, TransUnit *trans_unit)
 {
 	builder->current_function = NULL;
 	builder->trans_unit = trans_unit;
 }
 
-static inline IrInstr *append_instr(Builder *builder)
+static inline IrInstr *append_instr(IrBuilder *builder)
 {
 	IrBlock *block = builder->current_block;
 
@@ -227,7 +227,7 @@ static inline IrInstr *append_instr(Builder *builder)
 }
 
 // @TODO: Currently this is limited to blocks of arity 1.
-IrInstr *build_branch(Builder *builder, IrBlock *block, Value value)
+IrInstr *build_branch(IrBuilder *builder, IrBlock *block, Value value)
 {
 	assert(ir_type_eq(block->args[0].type, value.type));
 
@@ -262,7 +262,7 @@ static Value value_instr(IrInstr *instr)
 	};
 }
 
-Value build_local(Builder *builder, IrType type)
+Value build_local(IrBuilder *builder, IrType type)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->type = (IrType) { .kind = IR_POINTER };
@@ -272,7 +272,7 @@ Value build_local(Builder *builder, IrType type)
 	return value_instr(instr);
 }
 
-Value build_load(Builder *builder, Value pointer, IrType type)
+Value build_load(IrBuilder *builder, Value pointer, IrType type)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->type = type;
@@ -283,7 +283,7 @@ Value build_load(Builder *builder, Value pointer, IrType type)
 	return value_instr(instr);
 }
 
-Value build_store(Builder *builder, Value pointer, Value value, IrType type)
+Value build_store(IrBuilder *builder, Value pointer, Value value, IrType type)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_STORE;
@@ -294,7 +294,7 @@ Value build_store(Builder *builder, Value pointer, Value value, IrType type)
 	return value_instr(instr);
 }
 
-Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2)
+Value build_binary_instr(IrBuilder *builder, IrOp op, Value arg1, Value arg2)
 {
 	assert(ir_type_eq(arg1.type, arg2.type));
 
@@ -313,7 +313,7 @@ Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2)
 	return value_instr(instr);
 }
 
-Value build_call(Builder *builder, Value callee, IrType return_type, u32 arity,
+Value build_call(IrBuilder *builder, Value callee, IrType return_type, u32 arity,
 		Value *arg_array)
 {
 	IrInstr *instr = append_instr(builder);

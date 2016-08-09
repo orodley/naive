@@ -61,12 +61,12 @@ typedef struct IrGlobal
 	} val;
 } IrGlobal;
 
-typedef struct Builder
+typedef struct IrBuilder
 {
 	TransUnit *trans_unit;
 	IrFunction *current_function;
 	IrBlock *current_block;
-} Builder;
+} IrBuilder;
 
 
 typedef struct Value
@@ -171,18 +171,18 @@ void dump_ir_type(IrType type);
 
 void dump_trans_unit(TransUnit *tu);
 
-void builder_init(Builder *builder, TransUnit *tu);
-IrInstr *build_branch(Builder *builder, IrBlock *block, Value value);
+void builder_init(IrBuilder *builder, TransUnit *tu);
+IrInstr *build_branch(IrBuilder *builder, IrBlock *block, Value value);
 
 Value value_const(IrType type, u64 constant);
 Value value_arg(Arg *arg);
 Value value_global(IrGlobal *global);
 
-Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2);
-Value build_local(Builder *builder, IrType type);
-Value build_load(Builder *builder, Value pointer, IrType type);
-Value build_store(Builder *builder, Value pointer, Value value, IrType type);
-Value build_call(Builder *builder, Value callee, IrType return_type, u32 arity,
+Value build_binary_instr(IrBuilder *builder, IrOp op, Value arg1, Value arg2);
+Value build_local(IrBuilder *builder, IrType type);
+Value build_load(IrBuilder *builder, Value pointer, IrType type);
+Value build_store(IrBuilder *builder, Value pointer, Value value, IrType type);
+Value build_call(IrBuilder *builder, Value callee, IrType return_type, u32 arity,
 		Value *arg_array);
 
 #endif

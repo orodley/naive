@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
 
 	TransUnit tu;
 	trans_unit_init(&tu);
-	Builder builder;
+	IrBuilder builder;
 	builder_init(&builder, &tu);
 
 	ir_gen_toplevel(&tu, &builder, ast);

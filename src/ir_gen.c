@@ -144,7 +144,7 @@ static IrType c_type_to_ir_type(CType *ctype)
 	}
 }
 
-static void cdecl_to_binding(Builder *builder, CDecl *cdecl, Binding *binding)
+static void cdecl_to_binding(IrBuilder *builder, CDecl *cdecl, Binding *binding)
 {
 	IrType ir_type = c_type_to_ir_type(&cdecl->type);
 
@@ -153,10 +153,10 @@ static void cdecl_to_binding(Builder *builder, CDecl *cdecl, Binding *binding)
 	binding->term.value = build_local(builder, ir_type);
 }
 
-static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *statement);
-static Term ir_gen_expression(Builder *builder, Scope *scope, ASTExpr *expr);
+static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *statement);
+static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr);
 
-void ir_gen_toplevel(TransUnit *tu, Builder *builder, ASTToplevel *toplevel)
+void ir_gen_toplevel(TransUnit *tu, IrBuilder *builder, ASTToplevel *toplevel)
 {
 	Scope global_scope;
 	global_scope.parent_scope = NULL;
@@ -262,7 +262,7 @@ void ir_gen_toplevel(TransUnit *tu, Builder *builder, ASTToplevel *toplevel)
 	}
 }
 
-static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *statement)
+static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *statement)
 {
 	switch (statement->type) {
 	case COMPOUND_STATEMENT: {
@@ -293,7 +293,7 @@ static void ir_gen_statement(Builder *builder, Scope *scope, ASTStatement *state
 	}
 }
 
-static Term ir_gen_expression(Builder *builder, Scope *scope, ASTExpr *expr)
+static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 {
 	IGNORE(builder);
 
