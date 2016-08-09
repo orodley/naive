@@ -35,7 +35,7 @@ static inline void block_init(IrBlock *block, char *name,
 		arg->virtual_register = -1;
 	}
 
-	ARRAY_INIT(&block->instrs, IrInstr, 10);
+	ARRAY_INIT(&block->instrs, IrInstr *, 10);
 }
 
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
@@ -179,9 +179,9 @@ void dump_trans_unit(TransUnit *trans_unit)
 			for (;;) {
 				printf("%s(%d):\n", block->name, block->arity);
 
-				Array(IrInstr) *instrs = &block->instrs;
+				Array(IrInstr *) *instrs = &block->instrs;
 				for (u32 i = 0; i < instrs->size; i++) {
-					IrInstr *instr = ARRAY_REF(instrs, IrInstr, i);
+					IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
 					putchar('\t');
 					if (instr->op != OP_STORE && instr->op != OP_BRANCH)
 						printf("#%u = ", i);
@@ -191,7 +191,7 @@ void dump_trans_unit(TransUnit *trans_unit)
 				if (instrs->size == 0)
 					break;
 
-				IrInstr *last_instr = ARRAY_REF(instrs, IrInstr, instrs->size - 1);
+				IrInstr *last_instr = *ARRAY_REF(instrs, IrInstr *, instrs->size - 1);
 				assert(last_instr->op == OP_BRANCH);
 				block = last_instr->val.branch.target_block;
 			}
@@ -214,11 +214,15 @@ void builder_init(Builder *builder, TransUnit *trans_unit)
 	builder->trans_unit = trans_unit;
 }
 
-static inline IrInstr *append_instr(IrBlock *block)
+static inline IrInstr *append_instr(Builder *builder)
 {
-	IrInstr *instr = ARRAY_APPEND(&block->instrs, IrInstr);
+	IrBlock *block = builder->current_block;
+
+	IrInstr *instr = pool_alloc(&builder->trans_unit->pool, sizeof *instr);
 	instr->id = block->instrs.size - 1;
 	instr->virtual_register = -1;
+	*ARRAY_APPEND(&block->instrs, IrInstr *) = instr;
+
 	return instr;
 }
 
@@ -227,7 +231,7 @@ IrInstr *build_branch(Builder *builder, IrBlock *block, Value value)
 {
 	assert(ir_type_eq(block->args[0].type, value.type));
 
-	IrInstr *instr = append_instr(builder->current_block);
+	IrInstr *instr = append_instr(builder);
 	instr->op = OP_BRANCH;
 	instr->val.branch.target_block = block;
 	instr->val.branch.argument = value;
@@ -260,7 +264,7 @@ static Value value_instr(IrInstr *instr)
 
 Value build_local(Builder *builder, IrType type)
 {
-	IrInstr *instr = append_instr(builder->current_block);
+	IrInstr *instr = append_instr(builder);
 	instr->type = (IrType) { .kind = IR_POINTER };
 	instr->op = OP_LOCAL;
 	instr->val.type = type;
@@ -270,7 +274,7 @@ Value build_local(Builder *builder, IrType type)
 
 Value build_load(Builder *builder, Value pointer, IrType type)
 {
-	IrInstr *instr = append_instr(builder->current_block);
+	IrInstr *instr = append_instr(builder);
 	instr->type = type;
 	instr->op = OP_LOAD;
 	instr->val.load.pointer = pointer;
@@ -281,7 +285,7 @@ Value build_load(Builder *builder, Value pointer, IrType type)
 
 Value build_store(Builder *builder, Value pointer, Value value, IrType type)
 {
-	IrInstr *instr = append_instr(builder->current_block);
+	IrInstr *instr = append_instr(builder);
 	instr->op = OP_STORE;
 	instr->val.store.pointer = pointer;
 	instr->val.store.type = type;
@@ -300,7 +304,7 @@ Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2)
 		return value_const(type, constant_fold_op(op, arg1.val.constant, arg2.val.constant));
 	}
 
-	IrInstr *instr = append_instr(builder->current_block);
+	IrInstr *instr = append_instr(builder);
 	instr->op = op;
 	instr->type = type;
 	instr->val.binary_op.arg1 = arg1;
@@ -312,7 +316,7 @@ Value build_binary_instr(Builder *builder, IrOp op, Value arg1, Value arg2)
 Value build_call(Builder *builder, Value callee, IrType return_type, u32 arity,
 		Value *arg_array)
 {
-	IrInstr *instr = append_instr(builder->current_block);
+	IrInstr *instr = append_instr(builder);
 	instr->op = OP_CALL;
 	instr->type = return_type;
 	instr->val.call.return_type = return_type;

@@ -334,9 +334,9 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	AsmInstr *reserve_stack = emit_instr2(builder, SUB,
 			asm_physical_register(RSP), asm_const32(0));
 
-	Array(IrInstr) *instrs = &block->instrs;
+	Array(IrInstr *) *instrs = &block->instrs;
 	for (u32 i = 0; i < instrs->size; i++) {
-		asm_gen_instr(ir_func, builder, ARRAY_REF(instrs, IrInstr, i));
+		asm_gen_instr(ir_func, builder, *ARRAY_REF(instrs, IrInstr *, i));
 	}
 
 	reserve_stack->args[1] = asm_const32(builder->local_stack_usage);

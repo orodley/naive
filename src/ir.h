@@ -19,7 +19,7 @@ typedef struct IrBlock
 
 	u32 arity;
 	struct Arg *args;
-	Array(IrInstr) instrs;
+	Array(IrInstr *) instrs;
 } IrBlock;
 
 typedef struct IrType
@@ -88,6 +88,7 @@ typedef struct Value
 		u64 constant;
 		struct IrInstr *instr;
 		struct Arg *arg;
+		// @TODO: Make this into a pointer instead?
 		u32 global_id;
 	} val;
 } Value;
