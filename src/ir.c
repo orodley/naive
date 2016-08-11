@@ -10,7 +10,7 @@
 
 void trans_unit_init(TransUnit *trans_unit)
 {
-	ARRAY_INIT(&trans_unit->globals, IrGlobal, 10);
+	ARRAY_INIT(&trans_unit->globals, IrGlobal *, 10);
 	pool_init(&trans_unit->pool, 512);
 }
 
@@ -41,13 +41,13 @@ static inline void block_init(IrBlock *block, char *name,
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 		IrType return_type, u32 arity, IrType *arg_types)
 {
-	IrGlobal *new_global = ARRAY_APPEND(&trans_unit->globals, IrGlobal);
+	IrGlobal *new_global = pool_alloc(&trans_unit->pool, sizeof *new_global);
+	*ARRAY_APPEND(&trans_unit->globals, IrGlobal *) = new_global;
 	ZERO_STRUCT(new_global);
 
 	new_global->name = name;
 	new_global->ir_type.kind = IR_FUNCTION;
 	new_global->kind = IR_GLOBAL_FUNCTION;
-	new_global->id = trans_unit->globals.size - 1;
 	block_init(&new_global->val.function.entry_block, "entry", arity, arg_types);
 	block_init(&new_global->val.function.ret_block, "ret", 1, &return_type);
 
@@ -84,7 +84,7 @@ void dump_ir_type(IrType type)
 	}
 }
 
-static void dump_value(TransUnit *trans_unit, IrValue value)
+static void dump_value(IrValue value)
 {
 	switch (value.kind) {
 	case VALUE_CONST: 
@@ -97,12 +97,12 @@ static void dump_value(TransUnit *trans_unit, IrValue value)
 		printf("#%d", value.val.instr->id);
 		break;
 	case VALUE_GLOBAL:
-		printf("$%s", ARRAY_REF(&trans_unit->globals, IrGlobal, value.val.global_id)->name);
+		printf("$%s", value.val.global->name);
 		break;
 	}
 }
 
-static void dump_instr(TransUnit *trans_unit, IrInstr *instr)
+static void dump_instr(IrInstr *instr)
 {
 	switch (instr->op) {
 	case OP_LOCAL:
@@ -113,39 +113,39 @@ static void dump_instr(TransUnit *trans_unit, IrInstr *instr)
 		fputs("load(", stdout);
 		dump_ir_type(instr->val.load.type);
 		fputs(", ", stdout);
-		dump_value(trans_unit, instr->val.load.pointer);
+		dump_value(instr->val.load.pointer);
 		break;
 	case OP_STORE:
 		fputs("store(", stdout);
-		dump_value(trans_unit, instr->val.store.pointer);
+		dump_value(instr->val.store.pointer);
 		fputs(", ", stdout);
-		dump_value(trans_unit, instr->val.store.value);
+		dump_value(instr->val.store.value);
 		fputs(", ", stdout);
 		dump_ir_type(instr->val.store.type);
 		break;
 	case OP_BRANCH:
 		printf("branch(%s, ", instr->val.branch.target_block->name);
-		dump_value(trans_unit, instr->val.branch.argument);
+		dump_value(instr->val.branch.argument);
 		break;
 	case OP_CALL:
 		fputs("call(", stdout);
-		dump_value(trans_unit, instr->val.call.callee);
+		dump_value(instr->val.call.callee);
 		for (u32 i = 0; i < instr->val.call.arity; i++) {
 			fputs(", ", stdout);
-			dump_value(trans_unit, instr->val.call.arg_array[i]);
+			dump_value(instr->val.call.arg_array[i]);
 		}
 		break;
 	case OP_BIT_XOR:
 		fputs("bit_xor(", stdout);
-		dump_value(trans_unit, instr->val.binary_op.arg1);
+		dump_value(instr->val.binary_op.arg1);
 		fputs(", ", stdout);
-		dump_value(trans_unit, instr->val.binary_op.arg2);
+		dump_value(instr->val.binary_op.arg2);
 		break;
 	case OP_IMUL:
 		fputs("imul(", stdout);
-		dump_value(trans_unit, instr->val.binary_op.arg1);
+		dump_value(instr->val.binary_op.arg1);
 		fputs(", ", stdout);
-		dump_value(trans_unit, instr->val.binary_op.arg2);
+		dump_value(instr->val.binary_op.arg2);
 		break;
 	}
 
@@ -154,9 +154,9 @@ static void dump_instr(TransUnit *trans_unit, IrInstr *instr)
 
 void dump_trans_unit(TransUnit *trans_unit)
 {
-	Array(IrGlobal) *globals = &trans_unit->globals;
+	Array(IrGlobal *) *globals = &trans_unit->globals;
 	for (u32 i = 0; i < globals->size; i++) {
-		IrGlobal *global = ARRAY_REF(globals, IrGlobal, i);
+		IrGlobal *global = *ARRAY_REF(globals, IrGlobal *, i);
 
 		switch (global->kind) {
 		case IR_GLOBAL_FUNCTION: {
@@ -185,7 +185,7 @@ void dump_trans_unit(TransUnit *trans_unit)
 					putchar('\t');
 					if (instr->op != OP_STORE && instr->op != OP_BRANCH)
 						printf("#%u = ", i);
-					dump_instr(trans_unit, instr);
+					dump_instr(instr);
 				}
 
 				if (instrs->size == 0)
@@ -354,7 +354,7 @@ IrValue value_global(IrGlobal *global)
 	IrValue value = {
 		.kind = VALUE_GLOBAL,
 		.type = global->ir_type,
-		.val.global_id = global->id,
+		.val.global = global,
 	};
 
 	return value;

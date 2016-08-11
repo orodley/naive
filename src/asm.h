@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "array.h"
+#include "pool.h"
 
 // @TODO: We need to unify registers that overlap like rax, eax, al, ah.
 #define PHYSICAL_REGISTERS \
@@ -47,11 +48,12 @@ typedef struct Register
 	} val;
 } Register;
 
+// @TODO: Merge this and AsmFunction, just like in the IR?
 typedef struct AsmGlobal
 {
 	char *name;
 	i32 offset;
-	u32 id;
+	struct AsmSymbol *symbol;
 } AsmGlobal;
 
 typedef struct AsmArg
@@ -83,7 +85,7 @@ typedef struct AsmArg
 			u64 offset;
 		} offset_register;
 		u64 constant;
-		u32 global_id;
+		AsmGlobal *global;
 	} val;
 } AsmArg;
 
@@ -120,7 +122,7 @@ typedef struct AsmFunction
 
 typedef struct GlobalReference
 {
-	u32 global_id;
+	AsmGlobal *global;
 	u32 file_location;
 	u32 size_bytes;
 } GlobalReference;
@@ -128,9 +130,11 @@ typedef struct GlobalReference
 typedef struct AsmModule
 {
 	Array(AsmFunction) functions;
-	Array(AsmGlobal) globals;
+	Array(AsmGlobal *) globals;
 
 	Array(GlobalReference) global_references;
+
+	Pool pool;
 } AsmModule;
 
 typedef struct AsmSymbol
@@ -142,13 +146,16 @@ typedef struct AsmSymbol
 } AsmSymbol;
 
 void init_asm_function(AsmFunction *func, char *name);
+void init_asm_module(AsmModule *asm_module);
+
+void free_asm_module(AsmModule *asm_module);
 
 AsmArg asm_virtual_register(u32 n);
 AsmArg asm_physical_register(PhysicalRegister reg);
 AsmArg asm_offset_register(PhysicalRegister reg, u64 offset);
 AsmArg asm_const32(i32 constant);
 AsmArg asm_deref(AsmArg asm_arg);
-AsmArg asm_global(u32 global_id);
+AsmArg asm_global(AsmGlobal *global);
 
 void dump_asm_module(AsmModule *asm_module);
 

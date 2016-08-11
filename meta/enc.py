@@ -144,7 +144,7 @@ static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *i
 \t}
 \t
 \tfputs("Unimplemented instruction:\\n", stderr);
-\tdump_asm_instr(asm_module, instr);
+\tdump_asm_instr(instr);
 \t
 \tUNIMPLEMENTED;
 }

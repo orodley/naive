@@ -3,6 +3,7 @@
 
 #include "misc.h"
 
+// @TODO: Rename this? PoolBlock or something, Entry isn't a good description.
 typedef struct PoolEntry
 {
 	size_t used;

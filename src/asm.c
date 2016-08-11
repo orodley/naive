@@ -8,6 +8,24 @@
 #include "asm_gen.h"
 #include "util.h"
 
+void init_asm_module(AsmModule *asm_module)
+{
+	ARRAY_INIT(&asm_module->functions, AsmFunction, 10);
+	ARRAY_INIT(&asm_module->globals, AsmGlobal *, 10);
+	ARRAY_INIT(&asm_module->global_references, GlobalReference, 10);
+
+	pool_init(&asm_module->pool, 1024);
+}
+
+void free_asm_module(AsmModule *asm_module)
+{
+	for (u32 i = 0; i < asm_module->functions.size; i++)
+		array_free(ARRAY_REF(&asm_module->functions, Array(AsmFunction), i));
+	array_free(&asm_module->functions);
+	array_free(&asm_module->globals);
+	array_free(&asm_module->global_references);
+}
+
 void init_asm_function(AsmFunction *function, char *name)
 {
 	ARRAY_INIT(&function->instrs, AsmInstr, 20);
@@ -72,12 +90,12 @@ AsmArg asm_const32(i32 constant)
 	return asm_arg;
 }
 
-AsmArg asm_global(u32 global_id)
+AsmArg asm_global(AsmGlobal *global)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
 		.type = GLOBAL,
-		.val.global_id = global_id,
+		.val.global = global,
 	};
 
 	return asm_arg;
@@ -107,7 +125,7 @@ static bool is_const_and_fits(AsmArg asm_arg, u32 bits)
 	return truncated == constant;
 }
 
-static void dump_asm_args(AsmModule *module, AsmArg *args, u32 num_args);
+static void dump_asm_args(AsmArg *args, u32 num_args);
 
 #define X(x) #x
 static char *asm_op_names[] = {
@@ -115,7 +133,7 @@ static char *asm_op_names[] = {
 };
 #undef X
 
-static void dump_asm_instr(AsmModule *asm_module, AsmInstr *instr)
+static void dump_asm_instr(AsmInstr *instr)
 {
 	putchar('\t');
 	char *op_name = asm_op_names[instr->op];
@@ -125,11 +143,11 @@ static void dump_asm_instr(AsmModule *asm_module, AsmInstr *instr)
 	switch (instr->op) {
 	case MOV: case XOR: case ADD: case SUB: case IMUL:
 		putchar(' ');
-		dump_asm_args(asm_module, instr->args, 2);
+		dump_asm_args(instr->args, 2);
 		break;
 	case PUSH: case POP: case CALL:
 		putchar(' ');
-		dump_asm_args(asm_module, instr->args, 1);
+		dump_asm_args(instr->args, 1);
 		break;
 	case RET:
 		// Print an extra newline, to visually separate functions
@@ -161,7 +179,7 @@ static void dump_register(Register reg)
 	}
 }
 
-static void dump_asm_args(AsmModule *asm_module, AsmArg *args, u32 num_args)
+static void dump_asm_args(AsmArg *args, u32 num_args)
 {
 	for (u32 i = 0; i < num_args; i++) {
 		if (i != 0)
@@ -201,9 +219,7 @@ static void dump_asm_args(AsmModule *asm_module, AsmArg *args, u32 num_args)
 				printf("%" PRIu64, (i64)arg->val.constant);
 			break;
 		case GLOBAL:
-			printf("$%s", ARRAY_REF(&asm_module->globals,
-								AsmGlobal,
-								arg->val.global_id)->name);
+			printf("$%s", arg->val.global->name);
 			break;
 		}
 		if (arg->is_deref)
@@ -218,7 +234,7 @@ void dump_asm_module(AsmModule *asm_module)
 
 		for (u32 j = 0; j < block->instrs.size; j++) {
 			AsmInstr *instr = ARRAY_REF(&block->instrs, AsmInstr, j);
-			dump_asm_instr(asm_module, instr);
+			dump_asm_instr(instr);
 		}
 	}
 }
@@ -408,7 +424,7 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 {
 #if 0
 	puts("Encoding instr:");
-	dump_asm_instr(asm_module, instr);
+	dump_asm_instr(instr);
 #endif
 
 	if (rex_prefix != -1)
@@ -470,7 +486,7 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 
 			ref->file_location = (u32)checked_ftell(file);
 			ref->size_bytes = 4;
-			ref->global_id = immediate_arg->val.global_id;
+			ref->global = immediate_arg->val.global;
 
 			// Dummy value, gets patched later.
 			immediate = 0;
@@ -510,6 +526,10 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 		// Offset is relative to the start of the section.
 		symbol->offset = function_offset - base_virtual_address;
 		symbol->size = function_size;
+
+		AsmGlobal *corresponding_global =
+			*ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
+		corresponding_global->symbol = symbol;
 	}
 	u64 final_file_position = checked_ftell(output_file);
 
@@ -520,7 +540,7 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 		int ret = fseek(output_file, ref->file_location, SEEK_SET);
 		assert(ret == 0);
 
-		AsmSymbol *referenced_symbol = ARRAY_REF(symbols, AsmSymbol, ref->global_id);
+		AsmSymbol *referenced_symbol = ref->global->symbol;
 
 		// Relative accesses are relative to the start of the next instruction,
 		// so we add on the size of the reference itself first.

@@ -8,7 +8,7 @@
 
 typedef struct TransUnit
 {
-	Array(IrGlobal) globals;
+	Array(IrGlobal *) globals;
 
 	Pool pool;
 } TransUnit;
@@ -47,7 +47,7 @@ typedef struct IrGlobal
 {
 	char *name;
 	IrType ir_type;
-	u32 id;
+	struct AsmGlobal *asm_global;
 
 	enum
 	{
@@ -88,8 +88,7 @@ typedef struct IrValue
 		u64 constant;
 		struct IrInstr *instr;
 		struct IrArg *arg;
-		// @TODO: Make this into a pointer instead?
-		u32 global_id;
+		IrGlobal *global;
 	} val;
 } IrValue;
 

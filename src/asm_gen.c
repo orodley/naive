@@ -6,9 +6,7 @@
 
 void init_asm_builder(AsmBuilder *builder)
 {
-	ARRAY_INIT(&builder->asm_module.functions, AsmFunction, 10);
-	ARRAY_INIT(&builder->asm_module.globals, AsmGlobal, 10);
-	ARRAY_INIT(&builder->asm_module.global_references, GlobalReference, 10);
+	init_asm_module(&builder->asm_module);
 
 	builder->local_stack_usage = 0;
 	builder->stack_slots = ARRAY_ZEROED;
@@ -17,11 +15,7 @@ void init_asm_builder(AsmBuilder *builder)
 
 void free_asm_builder(AsmBuilder *builder)
 {
-	for (u32 i = 0; i < builder->asm_module.functions.size; i++)
-		array_free(ARRAY_REF(&builder->asm_module.functions, Array(AsmFunction), i));
-	array_free(&builder->asm_module.functions);
-	array_free(&builder->asm_module.globals);
-	array_free(&builder->asm_module.global_references);
+	free_asm_module(&builder->asm_module);
 
 	if (ARRAY_IS_VALID(&builder->stack_slots))
 		array_free(&builder->stack_slots);
@@ -116,7 +110,7 @@ static AsmArg asm_value(IrValue value)
 		return asm_virtual_register(vreg);
 	}
 	case VALUE_GLOBAL:
-		return asm_global(value.val.global_id);
+		return asm_global(value.val.global->asm_global);
 	}
 }
 
@@ -347,12 +341,14 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 {
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
-		IrGlobal *ir_global = ARRAY_REF(&trans_unit->globals, IrGlobal, i);
-		AsmGlobal *asm_global = ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal);
+		IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
+		AsmGlobal *asm_global =
+			pool_alloc(&builder->asm_module.pool, sizeof *asm_global);
+		*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = asm_global;
+		ir_global->asm_global = asm_global;
 
 		asm_global->name = ir_global->name;
 		asm_global->offset = 0;
-		asm_global->id = i;
 
 		switch (ir_global->kind) {
 		case IR_GLOBAL_FUNCTION:
