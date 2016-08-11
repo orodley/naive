@@ -3,8 +3,12 @@
 
 #include <stdio.h>
 
+#include "array.h"
 #include "asm.h"
 
-void write_elf_file(FILE *output_file, AsmModule *asm_module, bool do_link);
+void write_elf_file(FILE *output_file, AsmModule *asm_module);
+
+// @TODO: Report errors?
+void link_elf_executable(char *executable_filename, Array(char *) *linker_input_filenames);
 
 #endif
