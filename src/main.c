@@ -22,11 +22,6 @@
 
 int main(int argc, char *argv[])
 {
-	if (argc == 1) {
-		fputs("Error: no input file given\n", stderr);
-		return 1;
-	}
-
 	char *input_filename = NULL;
 	bool dump_tokens = false;
 	bool dump_ast = false;
@@ -55,10 +50,15 @@ int main(int argc, char *argv[])
 			if (input_filename == NULL) {
 				input_filename = arg;
 			} else {
-				fputs("Error: no input file given\n", stderr);
-				return 2;
+				fputs("Error: multiple source files given\n", stderr);
+				return 1;
 			}
 		}
+	}
+
+	if (input_filename == NULL) {
+		fputs("Error: no input file given\n", stderr);
+		return 2;
 	}
 
 	Array(SourceToken) tokens;
