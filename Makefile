@@ -1,5 +1,6 @@
-NAME := ncc
 CC ?= clang
+AR ?= ar
+NASM ?= nasm
 
 PEG ?= meta/peg.py
 ENC ?= meta/enc.py
@@ -16,29 +17,42 @@ ifneq (, $(shell which ccache))
 	CC := CCACHE_CPP2=yes ccache $(CC)
 endif
 
-GEN_FILES := $(patsubst %.peg, %.inc, $(shell find src -name '*.peg'))
-GEN_FILES += $(patsubst %.enc, %.inc, $(shell find src -name '*.enc'))
+SRC_DIRS := src libc
 
-OBJS := $(patsubst %.c, %.o, $(shell find src -name '*.c'))
-HEADERS := $(shell find src -name '*.h')
+GEN_FILES := $(patsubst %.peg, %.inc, $(shell find $(SRC_DIRS) -name '*.peg'))
+GEN_FILES += $(patsubst %.enc, %.inc, $(shell find $(SRC_DIRS) -name '*.enc'))
+
+HEADERS := $(shell find $(SRC_DIRS) -name '*.h')
+
+objs_for_dir = $(patsubst %.c, %.o, $(shell find $(1) -name '*.c')) \
+			   $(patsubst %.s, %.o, $(shell find $(1) -name '*.s')) \
 
 # Please don't make us waste time regenerating temp files, Mr. Make
 .SECONDARY: $(GEN_FILES)
 
 .PHONY: all
-all: $(NAME) tags
+all: ncc libc.a tags
 
-tags: $(OBJS) $(HEADERS)
+tags: ncc
 	@echo 'ctags'
 	@ctags -R --fields=+Sl --langmap=c:+.h
 
-$(NAME): $(OBJS)
+ncc: $(call objs_for_dir,src)
 	@echo 'CC $@'
 	@$(CC) $^ -o $@
+
+libc.a: $(call objs_for_dir,libc)
+	@echo 'AR $@'
+	@$(AR) -cr $@ $^
+
 
 %.o: %.c $(HEADERS) $(GEN_FILES)
 	@echo 'CC $<'
 	@$(CC) -c $(CFLAGS) $< -o $@
+
+%.o: %.s
+	@echo 'NASM $<'
+	@$(NASM) -f elf64 $< -o $@
 
 %.inc: %.peg $(PEG)
 	@echo 'PEG $<'
@@ -50,4 +64,4 @@ $(NAME): $(OBJS)
 
 .PHONY: clean
 clean:
-	rm -f $(NAME) $(OBJS) $(GEN_FILES)
+	rm -f ncc libc.a $(shell find $(SRC_DIRS) -name '*.o') $(GEN_FILES)
