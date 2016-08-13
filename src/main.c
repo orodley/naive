@@ -4,17 +4,20 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 // @PORT
+#include <errno.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
 
 #include "array.h"
 #include "asm.h"
 #include "asm_gen.h"
 #include "elf.h"
+#include "file.h"
 #include "ir_gen.h"
 #include "misc.h"
 #include "tokenise.h"
@@ -32,6 +35,11 @@ static int make_file_executable(char *filename);
 
 int main(int argc, char *argv[])
 {
+	// @NOTE: We only use this for generating temp file names. We go to extra
+	// precautions to make sure the names don't conflict, so it doesn't really
+	// matter how we seed this.
+	srand(time(NULL));
+
 	Array(char *) input_filenames;
 	ARRAY_INIT(&input_filenames, char *, 10);
 	bool do_link = true;
@@ -76,17 +84,9 @@ int main(int argc, char *argv[])
 			return 7;
 		}
 
-		u8 magic[4];
-		size_t items_read = fread(magic, 1, sizeof magic, input_file);
-		if (items_read != sizeof magic) {
-			perror("Failed to determine type of input file");
-			return 8;
-		}
+		FileType type = file_type(input_file);
 
-		// @NOTE: Needs to be changed if we support different object file
-		// formats.
-		if (magic[0] == 0x7F &&
-				magic[1] == 'E' && magic[2] == 'L' && magic[3] == 'F') {
+		if (type == ELF_FILE_TYPE || type == AR_FILE_TYPE) {
 			*ARRAY_APPEND(&linker_input_filenames, char *) = input_filename;
 		} else {
 			*ARRAY_APPEND(&source_input_filenames, char *) = input_filename;
@@ -240,7 +240,26 @@ static int compile_file(char *input_filename, char *output_filename) {
 // @PORT
 static char *make_temp_file()
 {
-	UNIMPLEMENTED;
+	char fmt[] = "/tmp/ncc_temp_%x.o";
+
+	// - 2 adjusts down for the "%x" which isn't present in the output
+	// sizeof(int) * 2 is the max length of rand_suffix in hex
+	// + 1 for the null terminator
+	u32 filename_max_length = sizeof fmt - 2 + sizeof(int) * 2 + 1;
+	char *filename = calloc(filename_max_length, 1);
+
+	for (;;) {
+		int rand_suffix = rand();
+		snprintf(filename, filename_max_length, fmt, rand_suffix);
+
+		int fd = open(filename, O_CREAT | O_WRONLY | O_EXCL, 0600);
+		if (fd != -1) {
+			close(fd);
+			return filename;
+		} else {
+			assert(errno == EEXIST);
+		}
+	}
 }
 
 // @PORT
