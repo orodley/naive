@@ -290,6 +290,7 @@ if (!first.success)
 
 %s *curr = first.result;
 for (;;) {%s
+\tcurr->next = NULL;
 \tParserResult next = %s(parser);
 \tif (!next.success)
 \t\treturn first;
