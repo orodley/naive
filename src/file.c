@@ -23,3 +23,8 @@ FileType file_type(FILE *file)
 	size_t items_read = fread(magic, 1, 7, file);
 	return file_type_of_bytes(magic, items_read);
 }
+
+extern inline long checked_ftell(FILE *file);
+extern inline void checked_fseek(FILE *file, long offset, int whence);
+extern inline void checked_fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
+extern inline void checked_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);

@@ -6,7 +6,7 @@
 #include "array.h"
 #include "asm.h"
 #include "asm_gen.h"
-#include "util.h"
+#include "file.h"
 
 void init_asm_module(AsmModule *asm_module)
 {
