@@ -42,6 +42,11 @@ static void type_table_init(TypeTable *type_table)
 	}
 }
 
+static void type_table_free(TypeTable *type_table)
+{
+	array_free(&type_table->entries);
+}
+
 static bool type_table_look_up_name(
 		TypeTable *type_table, char *name, TypeTableEntry *out)
 {
@@ -548,6 +553,8 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 
 		return NULL;
 	}
+
+	type_table_free(&parser.defined_types);
 
 	return result.result;
 }

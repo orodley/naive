@@ -33,6 +33,10 @@ objs_for_dir = $(patsubst %.c, %.o, $(shell find $(1) -name '*.c')) \
 .PHONY: all
 all: ncc libc.a tags
 
+.PHONY: asan
+asan: CFLAGS += -fsanitize=address
+asan: all
+
 tags: ncc
 	@echo 'ctags'
 	@ctags -R --fields=+Sl --langmap=c:+.h

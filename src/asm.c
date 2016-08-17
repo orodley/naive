@@ -24,6 +24,8 @@ void free_asm_module(AsmModule *asm_module)
 	array_free(&asm_module->functions);
 	array_free(&asm_module->globals);
 	array_free(&asm_module->global_references);
+
+	pool_free(&asm_module->pool);
 }
 
 void init_asm_function(AsmFunction *function, char *name)

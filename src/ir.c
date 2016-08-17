@@ -8,21 +8,9 @@
 #include "misc.h"
 #include "util.h"
 
-void trans_unit_init(TransUnit *trans_unit)
-{
-	ARRAY_INIT(&trans_unit->globals, IrGlobal *, 10);
-	pool_init(&trans_unit->pool, 512);
-}
-
-void trans_unit_free(TransUnit *trans_unit)
-{
-	array_free(&trans_unit->globals);
-	pool_free(&trans_unit->pool);
-}
-
 // @TODO: Maybe we should let the caller initialize arg_types rather than
 // making them allocate an array?
-static inline void block_init(IrBlock *block, char *name,
+static void block_init(IrBlock *block, char *name,
 		u32 arity, IrType *arg_types)
 {
 	block->name = name;
@@ -36,6 +24,33 @@ static inline void block_init(IrBlock *block, char *name,
 	}
 
 	ARRAY_INIT(&block->instrs, IrInstr *, 10);
+}
+
+static void block_free(IrBlock *block)
+{
+	free(block->args);
+	array_free(&block->instrs);
+}
+
+void trans_unit_init(TransUnit *trans_unit)
+{
+	ARRAY_INIT(&trans_unit->globals, IrGlobal *, 10);
+	pool_init(&trans_unit->pool, 512);
+}
+
+void trans_unit_free(TransUnit *trans_unit)
+{
+	for (u32 i = 0; i < trans_unit->globals.size; i++) {
+		IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
+		if (global->kind == IR_GLOBAL_FUNCTION) {
+			IrFunction *func = &global->val.function;
+			block_free(&func->entry_block);
+			block_free(&func->ret_block);
+		}
+	}
+
+	array_free(&trans_unit->globals);
+	pool_free(&trans_unit->pool);
 }
 
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,

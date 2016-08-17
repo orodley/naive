@@ -40,8 +40,11 @@ int main(int argc, char *argv[])
 	// matter how we seed this.
 	srand(time(NULL));
 
-	Array(char *) input_filenames;
-	ARRAY_INIT(&input_filenames, char *, 10);
+	Array(char *) source_input_filenames;
+	Array(char *) linker_input_filenames;
+	ARRAY_INIT(&source_input_filenames, char *, 10);
+	ARRAY_INIT(&linker_input_filenames, char *, 10);
+
 	bool do_link = true;
 
 	for (i32 i = 1; i < argc; i++) {
@@ -62,37 +65,29 @@ int main(int argc, char *argv[])
 				return 1;
 			}
 		} else {
-			*ARRAY_APPEND(&input_filenames, char *) = arg;
+			char *input_filename = arg;
+
+			FILE *input_file = fopen(input_filename, "rb");
+			if (input_file == NULL) {
+				perror("Unable to open input file");
+				return 7;
+			}
+
+			FileType type = file_type(input_file);
+
+			if (type == ELF_FILE_TYPE || type == AR_FILE_TYPE) {
+				*ARRAY_APPEND(&linker_input_filenames, char *) = input_filename;
+			} else {
+				*ARRAY_APPEND(&source_input_filenames, char *) = input_filename;
+			}
+
+			fclose(input_file);
 		}
 	}
 
-	if (input_filenames.size == 0) {
+	if (source_input_filenames.size == 0 && linker_input_filenames.size == 0) {
 		fputs("Error: no input files given\n", stderr);
 		return 2;
-	}
-
-	Array(char *) source_input_filenames;
-	Array(char *) linker_input_filenames;
-	ARRAY_INIT(&source_input_filenames, char *, input_filenames.size);
-	ARRAY_INIT(&linker_input_filenames, char *, input_filenames.size + 1);
-
-	for (u32 i = 0; i < input_filenames.size; i++) {
-		char *input_filename = *ARRAY_REF(&input_filenames, char *, i);
-		FILE *input_file = fopen(input_filename, "rb");
-		if (input_file == NULL) {
-			perror("Unable to open input file");
-			return 7;
-		}
-
-		FileType type = file_type(input_file);
-
-		if (type == ELF_FILE_TYPE || type == AR_FILE_TYPE) {
-			*ARRAY_APPEND(&linker_input_filenames, char *) = input_filename;
-		} else {
-			*ARRAY_APPEND(&source_input_filenames, char *) = input_filename;
-		} 
-
-		fclose(input_file);
 	}
 
 	Array(char *) temp_filenames;
@@ -135,6 +130,8 @@ int main(int argc, char *argv[])
 			return result;
 	}
 
+	array_free(&source_input_filenames);
+
 	// Implicitly link in the standard library. We have to put this after the
 	// rest of the inputs because it's an archive.
 	// @TODO: Change this to "libc.a" once we support archives.
@@ -168,6 +165,8 @@ int main(int argc, char *argv[])
 		if (result != 0)
 			return result;
 	}
+
+	array_free(&linker_input_filenames);
 
 	return 0;
 }

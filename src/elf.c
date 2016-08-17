@@ -331,6 +331,8 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module)
 		symtab_header.entry_size = sizeof(ELF64Symbol);
 		fwrite(&symtab_header, sizeof symtab_header, 1, output_file);
 	}
+
+	array_free(&symbols);
 }
 
 typedef struct Relocation
