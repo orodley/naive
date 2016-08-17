@@ -11,6 +11,11 @@ char *strndup(char *str, u32 length)
 	return result;
 }
 
+char *strdup(char *str)
+{
+	return strndup(str, strlen(str));
+}
+
 extern inline bool streq(char *a, char *b);
 extern inline bool strneq(char *a, char *b, u32 length);
 

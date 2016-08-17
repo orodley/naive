@@ -556,7 +556,7 @@ static bool process_elf_file(FILE *input_file, FILE *output_file,
 			if (found_symbol_index == -1) {
 				symbol = ARRAY_APPEND(symbol_table, Symbol);
 				symbol->defined = false;
-				symbol->name = strndup(symbol_name, strlen(symbol_name));
+				symbol->name = strdup(symbol_name);
 				ARRAY_INIT(&symbol->val.undef.relocs, Relocation, 5);
 			} else {
 				symbol = ARRAY_REF(symbol_table, Symbol, found_symbol_index);
@@ -595,7 +595,7 @@ static bool process_elf_file(FILE *input_file, FILE *output_file,
 			}
 
 			symbol->defined = true;
-			symbol->name = strndup(symbol_name, strlen(symbol_name));
+			symbol->name = strdup(symbol_name);
 			symbol->val.def.file_offset = symbol_file_offset;
 
 			file_symbols[symtab_index] = symbol;

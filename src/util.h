@@ -10,6 +10,7 @@
 #define ZERO_STRUCT(s) memset(s, 0, sizeof *s);
 
 char *strndup(char *str, u32 length);
+char *strdup(char *str);
 
 inline bool streq(char *a, char *b)
 {
