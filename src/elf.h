@@ -8,7 +8,6 @@
 
 void write_elf_file(FILE *output_file, AsmModule *asm_module);
 
-// @TODO: Report errors?
-void link_elf_executable(char *executable_filename, Array(char *) *linker_input_filenames);
+bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_filenames);
 
 #endif

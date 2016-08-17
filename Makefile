@@ -39,7 +39,7 @@ tags: ncc
 
 ncc: $(call objs_for_dir,src)
 	@echo 'CC $@'
-	@$(CC) $^ -o $@
+	@$(CC) $(CFLAGS) $^ -o $@
 
 libc.a: $(call objs_for_dir,libc)
 	@echo 'AR $@'

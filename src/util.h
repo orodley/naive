@@ -16,11 +16,34 @@ inline bool streq(char *a, char *b)
 	return strcmp(a, b) == 0;
 }
 
+inline bool strneq(char *a, char *b, u32 length)
+{
+	return strncmp(a, b, length) == 0;
+}
 
-static inline u64 checked_ftell(FILE *file)
+
+inline long checked_ftell(FILE *file)
 {
 	long ret = ftell(file);
 	assert(ret != -1);
 
-	return (u64)ret;
+	return ret;
+}
+
+inline void checked_fseek(FILE *stream, long offset, int whence)
+{
+	int ret = fseek(stream, offset, whence);
+	assert(ret != -1);
+}
+
+inline void checked_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
+{
+	size_t entries_read = fread(ptr, size, nmemb, stream);
+	assert(entries_read == nmemb);
+}
+
+inline void checked_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+{
+	size_t entries_written = fwrite(ptr, size, nmemb, stream);
+	assert(entries_written == nmemb);
 }

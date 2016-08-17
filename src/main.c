@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
 	Array(char *) source_input_filenames;
 	Array(char *) linker_input_filenames;
 	ARRAY_INIT(&source_input_filenames, char *, input_filenames.size);
-	ARRAY_INIT(&linker_input_filenames, char *, input_filenames.size);
+	ARRAY_INIT(&linker_input_filenames, char *, input_filenames.size + 1);
 
 	for (u32 i = 0; i < input_filenames.size; i++) {
 		char *input_filename = *ARRAY_REF(&input_filenames, char *, i);
@@ -103,9 +103,9 @@ int main(int argc, char *argv[])
 		char *output_filename;
 		if (do_link) {
 			// In this mode we compile all given sources files to temporary
-			// object files, link the result with the stdlib and any other
-			// object files passed on the command line, and then delete the
-			// temporary object files we created.
+			// object files, link the result with libc and any other object
+			// files passed on the command line, and then delete the temporary
+			// object files we created.
 			output_filename = make_temp_file();
 			*ARRAY_APPEND(&temp_filenames, char *) = output_filename;
 			*ARRAY_APPEND(&linker_input_filenames, char *) = output_filename;
@@ -114,8 +114,8 @@ int main(int argc, char *argv[])
 			// files, and leave it at that.
 			// @TODO: Support "-o" flag.
 			u32 input_filename_length = strlen(source_input_filename);
-			output_filename = malloc(input_filename_length); // @LEAK
-			strcpy(output_filename, source_input_filename);
+			output_filename = malloc(input_filename_length + 1); // @LEAK
+			strncpy(output_filename, source_input_filename, input_filename_length);
 			output_filename[input_filename_length - 1] = 'o';
 
 			u32 last_slash = input_filename_length - 1;
@@ -135,29 +135,36 @@ int main(int argc, char *argv[])
 			return result;
 	}
 
+	// Implicitly link in the standard library. We have to put this after the
+	// rest of the inputs because it's an archive.
+	// @TODO: Change this to "libc.a" once we support archives.
+	*ARRAY_APPEND(&linker_input_filenames, char *) = "libc/start.o";
+
 	if (do_link) {
 		// @TODO: Support "-o" flag.
 		char *executable_filename = "a.out";
 
 		// @NOTE: Needs to be changed if we support different object file
 		// formats.
-		link_elf_executable(executable_filename, &linker_input_filenames);
+		if (!link_elf_executable(executable_filename, &linker_input_filenames)) {
+			puts("Linker error, terminating");
+			return 10;
+		}
 
-		int ret = 0;
-
+		int result = 0;
 		for (u32 i = 0; i < temp_filenames.size;i ++) {
 			char *temp_filename = *ARRAY_REF(&temp_filenames, char *, i);
 			int result = remove(temp_filename);
 			if (result != 0) {
 				perror("Failed to remove temporary object file");
-				ret = 9;
+				result = 9;
 			}
-
-			if (ret != 0)
-				return ret;
 		}
 
-		int result = make_file_executable(executable_filename);
+		if (result != 0)
+			return result;
+
+		result = make_file_executable(executable_filename);
 		if (result != 0)
 			return result;
 	}
