@@ -134,8 +134,7 @@ int main(int argc, char *argv[])
 
 	// Implicitly link in the standard library. We have to put this after the
 	// rest of the inputs because it's an archive.
-	// @TODO: Change this to "libc.a" once we support archives.
-	*ARRAY_APPEND(&linker_input_filenames, char *) = "libc/start.o";
+	*ARRAY_APPEND(&linker_input_filenames, char *) = "libc.a";
 
 	if (do_link) {
 		// @TODO: Support "-o" flag.

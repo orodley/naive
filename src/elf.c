@@ -645,6 +645,17 @@ cleanup1:
 	return ret;
 }
 
+typedef struct ArFileHeader
+{
+	char name[16];
+	char modification_timestamp_decimal[12];
+	char owner_id_decimal[6];
+	char group_id_decimal[6];
+	char mode_octal[8];
+	char size_bytes_decimal[10];
+	char magic[2];
+} __attribute__((packed)) ArFileHeader;
+
 // @TODO: Write symbol table. We'll need to keep track of local symbols too for
 // full coverage.
 // @TODO: Add .note.GNU-STACK section header to prevent executable stack.
@@ -688,9 +699,57 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 				goto cleanup;
 			}
 			break;
-		case AR_FILE_TYPE:
-			UNIMPLEMENTED;
+		case AR_FILE_TYPE: {
+			u32 global_header_length = sizeof "!<arch>\n" - 1;
+			checked_fseek(input_file, global_header_length, SEEK_SET);
+
+			for (;;) {
+				// File headers are aligned to even byte boundaries.
+				if (checked_ftell(input_file) % 2 == 1)
+					checked_fseek(input_file, 1, SEEK_CUR);
+
+				ArFileHeader header;
+				int result = fread(&header, sizeof header, 1, input_file);
+				if (result == 0) {
+					assert(feof(input_file));
+					break;
+				}
+
+				assert(header.magic[0] == 0x60 && header.magic[1] == 0x0A);
+
+				char filename[sizeof header.name + 1];
+				memcpy(filename, header.name, sizeof header.name);
+				filename[sizeof filename - 1] = '\0';
+
+				// Filenames are terminated with '/'
+				for (i32 i = sizeof filename - 2; i >= 0; i--) {
+					if (filename[i] == '/') {
+						filename[i] = '\0';
+						break;
+					}
+				}
+
+				char file_size_bytes_decimal[sizeof header.size_bytes_decimal + 1];
+				memcpy(file_size_bytes_decimal, header.size_bytes_decimal,
+						sizeof header.size_bytes_decimal);
+				file_size_bytes_decimal[sizeof file_size_bytes_decimal - 1] = '\0';
+				long file_size_bytes = atol(file_size_bytes_decimal);
+
+				// This is a special file, used to store a symbol index in
+				// System V ar. We don't care about it for now.
+				if (streq(filename, "")) {
+					fseek(input_file, file_size_bytes, SEEK_CUR);
+					continue;
+				}
+
+				if (!process_elf_file(input_file, output_file, &symbol_table)) {
+					ret = false;
+					goto cleanup;
+				}
+			}
+
 			break;
+		}
 		// We should have checked it was an object file or archive before
 		// putting it on the linker input list.
 		case UNKNOWN_FILE_TYPE:
