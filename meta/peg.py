@@ -152,6 +152,9 @@ static Token _unexpected_token;
             if parser.startswith('TOK_'):
                 return self.emit_function(
 """
+if (parser->position >= parser->tokens->size)
+\treturn failure;
+
 Token *result = read_token(parser);
 if (result->type != %s) {
 \tback_up(parser);
@@ -178,6 +181,9 @@ return success(result);""" % parser, name)
         if operator == 'keyword':
             return self.emit_function(
 """
+if (parser->position >= parser->tokens->size)
+\treturn failure;
+
 Token *token = read_token(parser);
 if (token->type == TOK_SYMBOL && streq(token->val.symbol, "%s")) {
 \treturn success((void *)1);

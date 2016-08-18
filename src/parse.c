@@ -416,6 +416,9 @@ static ASTDeclSpecifier *build_type_qualifier(Parser *parser, WhichResult *keywo
 // types. We need to add typedefs and named tagged types as we go.
 static ParserResult named_type(Parser *parser)
 {
+	if (parser->position >= parser->tokens->size)
+		return failure;
+
 	Token *token = read_token(parser);
 	if (token->type != TOK_SYMBOL) {
 		back_up(parser);

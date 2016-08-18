@@ -37,6 +37,10 @@ all: ncc libc.a tags
 asan: CFLAGS += -fsanitize=address
 asan: all
 
+.PHONY: msan
+msan: CFLAGS += -fsanitize=memory -fsanitize-memory-track-origins=2
+msan: all
+
 tags: ncc
 	@echo 'ctags'
 	@ctags -R --fields=+Sl --langmap=c:+.h

@@ -227,12 +227,10 @@ static inline bool ident_char(char c)
 static Token *append_token(Reader *reader, SourceLoc source_loc, TokenType type)
 {
 	SourceToken *source_token = ARRAY_APPEND(reader->tokens, SourceToken);
-	source_token->token.type = TOK_INVALID;
+	source_token->token.type = type;
 	source_token->source_loc = source_loc;
 
-	Token *token = (Token *)source_token;
-	token->type = type;
-	return token;
+	return (Token *)source_token;
 }
 
 static char *read_symbol(Reader *reader)
