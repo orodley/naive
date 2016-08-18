@@ -6,11 +6,10 @@
 
 FileType file_type_of_bytes(u8 *bytes, u32 length)
 {
-	if (length >= 4 && bytes[0] == 0x7F &&
-		bytes[1] == 'E' && bytes[2] == 'L' && bytes[3] == 'F') {
+	if (length >= 4 && strneq((char *)bytes, "\x7F" "ELF", 4)) {
 		return ELF_FILE_TYPE;
 	}
-	if (length == 7 && streq((char *)bytes, "!<arch>")) {
+	if (length >= 8 && strneq((char *)bytes, "!<arch>\n", 8)) {
 		return AR_FILE_TYPE;
 	}
 
@@ -19,8 +18,8 @@ FileType file_type_of_bytes(u8 *bytes, u32 length)
 
 FileType file_type(FILE *file)
 {
-	u8 magic[8] = { [7] = 0 };
-	size_t items_read = fread(magic, 1, 7, file);
+	u8 magic[8];
+	size_t items_read = fread(magic, 1, sizeof magic, file);
 	return file_type_of_bytes(magic, items_read);
 }
 

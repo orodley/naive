@@ -416,8 +416,7 @@ static bool process_elf_file(FILE *input_file, FILE *output_file,
 	}
 
 	// This should have been checked already
-	assert(file_header.identifier[0] == 0x7F && file_header.identifier[1] == 'E' &&
-			file_header.identifier[2] == 'L' && file_header.identifier[3] == 'F');
+	assert(strneq((char *)file_header.identifier, "\x7F" "ELF", 4));
 
 	if (file_header.target_architecture != EM_X86_64) {
 		fprintf(stderr,
