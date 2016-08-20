@@ -19,7 +19,10 @@ FileType file_type(FILE *file);
 inline long checked_ftell(FILE *file)
 {
 	long ret = ftell(file);
-	assert(ret != -1);
+	if (ret == -1) {
+		perror("checked_ftell");
+		assert(false);
+	}
 
 	return ret;
 }
@@ -27,19 +30,28 @@ inline long checked_ftell(FILE *file)
 inline void checked_fseek(FILE *stream, long offset, int whence)
 {
 	int ret = fseek(stream, offset, whence);
-	assert(ret != -1);
+	if (ret == -1) {
+		perror("checked_fseek");
+		assert(false);
+	}
 }
 
 inline void checked_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
 	size_t entries_read = fread(ptr, size, nmemb, stream);
-	assert(entries_read == nmemb);
+	if (entries_read != nmemb) {
+		perror("checked_fread");
+		assert(false);
+	}
 }
 
 inline void checked_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
 	size_t entries_written = fwrite(ptr, size, nmemb, stream);
-	assert(entries_written == nmemb);
+	if (entries_written != nmemb) {
+		perror("checked_fwrite");
+		assert(false);
+	}
 }
 
 #endif
