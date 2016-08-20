@@ -504,10 +504,9 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 // This is generated from "x64.enc", and defines the function "assemble_instr".
 #include "x64.inc"
 
-void assemble(AsmModule *asm_module, FILE *output_file,
-		Array(AsmSymbol) *symbols, u64 base_virtual_address)
+void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbols)
 {
-	u64 current_offset = base_virtual_address;
+	u64 current_offset = 0;
 	u64 initial_file_location = checked_ftell(output_file);
 
 	for (u32 i = 0; i < asm_module->functions.size; i++) {
@@ -518,15 +517,14 @@ void assemble(AsmModule *asm_module, FILE *output_file,
 			AsmInstr *instr = ARRAY_REF(&function->instrs, AsmInstr, j);
 			assemble_instr(output_file, asm_module, instr);
 
-			current_offset = base_virtual_address +
-				checked_ftell(output_file) - initial_file_location;
+			current_offset = checked_ftell(output_file) - initial_file_location;
 		}
 		u32 function_size = current_offset - function_offset;
 
 		AsmSymbol *symbol = ARRAY_APPEND(symbols, AsmSymbol);
 		symbol->name = function->name;
 		// Offset is relative to the start of the section.
-		symbol->offset = function_offset - base_virtual_address;
+		symbol->offset = function_offset;
 		symbol->size = function_size;
 
 		AsmGlobal *corresponding_global =

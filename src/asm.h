@@ -159,7 +159,6 @@ AsmArg asm_global(AsmGlobal *global);
 
 void dump_asm_module(AsmModule *asm_module);
 
-void assemble(AsmModule *asm_module, FILE *output_file,
-		Array(AsmSymbol) *symbols, u64 base_virtual_address);
+void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbols);
 
 #endif

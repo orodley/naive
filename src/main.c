@@ -233,7 +233,7 @@ static int compile_file(char *input_filename, char *output_filename) {
 	}
 	// @NOTE: Needs to be changed if we support different object file
 	// formats.
-	write_elf_file(output_file, &asm_builder.asm_module);
+	write_elf_object_file(output_file, &asm_builder.asm_module);
 
 	free_asm_builder(&asm_builder);
 

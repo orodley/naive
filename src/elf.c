@@ -26,8 +26,11 @@ typedef enum ELFIdentIndex
 #define ELFDATA2LSB 1
 #define EV_CURRENT 1
 
-#define ET_REL 1
-#define ET_EXEC 2
+typedef enum ELFFileType
+{
+	ET_REL = 1,
+	ET_EXEC = 2,
+} ELFFileType;
 
 // Specified by System V x86-64 spec
 #define EM_X86_64 62
@@ -41,16 +44,16 @@ typedef struct ELFHeader
 	u32 elf_version;
 
 	u64 entry_point_virtual_address;
-	u64 program_header_table_location;
-	u64 section_header_table_location;
+	u64 pht_location;
+	u64 sht_location;
 
 	u32 architecture_specific_flags;
 	u16 header_size;
 
-	u16 program_header_entry_size;
-	u16 program_header_entries;
-	u16 section_header_entry_size;
-	u16 section_header_entries;
+	u16 program_header_size;
+	u16 pht_entries;
+	u16 section_header_size;
+	u16 sht_entries;
 
 	u16 shstrtab_index;
 } __attribute__((packed)) ELFHeader;
@@ -109,15 +112,21 @@ typedef struct ELF64Symbol
 	u64 size;
 } __attribute__((packed)) ELF64Symbol;
 
-#define STB_LOCAL 0
-#define STB_GLOBAL 1
+typedef enum ELFSymbolBinding
+{
+	STB_LOCAL = 0,
+	STB_GLOBAL = 1,
+} ELFSymbolBinding;
+
+typedef enum ELFSymbolType
+{
+	STT_NOTYPE = 0,
+	STT_FUNC = 2,
+	STT_FILE = 4,
+} ELFSymbolType;
 
 #define ELF64_SYMBOL_BINDING(x) ((x) >> 4)
 #define ELF64_SYMBOL_TYPE(x) ((x) & 0xF)
-
-#define STT_NOTYPE 0
-#define STT_FUNC 2
-#define STT_FILE 4
 
 typedef struct ELF64Rela
 {
@@ -138,139 +147,202 @@ typedef enum ELF64RelocType
 } ELF64RelocType;
 
 
-// Writes all the standard boilerplate in the header.
-static void init_elf_header(ELFHeader *header)
+// The following have nothing to do with the spec - they're just constants
+// regarding the object files we want to create
+
+#define NUM_SECTIONS 5
+
+typedef struct SectionInfo
 {
-	ZERO_STRUCT(header);
+	u32 size;
+	u32 offset;
+} SectionInfo;
 
-	header->identifier[ELF_IDENT_MAGIC0] = 0x7F;
-	header->identifier[ELF_IDENT_MAGIC1] = 'E';
-	header->identifier[ELF_IDENT_MAGIC2] = 'L';
-	header->identifier[ELF_IDENT_MAGIC3] = 'F';
-	header->identifier[ELF_IDENT_ELF_VERSION] = EV_CURRENT;
-	header->elf_version = EV_CURRENT;
+typedef struct ELFFile
+{
+	FILE *output_file;
+	ELFFileType type;
+	i32 entry_point_virtual_address;
+	u32 next_string_index;
+	u32 base_virtual_address;
 
-	header->header_size = sizeof(ELFHeader);
-	header->program_header_entry_size = sizeof(ELFProgramHeader);
-	header->section_header_entry_size = sizeof(ELFSectionHeader);
+	SectionInfo section_info[NUM_SECTIONS];
+} ELFFile;
 
-	header->identifier[ELF_IDENT_FILE_CLASS] = ELFCLASS64;
-	header->identifier[ELF_IDENT_DATA_ENCODING] = ELFDATA2LSB;
-	header->target_architecture = EM_X86_64;
-	header->architecture_specific_flags = 0;
+static void init_elf_file(ELFFile *elf_file, FILE *output_file, ELFFileType type)
+{
+	ZERO_STRUCT(elf_file);
+
+	elf_file->output_file = output_file;
+	elf_file->type = type;
+	elf_file->next_string_index = 1;
 }
 
-void write_elf_file(FILE *output_file, AsmModule *asm_module)
+// We write out the following sections (in this order):
+//   * .text
+//   * .shstrtab
+//   * .symtab
+//   * .strtab
+//
+// The headers are in the same order, but with a NULL header at the start that
+// has no corresponding sections, as required by the spec.
+
+//                         0          1           2          3
+//                         0 1234567890 123456 78901234 5678901
+#define SHSTRTAB_CONTENTS "\0.text\0.shstrtab\0.symtab\0.strtab"
+#define TEXT_NAME 1
+#define SHSTRTAB_NAME 8
+#define SYMTAB_NAME 17
+#define STRTAB_NAME 25
+
+#define TEXT_INDEX 1
+#define SHSTRTAB_INDEX 2
+#define SYMTAB_INDEX 3
+#define STRTAB_INDEX 4
+
+static void start_text_section(ELFFile *elf_file)
 {
+	u32 pht_entries = elf_file->type == ET_EXEC ? 1 : 0;
+	u32 first_section_offset = sizeof(ELFHeader) +
+		sizeof(ELFSectionHeader) * NUM_SECTIONS +
+		sizeof(ELFProgramHeader) * pht_entries;
+	elf_file->section_info[TEXT_INDEX].offset = first_section_offset;
+
+	checked_fseek(elf_file->output_file, first_section_offset, SEEK_SET);
+}
+
+static void finish_text_section(ELFFile *elf_file)
+{
+	SectionInfo *text_info = elf_file->section_info + TEXT_INDEX;
+	text_info->size = checked_ftell(elf_file->output_file) - text_info->offset;
+
+	// @NOTE: In System V, file offsets and base virtual addresses for segments
+	// must be congruent modulo the page size.
+	elf_file->base_virtual_address = 0x8000000 + text_info->offset; 
+
+	SectionInfo shstrtab_info = (SectionInfo) {
+		.offset = text_info->offset + text_info->size,
+		.size = sizeof SHSTRTAB_CONTENTS,
+	};
+	elf_file->section_info[SHSTRTAB_INDEX] = shstrtab_info;
+	checked_fwrite(SHSTRTAB_CONTENTS, sizeof SHSTRTAB_CONTENTS, 1, elf_file->output_file);
+
+	elf_file->section_info[SYMTAB_INDEX].offset =
+		shstrtab_info.offset + shstrtab_info.size;
+
+	ELF64Symbol undef_symbol;
+	ZERO_STRUCT(&undef_symbol);
+	checked_fwrite(&undef_symbol, sizeof undef_symbol, 1, elf_file->output_file);
+}
+
+static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
+		ELFSymbolBinding binding, char *name, u32 value, u32 size)
+{
+	if (elf_file->type == ET_EXEC && streq(name, "_start")) {
+		elf_file->entry_point_virtual_address = value;
+	}
+
+	ELF64Symbol symbol;
+	ZERO_STRUCT(&symbol);
+	symbol.strtab_index_for_name = elf_file->next_string_index;
+	symbol.type_and_binding = (binding << 4) | type;
+	symbol.section = type == STT_FILE ? SHN_ABS : TEXT_INDEX;
+	symbol.value = value;
+	symbol.size = size;
+
+	elf_file->next_string_index += strlen(name) + 1;
+
+	checked_fwrite(&symbol, sizeof symbol, 1, elf_file->output_file);
+}
+
+static void finish_symtab_section(ELFFile *elf_file)
+{
+	SectionInfo *symtab_info = elf_file->section_info + SYMTAB_INDEX;
+	symtab_info->size = checked_ftell(elf_file->output_file) - symtab_info->offset;
+	elf_file->section_info[STRTAB_INDEX].offset =
+		symtab_info->offset + symtab_info->size;
+
+	// The string table has to start with a 0 byte.
+	fputc('\0', elf_file->output_file);
+}
+
+static void add_string(ELFFile *elf_file, char *string)
+{
+	fputs(string, elf_file->output_file);
+	fputc('\0', elf_file->output_file);
+}
+
+static void finish_strtab_section(ELFFile *elf_file)
+{
+	FILE *output_file = elf_file->output_file;
+
+	SectionInfo *strtab_info = elf_file->section_info + STRTAB_INDEX;
+	strtab_info->size = checked_ftell(output_file) - strtab_info->offset;
+
+
+	// .strtab is the last section, so now we write out all the headers and
+	// finish off the file
 	ELFHeader header;
-	init_elf_header(&header);
+	ZERO_STRUCT(&header);
 
-	header.object_file_type = ET_REL;
+	if (elf_file->type == ET_EXEC) {
+		assert(elf_file->entry_point_virtual_address != -1);
 
-	header.program_header_table_location = 0;
-	header.program_header_entries = 0;
-	header.program_header_entry_size = 0;
+		header.entry_point_virtual_address = elf_file->entry_point_virtual_address;
+		header.pht_entries = 1;
+		header.pht_location =
+			sizeof(ELFHeader) + sizeof(ELFSectionHeader) * NUM_SECTIONS;
 
-	header.section_header_table_location = sizeof(ELFHeader);
-	// We write out the following sections (in this order):
-	//   * .shstrtab
-	//   * .text
-	//   * .strtab
-	//   * .symtab
-	//
-	// The headers are in the same order, but with a NULL header at the start
-	// that has no corresponding sections, as required by the spec.
-	u32 num_sections = 5;
-	header.section_header_entries = num_sections;
-	header.shstrtab_index = 1;
-	u32 text_section_index = 2;
-	u32 strtab_section_index = 3;
+		ELFProgramHeader executable_segment_header;
+		ZERO_STRUCT(&executable_segment_header);
+		executable_segment_header.type = PT_LOAD;
+		executable_segment_header.segment_location = elf_file->section_info[TEXT_INDEX].offset;
+		executable_segment_header.segment_size_in_file =
+			executable_segment_header.segment_size_in_process =
+			elf_file->section_info[TEXT_INDEX].size;
+		executable_segment_header.base_virtual_address =
+			elf_file->base_virtual_address;
+		executable_segment_header.flags = PF_R | PF_X;
+		executable_segment_header.alignment = 0x1000;
+
+		checked_fseek(output_file, header.pht_location, SEEK_SET);
+		checked_fwrite(&executable_segment_header,
+				sizeof executable_segment_header,
+				1,
+				output_file);
+	} else {
+		header.pht_entries = 0;
+		header.pht_location = 0;
+	}
+
+	checked_fseek(output_file, 0, SEEK_SET);
+
+	header.identifier[ELF_IDENT_MAGIC0] = 0x7F;
+	header.identifier[ELF_IDENT_MAGIC1] = 'E';
+	header.identifier[ELF_IDENT_MAGIC2] = 'L';
+	header.identifier[ELF_IDENT_MAGIC3] = 'F';
+	header.identifier[ELF_IDENT_ELF_VERSION] = EV_CURRENT;
+	header.elf_version = EV_CURRENT;
+
+	header.header_size = sizeof(ELFHeader);
+	header.program_header_size = sizeof(ELFProgramHeader);
+	header.section_header_size = sizeof(ELFSectionHeader);
+
+	header.identifier[ELF_IDENT_FILE_CLASS] = ELFCLASS64;
+	header.identifier[ELF_IDENT_DATA_ENCODING] = ELFDATA2LSB;
+	header.target_architecture = EM_X86_64;
+	header.architecture_specific_flags = 0;
+	header.object_file_type = elf_file->type;
+
+	header.sht_location = sizeof(ELFHeader);
+
+	header.sht_entries = NUM_SECTIONS;
+	header.shstrtab_index = SHSTRTAB_INDEX;
 
 	assert(checked_ftell(output_file) == 0);
-	fwrite(&header, sizeof header, 1, output_file);
+	checked_fwrite(&header, sizeof header, 1, output_file);
 
-	u32 first_section_offset = header.section_header_table_location +
-		sizeof(ELFSectionHeader) * num_sections;
-	fseek(output_file, first_section_offset, SEEK_SET);
-
-	// .shstrtab
-	u32 shstrtab_offset = checked_ftell(output_file);
-	//                          0          1           2          3
-	//                          0 1234567890 123456 78901234 5678901
-	char shstrtab_contents[] = "\0.shstrtab\0.text\0.strtab\0.symtab";
-	u32 shstrtab_name = 1;
-	u32 text_name = 11;
-	u32 strtab_name = 17;
-	u32 symtab_name = 25;
-	fwrite(shstrtab_contents, sizeof shstrtab_contents, 1, output_file);
-	u32 shstrtab_size = checked_ftell(output_file) - shstrtab_offset;
-
-	// .text
-	u32 text_offset = checked_ftell(output_file);
-	u32 base_virtual_address = 0;
-	Array(AsmSymbol) symbols;
-	ARRAY_INIT(&symbols, AsmSymbol, 10);
-	assemble(asm_module, output_file, &symbols, base_virtual_address);
-	u32 text_size = checked_ftell(output_file) - text_offset;
-
-	// .strtab
-	u32 strtab_offset = checked_ftell(output_file);
-	fputc('\0', output_file);
-
-	// @TODO: Pass the file name through so we have it here
-	char *dummy_filename = "foo.c";
-	fputs(dummy_filename, output_file);
-	fputc('\0', output_file);
-
-	for (u32 i = 0; i < symbols.size; i++) {
-		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
-		u32 current_strtab_position = checked_ftell(output_file) - strtab_offset;
-		symbol->string_table_offset_for_name = current_strtab_position;
-
-		fputs(symbol->name, output_file);
-		fputc('\0', output_file);
-	}
-	u32 strtab_size = checked_ftell(output_file) - strtab_offset;
-
-	// .symtab
-	u32 symtab_offset = checked_ftell(output_file);
-
-	{
-		ELF64Symbol undef_symbol;
-		ZERO_STRUCT(&undef_symbol);
-		fwrite(&undef_symbol, sizeof undef_symbol, 1, output_file);
-	}
-
-	{
-		ELF64Symbol file_symbol;
-		ZERO_STRUCT(&file_symbol);
-		// We write out the filename right at the start just above. This is
-		// 1 rather than 0 as the string table starts with '\0'.
-		file_symbol.strtab_index_for_name = 1;
-		file_symbol.type_and_binding = (STB_LOCAL << 4) | STT_FILE;
-		file_symbol.section = SHN_ABS;
-		file_symbol.value = 0;
-		file_symbol.size = 0;
-		fwrite(&file_symbol, sizeof file_symbol, 1, output_file);
-	}
-
-	for (u32 i = 0; i < symbols.size; i++) {
-		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
-
-		ELF64Symbol elf_symbol;
-		ZERO_STRUCT(&elf_symbol);
-		elf_symbol.strtab_index_for_name = symbol->string_table_offset_for_name;
-		elf_symbol.type_and_binding = (STB_GLOBAL << 4) | STT_FUNC;
-		elf_symbol.section = text_section_index;
-		elf_symbol.value = symbol->offset;
-		elf_symbol.size = symbol->size;
-
-		fwrite(&elf_symbol, sizeof elf_symbol, 1, output_file);
-	}
-	u32 symtab_size = checked_ftell(output_file) - symtab_offset;
-
-	// Then write the corresponding section headers
-	fseek(output_file, header.section_header_table_location, SEEK_SET);
+	fseek(output_file, header.sht_location, SEEK_SET);
 
 	// NULL header
 	{
@@ -280,57 +352,88 @@ void write_elf_file(FILE *output_file, AsmModule *asm_module)
 		fwrite(&null_header, sizeof null_header, 1, output_file);
 	}
 
-	// .shstrtab
-	{
-		ELFSectionHeader shstrtab_header;
-		ZERO_STRUCT(&shstrtab_header);
-		shstrtab_header.shstrtab_index_for_name = shstrtab_name;
-		shstrtab_header.type = SHT_STRTAB;
-		shstrtab_header.section_location = first_section_offset;
-		shstrtab_header.section_size = shstrtab_size;
-		fwrite(&shstrtab_header, sizeof shstrtab_header, 1, output_file);
-	}
-
 	// .text
 	{
 		ELFSectionHeader text_header;
 		ZERO_STRUCT(&text_header);
-		text_header.shstrtab_index_for_name = text_name;
+		text_header.shstrtab_index_for_name = TEXT_NAME;
 		text_header.type = SHT_PROGBITS;
 		text_header.flags = SHF_ALLOC | SHF_EXECINSTR;
-		text_header.base_virtual_address = base_virtual_address;
-		text_header.section_location = text_offset;
-		text_header.section_size = text_size;
+		text_header.base_virtual_address = elf_file->base_virtual_address;
+		text_header.section_location = elf_file->section_info[TEXT_INDEX].offset;
+		text_header.section_size = elf_file->section_info[TEXT_INDEX].size;
 		fwrite(&text_header, sizeof text_header, 1, output_file);
 	}
 
-	// .strtab
+	// .shstrtab
 	{
-		ELFSectionHeader strtab_header;
-		ZERO_STRUCT(&strtab_header);
-		strtab_header.shstrtab_index_for_name = strtab_name;
-		strtab_header.type = SHT_STRTAB;
-		strtab_header.section_location = strtab_offset;
-		strtab_header.section_size = strtab_size;
-		fwrite(&strtab_header, sizeof strtab_header, 1, output_file);
+		ELFSectionHeader shstrtab_header;
+		ZERO_STRUCT(&shstrtab_header);
+		shstrtab_header.shstrtab_index_for_name = SHSTRTAB_NAME;
+		shstrtab_header.type = SHT_STRTAB;
+		shstrtab_header.section_location = elf_file->section_info[SHSTRTAB_INDEX].offset;
+		shstrtab_header.section_size = elf_file->section_info[SHSTRTAB_INDEX].size;
+		fwrite(&shstrtab_header, sizeof shstrtab_header, 1, output_file);
 	}
 
 	// .symtab
 	{
 		ELFSectionHeader symtab_header;
 		ZERO_STRUCT(&symtab_header);
-		symtab_header.shstrtab_index_for_name = symtab_name;
+		symtab_header.shstrtab_index_for_name = SYMTAB_NAME;
 		symtab_header.type = SHT_SYMTAB;
 		// For symbol tables, this field contains 1 + the index of the last
 		// local symbol. 0 is undef symbol, 1 is the symbol for the filename,
-		// + all the rest of the symbols.
-		symtab_header.misc_info = 2 + symbols.size;;
-		symtab_header.linked_section = strtab_section_index;
-		symtab_header.section_location = symtab_offset;
-		symtab_header.section_size = symtab_size;
+		// then all the rest of the symbols are global (at the moment).
+		// @TODO: Determine this correctly when we handle static correctly.
+		symtab_header.misc_info = 2;
+		symtab_header.linked_section = STRTAB_INDEX;
+		symtab_header.section_location = elf_file->section_info[SYMTAB_INDEX].offset;
+		symtab_header.section_size = elf_file->section_info[SYMTAB_INDEX].size;
 		symtab_header.entry_size = sizeof(ELF64Symbol);
 		fwrite(&symtab_header, sizeof symtab_header, 1, output_file);
 	}
+
+	// .strtab
+	{
+		ELFSectionHeader strtab_header;
+		ZERO_STRUCT(&strtab_header);
+		strtab_header.shstrtab_index_for_name = STRTAB_NAME;
+		strtab_header.type = SHT_STRTAB;
+		strtab_header.section_location = elf_file->section_info[STRTAB_INDEX].offset;
+		strtab_header.section_size = elf_file->section_info[STRTAB_INDEX].size;
+		fwrite(&strtab_header, sizeof strtab_header, 1, output_file);
+	}
+}
+
+void write_elf_object_file(FILE *output_file, AsmModule *asm_module)
+{
+	ELFFile _elf_file;
+	ELFFile *elf_file = &_elf_file;
+	init_elf_file(elf_file, output_file, ET_REL);
+
+	start_text_section(elf_file);
+	Array(AsmSymbol) symbols;
+	ARRAY_INIT(&symbols, AsmSymbol, 10);
+	assemble(asm_module, output_file, &symbols);
+	finish_text_section(elf_file);
+
+	// @TODO: Pass the file name through so we have it here
+	add_symbol(elf_file, STT_FILE, STB_LOCAL, "foo.c", 0, 0);
+	for (u32 i = 0; i < symbols.size; i++) {
+		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
+		add_symbol(elf_file, STT_FUNC, STB_GLOBAL,
+				symbol->name, symbol->offset, symbol->size);
+	}
+	finish_symtab_section(elf_file);
+
+	// @TODO: Pass the file name through so we have it here
+	add_string(elf_file, "foo.c");
+	for (u32 i = 0; i < symbols.size; i++) {
+		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
+		add_string(elf_file, symbol->name);
+	}
+	finish_strtab_section(elf_file);
 
 	array_free(&symbols);
 }
@@ -357,6 +460,7 @@ typedef struct Symbol
 		struct
 		{
 			u32 file_offset;
+			u32 size;
 		} def;
 		struct
 		{
@@ -424,15 +528,15 @@ static bool process_elf_file(FILE *input_file, FILE *output_file,
 				file_header.target_architecture, EM_X86_64);
 		return false;
 	}
-	assert(file_header.section_header_entry_size == sizeof(ELFSectionHeader));
+	assert(file_header.section_header_size == sizeof(ELFSectionHeader));
 
-	u32 sht_offset = file_header.section_header_table_location;
+	u32 sht_offset = file_header.sht_location;
 	checked_fseek(input_file, initial_location + sht_offset, SEEK_SET);
 
 	bool ret = true;
 	ELFSectionHeader *headers =
-		malloc(sizeof *headers * file_header.section_header_entries);
-	for (u32 i = 0; i < file_header.section_header_entries; i++) {
+		malloc(sizeof *headers * file_header.sht_entries);
+	for (u32 i = 0; i < file_header.sht_entries; i++) {
 		ELFSectionHeader *header = headers + i;
 		checked_fread(header, sizeof *header, 1, input_file);
 	}
@@ -451,7 +555,7 @@ static bool process_elf_file(FILE *input_file, FILE *output_file,
 	u32 symtab_section_index;
 	ELFSectionHeader *strtab_header = NULL;
 	ELFSectionHeader *rela_text_header = NULL;
-	for (u32 i = 0; i < file_header.section_header_entries; i++) {
+	for (u32 i = 0; i < file_header.sht_entries; i++) {
 		ELFSectionHeader *curr_header = headers + i;
 		char *section_name = shstrtab + curr_header->shstrtab_index_for_name;
 
@@ -596,6 +700,7 @@ static bool process_elf_file(FILE *input_file, FILE *output_file,
 			symbol->defined = true;
 			symbol->name = strdup(symbol_name);
 			symbol->val.def.file_offset = symbol_file_offset;
+			symbol->val.def.size = symtab_symbol.size;
 
 			file_symbols[symtab_index] = symbol;
 		}
@@ -668,17 +773,13 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 		return false;
 	}
 
+	ELFFile _elf_file;
+	ELFFile *elf_file = &_elf_file;
+	init_elf_file(elf_file, output_file, ET_EXEC);
+
+	start_text_section(elf_file);
 	Array(Symbol) symbol_table;
 	ARRAY_INIT(&symbol_table, Symbol, 100);
-
-	u32 program_header_table_location = sizeof(ELFHeader);
-	u32 program_header_entries = 1;
-
-	u32 first_segment_location =
-		program_header_table_location +
-		(program_header_entries * sizeof(ELFProgramHeader));
-
-	fseek(output_file, first_segment_location, SEEK_SET);
 
 	for (u32 i = 0; i < linker_input_filenames->size; i++) {
 		char *input_filename = *ARRAY_REF(linker_input_filenames, char *, i);
@@ -757,63 +858,35 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 
 		fclose(input_file);
 	}
+	finish_text_section(elf_file);
 
-	Symbol *start_symbol = NULL;
+	add_symbol(elf_file, STT_FILE, STB_LOCAL, executable_filename, 0, 0);
 	for (u32 i = 0; i < symbol_table.size; i++) {
 		Symbol *symbol = ARRAY_REF(&symbol_table, Symbol, i);
+
 		if (!symbol->defined) {
 			fprintf(stderr, "Undefined symbol '%s'\n", symbol->name);
 			ret = false;
 			goto cleanup;
 		}
 
-		if (streq(symbol->name, "_start")) {
-			start_symbol = symbol;
-		}
+		// Since this is an executable, the symbol value is the location of the
+		// symbol in memory once loaded, not an offset into the corresponding
+		// sections.
+		u32 value = elf_file->base_virtual_address +
+			symbol->val.def.file_offset -
+			elf_file->section_info[TEXT_INDEX].offset;
+		add_symbol(elf_file, STT_FUNC, STB_GLOBAL,
+				symbol->name, value, symbol->val.def.size);
 	}
+	finish_symtab_section(elf_file);
 
-	assert(start_symbol != NULL);
-	// @NOTE: In System V, file offsets and base virtual addresses for segments
-	// must be congruent modulo the page size.
-	u32 base_virtual_address = 0x8000000 + first_segment_location; 
-	u32 entry_point_virtual_address = base_virtual_address
-		- first_segment_location
-		+ start_symbol->val.def.file_offset;
-
-	u32 executable_segment_size = checked_ftell(output_file) - first_segment_location;
-
-	ELFHeader header;
-	init_elf_header(&header);
-
-	header.object_file_type = ET_EXEC;
-	header.entry_point_virtual_address = entry_point_virtual_address;
-
-	// We don't write any sections, only segments.
-	header.section_header_table_location = 0;
-	header.section_header_entries = 0;
-	header.shstrtab_index = SHN_UNDEF;
-	header.program_header_table_location = program_header_table_location;
-	header.program_header_entries = program_header_entries;
-
-	checked_fseek(output_file, 0, SEEK_SET);
-	checked_fwrite(&header, sizeof header, 1, output_file);
-
-	ELFProgramHeader executable_segment_header;
-	ZERO_STRUCT(&executable_segment_header);
-	executable_segment_header.type = PT_LOAD;
-	executable_segment_header.segment_location = first_segment_location;
-	executable_segment_header.base_virtual_address = base_virtual_address;
-	executable_segment_header.flags = PF_R | PF_X;
-	executable_segment_header.alignment = 0x1000;
-
-	// @TODO: Search symbols from input files, set entry point to _start
-	header.entry_point_virtual_address = 0;
-
-	executable_segment_header.segment_size_in_file =
-		executable_segment_header.segment_size_in_process = executable_segment_size;
-
-	checked_fseek(output_file, header.program_header_table_location, SEEK_SET);
-	checked_fwrite(&executable_segment_header, sizeof executable_segment_header, 1, output_file);
+	add_string(elf_file, executable_filename);
+	for (u32 i = 0; i < symbol_table.size; i++) {
+		Symbol *symbol = ARRAY_REF(&symbol_table, Symbol, i);
+		add_string(elf_file, symbol->name);
+	}
+	finish_strtab_section(elf_file);
 
 cleanup:
 	fclose(output_file);
