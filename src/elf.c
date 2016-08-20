@@ -817,14 +817,10 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 
 				assert(header.magic[0] == 0x60 && header.magic[1] == 0x0A);
 
-				char filename[sizeof header.name + 1];
-				memcpy(filename, header.name, sizeof header.name);
-				filename[sizeof filename - 1] = '\0';
-
 				// Filenames are terminated with '/'
-				for (i32 i = sizeof filename - 2; i >= 0; i--) {
-					if (filename[i] == '/') {
-						filename[i] = '\0';
+				for (i32 i = sizeof header.name - 1; i >= 0; i--) {
+					if (header.name[i] == '/') {
+						header.name[i] = '\0';
 						break;
 					}
 				}
@@ -837,7 +833,7 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 
 				// This is a special file, used to store a symbol index in
 				// System V ar. We don't care about it for now.
-				if (streq(filename, "")) {
+				if (streq(header.name, "")) {
 					fseek(input_file, file_size_bytes, SEEK_CUR);
 					continue;
 				}
