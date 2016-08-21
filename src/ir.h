@@ -39,8 +39,10 @@ typedef struct IrType
 
 typedef struct IrFunction
 {
-	IrBlock entry_block;
-	IrBlock ret_block;
+	IrBlock *entry_block;
+	IrBlock *ret_block;
+
+	Array(IrBlock *) blocks;
 } IrFunction;
 
 typedef struct IrGlobal
@@ -162,7 +164,7 @@ IrGlobal *trans_unit_add_function(TransUnit *tu, char *name,
 
 static inline IrType ir_function_return_type(IrFunction *f)
 {
-	return f->ret_block.args[0].type;
+	return f->ret_block->args[0].type;
 }
 
 bool ir_type_eq(IrType a, IrType b);

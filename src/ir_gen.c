@@ -216,7 +216,7 @@ void ir_gen_toplevel(TransUnit *tu, IrBuilder *builder, ASTToplevel *toplevel)
 			IrFunction *f = &global->val.function;
 
 			builder->current_function = f;
-			builder->current_block = &f->entry_block;
+			builder->current_block = f->entry_block;
 
 			Scope scope;
 			scope.parent_scope = &global_scope;
@@ -231,7 +231,7 @@ void ir_gen_toplevel(TransUnit *tu, IrBuilder *builder, ASTToplevel *toplevel)
 
 				build_store(builder,
 						next_binding.term.value,
-						value_arg(&f->entry_block.args[i]),
+						value_arg(&f->entry_block->args[i]),
 						c_type_to_ir_type(&cdecl.type));
 			}
 
@@ -284,7 +284,7 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 	}
 	case RETURN_STATEMENT: {
 		Term term = ir_gen_expression(builder, scope, statement->val.expr);
-		IrBlock *ret_block = &builder->current_function->ret_block;
+		IrBlock *ret_block = builder->current_function->ret_block;
 		build_branch(builder, ret_block, term.value);
 		break;
 	}

@@ -44,13 +44,26 @@ void trans_unit_free(TransUnit *trans_unit)
 		IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
 		if (global->kind == IR_GLOBAL_FUNCTION) {
 			IrFunction *func = &global->val.function;
-			block_free(&func->entry_block);
-			block_free(&func->ret_block);
+			for (u32 j = 0; j < func->blocks.size; j++) {
+				IrBlock *block = *ARRAY_REF(&func->blocks, IrBlock *, j);
+				block_free(block);
+			}
+			array_free(&func->blocks);
 		}
 	}
 
 	array_free(&trans_unit->globals);
 	pool_free(&trans_unit->pool);
+}
+
+IrBlock *add_block(TransUnit *trans_unit, IrFunction *function, char *name, u32 arity,
+		IrType *arg_types)
+{
+	IrBlock *block = pool_alloc(&trans_unit->pool, sizeof *block);
+	*ARRAY_APPEND(&function->blocks, IrBlock *) = block;
+	block_init(block, name, arity, arg_types);
+
+	return block;
 }
 
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
@@ -63,8 +76,14 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	new_global->name = name;
 	new_global->ir_type.kind = IR_FUNCTION;
 	new_global->kind = IR_GLOBAL_FUNCTION;
-	block_init(&new_global->val.function.entry_block, "entry", arity, arg_types);
-	block_init(&new_global->val.function.ret_block, "ret", 1, &return_type);
+
+	IrFunction *new_function = &new_global->val.function;
+
+	ARRAY_INIT(&new_function->blocks, IrBlock *, 5);
+	new_function->entry_block =
+		add_block(trans_unit, new_function, "entry", arity, arg_types);
+	new_function->ret_block =
+		add_block(trans_unit, new_function, "ret", 1, &return_type);
 
 	return new_global;
 }
@@ -179,18 +198,18 @@ void dump_trans_unit(TransUnit *trans_unit)
 
 			dump_ir_type(ir_function_return_type(f));
 			printf(" %s(", global->name);
-			IrArg *args = f->entry_block.args;
-			for (u32 i = 0; i < f->entry_block.arity; i++) {
+			IrArg *args = f->entry_block->args;
+			for (u32 i = 0; i < f->entry_block->arity; i++) {
 				IrType arg_type = args[i].type;
 				dump_ir_type(arg_type);
 
-				if (i != f->entry_block.arity - 1)
+				if (i != f->entry_block->arity - 1)
 					fputs(", ", stdout);
 			}
 
 			puts(")\n{");
 
-			IrBlock *block = &f->entry_block;
+			IrBlock *block = f->entry_block;
 			for (;;) {
 				printf("%s(%d):\n", block->name, block->arity);
 

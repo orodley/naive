@@ -147,7 +147,7 @@ static void asm_gen_instr(
 	}
 	case OP_BRANCH: {
 		IrBlock *target_block = instr->val.branch.target_block;
-		assert(target_block == &ir_func->ret_block);
+		assert(target_block == ir_func->ret_block);
 
 		IrValue arg = instr->val.branch.argument;
 		assert(ir_type_eq(target_block->args[0].type, arg.type));
@@ -309,7 +309,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	IrType return_type = ir_function_return_type(ir_func);
 	assert(return_type.kind == IR_INT && return_type.val.bit_width == 32);
 
-	IrBlock *block = &ir_func->entry_block;
+	IrBlock *block = ir_func->entry_block;
 	IrArg *args = block->args;
 	assert(block->arity <= STATIC_ARRAY_LENGTH(argument_registers));
 	for (u32 i = 0; i < block->arity; i++) {
