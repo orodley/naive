@@ -112,6 +112,7 @@ int main(int argc, char *argv[])
 			output_filename = malloc(input_filename_length + 1); // @LEAK
 			strncpy(output_filename, source_input_filename, input_filename_length);
 			output_filename[input_filename_length - 1] = 'o';
+			output_filename[input_filename_length] = '\0';
 
 			u32 last_slash = input_filename_length - 1;
 			for (; last_slash != 0; last_slash--) {
