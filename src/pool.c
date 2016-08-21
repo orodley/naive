@@ -39,8 +39,9 @@ void pool_free(Pool *pool)
 	PoolEntry *entry = pool->first_entry;
 
 	while (entry != NULL) {
-		free(entry->memory);
 		PoolEntry *next_entry = entry->next;
+
+		free(entry->memory);
 		free(entry);
 
 		entry = next_entry;
