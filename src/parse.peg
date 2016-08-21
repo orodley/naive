@@ -180,7 +180,8 @@ parameter_decl =
 build_parameter_decl =
 	build(ASTParameterDecl, 2,
 		decl_specifier_list, #0,
-		declarator, #1)
+		declarator, #1,
+		next, NULL)
 
 type_name = seq(build_type_name, decl_specifiers, opt(declarator))
 
