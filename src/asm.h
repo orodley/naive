@@ -56,6 +56,12 @@ typedef struct AsmGlobal
 	struct AsmSymbol *symbol;
 } AsmGlobal;
 
+typedef struct AsmLabel
+{
+	char *name;
+	u32 file_location;
+} AsmLabel;
+
 typedef struct AsmArg
 {
 	// @TODO: This is kinda messy considering that OFFSET_REGISTER doesn't make
@@ -66,6 +72,7 @@ typedef struct AsmArg
 	{
 		REGISTER,
 		OFFSET_REGISTER,
+		LABEL,
 
 		// @TODO: Do we want to encode the size of the immediate here rather
 		// than just having one type for all constants? Seems unnecessary.
@@ -73,7 +80,6 @@ typedef struct AsmArg
 		CONST16,
 		CONST32,
 		CONST64,
-		GLOBAL,
 	} type;
 
 	union
@@ -85,7 +91,7 @@ typedef struct AsmArg
 			u64 offset;
 		} offset_register;
 		u64 constant;
-		AsmGlobal *global;
+		AsmLabel *label;
 	} val;
 } AsmArg;
 
@@ -98,7 +104,10 @@ typedef struct AsmArg
 	X(SUB), \
 	X(PUSH), \
 	X(POP), \
-	X(IMUL)
+	X(IMUL), \
+	X(CMP), \
+	X(JMP), \
+	X(JE)
 
 #define X(x) x
 typedef enum AsmOp
@@ -112,27 +121,31 @@ typedef struct AsmInstr
 	AsmOp op;
 	u32 num_args;
 	AsmArg args[2];
+	AsmLabel *label;
 } AsmInstr;
 
 typedef struct AsmFunction
 {
-	Array(AsmInstr) instrs;
 	char *name;
+
+	Array(AsmInstr) instrs;
+	Array(AsmLabel *) labels;
 } AsmFunction;
 
-typedef struct GlobalReference
+typedef struct Fixup
 {
-	AsmGlobal *global;
+	AsmLabel *label;
+
 	u32 file_location;
 	u32 size_bytes;
-} GlobalReference;
+} Fixup;
 
 typedef struct AsmModule
 {
 	Array(AsmFunction) functions;
 	Array(AsmGlobal *) globals;
 
-	Array(GlobalReference) global_references;
+	Array(Fixup) fixups;
 
 	Pool pool;
 } AsmModule;
@@ -156,6 +169,7 @@ AsmArg asm_offset_register(PhysicalRegister reg, u64 offset);
 AsmArg asm_const32(i32 constant);
 AsmArg asm_deref(AsmArg asm_arg);
 AsmArg asm_global(AsmGlobal *global);
+AsmArg asm_label(AsmLabel *label);
 
 void dump_asm_module(AsmModule *asm_module);
 

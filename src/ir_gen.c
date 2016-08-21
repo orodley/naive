@@ -153,6 +153,11 @@ static void cdecl_to_binding(IrBuilder *builder, CDecl *cdecl, Binding *binding)
 	binding->term.value = build_local(builder, ir_type);
 }
 
+static inline IrBlock *add_block(IrBuilder *builder, char *name)
+{
+	return add_block_to_function(builder->trans_unit, builder->current_function, name);
+}
+
 static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *statement);
 static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr);
 
@@ -210,13 +215,11 @@ void ir_gen_toplevel(TransUnit *tu, IrBuilder *builder, ASTToplevel *toplevel)
 					direct_declarator->val.function_declarator.declarator->val.name,
 					return_ir_type, arity, arg_ir_types);
 
-			free(arg_ir_types);
-
 			assert(global->kind == IR_GLOBAL_FUNCTION);
 			IrFunction *f = &global->val.function;
 
 			builder->current_function = f;
-			builder->current_block = f->entry_block;
+			builder->current_block = *ARRAY_REF(&f->blocks, IrBlock *, 0);
 
 			Scope scope;
 			scope.parent_scope = &global_scope;
@@ -233,7 +236,7 @@ void ir_gen_toplevel(TransUnit *tu, IrBuilder *builder, ASTToplevel *toplevel)
 
 				build_store(builder,
 						binding->term.value,
-						value_arg(&f->entry_block->args[i]),
+						value_arg(i, f->arg_types[i]),
 						c_type_to_ir_type(&cdecl.type));
 			}
 
@@ -288,8 +291,31 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 	}
 	case RETURN_STATEMENT: {
 		Term term = ir_gen_expression(builder, scope, statement->val.expr);
-		IrBlock *ret_block = builder->current_function->ret_block;
-		build_branch(builder, ret_block, term.value);
+		build_unary_instr(builder, OP_RET, term.value);
+		break;
+	}
+	case IF_STATEMENT: {
+		IrBlock *initial_block = builder->current_block;
+		IrBlock *then_block = add_block(builder, "then");
+		IrBlock *else_block = add_block(builder, "else");
+		IrBlock *after_block = add_block(builder, "after");
+
+		ASTStatement *then_statement = statement->val.if_statement.then_statement;
+		builder->current_block = then_block;
+		ir_gen_statement(builder, scope, then_statement);
+		build_branch(builder, after_block);
+
+		ASTStatement *else_statement = statement->val.if_statement.else_statement;
+		builder->current_block = else_block;
+		ir_gen_statement(builder, scope, else_statement);
+		build_branch(builder, after_block);
+
+		builder->current_block = initial_block;
+		ASTExpr *condition_expr = statement->val.if_statement.condition;
+		Term condition_term = ir_gen_expression(builder, scope, condition_expr);
+		assert(condition_term.ctype.type == INTEGER_TYPE);
+
+		build_cond(builder, condition_term.value, then_block, else_block);
 		break;
 	}
 	default:

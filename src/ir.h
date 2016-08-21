@@ -16,10 +16,10 @@ typedef struct TransUnit
 typedef struct IrBlock
 {
 	char *name;
-
-	u32 arity;
-	struct IrArg *args;
 	Array(IrInstr *) instrs;
+
+	// used by asm_gen
+	AsmLabel *label;
 } IrBlock;
 
 typedef struct IrType
@@ -39,9 +39,9 @@ typedef struct IrType
 
 typedef struct IrFunction
 {
-	IrBlock *entry_block;
-	IrBlock *ret_block;
-
+	u32 arity;
+	IrType *arg_types;
+	IrType return_type;
 	Array(IrBlock *) blocks;
 } IrFunction;
 
@@ -49,7 +49,6 @@ typedef struct IrGlobal
 {
 	char *name;
 	IrType ir_type;
-	struct AsmGlobal *asm_global;
 
 	enum
 	{
@@ -89,7 +88,7 @@ typedef struct IrValue
 	{
 		u64 constant;
 		struct IrInstr *instr;
-		struct IrArg *arg;
+		u32 arg_index;
 		IrGlobal *global;
 	} val;
 } IrValue;
@@ -103,8 +102,11 @@ typedef enum IrOp
 
 	OP_LOAD,
 	OP_STORE,
-	OP_BRANCH,
 	OP_LOCAL,
+
+	OP_RET,
+	OP_BRANCH,
+	OP_COND,
 } IrOp;
 
 typedef struct IrInstr
@@ -117,11 +119,7 @@ typedef struct IrInstr
 	union
 	{
 		u64 constant;
-		struct
-		{
-			IrBlock *target_block;
-			IrValue argument;
-		} branch;
+		IrValue arg;
 		struct
 		{
 			IrValue arg1;
@@ -145,27 +143,24 @@ typedef struct IrInstr
 			IrValue *arg_array;
 			IrType return_type;
 		} call;
+		struct
+		{
+			IrValue condition;
+			IrBlock *then_block;
+			IrBlock *else_block;
+		} cond;
+		IrBlock *target_block;
 		IrType type;
 	} val;
 } IrInstr;
-
-typedef struct IrArg
-{
-	u32 index;
-	IrType type;
-
-	i32 virtual_register; // used by asm_gen
-} IrArg;
 
 void trans_unit_init(TransUnit *tu);
 void trans_unit_free(TransUnit *trans_unit);
 IrGlobal *trans_unit_add_function(TransUnit *tu, char *name,
 		IrType return_type, u32 arity, IrType *arg_types);
 
-static inline IrType ir_function_return_type(IrFunction *f)
-{
-	return f->ret_block->args[0].type;
-}
+IrBlock *add_block_to_function(
+		TransUnit *trans_unit, IrFunction *function, char *name);
 
 bool ir_type_eq(IrType a, IrType b);
 void dump_ir_type(IrType type);
@@ -173,12 +168,17 @@ void dump_ir_type(IrType type);
 void dump_trans_unit(TransUnit *tu);
 
 void builder_init(IrBuilder *builder, TransUnit *tu);
-IrInstr *build_branch(IrBuilder *builder, IrBlock *block, IrValue value);
+IrInstr *build_branch(IrBuilder *builder, IrBlock *block);
+IrInstr *build_cond(IrBuilder *builder,
+		IrValue condition, IrBlock *then_block, IrBlock *else_block);
 
 IrValue value_const(IrType type, u64 constant);
-IrValue value_arg(IrArg *arg);
+IrValue value_arg(u32 arg_index, IrType type);
 IrValue value_global(IrGlobal *global);
 
+AsmLabel *global_label(IrGlobal *global);
+
+IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg);
 IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2);
 IrValue build_local(IrBuilder *builder, IrType type);
 IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type);

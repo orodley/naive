@@ -21,11 +21,7 @@ typedef struct VRegInfo
 
 	union
 	{
-		struct
-		{
-			IrBlock *block;
-			u32 arg_num;
-		} arg;
+		u32 arg_index;
 		IrInstr *defining_instr;
 	} val;
 } VRegInfo;

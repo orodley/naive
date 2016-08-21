@@ -40,6 +40,7 @@ AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 	AsmInstr *instr = ARRAY_APPEND(&builder->current_function->instrs, AsmInstr);
 	instr->op = op;
 	instr->num_args = 0;
+	instr->label = NULL;
 
 	return instr;
 }
@@ -50,6 +51,7 @@ AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmArg arg1)
 	instr->op = op;
 	instr->num_args = 1;
 	instr->args[0] = arg1;
+	instr->label = NULL;
 
 	return instr;
 }
@@ -61,6 +63,7 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 	instr->num_args = 2;
 	instr->args[0] = arg1;
 	instr->args[1] = arg2;
+	instr->label = NULL;
 
 	return instr;
 }
@@ -93,6 +96,10 @@ static inline u32 next_vreg(AsmBuilder *builder)
 	return builder->virtual_registers.size;
 }
 
+static PhysicalRegister argument_registers[] = {
+	RDI, RSI, RDX, RCX, R8, R9,
+};
+
 static AsmArg asm_value(IrValue value)
 {
 	switch (value.kind) {
@@ -105,12 +112,15 @@ static AsmArg asm_value(IrValue value)
 		return asm_virtual_register(vreg);
 	}
 	case VALUE_ARG: {
-		i32 vreg = value.val.arg->virtual_register;
-		assert(vreg != -1);
-		return asm_virtual_register(vreg);
+		assert(value.type.kind == IR_INT);
+		assert(value.val.arg_index < STATIC_ARRAY_LENGTH(argument_registers));
+
+		// We always allocate virtual registers to arguments first, so arg at
+		// index i = virtual register i.
+		return asm_virtual_register(value.val.arg_index);
 	}
 	case VALUE_GLOBAL:
-		return asm_global(value.val.global->asm_global);
+		return asm_label(global_label(value.val.global));
 	}
 }
 
@@ -125,10 +135,6 @@ static void assign_vreg(AsmBuilder *builder, IrInstr *instr)
 
 	instr->virtual_register = vreg_number;
 }
-
-static PhysicalRegister argument_registers[] = {
-	RDI, RSI, RDX, RCX, R8, R9,
-};
 
 static void asm_gen_instr(
 		IrFunction *ir_func, AsmBuilder *builder, IrInstr *instr)
@@ -145,12 +151,9 @@ static void asm_gen_instr(
 
 		break;
 	}
-	case OP_BRANCH: {
-		IrBlock *target_block = instr->val.branch.target_block;
-		assert(target_block == ir_func->ret_block);
-
-		IrValue arg = instr->val.branch.argument;
-		assert(ir_type_eq(target_block->args[0].type, arg.type));
+	case OP_RET: {
+		IrValue arg = instr->val.arg;
+		assert(ir_type_eq(ir_func->return_type, arg.type));
 
 		emit_instr2(builder, ADD, asm_physical_register(RSP),
 				asm_const32(builder->local_stack_usage));
@@ -160,6 +163,14 @@ static void asm_gen_instr(
 
 		break;
 	}
+	case OP_BRANCH:
+		emit_instr1(builder, JMP, asm_label(instr->val.target_block->label));
+		break;
+	case OP_COND:
+		emit_instr2(builder, CMP, asm_value(instr->val.cond.condition), asm_const32(0));
+		emit_instr1(builder, JE, asm_label(instr->val.cond.then_block->label));
+		emit_instr1(builder, JMP, asm_label(instr->val.cond.else_block->label));
+		break;
 	case OP_STORE: {
 		IrValue pointer = instr->val.store.pointer;
 		IrValue value = instr->val.store.value;
@@ -306,20 +317,14 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
 	ARRAY_INIT(&builder->virtual_registers, VRegInfo, 20);
-	IrType return_type = ir_function_return_type(ir_func);
+	IrType return_type = ir_func->return_type;
 	assert(return_type.kind == IR_INT && return_type.val.bit_width == 32);
 
-	IrBlock *block = ir_func->entry_block;
-	IrArg *args = block->args;
-	assert(block->arity <= STATIC_ARRAY_LENGTH(argument_registers));
-	for (u32 i = 0; i < block->arity; i++) {
-		u32 vreg = next_vreg(builder);
-		args[i].virtual_register = vreg;;
-
+	assert(ir_func->arity <= STATIC_ARRAY_LENGTH(argument_registers));
+	for (u32 i = 0; i < ir_func->arity; i++) {
 		VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
 		vreg_info->source = ARG;
-		vreg_info->val.arg.block = block;
-		vreg_info->val.arg.arg_num = i;
+		vreg_info->val.arg_index = i;
 		vreg_info->assigned_register = argument_registers[i];
 	}
 
@@ -328,9 +333,29 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	AsmInstr *reserve_stack = emit_instr2(builder, SUB,
 			asm_physical_register(RSP), asm_const32(0));
 
-	Array(IrInstr *) *instrs = &block->instrs;
-	for (u32 i = 0; i < instrs->size; i++) {
-		asm_gen_instr(ir_func, builder, *ARRAY_REF(instrs, IrInstr *, i));
+	for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
+		IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
+		AsmLabel *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
+		label->name = block->name;
+
+		*ARRAY_APPEND(&builder->current_function->labels, AsmLabel *) = label;
+		block->label = label;
+	}
+
+	for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
+		IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
+
+		u32 first_instr_of_block_index = builder->current_function->instrs.size;
+		Array(IrInstr *) *instrs = &block->instrs;
+		for (u32 i = 0; i < instrs->size; i++) {
+			asm_gen_instr(ir_func, builder, *ARRAY_REF(instrs, IrInstr *, i));
+		}
+
+		AsmInstr *first_instr_of_block = ARRAY_REF(
+				&builder->current_function->instrs,
+				AsmInstr,
+				first_instr_of_block_index);
+		first_instr_of_block->label = block->label;
 	}
 
 	reserve_stack->args[1] = asm_const32(builder->local_stack_usage);
@@ -345,7 +370,6 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 		AsmGlobal *asm_global =
 			pool_alloc(&builder->asm_module.pool, sizeof *asm_global);
 		*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = asm_global;
-		ir_global->asm_global = asm_global;
 
 		asm_global->name = ir_global->name;
 		asm_global->offset = 0;

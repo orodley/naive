@@ -1,6 +1,14 @@
 ADD r/m64, imm8  = REX.W + 83 /0 ib
 
+CALL sym         =         E8 cd
+
+CMP r/m64 imm32  = REX.W + 81 /7 id
+
 IMUL r64, r/m64  = REX.W + [0F AF] /r
+
+JE  sym          =         [0F 84] cd
+
+JMP sym          =         E9 cd
 
 MOV r/m64, r64   = REX.W + 89 /r
 MOV r64,   r/m64 = REX.W + 8B /r
@@ -10,9 +18,8 @@ POP r64          = 58 +rd
 
 PUSH r64         = 50 +rd
 
+RET              =         C3
+
 SUB r/m64, imm8  = REX.W + 83 /5 ib
 
 XOR r/m64, r64   = REX.W + 31 /r
-
-CALL sym         =         E8 cd
-RET              =         C3

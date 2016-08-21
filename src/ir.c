@@ -8,27 +8,14 @@
 #include "misc.h"
 #include "util.h"
 
-// @TODO: Maybe we should let the caller initialize arg_types rather than
-// making them allocate an array?
-static void block_init(IrBlock *block, char *name,
-		u32 arity, IrType *arg_types)
+static void block_init(IrBlock *block, char *name)
 {
 	block->name = name;
-	block->arity = arity;
-	block->args = malloc(sizeof(*block->args) * arity);
-	for (u32 i = 0; i < arity; i++) {
-		IrArg *arg = &block->args[i];
-		arg->index = i;
-		arg->type = arg_types[i];
-		arg->virtual_register = -1;
-	}
-
 	ARRAY_INIT(&block->instrs, IrInstr *, 10);
 }
 
 static void block_free(IrBlock *block)
 {
-	free(block->args);
 	array_free(&block->instrs);
 }
 
@@ -49,6 +36,7 @@ void trans_unit_free(TransUnit *trans_unit)
 				block_free(block);
 			}
 			array_free(&func->blocks);
+			free(func->arg_types);
 		}
 	}
 
@@ -56,12 +44,12 @@ void trans_unit_free(TransUnit *trans_unit)
 	pool_free(&trans_unit->pool);
 }
 
-IrBlock *add_block(TransUnit *trans_unit, IrFunction *function, char *name, u32 arity,
-		IrType *arg_types)
+IrBlock *add_block_to_function(
+		TransUnit *trans_unit, IrFunction *function, char *name)
 {
 	IrBlock *block = pool_alloc(&trans_unit->pool, sizeof *block);
 	*ARRAY_APPEND(&function->blocks, IrBlock *) = block;
-	block_init(block, name, arity, arg_types);
+	block_init(block, name);
 
 	return block;
 }
@@ -78,17 +66,15 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	new_global->kind = IR_GLOBAL_FUNCTION;
 
 	IrFunction *new_function = &new_global->val.function;
+	new_function->return_type = return_type;
+	new_function->arity = arity;
+	new_function->arg_types = arg_types;
 
 	ARRAY_INIT(&new_function->blocks, IrBlock *, 5);
-	new_function->entry_block =
-		add_block(trans_unit, new_function, "entry", arity, arg_types);
-	new_function->ret_block =
-		add_block(trans_unit, new_function, "ret", 1, &return_type);
+	add_block_to_function(trans_unit, new_function, "entry");
 
 	return new_global;
 }
-
-extern inline IrType ir_function_return_type(IrFunction *f);
 
 bool ir_type_eq(IrType a, IrType b)
 {
@@ -125,7 +111,7 @@ static void dump_value(IrValue value)
 		printf("%" PRId64, value.val.constant);
 		break;
 	case VALUE_ARG:
-		printf("@%d", value.val.arg->index);
+		printf("@%d", value.val.arg_index);
 		break;
 	case VALUE_INSTR:
 		printf("#%d", value.val.instr->id);
@@ -158,8 +144,17 @@ static void dump_instr(IrInstr *instr)
 		dump_ir_type(instr->val.store.type);
 		break;
 	case OP_BRANCH:
-		printf("branch(%s, ", instr->val.branch.target_block->name);
-		dump_value(instr->val.branch.argument);
+		printf("branch(%s", instr->val.target_block->name);
+		break;
+	case OP_COND:
+		fputs("cond(", stdout);
+		dump_value(instr->val.cond.condition);
+		fputs(", ", stdout);
+		printf("%s, %s", instr->val.cond.then_block->name, instr->val.cond.else_block->name);
+		break;
+	case OP_RET:
+		fputs("ret(", stdout);
+		dump_value(instr->val.arg);
 		break;
 	case OP_CALL:
 		fputs("call(", stdout);
@@ -196,29 +191,30 @@ void dump_trans_unit(TransUnit *trans_unit)
 		case IR_GLOBAL_FUNCTION: {
 			IrFunction *f = &global->val.function;
 
-			dump_ir_type(ir_function_return_type(f));
+			dump_ir_type(f->return_type);
 			printf(" %s(", global->name);
-			IrArg *args = f->entry_block->args;
-			for (u32 i = 0; i < f->entry_block->arity; i++) {
-				IrType arg_type = args[i].type;
+			for (u32 i = 0; i < f->arity; i++) {
+				IrType arg_type = f->arg_types[i];
 				dump_ir_type(arg_type);
 
-				if (i != f->entry_block->arity - 1)
+				if (i != f->arity - 1)
 					fputs(", ", stdout);
 			}
 
 			puts(")\n{");
 
-			IrBlock *block = f->entry_block;
-			for (;;) {
-				printf("%s(%d):\n", block->name, block->arity);
+			for (u32 i = 0; i < f->blocks.size; i++) {
+				IrBlock *block = *ARRAY_REF(&f->blocks, IrBlock *, i);
+				printf("%s:\n", block->name);
 
 				Array(IrInstr *) *instrs = &block->instrs;
 				for (u32 i = 0; i < instrs->size; i++) {
 					IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
 					putchar('\t');
-					if (instr->op != OP_STORE && instr->op != OP_BRANCH)
+					if (instr->op != OP_STORE && instr->op != OP_BRANCH
+							&& instr->op != OP_COND && instr->op != OP_RET) {
 						printf("#%u = ", i);
+					}
 					dump_instr(instr);
 				}
 
@@ -226,8 +222,8 @@ void dump_trans_unit(TransUnit *trans_unit)
 					break;
 
 				IrInstr *last_instr = *ARRAY_REF(instrs, IrInstr *, instrs->size - 1);
-				assert(last_instr->op == OP_BRANCH);
-				block = last_instr->val.branch.target_block;
+				assert(last_instr->op == OP_RET || last_instr->op == OP_BRANCH
+						|| last_instr->op == OP_COND);
 			}
 
 			puts("}");
@@ -253,22 +249,30 @@ static inline IrInstr *append_instr(IrBuilder *builder)
 	IrBlock *block = builder->current_block;
 
 	IrInstr *instr = pool_alloc(&builder->trans_unit->pool, sizeof *instr);
-	instr->id = block->instrs.size - 1;
+	instr->id = block->instrs.size;
 	instr->virtual_register = -1;
 	*ARRAY_APPEND(&block->instrs, IrInstr *) = instr;
 
 	return instr;
 }
 
-// @TODO: Currently this is limited to blocks of arity 1.
-IrInstr *build_branch(IrBuilder *builder, IrBlock *block, IrValue value)
+IrInstr *build_branch(IrBuilder *builder, IrBlock *block)
 {
-	assert(ir_type_eq(block->args[0].type, value.type));
-
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_BRANCH;
-	instr->val.branch.target_block = block;
-	instr->val.branch.argument = value;
+	instr->val.target_block = block;
+
+	return instr;
+}
+
+IrInstr *build_cond(IrBuilder *builder,
+		IrValue condition, IrBlock *then_block, IrBlock *else_block)
+{
+	IrInstr *instr = append_instr(builder);
+	instr->op = OP_COND;
+	instr->val.cond.condition = condition;
+	instr->val.cond.then_block = then_block;
+	instr->val.cond.else_block = else_block;
 
 	return instr;
 }
@@ -276,7 +280,8 @@ IrInstr *build_branch(IrBuilder *builder, IrBlock *block, IrValue value)
 static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 {
 	switch (op) {
-	case OP_LOCAL: case OP_LOAD: case OP_STORE: case OP_BRANCH: case OP_CALL:
+	case OP_LOCAL: case OP_LOAD: case OP_STORE:
+	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL:
 		UNREACHABLE;
 	case OP_BIT_XOR:
 		return arg1 ^ arg2;
@@ -328,6 +333,19 @@ IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType t
 	return value_instr(instr);
 }
 
+IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg)
+{
+	// @TODO: Constant folding for unary ops once we have unary operations that
+	// can be constant folded.
+
+	IrInstr *instr = append_instr(builder);
+	instr->op = op;
+	instr->type = arg.type;
+	instr->val.arg = arg;
+
+	return value_instr(instr);
+}
+
 IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2)
 {
 	assert(ir_type_eq(arg1.type, arg2.type));
@@ -372,12 +390,12 @@ IrValue value_const(IrType type, u64 constant)
 	return value;
 }
 
-IrValue value_arg(IrArg *arg)
+IrValue value_arg(u32 arg_index, IrType type)
 {
 	IrValue value = {
 		.kind = VALUE_ARG,
-		.type = arg->type,
-		.val.arg = arg,
+		.type = type,
+		.val.arg_index = arg_index,
 	};
 
 	return value;
@@ -392,4 +410,14 @@ IrValue value_global(IrGlobal *global)
 	};
 
 	return value;
+}
+
+AsmLabel *global_label(IrGlobal *global)
+{
+	switch (global->kind) {
+	case IR_GLOBAL_FUNCTION:
+		return (*ARRAY_REF(&global->val.function.blocks, IrBlock *, 0))->label;
+	case IR_GLOBAL_SCALAR:
+		UNIMPLEMENTED;
+	}
 }

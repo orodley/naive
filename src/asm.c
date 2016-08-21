@@ -12,26 +12,31 @@ void init_asm_module(AsmModule *asm_module)
 {
 	ARRAY_INIT(&asm_module->functions, AsmFunction, 10);
 	ARRAY_INIT(&asm_module->globals, AsmGlobal *, 10);
-	ARRAY_INIT(&asm_module->global_references, GlobalReference, 10);
+	ARRAY_INIT(&asm_module->fixups, Fixup, 10);
 
 	pool_init(&asm_module->pool, 1024);
 }
 
 void free_asm_module(AsmModule *asm_module)
 {
-	for (u32 i = 0; i < asm_module->functions.size; i++)
-		array_free(ARRAY_REF(&asm_module->functions, Array(AsmFunction), i));
+	for (u32 i = 0; i < asm_module->functions.size; i++) {
+		AsmFunction *function = ARRAY_REF(&asm_module->functions, AsmFunction, i);
+		array_free(&function->instrs);
+		array_free(&function->labels);
+	}
 	array_free(&asm_module->functions);
 	array_free(&asm_module->globals);
-	array_free(&asm_module->global_references);
+	array_free(&asm_module->fixups);
 
 	pool_free(&asm_module->pool);
 }
 
 void init_asm_function(AsmFunction *function, char *name)
 {
-	ARRAY_INIT(&function->instrs, AsmInstr, 20);
 	function->name = name;
+
+	ARRAY_INIT(&function->instrs, AsmInstr, 20);
+	ARRAY_INIT(&function->labels, AsmLabel *, 10);
 }
 
 AsmArg asm_virtual_register(u32 n)
@@ -92,12 +97,12 @@ AsmArg asm_const32(i32 constant)
 	return asm_arg;
 }
 
-AsmArg asm_global(AsmGlobal *global)
+AsmArg asm_label(AsmLabel *label)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
-		.type = GLOBAL,
-		.val.global = global,
+		.type = LABEL,
+		.val.label = label,
 	};
 
 	return asm_arg;
@@ -137,23 +142,24 @@ static char *asm_op_names[] = {
 
 static void dump_asm_instr(AsmInstr *instr)
 {
+	if (instr->label != NULL)
+		printf("%s:\n", instr->label->name);
+
 	putchar('\t');
 	char *op_name = asm_op_names[instr->op];
 	for (u32 i = 0; op_name[i] != '\0'; i++)
 		putchar(tolower(op_name[i]));
 
 	switch (instr->op) {
-	case MOV: case XOR: case ADD: case SUB: case IMUL:
+	case MOV: case XOR: case ADD: case SUB: case IMUL: case CMP:
 		putchar(' ');
 		dump_asm_args(instr->args, 2);
 		break;
-	case PUSH: case POP: case CALL:
+	case PUSH: case POP: case CALL: case JMP: case JE:
 		putchar(' ');
 		dump_asm_args(instr->args, 1);
 		break;
 	case RET:
-		// Print an extra newline, to visually separate functions
-		putchar('\n');
 		break;
 	}
 
@@ -198,6 +204,9 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 			dump_register(arg->val.offset_register.reg);
 			printf(" + %" PRIu64, arg->val.offset_register.offset);
 			break;
+		case LABEL:
+			printf("%s", arg->val.label->name);
+			break;
 		case CONST8:
 			if ((i8)arg->val.constant < 0)
 				printf("%" PRId8, (i8)arg->val.constant);
@@ -220,9 +229,6 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 			else
 				printf("%" PRIu64, (i64)arg->val.constant);
 			break;
-		case GLOBAL:
-			printf("$%s", arg->val.global->name);
-			break;
 		}
 		if (arg->is_deref)
 			putchar(']');
@@ -232,12 +238,15 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 void dump_asm_module(AsmModule *asm_module)
 {
 	for (u32 i = 0; i < asm_module->functions.size; i++) {
-		AsmFunction *block = ARRAY_REF(&asm_module->functions, AsmFunction, i);
+		AsmFunction *func = ARRAY_REF(&asm_module->functions, AsmFunction, i);
 
-		for (u32 j = 0; j < block->instrs.size; j++) {
-			AsmInstr *instr = ARRAY_REF(&block->instrs, AsmInstr, j);
+		for (u32 j = 0; j < func->instrs.size; j++) {
+			AsmInstr *instr = ARRAY_REF(&func->instrs, AsmInstr, j);
 			dump_asm_instr(instr);
 		}
+
+		if (i == asm_module->functions.size - 1)
+			putchar('\n');
 	}
 }
 
@@ -471,7 +480,7 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 	if (immediate_size != -1) {
 		AsmArg* immediate_arg = NULL;
 		for (u32 i = 0; i < instr->num_args; i++) {
-			if (asm_arg_is_const(instr->args[i]) || instr->args[i].type == GLOBAL) {
+			if (asm_arg_is_const(instr->args[i]) || instr->args[i].type == LABEL) {
 				// Check that we only have one immediate.
 				assert(immediate_arg == NULL);
 				immediate_arg = instr->args + i;
@@ -482,13 +491,12 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		u64 immediate;
 		if (asm_arg_is_const(*immediate_arg)) {
 			immediate = immediate_arg->val.constant;
-		} else if (immediate_arg->type == GLOBAL) {
-			GlobalReference *ref =
-				ARRAY_APPEND(&asm_module->global_references, GlobalReference);
+		} else if (immediate_arg->type == LABEL) {
+			Fixup *fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
 
-			ref->file_location = (u32)checked_ftell(file);
-			ref->size_bytes = 4;
-			ref->global = immediate_arg->val.global;
+			fixup->file_location = (u32)checked_ftell(file);
+			fixup->size_bytes = 4;
+			fixup->label = immediate_arg->val.label;
 
 			// Dummy value, gets patched later.
 			immediate = 0;
@@ -506,25 +514,25 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 
 void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbols)
 {
-	u64 current_offset = 0;
 	u64 initial_file_location = checked_ftell(output_file);
 
 	for (u32 i = 0; i < asm_module->functions.size; i++) {
 		AsmFunction *function = ARRAY_REF(&asm_module->functions, AsmFunction, i);
 
-		u32 function_offset = current_offset;
+		u32 function_start = checked_ftell(output_file);
 		for (u32 j = 0; j < function->instrs.size; j++) {
 			AsmInstr *instr = ARRAY_REF(&function->instrs, AsmInstr, j);
+			if (instr->label != NULL) {
+				instr->label->file_location = checked_ftell(output_file);
+			}
 			assemble_instr(output_file, asm_module, instr);
-
-			current_offset = checked_ftell(output_file) - initial_file_location;
 		}
-		u32 function_size = current_offset - function_offset;
+		u32 function_size = checked_ftell(output_file) - function_start;
 
 		AsmSymbol *symbol = ARRAY_APPEND(symbols, AsmSymbol);
 		symbol->name = function->name;
 		// Offset is relative to the start of the section.
-		symbol->offset = function_offset;
+		symbol->offset = function_start - initial_file_location;
 		symbol->size = function_size;
 
 		AsmGlobal *corresponding_global =
@@ -533,21 +541,16 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 	}
 	u64 final_file_position = checked_ftell(output_file);
 
-	for (u32 i = 0; i < asm_module->global_references.size; i++) {
-		GlobalReference *ref =
-			ARRAY_REF(&asm_module->global_references, GlobalReference, i);
-
-		int ret = fseek(output_file, ref->file_location, SEEK_SET);
-		assert(ret == 0);
-
-		AsmSymbol *referenced_symbol = ref->global->symbol;
+	for (u32 i = 0; i < asm_module->fixups.size; i++) {
+		Fixup *fixup = ARRAY_REF(&asm_module->fixups, Fixup, i);
+		AsmLabel *referenced_label = fixup->label;
 
 		// Relative accesses are relative to the start of the next instruction,
 		// so we add on the size of the reference itself first.
-		u32 position_in_section =
-			(ref->file_location + ref->size_bytes) - initial_file_location;
-		i32 offset = (i32)referenced_symbol->offset - (i32)position_in_section;
-		write_int(output_file, (u64)offset, ref->size_bytes);
+		i32 offset = (i32)referenced_label->file_location -
+			(i32)(fixup->file_location + fixup->size_bytes);
+		checked_fseek(output_file, fixup->file_location, SEEK_SET);
+		write_int(output_file, (u64)offset, fixup->size_bytes);
 	}
 
 	int ret = fseek(output_file, final_file_position, SEEK_SET);
