@@ -24,6 +24,7 @@ void *pool_alloc(Pool *pool, size_t size)
 		PoolEntry *new_entry = malloc(sizeof *new_entry);
 		entry_init(new_entry, pool->entry_size);
 		pool->first_entry_with_space->next = new_entry;
+		pool->first_entry_with_space = new_entry;
 
 		entry = new_entry;
 	}
