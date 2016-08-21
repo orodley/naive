@@ -220,22 +220,26 @@ void ir_gen_toplevel(TransUnit *tu, IrBuilder *builder, ASTToplevel *toplevel)
 
 			Scope scope;
 			scope.parent_scope = &global_scope;
+			Array(Binding) *param_bindings = &scope.bindings;
+			ARRAY_INIT(param_bindings, Binding, 5);
 
 			params = first_param;
 			for (u32 i = 0; params != NULL; i++, params = params->next) {
-				Binding next_binding;
+				Binding *binding = ARRAY_APPEND(param_bindings, Binding);
 
 				CDecl cdecl;
 				decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
-				cdecl_to_binding(builder, &cdecl, &next_binding);
+				cdecl_to_binding(builder, &cdecl, binding);
 
 				build_store(builder,
-						next_binding.term.value,
+						binding->term.value,
 						value_arg(&f->entry_block->args[i]),
 						c_type_to_ir_type(&cdecl.type));
 			}
 
 			ir_gen_statement(builder, &scope, func->body);
+
+			array_free(param_bindings);
 
 			CType *pool_alloced_return_c_type = pool_alloc(&tu->pool,
 					sizeof *pool_alloced_return_c_type);
