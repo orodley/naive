@@ -297,7 +297,6 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 	case IF_STATEMENT: {
 		IrBlock *initial_block = builder->current_block;
 		IrBlock *then_block = add_block(builder, "then");
-		IrBlock *else_block = add_block(builder, "else");
 		IrBlock *after_block = add_block(builder, "after");
 
 		ASTStatement *then_statement = statement->val.if_statement.then_statement;
@@ -306,16 +305,26 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 		build_branch(builder, after_block);
 
 		ASTStatement *else_statement = statement->val.if_statement.else_statement;
-		builder->current_block = else_block;
-		ir_gen_statement(builder, scope, else_statement);
-		build_branch(builder, after_block);
+		IrBlock *else_block = NULL;
+		if (else_statement != NULL) {
+			else_block = add_block(builder, "else");
+			builder->current_block = else_block;
+			ir_gen_statement(builder, scope, else_statement);
+			build_branch(builder, after_block);
+		}
 
 		builder->current_block = initial_block;
 		ASTExpr *condition_expr = statement->val.if_statement.condition;
 		Term condition_term = ir_gen_expression(builder, scope, condition_expr);
 		assert(condition_term.ctype.type == INTEGER_TYPE);
 
-		build_cond(builder, condition_term.value, then_block, else_block);
+		if (else_statement == NULL) {
+			build_cond(builder, condition_term.value, then_block, after_block);
+		} else {
+			build_cond(builder, condition_term.value, then_block, else_block);
+		}
+
+		builder->current_block = after_block;
 		break;
 	}
 	default:
