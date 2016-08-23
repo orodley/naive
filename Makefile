@@ -54,6 +54,10 @@ libc.a: $(call objs_for_dir,libc)
 	@$(AR) -cr $@ $^
 
 
+libc/%.o: libc/%.c
+	@echo 'CC $@'
+	@$(CC) -c $(CFLAGS) -ffreestanding -nostdinc -I libc $< -o $@
+
 %.o: %.c $(HEADERS) $(GEN_FILES)
 	@echo 'CC $<'
 	@$(CC) -c $(CFLAGS) $< -o $@
