@@ -671,14 +671,26 @@ static void tokenise_aux(Reader *reader)
 
 		default: {
 			char *symbol = read_symbol(reader);
-			Macro *macro = look_up_macro(&reader->macro_env, symbol);
-
-			if (macro == NULL) {
-				Token *token = append_token(reader, start_source_loc, TOK_SYMBOL);
-				token->val.symbol = symbol;
+			if (streq(symbol, "__LINE__")) {
+				Token *line_number =
+					append_token(reader, start_source_loc, TOK_INT_LITERAL);
+				line_number->val.int_literal = reader->source_loc.line;
+			} else if (streq(symbol, "__FILE__")) {
+				Token *file_name =
+					append_token(reader, start_source_loc, TOK_STRING_LITERAL);
+				file_name->val.string_literal = reader->source_loc.filename;
 			} else {
-				tokenise_string(reader, macro->value);
+				Macro *macro = look_up_macro(&reader->macro_env, symbol);
+
+				if (macro == NULL) {
+					Token *token =
+						append_token(reader, start_source_loc, TOK_SYMBOL);
+					token->val.symbol = symbol;
+				} else {
+					tokenise_string(reader, macro->value);
+				}
 			}
+
 			break;
 		}
 		}
