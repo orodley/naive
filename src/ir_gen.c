@@ -289,6 +289,10 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 
 		break;
 	}
+	case EXPR_STATEMENT: {
+		ir_gen_expression(builder, scope, statement->val.expr);
+		break;
+	}
 	case RETURN_STATEMENT: {
 		Term term = ir_gen_expression(builder, scope, statement->val.expr);
 		build_unary_instr(builder, OP_RET, term.value);
