@@ -112,7 +112,7 @@ typedef struct SourceToken
 
 extern char *token_type_names[];
 
-void tokenise(Array(SourceToken) *tokens, char *input_filename);
+bool tokenise(Array(SourceToken) *tokens, char *input_filename);
 void dump_token(Token *token);
 
 #endif

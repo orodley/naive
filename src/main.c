@@ -173,7 +173,8 @@ int main(int argc, char *argv[])
 
 static int compile_file(char *input_filename, char *output_filename) {
 	Array(SourceToken) tokens;
-	tokenise(&tokens, input_filename);
+	if (!tokenise(&tokens, input_filename))
+		return 11;
 
 	if (flag_dump_tokens) {
 		for (u32 i = 0; i < tokens.size; i++) {

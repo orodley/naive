@@ -248,30 +248,34 @@ static char *read_symbol(Reader *reader)
 	return strndup(reader->buffer.buffer + start_index, length);
 }
 
-static void handle_pp_directive(Reader *reader);
-static void tokenise_file(Reader *reader, char *input_filename);
-static void tokenise_aux(Reader *reader);
+static bool handle_pp_directive(Reader *reader);
+static bool tokenise_file(Reader *reader, char *input_filename,
+		SourceLoc blame_source_loc);
+static bool tokenise_aux(Reader *reader);
 
 // @IMPROVE: Replace with a finite state machine
-void tokenise(Array(SourceToken) *tokens, char *input_filename)
+bool tokenise(Array(SourceToken) *tokens, char *input_filename)
 {
 	ARRAY_INIT(tokens, SourceToken, 500);
 
 	Reader reader;
 	reader.tokens = tokens;
+	reader.source_loc = (SourceLoc) { NULL, 0, 0 };
 	ARRAY_INIT(&reader.macro_env, Macro, 10);
 
-	tokenise_file(&reader, input_filename);
+	bool ret = tokenise_file(&reader, input_filename, reader.source_loc);
 
 	for (u32 i = 0; i < reader.macro_env.size; i++) {
 		free(ARRAY_REF(&reader.macro_env, Macro, i)->name);
 		free(ARRAY_REF(&reader.macro_env, Macro, i)->value);
 	}
 	array_free(&reader.macro_env);
+
+	return ret;
 }
 
 
-static void tokenise_string(Reader *reader, char *string)
+static bool tokenise_string(Reader *reader, char *string)
 {
 	u32 old_position = reader->position;
 	SourceLoc old_source_loc = reader->source_loc;
@@ -284,14 +288,18 @@ static void tokenise_string(Reader *reader, char *string)
 	reader->position = 0;
 	reader->source_loc = (SourceLoc) { "<macro>", 1, 1 };
 
-	tokenise_aux(reader);
+	if (!tokenise_aux(reader))
+		return false;
 
 	reader->position = old_position;
 	reader->buffer = old_buffer;
 	reader->source_loc = old_source_loc;
+
+	return true;
 }
 
-static void tokenise_file(Reader *reader, char *input_filename)
+static bool tokenise_file(Reader *reader, char *input_filename,
+		SourceLoc blame_source_loc)
 {
 	u32 old_position = reader->position;
 	SourceLoc old_source_loc = reader->source_loc;
@@ -299,8 +307,13 @@ static void tokenise_file(Reader *reader, char *input_filename)
 
 	InputBuffer buffer = map_file_into_memory(input_filename);
 	if (!is_valid(buffer)) {
-		fprintf(stderr, "Failed to open input file: '%s'\n", input_filename);
-		return;
+		if (blame_source_loc.filename == NULL) {
+			fprintf(stderr, "Failed to open input file: '%s'\n", input_filename);
+		} else {
+			issue_error(&blame_source_loc, "File not found: '%s'\n", input_filename);
+		}
+
+		return false;
 	}
 
 	reader->buffer = buffer;
@@ -309,15 +322,18 @@ static void tokenise_file(Reader *reader, char *input_filename)
 	reader->first_token_of_line = true;
 
 	if (buffer.buffer == NULL)
-		return;
+		return false;
 
-	tokenise_aux(reader);
+	if (!tokenise_aux(reader))
+		return false;
 
 	unmap_file(buffer);
 
 	reader->position = old_position;
 	reader->buffer = old_buffer;
 	reader->source_loc = old_source_loc;
+
+	return true;
 }
 
 
@@ -356,7 +372,7 @@ static void read_int_literal_suffix(Reader *reader)
 	}
 }
 
-static void tokenise_aux(Reader *reader)
+static bool tokenise_aux(Reader *reader)
 {
 	while (!at_end(reader)) {
 		skip_whitespace_and_comments(reader, true);
@@ -629,8 +645,8 @@ static void tokenise_aux(Reader *reader)
 				if (!reader->first_token_of_line) {
 					issue_error(&reader->source_loc,
 							"Unexpected preprocessor directive");
-				} else {
-					handle_pp_directive(reader);
+				} else if (!handle_pp_directive(reader)) {
+					return false;
 				}
 			}
 
@@ -686,8 +702,8 @@ static void tokenise_aux(Reader *reader)
 					Token *token =
 						append_token(reader, start_source_loc, TOK_SYMBOL);
 					token->val.symbol = symbol;
-				} else {
-					tokenise_string(reader, macro->value);
+				} else if (!tokenise_string(reader, macro->value)) {
+					return false;
 				}
 			}
 
@@ -697,6 +713,8 @@ static void tokenise_aux(Reader *reader)
 
 		reader->first_token_of_line = false;
 	}
+
+	return true;
 }
 
 
@@ -728,19 +746,19 @@ static char *look_up_include_path(char *including_file, char *include_path)
 	return result;
 }
 
-static void handle_pp_directive(Reader *reader)
+static bool handle_pp_directive(Reader *reader)
 {
 	IGNORE(reader);
 	skip_whitespace_and_comments(reader, false);
 	char c = read_char(reader);
 	// Empty directive
 	if (c == '\n')
-		return;
+		return true;
 
 	if (!initial_ident_char(c)) {
 		// @TODO: Sync to the next newline?
 		issue_error(&reader->source_loc, "Expected preprocessor directive");
-		return;
+		return false;
 	}
 
 	char *directive = read_symbol(reader);
@@ -758,12 +776,13 @@ static void handle_pp_directive(Reader *reader)
 		UNIMPLEMENTED;
 	} else if (streq(directive, "include")) {
 		skip_whitespace_and_comments(reader, false);
+		SourceLoc include_path_source_loc = reader->source_loc;
 
 		char c = read_char(reader);
 		if (c != '<' && c != '"') {
 			// @TODO: Resync to newline?
 			issue_error(&reader->source_loc, "Expected filename after #include");
-			return;
+			return false;
 		}
 
 		char terminator = c == '<' ? '>' : '"';
@@ -776,7 +795,8 @@ static void handle_pp_directive(Reader *reader)
 		char *include_path = strndup(reader->buffer.buffer + start_index, length);
 		char *includee_path = look_up_include_path(reader->source_loc.filename, include_path);
 
-		tokenise_file(reader, includee_path);
+		if (!tokenise_file(reader, includee_path, include_path_source_loc))
+			return false;
 		
 		free(include_path);
 		free(includee_path);
@@ -792,7 +812,7 @@ static void handle_pp_directive(Reader *reader)
 		char c = read_char(reader);
 		if (!initial_ident_char(c)) {
 			issue_error(&reader->source_loc, "Expected identifier after #define");
-			return;
+			return false;
 		}
 
 		char *macro_name = read_symbol(reader);
@@ -817,7 +837,10 @@ static void handle_pp_directive(Reader *reader)
 		UNIMPLEMENTED;
 	} else {
 		issue_error(&reader->source_loc, "Invalid preprocessor directive: %s", directive);
+		return false;
 	}
+
+	return true;
 }
 
 
