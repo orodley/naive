@@ -5,7 +5,7 @@ NASM ?= nasm
 PEG ?= meta/peg.py
 ENC ?= meta/enc.py
 
-CFLAGS := $(CFLAGS) -g -std=c99 -Isrc \
+CFLAGS := $(CFLAGS) -std=c99 -Isrc \
 	-Werror -Wall -Wextra -Wstrict-prototypes -Wformat
 
 ifneq (, $(shell which ccache))
@@ -56,11 +56,12 @@ libc.a: $(call objs_for_dir,libc)
 
 libc/%.o: libc/%.c
 	@echo 'CC $@'
-	@$(CC) -c $(CFLAGS) -ffreestanding -nostdinc -I libc $< -o $@
+	@$(CC) -c $(CFLAGS) -fno-asynchronous-unwind-tables -ffreestanding \
+		-nostdinc -I libc $< -o $@
 
 %.o: %.c $(HEADERS) $(GEN_FILES)
 	@echo 'CC $<'
-	@$(CC) -c $(CFLAGS) $< -o $@
+	@$(CC) -c $(CFLAGS) -g $< -o $@
 
 %.o: %.s
 	@echo 'NASM $<'
