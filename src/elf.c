@@ -814,6 +814,7 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 					assert(feof(input_file));
 					break;
 				}
+				long file_start = checked_ftell(input_file);
 
 				assert(header.magic[0] == 0x60 && header.magic[1] == 0x0A);
 
@@ -831,17 +832,16 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 				file_size_bytes_decimal[sizeof file_size_bytes_decimal - 1] = '\0';
 				long file_size_bytes = atol(file_size_bytes_decimal);
 
-				// This is a special file, used to store a symbol index in
-				// System V ar. We don't care about it for now.
-				if (streq(header.name, "")) {
-					fseek(input_file, file_size_bytes, SEEK_CUR);
-					continue;
-				}
-
-				if (!process_elf_file(input_file, output_file, &symbol_table)) {
+				// The file with an empty name is a special file, used to store
+				// a symbol index in System V ar. We don't care about it for
+				// now.
+				if (!streq(header.name, "") &&
+						!process_elf_file(input_file, output_file, &symbol_table)) {
 					ret = false;
 					goto cleanup;
 				}
+
+				fseek(input_file, file_start + file_size_bytes, SEEK_SET);
 			}
 
 			break;
