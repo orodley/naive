@@ -113,14 +113,6 @@ static void decl_to_cdecl(ASTDeclSpecifier *decl_specifier_list,
 	}
 }
 
-static CType function_return_type(ASTFunctionDef *func)
-{
-	CDecl cdecl;
-	decl_to_cdecl(func->decl_specifier_list, func->declarator, &cdecl);
-
-	return cdecl.type;
-}
-
 static IrType c_type_to_ir_type(CType *ctype)
 {
 	switch (ctype->type) {
@@ -158,10 +150,72 @@ static inline IrBlock *add_block(IrBuilder *builder, char *name)
 	return add_block_to_function(builder->trans_unit, builder->current_function, name);
 }
 
+static IrGlobal *ir_global_for_function(IrBuilder *builder,
+		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
+		CType *result_c_type)
+{
+	CDecl cdecl;
+	decl_to_cdecl(decl_specifier_list, declarator, &cdecl);
+	CType return_c_type = cdecl.type;
+	IrType return_ir_type = c_type_to_ir_type(&return_c_type);
+
+	assert(declarator->type == DIRECT_DECLARATOR);
+	ASTDirectDeclarator *direct_declarator =
+		declarator->val.direct_declarator;
+	assert(direct_declarator->type == FUNCTION_DECLARATOR);
+
+	ASTParameterDecl *first_param =
+		direct_declarator->val.function_declarator.parameters;
+	ASTParameterDecl *params = first_param;
+
+	u32 arity = 0;
+	while (params != NULL) {
+		arity++;
+		params = params->next;
+	}
+
+	params = first_param;
+
+	IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
+	CType *arg_c_types = pool_alloc(
+			&builder->trans_unit->pool,
+			sizeof(*arg_c_types) * arity);
+
+	for (u32 i = 0; i < arity; i++) {
+		CDecl cdecl;
+		decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
+		arg_ir_types[i] = c_type_to_ir_type(&cdecl.type);
+		arg_c_types[i] = cdecl.type;
+
+		params = params->next;
+	}
+
+	// @TODO: Search through the currently defined globals for one of the same
+	// name. If found, check that the CType matches and use that one instead of
+	// adding a new one.
+	IrGlobal *global = trans_unit_add_function(
+			builder->trans_unit,
+			direct_declarator->val.function_declarator.declarator->val.name,
+			return_ir_type, arity, arg_ir_types);
+
+	assert(global->kind == IR_GLOBAL_FUNCTION);
+
+	CType *pool_alloced_return_c_type = pool_alloc(&builder->trans_unit->pool,
+			sizeof *pool_alloced_return_c_type);
+	*pool_alloced_return_c_type = return_c_type;
+
+	result_c_type->type = FUNCTION_TYPE;
+	result_c_type->val.function.arity = arity;
+	result_c_type->val.function.arg_type_array = arg_c_types;
+	result_c_type->val.function.return_type = pool_alloced_return_c_type;
+
+	return global;
+}
+
 static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *statement);
 static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr);
 
-void ir_gen_toplevel(TransUnit *tu, IrBuilder *builder, ASTToplevel *toplevel)
+void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 {
 	Scope global_scope;
 	global_scope.parent_scope = NULL;
@@ -176,86 +230,61 @@ void ir_gen_toplevel(TransUnit *tu, IrBuilder *builder, ASTToplevel *toplevel)
 		switch (toplevel->type) {
 		case FUNCTION_DEF: {
 			ASTFunctionDef *func = toplevel->val.function_def;
-			CType return_c_type = function_return_type(func);
-			IrType return_ir_type = c_type_to_ir_type(&return_c_type);
+			ASTDeclSpecifier *decl_specifier_list = func->decl_specifier_list;
+			ASTDeclarator *declarator = func->declarator;
 
-			assert(func->declarator->type == DIRECT_DECLARATOR);
-			ASTDirectDeclarator *direct_declarator =
-				func->declarator->val.direct_declarator;
-			assert(direct_declarator->type == FUNCTION_DECLARATOR);
+			global = ir_global_for_function(builder, decl_specifier_list,
+					declarator, &global_type);
+			IrFunction *function = &global->val.function;
 
-			ASTParameterDecl *first_param =
-				direct_declarator->val.function_declarator.parameters;
-			ASTParameterDecl *params = first_param;
-
-			u32 arity = 0;
-			while (params != NULL) {
-				arity++;
-				params = params->next;
-			}
-
-			params = first_param;
-
-			IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
-			CType *arg_c_types = pool_alloc(
-					&builder->trans_unit->pool,
-					sizeof(*arg_c_types) * arity);
-
-			for (u32 i = 0; i < arity; i++) {
-				CDecl cdecl;
-				decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
-				arg_ir_types[i] = c_type_to_ir_type(&cdecl.type);
-				arg_c_types[i] = cdecl.type;
-
-				params = params->next;
-			}
-
-			global = trans_unit_add_function(
-					tu,
-					direct_declarator->val.function_declarator.declarator->val.name,
-					return_ir_type, arity, arg_ir_types);
-
-			assert(global->kind == IR_GLOBAL_FUNCTION);
-			IrFunction *f = &global->val.function;
-
-			builder->current_function = f;
-			builder->current_block = *ARRAY_REF(&f->blocks, IrBlock *, 0);
+			builder->current_function = function;
+			builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
 
 			Scope scope;
 			scope.parent_scope = &global_scope;
 			Array(Binding) *param_bindings = &scope.bindings;
 			ARRAY_INIT(param_bindings, Binding, 5);
 
-			params = first_param;
-			for (u32 i = 0; params != NULL; i++, params = params->next) {
+			ASTDirectDeclarator *direct_declarator =
+				declarator->val.direct_declarator;
+			assert(direct_declarator->type == FUNCTION_DECLARATOR);
+
+			ASTParameterDecl *param =
+				direct_declarator->val.function_declarator.parameters;
+			for (u32 i = 0; param != NULL; i++, param = param->next) {
 				Binding *binding = ARRAY_APPEND(param_bindings, Binding);
 
 				CDecl cdecl;
-				decl_to_cdecl(params->decl_specifier_list, params->declarator, &cdecl);
+				decl_to_cdecl(param->decl_specifier_list, param->declarator, &cdecl);
 				cdecl_to_binding(builder, &cdecl, binding);
 
 				build_store(builder,
 						binding->term.value,
-						value_arg(i, f->arg_types[i]),
+						value_arg(i, function->arg_types[i]),
 						c_type_to_ir_type(&cdecl.type));
 			}
 
-			ir_gen_statement(builder, &scope, func->body);
-
 			array_free(param_bindings);
 
-			CType *pool_alloced_return_c_type = pool_alloc(&tu->pool,
-					sizeof *pool_alloced_return_c_type);
-			*pool_alloced_return_c_type = return_c_type;
-
-			global_type.type = FUNCTION_TYPE;
-			global_type.val.function.arity = arity;
-			global_type.val.function.arg_type_array = arg_c_types;
-			global_type.val.function.return_type = pool_alloced_return_c_type;
+			ir_gen_statement(builder, &scope, func->body);
+			global->defined = true;
 
 			break;
 		}
-		case DECL: UNIMPLEMENTED;
+		case DECL: {
+			ASTDecl *decl = toplevel->val.decl;
+			ASTDeclSpecifier *decl_specifier_list = decl->decl_specifier_list;
+			ASTInitDeclarator *init_declarator = decl->init_declarators;
+			assert(init_declarator->initializer == NULL);
+			assert(init_declarator->next == NULL);
+			ASTDeclarator *declarator = init_declarator->declarator;
+
+			global = ir_global_for_function(builder, decl_specifier_list,
+					declarator, &global_type);
+			global->defined = false;
+
+			break;
+		}
 		}
 
 		Binding *binding = ARRAY_APPEND(global_bindings, Binding);

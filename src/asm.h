@@ -48,14 +48,6 @@ typedef struct Register
 	} val;
 } Register;
 
-// @TODO: Merge this and AsmFunction, just like in the IR?
-typedef struct AsmGlobal
-{
-	char *name;
-	i32 offset;
-	struct AsmSymbol *symbol;
-} AsmGlobal;
-
 typedef struct AsmLabel
 {
 	char *name;
@@ -73,6 +65,7 @@ typedef struct AsmArg
 		REGISTER,
 		OFFSET_REGISTER,
 		LABEL,
+		GLOBAL,
 
 		// @TODO: Do we want to encode the size of the immediate here rather
 		// than just having one type for all constants? Seems unnecessary.
@@ -92,6 +85,7 @@ typedef struct AsmArg
 		} offset_register;
 		u64 constant;
 		AsmLabel *label;
+		struct AsmGlobal *global;
 	} val;
 } AsmArg;
 
@@ -132,17 +126,44 @@ typedef struct AsmFunction
 	Array(AsmLabel *) labels;
 } AsmFunction;
 
+typedef struct AsmGlobal
+{
+	enum
+	{
+		ASM_GLOBAL_FUNCTION,
+	} type;
+
+	char *name;
+	bool defined;
+	i32 offset;
+	struct AsmSymbol *symbol;
+
+	union
+	{
+		AsmFunction function;
+	} val;
+} AsmGlobal;
+
 typedef struct Fixup
 {
-	AsmLabel *label;
+	enum
+	{
+		FIXUP_LABEL,
+		FIXUP_GLOBAL,
+	} type;
 
 	u32 file_location;
 	u32 size_bytes;
+
+	union
+	{
+		AsmLabel *label;
+		AsmGlobal *global;
+	} val;
 } Fixup;
 
 typedef struct AsmModule
 {
-	Array(AsmFunction) functions;
 	Array(AsmGlobal *) globals;
 
 	Array(Fixup) fixups;
@@ -153,6 +174,8 @@ typedef struct AsmModule
 typedef struct AsmSymbol
 {
 	char *name;
+	u32 defined;
+	u32 symtab_index;
 	u32 string_table_offset_for_name;
 	u32 offset;
 	u32 size;

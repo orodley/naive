@@ -125,6 +125,7 @@ typedef enum ELFSymbolType
 	STT_FILE = 4,
 } ELFSymbolType;
 
+// @TODO: Macro to create
 #define ELF64_SYMBOL_BINDING(x) ((x) >> 4)
 #define ELF64_SYMBOL_TYPE(x) ((x) & 0xF)
 
@@ -135,6 +136,7 @@ typedef struct ELF64Rela
 	i64 addend;
 } __attribute__((packed)) ELF64Rela;
 
+#define ELF64_RELA_TYPE_AND_SYMBOL(t, s) (((u64)(s) << 32) | ((t) & 0xFFFFFFFF))
 #define ELF64_RELA_SYMBOL(x) ((x) >> 32)
 #define ELF64_RELA_TYPE(x) ((x) & 0xFFFFFFFF)
 
@@ -150,7 +152,40 @@ typedef enum ELF64RelocType
 // The following have nothing to do with the spec - they're just constants
 // regarding the object files we want to create
 
-#define NUM_SECTIONS 5
+
+// We write the following sections (in this order):
+//   * .text
+//   * .rela.text
+//   * .shstrtab
+//   * .symtab
+//   * .strtab
+//
+// The headers are in the same order, but with a NULL header at the start that
+// has no corresponding sections, as required by the spec.
+//
+// Note that we write out .rela.text even if there are no relocations. In this
+// case we set the size to zero in the header and don't write any data for it.
+// This is simpler than having to handle it not being present, and it costs 
+// only 64 bytes in object files without relocations.
+
+#define NUM_SECTIONS 6
+
+//                         0          1           2          3          4
+//                         0 123456 78901234567 8901234567 89012345 6789012
+#define SHSTRTAB_CONTENTS "\0.text\0.rela.text\0.shstrtab\0.symtab\0.strtab"
+#define TEXT_NAME 1
+#define RELA_TEXT_NAME 7
+#define SHSTRTAB_NAME 18
+#define SYMTAB_NAME 28
+#define STRTAB_NAME 36
+
+// Starts from 1 because the NULL header is at 0.
+#define TEXT_INDEX 1
+#define RELA_TEXT_INDEX 2
+#define SHSTRTAB_INDEX 3
+#define SYMTAB_INDEX 4
+#define STRTAB_INDEX 5
+
 
 typedef struct SectionInfo
 {
@@ -178,28 +213,6 @@ static void init_elf_file(ELFFile *elf_file, FILE *output_file, ELFFileType type
 	elf_file->next_string_index = 1;
 }
 
-// We write out the following sections (in this order):
-//   * .text
-//   * .shstrtab
-//   * .symtab
-//   * .strtab
-//
-// The headers are in the same order, but with a NULL header at the start that
-// has no corresponding sections, as required by the spec.
-
-//                         0          1           2          3
-//                         0 1234567890 123456 78901234 5678901
-#define SHSTRTAB_CONTENTS "\0.text\0.shstrtab\0.symtab\0.strtab"
-#define TEXT_NAME 1
-#define SHSTRTAB_NAME 8
-#define SYMTAB_NAME 17
-#define STRTAB_NAME 25
-
-#define TEXT_INDEX 1
-#define SHSTRTAB_INDEX 2
-#define SYMTAB_INDEX 3
-#define STRTAB_INDEX 4
-
 static void start_text_section(ELFFile *elf_file)
 {
 	u32 pht_entries = elf_file->type == ET_EXEC ? 1 : 0;
@@ -211,7 +224,7 @@ static void start_text_section(ELFFile *elf_file)
 	checked_fseek(elf_file->output_file, first_section_offset, SEEK_SET);
 }
 
-static void finish_text_section(ELFFile *elf_file)
+static void finish_text_section(ELFFile *elf_file, Array(Fixup) *fixups)
 {
 	SectionInfo *text_info = elf_file->section_info + TEXT_INDEX;
 	text_info->size = checked_ftell(elf_file->output_file) - text_info->offset;
@@ -220,8 +233,30 @@ static void finish_text_section(ELFFile *elf_file)
 	// must be congruent modulo the page size.
 	elf_file->base_virtual_address = 0x8000000 + text_info->offset; 
 
+	for (u32 i = 0; i < fixups->size; i++) {
+		Fixup *fixup = ARRAY_REF(fixups, Fixup, i);
+		if (fixup->type != FIXUP_GLOBAL || fixup->val.global->defined)
+			continue;
+
+		u32 symbol = fixup->val.global->symbol->symtab_index;
+		ELF64Rela rela = {
+			.section_offset = fixup->file_location - text_info->offset,
+			.type_and_symbol = ELF64_RELA_TYPE_AND_SYMBOL(R_X86_64_PC32, symbol),
+			// We assume this is a function call. Calls are relative to the
+			// next instruction, which is just after the fixup.
+			.addend = -(i64)fixup->size_bytes,
+		};
+
+		checked_fwrite(&rela, sizeof rela, 1, elf_file->output_file);
+	}
+
+	SectionInfo *rela_text_info = elf_file->section_info + RELA_TEXT_INDEX;
+	rela_text_info->offset = text_info->offset + text_info->size;
+	rela_text_info->size =
+		checked_ftell(elf_file->output_file) - rela_text_info->offset;
+
 	SectionInfo shstrtab_info = (SectionInfo) {
-		.offset = text_info->offset + text_info->size,
+		.offset = rela_text_info->offset + rela_text_info->size,
 		.size = sizeof SHSTRTAB_CONTENTS,
 	};
 	elf_file->section_info[SHSTRTAB_INDEX] = shstrtab_info;
@@ -236,7 +271,7 @@ static void finish_text_section(ELFFile *elf_file)
 }
 
 static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
-		ELFSymbolBinding binding, char *name, u32 value, u32 size)
+		ELFSymbolBinding binding, u32 section, char *name, i32 value, u32 size)
 {
 	if (elf_file->type == ET_EXEC && streq(name, "_start")) {
 		elf_file->entry_point_virtual_address = value;
@@ -246,7 +281,7 @@ static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
 	ZERO_STRUCT(&symbol);
 	symbol.strtab_index_for_name = elf_file->next_string_index;
 	symbol.type_and_binding = (binding << 4) | type;
-	symbol.section = type == STT_FILE ? SHN_ABS : TEXT_INDEX;
+	symbol.section = section;
 	symbol.value = value;
 	symbol.size = size;
 
@@ -342,14 +377,14 @@ static void finish_strtab_section(ELFFile *elf_file)
 	assert(checked_ftell(output_file) == 0);
 	checked_fwrite(&header, sizeof header, 1, output_file);
 
-	fseek(output_file, header.sht_location, SEEK_SET);
+	checked_fseek(output_file, header.sht_location, SEEK_SET);
 
 	// NULL header
 	{
 		ELFSectionHeader null_header;
 		ZERO_STRUCT(&null_header);
 		null_header.type = SHT_NULL;
-		fwrite(&null_header, sizeof null_header, 1, output_file);
+		checked_fwrite(&null_header, sizeof null_header, 1, output_file);
 	}
 
 	// .text
@@ -362,7 +397,21 @@ static void finish_strtab_section(ELFFile *elf_file)
 		text_header.base_virtual_address = elf_file->base_virtual_address;
 		text_header.section_location = elf_file->section_info[TEXT_INDEX].offset;
 		text_header.section_size = elf_file->section_info[TEXT_INDEX].size;
-		fwrite(&text_header, sizeof text_header, 1, output_file);
+		checked_fwrite(&text_header, sizeof text_header, 1, output_file);
+	}
+
+	// .rela.text
+	{
+		ELFSectionHeader rela_text_header;
+		ZERO_STRUCT(&rela_text_header);
+		rela_text_header.shstrtab_index_for_name = RELA_TEXT_NAME;
+		rela_text_header.type = SHT_RELA;
+		rela_text_header.misc_info = TEXT_INDEX;
+		rela_text_header.linked_section = SYMTAB_INDEX;
+		rela_text_header.section_location = elf_file->section_info[RELA_TEXT_INDEX].offset;
+		rela_text_header.section_size = elf_file->section_info[RELA_TEXT_INDEX].size;
+		rela_text_header.entry_size = sizeof(ELF64Rela);
+		checked_fwrite(&rela_text_header, sizeof rela_text_header, 1, output_file);
 	}
 
 	// .shstrtab
@@ -373,7 +422,7 @@ static void finish_strtab_section(ELFFile *elf_file)
 		shstrtab_header.type = SHT_STRTAB;
 		shstrtab_header.section_location = elf_file->section_info[SHSTRTAB_INDEX].offset;
 		shstrtab_header.section_size = elf_file->section_info[SHSTRTAB_INDEX].size;
-		fwrite(&shstrtab_header, sizeof shstrtab_header, 1, output_file);
+		checked_fwrite(&shstrtab_header, sizeof shstrtab_header, 1, output_file);
 	}
 
 	// .symtab
@@ -391,7 +440,7 @@ static void finish_strtab_section(ELFFile *elf_file)
 		symtab_header.section_location = elf_file->section_info[SYMTAB_INDEX].offset;
 		symtab_header.section_size = elf_file->section_info[SYMTAB_INDEX].size;
 		symtab_header.entry_size = sizeof(ELF64Symbol);
-		fwrite(&symtab_header, sizeof symtab_header, 1, output_file);
+		checked_fwrite(&symtab_header, sizeof symtab_header, 1, output_file);
 	}
 
 	// .strtab
@@ -402,7 +451,7 @@ static void finish_strtab_section(ELFFile *elf_file)
 		strtab_header.type = SHT_STRTAB;
 		strtab_header.section_location = elf_file->section_info[STRTAB_INDEX].offset;
 		strtab_header.section_size = elf_file->section_info[STRTAB_INDEX].size;
-		fwrite(&strtab_header, sizeof strtab_header, 1, output_file);
+		checked_fwrite(&strtab_header, sizeof strtab_header, 1, output_file);
 	}
 }
 
@@ -416,23 +465,24 @@ void write_elf_object_file(FILE *output_file, AsmModule *asm_module)
 	Array(AsmSymbol) symbols;
 	ARRAY_INIT(&symbols, AsmSymbol, 10);
 	assemble(asm_module, output_file, &symbols);
-	finish_text_section(elf_file);
+	finish_text_section(elf_file, &asm_module->fixups);
 
-	// @TODO: Pass the file name through so we have it here
-	add_symbol(elf_file, STT_FILE, STB_LOCAL, "foo.c", 0, 0);
 	for (u32 i = 0; i < symbols.size; i++) {
 		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
-		add_symbol(elf_file, STT_FUNC, STB_GLOBAL,
+		u32 section = symbol->defined ? TEXT_INDEX : SHN_UNDEF;
+		add_symbol(elf_file, STT_FUNC, STB_GLOBAL, section,
 				symbol->name, symbol->offset, symbol->size);
 	}
+	// @TODO: Pass the file name through so we have it here
+	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, "foo.c", 0, 0);
 	finish_symtab_section(elf_file);
 
-	// @TODO: Pass the file name through so we have it here
-	add_string(elf_file, "foo.c");
 	for (u32 i = 0; i < symbols.size; i++) {
 		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
 		add_string(elf_file, symbol->name);
 	}
+	// @TODO: Pass the file name through so we have it here
+	add_string(elf_file, "foo.c");
 	finish_strtab_section(elf_file);
 
 	array_free(&symbols);
@@ -579,17 +629,17 @@ static bool process_elf_file(FILE *input_file, FILE *output_file,
 	}
 
 	if (text_header == NULL) {
-		fputs("Missing .text section", stderr);
+		fputs("Missing .text section\n", stderr);
 		ret = false;
 		goto cleanup1;
 	}
 	if (symtab_header == NULL) {
-		fputs("Missing .symtab section", stderr);
+		fputs("Missing .symtab section\n", stderr);
 		ret = false;
 		goto cleanup1;
 	}
 	if (strtab_header == NULL) {
-		fputs("Missing .strtab section", stderr);
+		fputs("Missing .strtab section\n", stderr);
 		ret = false;
 		goto cleanup1;
 	}
@@ -854,9 +904,14 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 
 		fclose(input_file);
 	}
-	finish_text_section(elf_file);
+	Array(Fixup) empty_array = {
+		.size = 0,
+		.capacity = 0,
+		.elements = NULL,
+	};
+	finish_text_section(elf_file, &empty_array);
 
-	add_symbol(elf_file, STT_FILE, STB_LOCAL, executable_filename, 0, 0);
+	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, executable_filename, 0, 0);
 	for (u32 i = 0; i < symbol_table.size; i++) {
 		Symbol *symbol = ARRAY_REF(&symbol_table, Symbol, i);
 
@@ -872,7 +927,7 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 		u32 value = elf_file->base_virtual_address +
 			symbol->val.def.file_offset -
 			elf_file->section_info[TEXT_INDEX].offset;
-		add_symbol(elf_file, STT_FUNC, STB_GLOBAL,
+		add_symbol(elf_file, STT_FUNC, STB_GLOBAL, TEXT_INDEX,
 				symbol->name, value, symbol->val.def.size);
 	}
 	finish_symtab_section(elf_file);

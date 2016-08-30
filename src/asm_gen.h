@@ -38,7 +38,6 @@ typedef struct AsmBuilder
 
 void init_asm_builder(AsmBuilder *builder);
 void free_asm_builder(AsmBuilder *builder);
-void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global);
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit);
 
 #endif

@@ -205,7 +205,7 @@ static int compile_file(char *input_filename, char *output_filename) {
 	IrBuilder builder;
 	builder_init(&builder, &tu);
 
-	ir_gen_toplevel(&tu, &builder, ast);
+	ir_gen_toplevel(&builder, ast);
 
 	array_free(&tokens);
 	pool_free(&ast_pool);

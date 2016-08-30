@@ -10,7 +10,6 @@
 
 void init_asm_module(AsmModule *asm_module)
 {
-	ARRAY_INIT(&asm_module->functions, AsmFunction, 10);
 	ARRAY_INIT(&asm_module->globals, AsmGlobal *, 10);
 	ARRAY_INIT(&asm_module->fixups, Fixup, 10);
 
@@ -19,12 +18,15 @@ void init_asm_module(AsmModule *asm_module)
 
 void free_asm_module(AsmModule *asm_module)
 {
-	for (u32 i = 0; i < asm_module->functions.size; i++) {
-		AsmFunction *function = ARRAY_REF(&asm_module->functions, AsmFunction, i);
-		array_free(&function->instrs);
-		array_free(&function->labels);
+	for (u32 i = 0; i < asm_module->globals.size; i++) {
+		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
+
+		if (global->type == ASM_GLOBAL_FUNCTION) {
+			AsmFunction *function = &global->val.function;
+			array_free(&function->instrs);
+			array_free(&function->labels);
+		}
 	}
-	array_free(&asm_module->functions);
 	array_free(&asm_module->globals);
 	array_free(&asm_module->fixups);
 
@@ -103,6 +105,17 @@ AsmArg asm_label(AsmLabel *label)
 		.is_deref = false,
 		.type = LABEL,
 		.val.label = label,
+	};
+
+	return asm_arg;
+}
+
+AsmArg asm_global(AsmGlobal *global)
+{
+	AsmArg asm_arg = {
+		.is_deref = false,
+		.type = GLOBAL,
+		.val.global = global,
 	};
 
 	return asm_arg;
@@ -207,6 +220,9 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 		case LABEL:
 			printf("%s", arg->val.label->name);
 			break;
+		case GLOBAL:
+			printf("%s", arg->val.global->name);
+			break;
 		case CONST8:
 			if ((i8)arg->val.constant < 0)
 				printf("%" PRId8, (i8)arg->val.constant);
@@ -237,15 +253,19 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 
 void dump_asm_module(AsmModule *asm_module)
 {
-	for (u32 i = 0; i < asm_module->functions.size; i++) {
-		AsmFunction *func = ARRAY_REF(&asm_module->functions, AsmFunction, i);
+	for (u32 i = 0; i < asm_module->globals.size; i++) {
+		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
 
-		for (u32 j = 0; j < func->instrs.size; j++) {
-			AsmInstr *instr = ARRAY_REF(&func->instrs, AsmInstr, j);
-			dump_asm_instr(instr);
+		if (global->type == ASM_GLOBAL_FUNCTION) {
+			AsmFunction *func = &global->val.function;
+
+			for (u32 j = 0; j < func->instrs.size; j++) {
+				AsmInstr *instr = ARRAY_REF(&func->instrs, AsmInstr, j);
+				dump_asm_instr(instr);
+			}
 		}
 
-		if (i == asm_module->functions.size - 1)
+		if (i == asm_module->globals.size - 1)
 			putchar('\n');
 	}
 }
@@ -480,7 +500,9 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 	if (immediate_size != -1) {
 		AsmArg* immediate_arg = NULL;
 		for (u32 i = 0; i < instr->num_args; i++) {
-			if (asm_arg_is_const(instr->args[i]) || instr->args[i].type == LABEL) {
+			if (asm_arg_is_const(instr->args[i])
+					|| instr->args[i].type == LABEL
+					|| instr->args[i].type == GLOBAL) {
 				// Check that we only have one immediate.
 				assert(immediate_arg == NULL);
 				immediate_arg = instr->args + i;
@@ -491,12 +513,19 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		u64 immediate;
 		if (asm_arg_is_const(*immediate_arg)) {
 			immediate = immediate_arg->val.constant;
-		} else if (immediate_arg->type == LABEL) {
+		} else if (immediate_arg->type == LABEL ||
+				immediate_arg->type == GLOBAL) {
 			Fixup *fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
 
 			fixup->file_location = (u32)checked_ftell(file);
 			fixup->size_bytes = 4;
-			fixup->label = immediate_arg->val.label;
+			if (immediate_arg->type == LABEL) {
+				fixup->type = FIXUP_LABEL;
+				fixup->val.label = immediate_arg->val.label;
+			} else {
+				fixup->type = FIXUP_GLOBAL;
+				fixup->val.global = immediate_arg->val.global;
+			}
 
 			// Dummy value, gets patched later.
 			immediate = 0;
@@ -516,38 +545,56 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 {
 	u64 initial_file_location = checked_ftell(output_file);
 
-	for (u32 i = 0; i < asm_module->functions.size; i++) {
-		AsmFunction *function = ARRAY_REF(&asm_module->functions, AsmFunction, i);
+	for (u32 i = 0; i < asm_module->globals.size; i++) {
+		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
+		if (global->type != ASM_GLOBAL_FUNCTION)
+			continue;
+		AsmFunction *function = &global->val.function;
 
-		u32 function_start = checked_ftell(output_file);
-		for (u32 j = 0; j < function->instrs.size; j++) {
-			AsmInstr *instr = ARRAY_REF(&function->instrs, AsmInstr, j);
-			if (instr->label != NULL) {
-				instr->label->file_location = checked_ftell(output_file);
+		u32 function_start = initial_file_location;
+		u32 function_size = 0;
+		if (global->defined) {
+			function_start = checked_ftell(output_file);
+			for (u32 j = 0; j < function->instrs.size; j++) {
+				AsmInstr *instr = ARRAY_REF(&function->instrs, AsmInstr, j);
+				if (instr->label != NULL) {
+					instr->label->file_location = checked_ftell(output_file);
+				}
+				assemble_instr(output_file, asm_module, instr);
 			}
-			assemble_instr(output_file, asm_module, instr);
+			function_size = checked_ftell(output_file) - function_start;
 		}
-		u32 function_size = checked_ftell(output_file) - function_start;
 
 		AsmSymbol *symbol = ARRAY_APPEND(symbols, AsmSymbol);
+		symbol->defined = global->defined;
 		symbol->name = function->name;
 		// Offset is relative to the start of the section.
 		symbol->offset = function_start - initial_file_location;
 		symbol->size = function_size;
+		// Add one to account for 0 = undef symbol index
+		symbol->symtab_index = i + 1;
 
-		AsmGlobal *corresponding_global =
-			*ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
-		corresponding_global->symbol = symbol;
+		global->symbol = symbol;
 	}
 	u64 final_file_position = checked_ftell(output_file);
 
+	// @TODO: Emit relocations here instead?
 	for (u32 i = 0; i < asm_module->fixups.size; i++) {
 		Fixup *fixup = ARRAY_REF(&asm_module->fixups, Fixup, i);
-		AsmLabel *referenced_label = fixup->label;
+		u32 file_location;
+		if (fixup->type == FIXUP_GLOBAL) {
+			AsmGlobal *global = fixup->val.global;
+			if (global->defined)
+				file_location = global->offset + initial_file_location;
+			else
+				continue;
+		} else {
+			file_location = fixup->val.label->file_location;
+		}
 
 		// Relative accesses are relative to the start of the next instruction,
 		// so we add on the size of the reference itself first.
-		i32 offset = (i32)referenced_label->file_location -
+		i32 offset = (i32)file_location -
 			(i32)(fixup->file_location + fixup->size_bytes);
 		checked_fseek(output_file, fixup->file_location, SEEK_SET);
 		write_int(output_file, (u64)offset, fixup->size_bytes);

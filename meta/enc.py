@@ -165,7 +165,7 @@ def arg_condition(arg, i):
     if arg == 'imm64':
         return '(is_const_and_fits(instr->args[%d], 64))' % i
     if arg == 'sym':
-        return '(instr->args[%d].type == LABEL)' % i
+        return '(instr->args[%d].type == LABEL || instr->args[%d].type == GLOBAL)' % (i, i)
 
     print "Unknown arg type: '%s'" % arg
     assert False

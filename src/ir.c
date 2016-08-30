@@ -69,6 +69,7 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	new_function->return_type = return_type;
 	new_function->arity = arity;
 	new_function->arg_types = arg_types;
+	new_function->label = NULL;
 
 	ARRAY_INIT(&new_function->blocks, IrBlock *, 5);
 	add_block_to_function(trans_unit, new_function, "entry");
@@ -200,8 +201,14 @@ void dump_trans_unit(TransUnit *trans_unit)
 				if (i != f->arity - 1)
 					fputs(", ", stdout);
 			}
+			puts(")");
 
-			puts(")\n{");
+			if (!global->defined) {
+				putchar('\n');
+				continue;
+			}
+
+			puts("{");
 
 			for (u32 i = 0; i < f->blocks.size; i++) {
 				IrBlock *block = *ARRAY_REF(&f->blocks, IrBlock *, i);
@@ -416,7 +423,7 @@ AsmLabel *global_label(IrGlobal *global)
 {
 	switch (global->kind) {
 	case IR_GLOBAL_FUNCTION:
-		return (*ARRAY_REF(&global->val.function.blocks, IrBlock *, 0))->label;
+		return global->val.function.label;
 	case IR_GLOBAL_SCALAR:
 		UNIMPLEMENTED;
 	}

@@ -43,12 +43,15 @@ typedef struct IrFunction
 	IrType *arg_types;
 	IrType return_type;
 	Array(IrBlock *) blocks;
+	AsmLabel *label;
 } IrFunction;
 
 typedef struct IrGlobal
 {
 	char *name;
 	IrType ir_type;
+	bool defined;
+	AsmGlobal *asm_global;
 
 	enum
 	{
