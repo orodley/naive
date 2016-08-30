@@ -155,9 +155,10 @@ static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *i
 
 def arg_condition(arg, i):
     if arg == 'r/m64':
-        return '((instr->args[%d].type == REGISTER) || (instr->args[%d].type == OFFSET_REGISTER))' % (i, i)
+        return ('((instr->args[%d].type == ASM_ARG_REGISTER)'
+                + ' || (instr->args[%d].type == ASM_ARG_OFFSET_REGISTER))') % (i, i)
     if arg == 'r64':
-        return '(instr->args[%d].type == REGISTER) && !instr->args[%d].is_deref' % (i, i)
+        return '(instr->args[%d].type == ASM_ARG_REGISTER) && !instr->args[%d].is_deref' % (i, i)
     if arg == 'imm8':
         return '(is_const_and_fits(instr->args[%d], 8))' % i
     if arg == 'imm32':
@@ -165,7 +166,8 @@ def arg_condition(arg, i):
     if arg == 'imm64':
         return '(is_const_and_fits(instr->args[%d], 64))' % i
     if arg == 'sym':
-        return '(instr->args[%d].type == LABEL || instr->args[%d].type == GLOBAL)' % (i, i)
+        return ('(instr->args[%d].type == ASM_ARG_LABEL'
+                + ' || instr->args[%d].type == ASM_ARG_GLOBAL)') % (i, i)
 
     print "Unknown arg type: '%s'" % arg
     assert False

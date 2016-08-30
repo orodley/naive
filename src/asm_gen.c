@@ -293,9 +293,9 @@ static void allocate_registers(AsmBuilder *builder)
 			AsmArg *arg = &instr->args[j];
 
 			Register *reg;
-			if (arg->type == REGISTER) {
+			if (arg->type == ASM_ARG_REGISTER) {
 				reg = &arg->val.reg;
-			} else if (arg->type == OFFSET_REGISTER) {
+			} else if (arg->type == ASM_ARG_OFFSET_REGISTER) {
 				reg = &arg->val.offset_register.reg;
 			} else {
 				continue;

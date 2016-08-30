@@ -45,7 +45,7 @@ AsmArg asm_virtual_register(u32 n)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
-		.type = REGISTER,
+		.type = ASM_ARG_REGISTER,
 		.val.reg.type = VIRTUAL_REGISTER,
 		.val.reg.val.register_number = n,
 	};
@@ -57,7 +57,7 @@ AsmArg asm_physical_register(PhysicalRegister reg)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
-		.type = REGISTER,
+		.type = ASM_ARG_REGISTER,
 		.val.reg.type = PHYSICAL_REGISTER,
 		.val.reg.val.physical_register = reg,
 	};
@@ -78,7 +78,7 @@ AsmArg asm_offset_register(PhysicalRegister reg, u64 offset)
 	} else {
 		AsmArg asm_arg = {
 			.is_deref = false,
-			.type = OFFSET_REGISTER,
+			.type = ASM_ARG_OFFSET_REGISTER,
 			.val.offset_register.reg.type = PHYSICAL_REGISTER,
 			.val.offset_register.reg.val.physical_register = reg,
 			.val.offset_register.offset = offset,
@@ -92,7 +92,7 @@ AsmArg asm_const32(i32 constant)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
-		.type = CONST32,
+		.type = ASM_ARG_CONST32,
 		.val.constant = constant,
 	};
 
@@ -103,7 +103,7 @@ AsmArg asm_label(AsmLabel *label)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
-		.type = LABEL,
+		.type = ASM_ARG_LABEL,
 		.val.label = label,
 	};
 
@@ -114,7 +114,7 @@ AsmArg asm_global(AsmGlobal *global)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
-		.type = GLOBAL,
+		.type = ASM_ARG_GLOBAL,
 		.val.global = global,
 	};
 
@@ -123,8 +123,8 @@ AsmArg asm_global(AsmGlobal *global)
 
 static inline bool asm_arg_is_const(AsmArg asm_arg)
 {
-	return (asm_arg.type == CONST8) || (asm_arg.type == CONST16) ||
-		(asm_arg.type == CONST32) || (asm_arg.type == CONST64);
+	return (asm_arg.type == ASM_ARG_CONST8) || (asm_arg.type == ASM_ARG_CONST16) ||
+		(asm_arg.type == ASM_ARG_CONST32) || (asm_arg.type == ASM_ARG_CONST64);
 }
 
 // @TODO: Negative numbers
@@ -210,36 +210,36 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 		if (arg->is_deref)
 			putchar('[');
 		switch (arg->type) {
-		case REGISTER:
+		case ASM_ARG_REGISTER:
 			dump_register(arg->val.reg);
 			break;
-		case OFFSET_REGISTER:
+		case ASM_ARG_OFFSET_REGISTER:
 			dump_register(arg->val.offset_register.reg);
 			printf(" + %" PRIu64, arg->val.offset_register.offset);
 			break;
-		case LABEL:
+		case ASM_ARG_LABEL:
 			printf("%s", arg->val.label->name);
 			break;
-		case GLOBAL:
+		case ASM_ARG_GLOBAL:
 			printf("%s", arg->val.global->name);
 			break;
-		case CONST8:
+		case ASM_ARG_CONST8:
 			if ((i8)arg->val.constant < 0)
 				printf("%" PRId8, (i8)arg->val.constant);
 			else
 				printf("%" PRIu8, (i8)arg->val.constant);
-		case CONST16:
+		case ASM_ARG_CONST16:
 			if ((i16)arg->val.constant < 0)
 				printf("%" PRId16, (i16)arg->val.constant);
 			else
 				printf("%" PRIu16, (i16)arg->val.constant);
-		case CONST32:
+		case ASM_ARG_CONST32:
 			if ((i32)arg->val.constant < 0)
 				printf("%" PRId32, (i32)arg->val.constant);
 			else
 				printf("%" PRIu32, (i32)arg->val.constant);
 			break;
-		case CONST64:
+		case ASM_ARG_CONST64:
 			if ((i64)arg->val.constant < 0)
 				printf("%" PRId64, (i64)arg->val.constant);
 			else
@@ -333,10 +333,10 @@ static inline void write_int(FILE *file, u64 x, u32 size)
 static inline PhysicalRegister get_register(AsmArg *arg)
 {
 	Register reg;
-	if (arg->type == REGISTER) {
+	if (arg->type == ASM_ARG_REGISTER) {
 		reg = arg->val.reg;
 	} else {
-		assert(arg->type == OFFSET_REGISTER);
+		assert(arg->type == ASM_ARG_OFFSET_REGISTER);
 		reg = arg->val.offset_register.reg;
 	}
 
@@ -367,7 +367,7 @@ static u32 encoded_register_number(PhysicalRegister reg)
 
 static void write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 {
-	if (arg->type == REGISTER) {
+	if (arg->type == ASM_ARG_REGISTER) {
 		PhysicalRegister reg = get_register(arg);
 
 		if (arg->is_deref) {
@@ -400,7 +400,7 @@ static void write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 			write_mod_rm_byte(file, 3, reg_field, encoded_reg);
 			return;
 		}
-	} else if (arg->type == OFFSET_REGISTER) {
+	} else if (arg->type == ASM_ARG_OFFSET_REGISTER) {
 		assert(arg->is_deref);
 
 		u64 offset = arg->val.offset_register.offset;
@@ -501,8 +501,8 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		AsmArg* immediate_arg = NULL;
 		for (u32 i = 0; i < instr->num_args; i++) {
 			if (asm_arg_is_const(instr->args[i])
-					|| instr->args[i].type == LABEL
-					|| instr->args[i].type == GLOBAL) {
+					|| instr->args[i].type == ASM_ARG_LABEL
+					|| instr->args[i].type == ASM_ARG_GLOBAL) {
 				// Check that we only have one immediate.
 				assert(immediate_arg == NULL);
 				immediate_arg = instr->args + i;
@@ -513,13 +513,13 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		u64 immediate;
 		if (asm_arg_is_const(*immediate_arg)) {
 			immediate = immediate_arg->val.constant;
-		} else if (immediate_arg->type == LABEL ||
-				immediate_arg->type == GLOBAL) {
+		} else if (immediate_arg->type == ASM_ARG_LABEL ||
+				immediate_arg->type == ASM_ARG_GLOBAL) {
 			Fixup *fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
 
 			fixup->file_location = (u32)checked_ftell(file);
 			fixup->size_bytes = 4;
-			if (immediate_arg->type == LABEL) {
+			if (immediate_arg->type == ASM_ARG_LABEL) {
 				fixup->type = FIXUP_LABEL;
 				fixup->val.label = immediate_arg->val.label;
 			} else {

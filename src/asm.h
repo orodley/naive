@@ -62,17 +62,17 @@ typedef struct AsmArg
 
 	enum
 	{
-		REGISTER,
-		OFFSET_REGISTER,
-		LABEL,
-		GLOBAL,
+		ASM_ARG_REGISTER,
+		ASM_ARG_OFFSET_REGISTER,
+		ASM_ARG_LABEL,
+		ASM_ARG_GLOBAL,
 
 		// @TODO: Do we want to encode the size of the immediate here rather
 		// than just having one type for all constants? Seems unnecessary.
-		CONST8,
-		CONST16,
-		CONST32,
-		CONST64,
+		ASM_ARG_CONST8,
+		ASM_ARG_CONST16,
+		ASM_ARG_CONST32,
+		ASM_ARG_CONST64,
 	} type;
 
 	union
