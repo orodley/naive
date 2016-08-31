@@ -46,6 +46,7 @@ int main(int argc, char *argv[])
 	ARRAY_INIT(&linker_input_filenames, char *, 10);
 
 	bool do_link = true;
+	char *output_filename = NULL;
 
 	for (i32 i = 1; i < argc; i++) {
 		char *arg = argv[i];
@@ -60,6 +61,8 @@ int main(int argc, char *argv[])
 				flag_dump_asm = true;
 			} else if (streq(arg, "-c")) {
 				do_link = false;
+			} else if (streq(arg, "-o")) {
+				output_filename = argv[++i];
 			} else {
 				fprintf(stderr, "Error: Unknown command-line argument: %s\n", arg);
 				return 1;
@@ -89,44 +92,52 @@ int main(int argc, char *argv[])
 		fputs("Error: no input files given\n", stderr);
 		return 2;
 	}
+	if (!do_link && output_filename != NULL && source_input_filenames.size > 1) {
+		fputs("Cannot specify output filename"
+				" when generating multiple output files\n", stderr);
+		return 12;
+	}
 
 	Array(char *) temp_filenames;
 	ARRAY_INIT(&temp_filenames, char *, do_link ? source_input_filenames.size : 0);
 
 	for (u32 i = 0; i < source_input_filenames.size; i++) {
 		char *source_input_filename = *ARRAY_REF(&source_input_filenames, char *, i);
-		char *output_filename;
+		char *object_filename;
 		if (do_link) {
 			// In this mode we compile all given sources files to temporary
 			// object files, link the result with libc and any other object
 			// files passed on the command line, and then delete the temporary
 			// object files we created.
-			output_filename = make_temp_file();
-			*ARRAY_APPEND(&temp_filenames, char *) = output_filename;
-			*ARRAY_APPEND(&linker_input_filenames, char *) = output_filename;
+			object_filename = make_temp_file();
+			*ARRAY_APPEND(&temp_filenames, char *) = object_filename;
+			*ARRAY_APPEND(&linker_input_filenames, char *) = object_filename;
 		} else {
 			// In this mode we compile all the given source files to object
 			// files, and leave it at that.
-			// @TODO: Support "-o" flag.
-			u32 input_filename_length = strlen(source_input_filename);
-			output_filename = malloc(input_filename_length + 1); // @LEAK
-			strncpy(output_filename, source_input_filename, input_filename_length);
-			output_filename[input_filename_length - 1] = 'o';
-			output_filename[input_filename_length] = '\0';
+			if (output_filename != NULL) {
+				object_filename = output_filename;
+			} else {
+				u32 input_filename_length = strlen(source_input_filename);
+				object_filename = malloc(input_filename_length + 1); // @LEAK
+				strncpy(object_filename, source_input_filename, input_filename_length);
+				object_filename[input_filename_length - 1] = 'o';
+				object_filename[input_filename_length] = '\0';
 
-			u32 last_slash = input_filename_length - 1;
-			for (; last_slash != 0; last_slash--) {
-				if (output_filename[last_slash] == '/')
-					break;
-			}
+				u32 last_slash = input_filename_length - 1;
+				for (; last_slash != 0; last_slash--) {
+					if (object_filename[last_slash] == '/')
+						break;
+				}
 
-			if (last_slash != 0) {
-				output_filename[last_slash - 1] = '.';
-				output_filename += last_slash - 1;
+				if (last_slash != 0) {
+					object_filename[last_slash - 1] = '.';
+					object_filename += last_slash - 1;
+				}
 			}
 		}
 
-		int result = compile_file(source_input_filename, output_filename);
+		int result = compile_file(source_input_filename, object_filename);
 		if (result != 0)
 			return result;
 	}
@@ -138,8 +149,11 @@ int main(int argc, char *argv[])
 		// rest of the inputs because it's an archive.
 		*ARRAY_APPEND(&linker_input_filenames, char *) = "libc.a";
 
-		// @TODO: Support "-o" flag.
-		char *executable_filename = "a.out";
+		char *executable_filename;
+		if (output_filename == NULL)
+			executable_filename = "a.out";
+		else
+			executable_filename = output_filename;
 
 		// @NOTE: Needs to be changed if we support different object file
 		// formats.
