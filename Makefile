@@ -41,6 +41,11 @@ asan: all
 msan: CFLAGS += -fsanitize=memory -fsanitize-memory-track-origins=2
 msan: all
 
+.PHONY: test
+test: all
+	@echo 'TEST'
+	@./run_tests.py
+
 tags: ncc
 	@echo 'ctags'
 	@ctags -R --fields=+Sl --langmap=c:+.h
