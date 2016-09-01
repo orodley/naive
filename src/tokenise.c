@@ -718,8 +718,38 @@ static bool tokenise_aux(Reader *reader)
 }
 
 
+// @TODO: This is probably too conservative - fopen can fail for other reasons.
+static bool file_exists(char *path)
+{
+	FILE *f = fopen(path, "r");
+	if (f != NULL)
+		fclose(f);
+
+	return f != NULL;
+}
+
+static char *concat(char *str_a, u32 len_a, char *str_b, u32 len_b)
+{
+	u32 result_length = len_a + len_b;
+	char *result = malloc(result_length + 1);
+	strncpy(result, str_a, len_a);
+	strncpy(result + len_a, str_b, len_b);
+	result[result_length] = '\0';
+
+	return result;
+}
+
 static char *look_up_include_path(char *including_file, char *include_path)
 {
+	// If absolute, just try the exact path.
+	if (include_path[0] == '/') {
+		if (file_exists(include_path))
+			return include_path;
+		else
+			return NULL;
+	}
+
+	// Try relative to the including file
 	u32 including_file_length = strlen(including_file);
 	i32 i = including_file_length - 1;
 	for (; i >= 0 && including_file[i] != '/'; i--)
@@ -737,13 +767,29 @@ static char *look_up_include_path(char *including_file, char *include_path)
 	}
 
 	u32 include_path_length = strlen(include_path);
-	u32 result_length = base_length + include_path_length;
-	char *result = malloc(result_length + 1);
-	strncpy(result, base_path, base_length);
-	strncpy(result + base_length, include_path, include_path_length);
-	result[result_length] = '\0';
+	char *potential_path = concat(
+			base_path, base_length, include_path, include_path_length);
+	if (file_exists(potential_path))
+		return potential_path;
+	free(potential_path);
 
-	return result;
+	// Try system headers
+
+	// @TODO: Here we assume that libc inclues live in "./libc". This obviously
+	// doesn't work in general. We need to install our libc somewhere.
+	base_path = "./libc/";
+	base_length = 7;
+
+	include_path_length = strlen(include_path);
+	potential_path = concat(
+			base_path, base_length, include_path, include_path_length);
+	if (file_exists(potential_path))
+		return potential_path;
+	free(potential_path);
+
+	// @TODO: Support -I flag.
+
+	return NULL;
 }
 
 static bool handle_pp_directive(Reader *reader)
@@ -794,6 +840,12 @@ static bool handle_pp_directive(Reader *reader)
 
 		char *include_path = strndup(reader->buffer.buffer + start_index, length);
 		char *includee_path = look_up_include_path(reader->source_loc.filename, include_path);
+
+		if (includee_path == NULL) {
+			issue_error(&include_path_source_loc,
+					"File not found: '%s'", include_path);
+			return false;
+		}
 
 		if (!tokenise_file(reader, includee_path, include_path_source_loc))
 			return false;
