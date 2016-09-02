@@ -645,6 +645,7 @@ static bool tokenise_aux(Reader *reader)
 				if (!reader->first_token_of_line) {
 					issue_error(&reader->source_loc,
 							"Unexpected preprocessor directive");
+					return false;
 				} else if (!handle_pp_directive(reader)) {
 					return false;
 				}
