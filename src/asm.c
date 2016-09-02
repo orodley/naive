@@ -7,6 +7,7 @@
 #include "asm.h"
 #include "asm_gen.h"
 #include "file.h"
+#include "util.h"
 
 void init_asm_module(AsmModule *asm_module)
 {
@@ -287,7 +288,6 @@ static inline void write_u16(FILE *file, u16 x)
 	size_t items_written = fwrite(out, 1, sizeof out, file);
 	assert(items_written == sizeof out);
 }
-#endif
 
 static inline void write_u32(FILE *file, u32 x)
 {
@@ -302,7 +302,6 @@ static inline void write_u32(FILE *file, u32 x)
 	assert(items_written == sizeof out);
 }
 
-#if 0
 static inline void write_u64(FILE *file, u64 x)
 {
 	u8 out[] = {
@@ -344,12 +343,6 @@ static inline PhysicalRegister get_register(AsmArg *arg)
 	return reg.val.physical_register;
 }
 
-static inline void write_mod_rm_byte(FILE *file, u8 mod, u8 reg, u8 rm)
-{
-	u8 mod_rm_byte = (mod << 6) | (reg << 3) | rm;
-	write_u8(file, mod_rm_byte);
-}
-
 static u32 encoded_register_number(PhysicalRegister reg)
 {
 	switch (reg) {
@@ -361,55 +354,90 @@ static u32 encoded_register_number(PhysicalRegister reg)
 	case RBP: return 5;
 	case RSI: return 6;
 	case RDI: return 7;
+	case R8:  return 8;
+	case R9:  return 9;
+	case R10: return 10;
+	case R11: return 11;
+	case R12: return 12;
+	case R13: return 13;
+	case R14: return 14;
+	case R15: return 15;
 	default: UNIMPLEMENTED;
 	}
 }
 
-static void write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
+#define MAX_OPCODE_SIZE 2
+
+typedef struct EncodedInstr
 {
+	u8 rex_prefix;
+	u8 opcode_size;
+	u8 opcode[MAX_OPCODE_SIZE];
+	bool has_modrm;
+	u8 mod;
+	u8 reg;
+	u8 rm;
+	bool has_sib;
+	u8 scale;
+	u8 index;
+	u8 base;
+	i8 displacement_size;
+	u64 displacement;
+	i8 immediate_size;
+	u64 immediate;
+} EncodedInstr;
+
+static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
+{
+	encoded_instr->has_modrm = true;
+
 	if (arg->type == ASM_ARG_REGISTER) {
 		PhysicalRegister reg = get_register(arg);
 
 		if (arg->is_deref) {
 			switch (reg) {
 			case RAX: case RCX: case RDX: case RBX: case RSI: case RDI: {
-				u8 encoded_reg = encoded_register_number(reg);
-				write_mod_rm_byte(file, 0, reg_field, encoded_reg);
+				encoded_instr->mod = 0;
+				encoded_instr->rm = encoded_register_number(reg);
 				return;
 			}
 			case RSP: {
 				// Mod = 0, R/M = 4 means SIB addressing
-				write_mod_rm_byte(file, 0, reg_field, 4);
-				// SIB byte, with RSP as base and no index/scale
-				write_u8(file, 0x24);
+				encoded_instr->mod = 0;
+				encoded_instr->rm = 4;
+				// RSP base with no index/scale
+				encoded_instr->has_sib = true;
+				encoded_instr->scale = 0;
+				encoded_instr->index = 4;
+				encoded_instr->base = 4;
 
 				return;
 			}
 			case RBP: {
 				// Mod = 1, R/M = 5 means RBP + disp8
-				write_mod_rm_byte(file, 1, reg_field, 5);
-				// 0 displacement
-				write_u8(file, 0);
+				encoded_instr->mod = 1;
+				encoded_instr->rm = 5;
+				encoded_instr->displacement_size = 1;
+				encoded_instr->displacement = 0;
 
 				return;
 			}
 			default: UNIMPLEMENTED;
 			}
 		} else {
-			u8 encoded_reg = encoded_register_number(reg);
-			write_mod_rm_byte(file, 3, reg_field, encoded_reg);
+			encoded_instr->mod = 3;
+			encoded_instr->rm = encoded_register_number(reg);
 			return;
 		}
 	} else if (arg->type == ASM_ARG_OFFSET_REGISTER) {
 		assert(arg->is_deref);
 
 		u64 offset = arg->val.offset_register.offset;
-		u8 mod;
 		// @TODO: Negative numbers
 		if ((offset & 0xFF) == offset)
-			mod = 1;
+			encoded_instr->mod = 1;
 		else if ((offset & 0xFFFFFFFF) == offset)
-			mod = 2;
+			encoded_instr->mod = 2;
 		else
 			assert(!"Offset too large!");
 
@@ -417,24 +445,26 @@ static void write_mod_rm_arg(FILE *file, AsmArg *arg, u8 reg_field)
 
 		switch (reg) {
 		case RAX: case RCX: case RDX: case RBX: case RBP: case RSI: case RDI: {
-			u8 encoded_reg = encoded_register_number(reg);
-			write_mod_rm_byte(file, mod, reg_field, encoded_reg);
+			encoded_instr->rm = encoded_register_number(reg);
 			return;
 		}
 		case RSP:
 			// Same as above: SIB addressing
-			write_mod_rm_byte(file, mod, reg_field, 4);
-			write_u8(file, 0x24);
+			encoded_instr->rm = 4;
+			encoded_instr->has_sib = true;
+			encoded_instr->scale = 0;
+			encoded_instr->index = 4;
+			encoded_instr->base = 4;
 			break;
 		default:
 			UNIMPLEMENTED;
 		}
 
-		// Displacement byte/dword
-		if (mod == 1)
-			write_u8(file, (u8)offset);
+		if (encoded_instr->mod == 1)
+			encoded_instr->displacement_size = 1;
 		else
-			write_u32(file, (u32)offset);
+			encoded_instr->displacement_size = 4;
+		encoded_instr->displacement = offset;
 	} else {
 		UNIMPLEMENTED;
 	}
@@ -449,24 +479,26 @@ static inline void write_bytes(FILE *file, u32 size, u8 *bytes)
 }
 
 // Called by the generated function "assemble_instr".
+// @TODO: Rename rex_prefix? It seems like the only REX prefix we can get
+// passed is REX.W, all the rest are determined by us.
 static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		ArgOrder arg_order, i32 rex_prefix, u32 opcode_size, u8 opcode[],
 		bool reg_and_rm, i32 opcode_extension, i32 immediate_size, bool reg_in_opcode)
 {
-#if 0
-	puts("Encoding instr:");
-	dump_asm_instr(instr);
-#endif
+	EncodedInstr encoded_instr;
+	ZERO_STRUCT(&encoded_instr);
+	encoded_instr.displacement_size = -1;
+	encoded_instr.immediate_size = -1;
 
 	if (rex_prefix != -1)
-		write_u8(file, (u8)rex_prefix);
+		encoded_instr.rex_prefix = (u8)rex_prefix;
 
+	encoded_instr.opcode_size = opcode_size;
+	memcpy(encoded_instr.opcode, opcode, opcode_size);
 	if (reg_in_opcode) {
-		assert(opcode_size == 1);
 		u8 reg = encoded_register_number(get_register(instr->args));
-		write_u8(file, opcode[0] | reg);
-	} else {
-		write_bytes(file, opcode_size, opcode);
+		assert(reg <= 8);
+		encoded_instr.opcode[0] |= reg;
 	}
 
 	if (reg_and_rm) {
@@ -475,16 +507,26 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		if (arg_order == RM) {
 			register_operand = instr->args;
 			memory_operand = instr->args + 1;
-		} else {
+		} else if (arg_order == MR) {
 			memory_operand = instr->args;
 			register_operand = instr->args + 1;
+		} else if (instr->num_args == 1) {
+			memory_operand = instr->args;
+			register_operand = NULL;
+		} else {
+			UNREACHABLE;
 		}
 
-		PhysicalRegister r_register = get_register(register_operand);
-		u8 reg = encoded_register_number(r_register);
-		write_mod_rm_arg(file, memory_operand, reg);
+		if (register_operand == NULL) {
+			encoded_instr.reg = 0;
+		} else {
+			PhysicalRegister r_register = get_register(register_operand);
+			encoded_instr.reg = encoded_register_number(r_register);
+		}
+		add_mod_rm_arg(&encoded_instr, memory_operand);
 	} else if (opcode_extension != -1) {
-		write_mod_rm_arg(file, instr->args, opcode_extension);
+		encoded_instr.reg = opcode_extension;
+		add_mod_rm_arg(&encoded_instr, instr->args);
 	} else {
 		// @NOTE: I'm not sure this is true in general, but it seems like there
 		// are three cases:
@@ -495,9 +537,12 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		// opcode above there's nothing left to do.
 	}
 
+	Fixup *fixup = NULL;
+
 	// @TODO: This seems kinda redundant considering we already encode the
 	// immediate size in AsmArg.
 	if (immediate_size != -1) {
+		encoded_instr.immediate_size = immediate_size;
 		AsmArg* immediate_arg = NULL;
 		for (u32 i = 0; i < instr->num_args; i++) {
 			if (asm_arg_is_const(instr->args[i])
@@ -510,14 +555,12 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		}
 		assert(immediate_arg != NULL);
 
-		u64 immediate;
 		if (asm_arg_is_const(*immediate_arg)) {
-			immediate = immediate_arg->val.constant;
+			encoded_instr.immediate = immediate_arg->val.constant;
 		} else if (immediate_arg->type == ASM_ARG_LABEL ||
 				immediate_arg->type == ASM_ARG_GLOBAL) {
-			Fixup *fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
+			fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
 
-			fixup->file_location = (u32)checked_ftell(file);
 			fixup->size_bytes = 4;
 			if (immediate_arg->type == ASM_ARG_LABEL) {
 				fixup->type = FIXUP_LABEL;
@@ -528,14 +571,53 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 			}
 
 			// Dummy value, gets patched later.
-			immediate = 0;
+			encoded_instr.immediate = 0;
 		} else {
 			assert(asm_arg_is_const(*immediate_arg));
-			immediate = immediate_arg->val.constant;
+			encoded_instr.immediate = immediate_arg->val.constant;
 		}
-
-		write_int(file, immediate, immediate_size);
 	}
+
+
+	if (encoded_instr.has_modrm) {
+		if ((encoded_instr.reg & (1 << 3)) != 0)
+			encoded_instr.rex_prefix |= 1 << 2;
+		if ((encoded_instr.rm & (1 << 3)) != 0)
+			encoded_instr.rex_prefix |= 1 << 0;
+	}
+	if (encoded_instr.has_sib) {
+		if ((encoded_instr.index & (1 << 3)) != 0)
+			encoded_instr.rex_prefix |= 1 << 1;
+		if ((encoded_instr.base & (1 << 3)) != 0) {
+			// Make sure we didn't already use REX.B for the RM field.
+			assert((encoded_instr.rex_prefix & (1 << 0)) == 0);
+			encoded_instr.rex_prefix |= 1 << 0;
+		}
+	}
+	if (encoded_instr.rex_prefix != 0)
+		write_u8(file, encoded_instr.rex_prefix);
+	write_bytes(file, encoded_instr.opcode_size, encoded_instr.opcode);
+	if (encoded_instr.has_modrm) {
+		u8 mod = encoded_instr.mod;
+		u8 reg = encoded_instr.reg;
+		u8 rm = encoded_instr.rm;
+		u8 mod_rm_byte = ((mod & 3) << 6) | ((reg & 7) << 3) | (rm & 7);
+
+		write_u8(file, mod_rm_byte);
+	}
+	if (encoded_instr.has_sib) {
+		u8 scale = encoded_instr.scale;
+		u8 index = encoded_instr.index;
+		u8 base = encoded_instr.base;
+		u8 sib_byte = ((scale  & 3) << 6) | ((index & 7) << 3) | (base & 7);
+		write_u8(file, sib_byte);
+	}
+	if (encoded_instr.displacement_size != -1)
+		write_int(file, encoded_instr.displacement, encoded_instr.displacement_size);
+	if (fixup != NULL)
+		fixup->file_location = (u32)checked_ftell(file);
+	if (encoded_instr.immediate_size != -1)
+		write_int(file, encoded_instr.immediate, encoded_instr.immediate_size);
 }
 
 // This is generated from "x64.enc", and defines the function "assemble_instr".
