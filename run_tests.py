@@ -10,22 +10,30 @@ import time
 import uuid
 
 def main():
-    cc = './ncc'
     print_details = True
     be_positive = False
+    create_testcase = False
     tests = []
     for arg in sys.argv[1:]:
         if arg == '-s':
             print_details = False
         elif arg == '-p':
             be_positive = True
+        elif arg == '-c':
+            create_testcase = True
         else:
             tests.append(arg)
     if not print_details and be_positive:
         print "Cannot specify '-s' and '-p'"
         return
+    if create_testcase:
+        if len(tests) == 0:
+            print "Must specify a list of tests if passing '-c'"
+            return
+        map(create_test_files, tests)
+        return
 
-    if tests == []:
+    if len(tests) == 0:
         for root, dirnames, filenames in os.walk('tests'):
             if len(dirnames) == 0:
                 tests.append(root)
@@ -49,7 +57,7 @@ def main():
 
         while len(running_testcases) < parallel_testcases and len(tests) > 0:
             new_test = tests.pop()
-            running_testcases.append(start_compiling(new_test, cc))
+            running_testcases.append(start_compiling(new_test))
 
         if len(done) == 0:
             time.sleep(0.05)
@@ -78,7 +86,7 @@ class Testcase(object):
             'expected_compile_stdout', 'expected_compile_stderr',
             'expected_run_stdout', 'expected_run_stderr', 'stdin']
 
-def start_compiling(test_dir, cc):
+def start_compiling(test_dir):
     testcase = Testcase()
     testcase.name = test_dir
 
@@ -113,12 +121,35 @@ def start_compiling(test_dir, cc):
             if first_line.startswith(flags_str):
                 extra_flags = first_line[len(flags_str):].strip().split(' ')
 
-    print extra_flags
     testcase.binary = os.path.join(test_dir, "a.out.tmp")
     testcase.cc_proc = subprocess.Popen(
-            [cc, test_filename, '-o', testcase.binary] + extra_flags,
+            ['./ncc', test_filename, '-o', testcase.binary] + extra_flags,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return testcase
+
+def create_test_files(test_dir):
+    testcase = start_compiling(test_dir)
+    compile_stdout, compile_stderr = testcase.cc_proc.communicate()
+
+    run_stdout = ''
+    run_stderr = ''
+    binary_path = os.path.abspath(testcase.binary)
+    if testcase.cc_proc.returncode == 0 and os.path.exists(binary_path):
+        program_proc = subprocess.Popen(binary_path,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE,
+            cwd=os.path.abspath(test_dir))
+        run_stdout, run_stderr = program_proc.communicate(testcase.stdin)
+        os.remove(binary_path)
+
+    def create_file(contents, filename):
+        if contents != '':
+            with open(os.path.join(test_dir, filename), 'w') as f:
+                f.write(contents)
+
+    create_file(compile_stdout, 'compile_stdout')
+    create_file(compile_stderr, 'compile_stderr')
+    create_file(run_stdout, 'run_stdout')
+    create_file(run_stderr, 'run_stderr')
 
 class TestResult(object):
     __slots__ = ['name', 'error']
@@ -136,11 +167,11 @@ def run_testcase(testcase):
     # @TODO: This seems to hang forever if cc produces loads of output (like if
     # we have some debugging stuff in there.
     compile_stdout, compile_stderr = cc_proc.communicate()
-    compiled_succesfully = cc_proc.returncode == 0
+    compiled_successfully = cc_proc.returncode == 0
     # Non-empty stderr = expected compile failure
     if testcase.expected_compile_stderr != '':
         if testcase.expected_compile_stderr != compile_stderr:
-            if compiled_succesfully:
+            if compiled_successfully:
                 os.remove(testcase.binary)
                 test_result.error = "compilation succeeded when expected to fail"
             else:
@@ -153,13 +184,16 @@ def run_testcase(testcase):
         test_result.error = "expected compile stdout:\n%s\ngot:\n%s" \
                 % (indent(testcas.expected_run_stdout, indent(compile_stdout)))
 
-    if not compiled_succesfully:
+    if not compiled_successfully:
         test_result.error = "compilation failed with stderr:\n" \
             + indent(compile_stderr)
         return test_result
 
     binary_path = os.path.abspath(testcase.binary)
-    test_dir = os.path.abspath(os.path.dirname(testcase.name))
+    if compiled_successfully and not os.path.exists(binary_path):
+        return test_result
+
+    test_dir = os.path.abspath(testcase.name)
     program_proc = subprocess.Popen(binary_path,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE,
         cwd=test_dir)
