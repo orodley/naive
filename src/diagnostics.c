@@ -5,18 +5,18 @@
 static void v_issue_diagnostic(ErrorLevel err_level,
 		SourceLoc *context, char *fmt, va_list varargs)
 {
-	printf("%s:%d:%d: ", context->filename, context->line, context->column);
+	fprintf(stderr, "%s:%d:%d: ", context->filename, context->line, context->column);
 	switch (err_level) {
 	case WARNING:
-		fputs("Warning: ", stdout);
+		fputs("Warning: ", stderr);
 		break;
 	case ERROR:
-		fputs("Error: ", stdout);
+		fputs("Error: ", stderr);
 		break;
 	}
 
-	vprintf(fmt, varargs);
-	putchar('\n');
+	vfprintf(stderr, fmt, varargs);
+	putc('\n', stderr);
 }
 
 void issue_diagnostic(ErrorLevel err_level, SourceLoc *context,
