@@ -30,7 +30,7 @@ static bool flag_dump_ir = false;
 static bool flag_dump_asm = false;
 
 static char *make_temp_file();
-static int compile_file(char *input_filename, char *output_filename);
+static int compile_file(char *input_filename, char *output_filename, bool syntax_only);
 static int make_file_executable(char *filename);
 
 int main(int argc, char *argv[])
@@ -46,6 +46,7 @@ int main(int argc, char *argv[])
 	ARRAY_INIT(&linker_input_filenames, char *, 10);
 
 	bool do_link = true;
+	bool syntax_only = false;
 	char *output_filename = NULL;
 
 	for (i32 i = 1; i < argc; i++) {
@@ -55,10 +56,12 @@ int main(int argc, char *argv[])
 				flag_dump_tokens = true;
 			} else if (streq(arg, "-fdump-ast")) {
 				flag_dump_ast = true;
-			} else if (streq(arg, "-fdump-ir")) {
+			} else if (streq(arg, "-dump-ir")) {
 				flag_dump_ir = true;
-			} else if (streq(arg, "-fdump-asm")) {
+			} else if (streq(arg, "-dump-asm")) {
 				flag_dump_asm = true;
+			} else if (streq(arg, "-fsyntax-only")) {
+				syntax_only = true;
 			} else if (streq(arg, "-c")) {
 				do_link = false;
 			} else if (streq(arg, "-o")) {
@@ -103,8 +106,8 @@ int main(int argc, char *argv[])
 
 	for (u32 i = 0; i < source_input_filenames.size; i++) {
 		char *source_input_filename = *ARRAY_REF(&source_input_filenames, char *, i);
-		char *object_filename;
-		if (do_link) {
+		char *object_filename = NULL;
+		if (do_link && !syntax_only) {
 			// In this mode we compile all given sources files to temporary
 			// object files, link the result with libc and any other object
 			// files passed on the command line, and then delete the temporary
@@ -112,7 +115,7 @@ int main(int argc, char *argv[])
 			object_filename = make_temp_file();
 			*ARRAY_APPEND(&temp_filenames, char *) = object_filename;
 			*ARRAY_APPEND(&linker_input_filenames, char *) = object_filename;
-		} else {
+		} else if (!syntax_only) {
 			// In this mode we compile all the given source files to object
 			// files, and leave it at that.
 			if (output_filename != NULL) {
@@ -137,14 +140,14 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		int result = compile_file(source_input_filename, object_filename);
+		int result = compile_file(source_input_filename, object_filename, syntax_only);
 		if (result != 0)
 			return result;
 	}
 
 	array_free(&source_input_filenames);
 
-	if (do_link) {
+	if (do_link && !syntax_only) {
 		// Implicitly link in the standard library. We have to put this after the
 		// rest of the inputs because it's an archive.
 		*ARRAY_APPEND(&linker_input_filenames, char *) = "libc.a";
@@ -185,7 +188,7 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-static int compile_file(char *input_filename, char *output_filename) {
+static int compile_file(char *input_filename, char *output_filename, bool syntax_only) {
 	Array(SourceToken) tokens;
 	if (!tokenise(&tokens, input_filename))
 		return 11;
@@ -212,6 +215,13 @@ static int compile_file(char *input_filename, char *output_filename) {
 		if (flag_dump_tokens)
 			puts("\n");
 		dump_toplevel(ast);
+	}
+
+	if (syntax_only) {
+		array_free(&tokens);
+		pool_free(&ast_pool);
+
+		return 0;
 	}
 
 	TransUnit tu;
