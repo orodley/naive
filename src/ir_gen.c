@@ -264,9 +264,9 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 						c_type_to_ir_type(&cdecl.type));
 			}
 
-			array_free(param_bindings);
-
 			ir_gen_statement(builder, &scope, func->body);
+
+			array_free(param_bindings);
 			global->defined = true;
 
 			break;
