@@ -177,8 +177,8 @@ static void asm_gen_instr(
 		break;
 	case OP_COND:
 		emit_instr2(builder, CMP, asm_value(instr->val.cond.condition), asm_const32(0));
-		emit_instr1(builder, JE, asm_label(instr->val.cond.then_block->label));
-		emit_instr1(builder, JMP, asm_label(instr->val.cond.else_block->label));
+		emit_instr1(builder, JE, asm_label(instr->val.cond.else_block->label));
+		emit_instr1(builder, JMP, asm_label(instr->val.cond.then_block->label));
 		break;
 	case OP_STORE: {
 		IrValue pointer = instr->val.store.pointer;
