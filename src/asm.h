@@ -100,6 +100,7 @@ typedef struct AsmArg
 	X(POP), \
 	X(IMUL), \
 	X(CMP), \
+	X(SETE), \
 	X(JMP), \
 	X(JE)
 
@@ -194,6 +195,7 @@ AsmArg asm_deref(AsmArg asm_arg);
 AsmArg asm_global(AsmGlobal *global);
 AsmArg asm_label(AsmLabel *label);
 
+void dump_asm_function(AsmFunction *asm_function);
 void dump_asm_module(AsmModule *asm_module);
 
 void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbols);

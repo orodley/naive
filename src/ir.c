@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -123,21 +124,29 @@ static void dump_value(IrValue value)
 	}
 }
 
+#define X(x) #x
+static char *ir_op_names[] = {
+	IR_OPS
+};
+#undef X
+
 static void dump_instr(IrInstr *instr)
 {
+	char *op_name = ir_op_names[instr->op];
+	for (u32 i = 3; op_name[i] != '\0'; i++)
+		putchar(tolower(op_name[i]));
+	putchar('(');
+
 	switch (instr->op) {
 	case OP_LOCAL:
-		fputs("local(", stdout);
 		dump_ir_type(instr->val.type);
 		break;
 	case OP_LOAD:
-		fputs("load(", stdout);
 		dump_ir_type(instr->val.load.type);
 		fputs(", ", stdout);
 		dump_value(instr->val.load.pointer);
 		break;
 	case OP_STORE:
-		fputs("store(", stdout);
 		dump_value(instr->val.store.pointer);
 		fputs(", ", stdout);
 		dump_value(instr->val.store.value);
@@ -145,34 +154,24 @@ static void dump_instr(IrInstr *instr)
 		dump_ir_type(instr->val.store.type);
 		break;
 	case OP_BRANCH:
-		printf("branch(%s", instr->val.target_block->name);
+		fputs(instr->val.target_block->name, stdout);
 		break;
 	case OP_COND:
-		fputs("cond(", stdout);
 		dump_value(instr->val.cond.condition);
 		fputs(", ", stdout);
 		printf("%s, %s", instr->val.cond.then_block->name, instr->val.cond.else_block->name);
 		break;
 	case OP_RET:
-		fputs("ret(", stdout);
 		dump_value(instr->val.arg);
 		break;
 	case OP_CALL:
-		fputs("call(", stdout);
 		dump_value(instr->val.call.callee);
 		for (u32 i = 0; i < instr->val.call.arity; i++) {
 			fputs(", ", stdout);
 			dump_value(instr->val.call.arg_array[i]);
 		}
 		break;
-	case OP_BIT_XOR:
-		fputs("bit_xor(", stdout);
-		dump_value(instr->val.binary_op.arg1);
-		fputs(", ", stdout);
-		dump_value(instr->val.binary_op.arg2);
-		break;
-	case OP_IMUL:
-		fputs("imul(", stdout);
+	case OP_BIT_XOR: case OP_IMUL: case OP_EQ:
 		dump_value(instr->val.binary_op.arg1);
 		fputs(", ", stdout);
 		dump_value(instr->val.binary_op.arg2);
@@ -296,6 +295,8 @@ static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 	case OP_IMUL:
 		return arg1 * arg2;
 		break;
+	case OP_EQ:
+		return arg1 == arg2;
 	}
 }
 

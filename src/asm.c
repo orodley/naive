@@ -169,7 +169,7 @@ static void dump_asm_instr(AsmInstr *instr)
 		putchar(' ');
 		dump_asm_args(instr->args, 2);
 		break;
-	case PUSH: case POP: case CALL: case JMP: case JE:
+	case PUSH: case POP: case CALL: case JMP: case JE: case SETE:
 		putchar(' ');
 		dump_asm_args(instr->args, 1);
 		break;
@@ -252,6 +252,14 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 	}
 }
 
+void dump_asm_function(AsmFunction *asm_function)
+{
+	for (u32 j = 0; j < asm_function->instrs.size; j++) {
+		AsmInstr *instr = ARRAY_REF(&asm_function->instrs, AsmInstr, j);
+		dump_asm_instr(instr);
+	}
+}
+
 void dump_asm_module(AsmModule *asm_module)
 {
 	for (u32 i = 0; i < asm_module->globals.size; i++) {
@@ -259,11 +267,7 @@ void dump_asm_module(AsmModule *asm_module)
 
 		if (global->type == ASM_GLOBAL_FUNCTION) {
 			AsmFunction *func = &global->val.function;
-
-			for (u32 j = 0; j < func->instrs.size; j++) {
-				AsmInstr *instr = ARRAY_REF(&func->instrs, AsmInstr, j);
-				dump_asm_instr(instr);
-			}
+			dump_asm_function(func);
 		}
 
 		if (i == asm_module->globals.size - 1)

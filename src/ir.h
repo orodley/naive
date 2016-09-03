@@ -96,21 +96,24 @@ typedef struct IrValue
 	} val;
 } IrValue;
 
+#define IR_OPS \
+	X(OP_BIT_XOR), \
+	X(OP_IMUL), \
+	X(OP_EQ), \
+	X(OP_CALL), \
+	X(OP_LOAD), \
+	X(OP_STORE), \
+	X(OP_LOCAL), \
+	X(OP_RET), \
+	X(OP_BRANCH), \
+	X(OP_COND),
+
+#define X(x) x
 typedef enum IrOp
 {
-	OP_BIT_XOR,
-	OP_IMUL,
-
-	OP_CALL,
-
-	OP_LOAD,
-	OP_STORE,
-	OP_LOCAL,
-
-	OP_RET,
-	OP_BRANCH,
-	OP_COND,
+	IR_OPS
 } IrOp;
+#undef X
 
 typedef struct IrInstr
 {

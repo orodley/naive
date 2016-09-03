@@ -21,7 +21,7 @@ def generate_encoder(input_filename, output_filename):
 
     with open(input_filename, 'r') as f:
         for line in f.readlines():
-            if line == '\n':
+            if line == '\n' or line.startswith('#'):
                 continue
 
             instr, encoding = line.rstrip('\n').split('=')
