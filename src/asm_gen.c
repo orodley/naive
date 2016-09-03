@@ -292,6 +292,12 @@ static Register *arg_reg(AsmArg *arg)
 	return NULL;
 }
 
+// @TODO: Save all callee save registers that we allocate.
+// @TODO: Save all caller save registers that are live across calls.
+// @TODO: In order for this to work as expected with pre-allocated registers,
+// those registers need to be virtual, but with a register already assigned.
+// There are a few places where we just use a physical register directly. Those
+// need to be changed.
 static void allocate_registers(AsmBuilder *builder)
 {
 	Array(AsmInstr) *instrs = &builder->current_function->instrs;
