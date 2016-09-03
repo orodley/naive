@@ -28,6 +28,7 @@ static bool flag_dump_tokens = false;
 static bool flag_dump_ast = false;
 static bool flag_dump_ir = false;
 static bool flag_dump_asm = false;
+bool flag_dump_live_ranges = false;
 
 static char *make_temp_file();
 static int compile_file(char *input_filename, char *output_filename, bool syntax_only);
@@ -60,6 +61,8 @@ int main(int argc, char *argv[])
 				flag_dump_ir = true;
 			} else if (streq(arg, "-dump-asm")) {
 				flag_dump_asm = true;
+			} else if (streq(arg, "-dump-live-ranges")) {
+				flag_dump_live_ranges = true;
 			} else if (streq(arg, "-fsyntax-only")) {
 				syntax_only = true;
 			} else if (streq(arg, "-c")) {

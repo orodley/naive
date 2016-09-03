@@ -3,6 +3,7 @@
 #include "ir.h"
 #include "asm.h"
 #include "asm_gen.h"
+#include "flags.h"
 
 void init_asm_builder(AsmBuilder *builder)
 {
@@ -138,6 +139,7 @@ static void assign_vreg(AsmBuilder *builder, IrInstr *instr)
 	vreg_info->assigned_register = INVALID_REGISTER;
 	vreg_info->source = INSTR;
 	vreg_info->val.defining_instr = instr;
+	vreg_info->live_range_start = vreg_info->live_range_end = -1;
 
 	instr->virtual_register = vreg_number;
 }
@@ -271,8 +273,48 @@ static PhysicalRegister caller_save_registers[] = {
 	RAX, RCX, RDX, RDI, RSI, R8, R9, R10, R11,
 };
 
+static Register *arg_reg(AsmArg *arg)
+{
+	if (arg->type == ASM_ARG_REGISTER)
+		return &arg->val.reg;
+	if (arg->type == ASM_ARG_OFFSET_REGISTER)
+		return &arg->val.offset_register.reg;
+	return NULL;
+}
+
 static void allocate_registers(AsmBuilder *builder)
 {
+	Array(AsmInstr) *instrs = &builder->current_function->instrs;
+	for (u32 i = 0; i < instrs->size; i++) {
+		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
+		for (u32 j = 0; j < instr->num_args; j++) {
+			AsmArg *arg = instr->args + j;
+			Register *reg = arg_reg(arg);
+			if (reg == NULL)
+				continue;
+
+			if (reg->type == VIRTUAL_REGISTER) {
+				u32 reg_num = reg->val.register_number;
+				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
+						VRegInfo, reg_num);
+				if (vreg->live_range_start == -1) {
+					vreg->live_range_start = vreg->live_range_end = i;
+				} else {
+					vreg->live_range_end = i;
+				}
+			}
+		}
+	}
+
+	if (flag_dump_live_ranges) {
+		dump_asm_function(builder->current_function);
+		for (u32 i = 0; i < builder->virtual_registers.size; i++) {
+			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
+			printf("#%u: [%d, %d]\n", i, vreg->live_range_start, vreg->live_range_end);
+		}
+		putchar('\n');
+	}
+
 	u32 reg_to_assign_index = 0;
 	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
 		VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
@@ -285,21 +327,14 @@ static void allocate_registers(AsmBuilder *builder)
 		}
 	}
 
-	Array(AsmInstr) *instrs = &builder->current_function->instrs;
 	for (u32 i = 0; i < instrs->size; i++) {
 		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
 
 		for (u32 j = 0; j < instr->num_args; j++) {
-			AsmArg *arg = &instr->args[j];
-
-			Register *reg;
-			if (arg->type == ASM_ARG_REGISTER) {
-				reg = &arg->val.reg;
-			} else if (arg->type == ASM_ARG_OFFSET_REGISTER) {
-				reg = &arg->val.offset_register.reg;
-			} else {
+			AsmArg *arg = instr->args + j;
+			Register *reg = arg_reg(arg);
+			if (reg == NULL)
 				continue;
-			}
 
 			if (reg->type == VIRTUAL_REGISTER) {
 				u32 reg_num = reg->val.register_number;
@@ -343,6 +378,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		vreg_info->source = ARG;
 		vreg_info->val.arg_index = i;
 		vreg_info->assigned_register = argument_registers[i];
+		vreg_info->live_range_start = vreg_info->live_range_end = -1;
 	}
 
 	AsmInstr *first_instr = emit_instr1(builder, PUSH, asm_physical_register(RBP));
