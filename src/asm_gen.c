@@ -298,6 +298,17 @@ static Register *arg_reg(AsmArg *arg)
 // those registers need to be virtual, but with a register already assigned.
 // There are a few places where we just use a physical register directly. Those
 // need to be changed.
+// @TODO: In fact, this won't work even if we do the above, because we process
+// in order of increasing live range start. Imagine we have #1: [1, 5] with no
+// allocated register, #2: [3, 4] with RDI allocated, and RDI is on the top of
+// free_regs. We'll allocate RDI to #1 before we even get to #2, even if #2 is
+// in the list.
+// The linear scan paper recommends simply scanning the active set when finding
+// a pre-allocated register and spilling anything using it. This seems nasty,
+// but maybe it's fine if we rearrange free_regs such that we prefer allocating
+// registers that aren't part of the calling convention. This can still be a
+// problem though, as after the pre-allocate range ends we'll put the
+// pre-allocated registers right on top of the stack again...
 static void allocate_registers(AsmBuilder *builder)
 {
 	Array(AsmInstr) *instrs = &builder->current_function->instrs;
@@ -370,6 +381,11 @@ static void allocate_registers(AsmBuilder *builder)
 			}
 			assert(free_regs_index != -1);
 			ARRAY_REMOVE(&free_regs, PhysicalRegister, free_regs_index);
+
+			for (u32 j = 0; j < active_intervals.size; j++) {
+				VRegInfo *interval = *ARRAY_REF(&active_intervals, VRegInfo *, j);
+				assert(interval->assigned_register != vreg->assigned_register);
+			}
 		}
 
 		u32 insertion_point = active_intervals.size;
