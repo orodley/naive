@@ -5,6 +5,7 @@
 #include "asm_gen.h"
 #include "flags.h"
 #include "ir.h"
+#include "util.h"
 
 void init_asm_builder(AsmBuilder *builder)
 {
@@ -132,17 +133,36 @@ static AsmArg asm_value(IrValue value)
 	}
 }
 
-static void assign_vreg(AsmBuilder *builder, IrInstr *instr)
+static VRegInfo *append_vreg(AsmBuilder *builder)
 {
-	u32 vreg_number = next_vreg(builder);
+	if (next_vreg(builder) == 4) {
+		volatile int x = 3;
+		x = x;
+	}
 	VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
-
 	vreg_info->assigned_register = INVALID_REGISTER;
-	vreg_info->source = INSTR;
-	vreg_info->val.defining_instr = instr;
 	vreg_info->live_range_start = vreg_info->live_range_end = -1;
 
+	return vreg_info;
+}
+
+static VRegInfo *assign_vreg(AsmBuilder *builder, IrInstr *instr)
+{
+	u32 vreg_number = next_vreg(builder);
+	VRegInfo *vreg = append_vreg(builder);
 	instr->virtual_register = vreg_number;
+
+	return vreg;
+}
+
+static AsmArg pre_alloced_vreg(AsmBuilder *builder, PhysicalRegister reg)
+{
+	u32 vreg_number = next_vreg(builder);
+
+	VRegInfo *vreg_info = append_vreg(builder);
+	vreg_info->assigned_register = reg;
+
+	return asm_virtual_register(vreg_number);
 }
 
 static void asm_gen_instr(
@@ -230,15 +250,12 @@ static void asm_gen_instr(
 		assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
 		for (u32 i = 0; i < arity; i++) {
 			AsmArg arg_current_reg = asm_value(instr->val.call.arg_array[i]);
-			AsmArg arg_target_reg = asm_physical_register(argument_registers[i]);
+			AsmArg arg_target_reg = pre_alloced_vreg(builder, argument_registers[i]);
 			emit_instr2(builder, MOV, arg_target_reg, arg_current_reg);
 		}
 
 		emit_instr1(builder, CALL, asm_value(instr->val.call.callee));
-		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)),
-				asm_physical_register(RAX));
-
-		assign_vreg(builder, instr);
+		assign_vreg(builder, instr)->assigned_register = RAX;
 		break;
 	}
 	case OP_BIT_XOR: {
@@ -273,6 +290,7 @@ static void asm_gen_instr(
 	}
 }
 
+#if 0
 // We deliberately exclude RBP from this list, as we don't support omitting the
 // frame pointer and so we never use it for register allocation.
 static PhysicalRegister callee_save_registers[] = {
@@ -280,8 +298,9 @@ static PhysicalRegister callee_save_registers[] = {
 };
 
 static PhysicalRegister caller_save_registers[] = {
-	R11, R10, R9, R8, RSI, RDI, RDX, RCX, RAX,
+	RAX, RDI, RSI, RDX, RCX, R8, R9, R10, R11,
 };
+#endif
 
 static Register *arg_reg(AsmArg *arg)
 {
@@ -292,23 +311,36 @@ static Register *arg_reg(AsmArg *arg)
 	return NULL;
 }
 
+#define ALLOCATION_ORDER \
+	X(0, R11), \
+	X(1, R10), \
+	X(2, R9), \
+	X(3, R8), \
+	X(4, RBX), \
+	X(5, R12), \
+	X(6, R13), \
+	X(7, R14), \
+	X(8, R15), \
+	X(9, RCX), \
+	X(10, RDX), \
+	X(11, RSI), \
+	X(12, RDI), \
+	X(13, RAX),
+
+#define X(i, x) [i] = x
+static PhysicalRegister alloc_index_to_reg[] = {
+	ALLOCATION_ORDER
+};
+#undef X
+
+#define X(i, x) [x] = i
+static u32 reg_to_alloc_index[] = {
+	ALLOCATION_ORDER
+};
+#undef X
+
 // @TODO: Save all callee save registers that we allocate.
 // @TODO: Save all caller save registers that are live across calls.
-// @TODO: In order for this to work as expected with pre-allocated registers,
-// those registers need to be virtual, but with a register already assigned.
-// There are a few places where we just use a physical register directly. Those
-// need to be changed.
-// @TODO: In fact, this won't work even if we do the above, because we process
-// in order of increasing live range start. Imagine we have #1: [1, 5] with no
-// allocated register, #2: [3, 4] with RDI allocated, and RDI is on the top of
-// free_regs. We'll allocate RDI to #1 before we even get to #2, even if #2 is
-// in the list.
-// The linear scan paper recommends simply scanning the active set when finding
-// a pre-allocated register and spilling anything using it. This seems nasty,
-// but maybe it's fine if we rearrange free_regs such that we prefer allocating
-// registers that aren't part of the calling convention. This can still be a
-// problem though, as after the pre-allocate range ends we'll put the
-// pre-allocated registers right on top of the stack again...
 static void allocate_registers(AsmBuilder *builder)
 {
 	Array(AsmInstr) *instrs = &builder->current_function->instrs;
@@ -342,65 +374,63 @@ static void allocate_registers(AsmBuilder *builder)
 		putchar('\n');
 	}
 
-	// @TODO: Keep this sorted according to some heuristic? At the moment it's
-	// just a stack, so we always allocate the register that expired last.
-	Array(PhysicalRegister) free_regs;
-	ARRAY_INIT(&free_regs, PhysicalRegister, 16);
-	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(callee_save_registers); i++)
-		*ARRAY_APPEND(&free_regs, PhysicalRegister) = callee_save_registers[i];
-	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(caller_save_registers); i++)
-		*ARRAY_APPEND(&free_regs, PhysicalRegister) = caller_save_registers[i];
+	u32 free_regs_bitset;
+	assert(STATIC_ARRAY_LENGTH(alloc_index_to_reg) < 8 * sizeof free_regs_bitset);
 
-	Array(VRegInfo *) active_intervals;
-	ARRAY_INIT(&active_intervals, VRegInfo *, 16);
+	// Start with all regs free
+	free_regs_bitset = (1 << STATIC_ARRAY_LENGTH(alloc_index_to_reg)) - 1;
+
+	Array(VRegInfo *) active_vregs;
+	ARRAY_INIT(&active_vregs, VRegInfo *, 16);
 	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
 		VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
-		for (u32 j = 0; j < active_intervals.size; j++) {
-			VRegInfo *active_interval = *ARRAY_REF(&active_intervals, VRegInfo *, j);
-			if (active_interval->live_range_end >= vreg->live_range_start)
+
+		// This indicates that we assigned a vreg to something that wasn't
+		// used, e.g. a pre-alloced RAX for the return value of a function.
+		if (vreg->live_range_start == -1) {
+			assert(vreg->live_range_end == -1);
+			continue;
+		}
+
+		while (active_vregs.size != 0) {
+			VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, 0);
+			if (active_vreg->live_range_end >= vreg->live_range_start)
 				break;
-			*ARRAY_APPEND(&free_regs, PhysicalRegister) = active_interval->assigned_register;
-			ARRAY_REMOVE(&active_intervals, VRegInfo *, j);
+			u32 alloc_index = reg_to_alloc_index[active_vreg->assigned_register];
+			free_regs_bitset |= 1 << alloc_index;
+
+			// @TODO: Remove all the invalidated vregs at once instead of
+			// repeatedly shifting down.
+			ARRAY_REMOVE(&active_vregs, VRegInfo *, 0);
 		}
 
 		if (vreg->assigned_register  == INVALID_REGISTER) {
 			// @TODO: Insert spills when there are no free registers to assign.
-			assert(free_regs.size != 0);
-			vreg->assigned_register = *ARRAY_POP(&free_regs, PhysicalRegister);
+			assert(free_regs_bitset != 0);
+			u32 first_free_alloc_index = lowest_set_bit(free_regs_bitset);
+			vreg->assigned_register = alloc_index_to_reg[first_free_alloc_index];
+			free_regs_bitset &= ~(1 << first_free_alloc_index);
 		} else {
 			// This register has already been assigned, e.g. part of a call
 			// sequence. We don't need to allocate it, but we do need to keep
 			// track of it so it doesn't get clobbered.
-			i32 free_regs_index = -1;
-			for (u32 j = 0; j < free_regs.size; j++) {
-				PhysicalRegister phys_reg = *ARRAY_REF(&free_regs, PhysicalRegister, j);
-				if (phys_reg == vreg->assigned_register) {
-					free_regs_index = j;
-					break;
-				}
-			}
-			assert(free_regs_index != -1);
-			ARRAY_REMOVE(&free_regs, PhysicalRegister, free_regs_index);
-
-			for (u32 j = 0; j < active_intervals.size; j++) {
-				VRegInfo *interval = *ARRAY_REF(&active_intervals, VRegInfo *, j);
-				assert(interval->assigned_register != vreg->assigned_register);
-			}
+			u32 alloc_index = reg_to_alloc_index[vreg->assigned_register];
+			assert((free_regs_bitset & (1 << alloc_index)) != 0);
+			free_regs_bitset &= ~(1 << alloc_index);
 		}
 
-		u32 insertion_point = active_intervals.size;
-		for (u32 j = 0; j < active_intervals.size; j++) {
-			VRegInfo *active_interval = *ARRAY_REF(&active_intervals, VRegInfo *, j);
-			if (active_interval->live_range_end < vreg->live_range_end) {
+		u32 insertion_point = active_vregs.size;
+		for (u32 j = 0; j < active_vregs.size; j++) {
+			VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, j);
+			if (active_vreg->live_range_end < vreg->live_range_end) {
 				insertion_point = j;
 				break;
 			}
 		}
-		*ARRAY_INSERT(&active_intervals, VRegInfo *, insertion_point) = vreg;
+		*ARRAY_INSERT(&active_vregs, VRegInfo *, insertion_point) = vreg;
 	}
 
-	array_free(&free_regs);
-	array_free(&active_intervals);
+	array_free(&active_vregs);
 
 	for (u32 i = 0; i < instrs->size; i++) {
 		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
@@ -450,8 +480,6 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	assert(ir_func->arity <= STATIC_ARRAY_LENGTH(argument_registers));
 	for (u32 i = 0; i < ir_func->arity; i++) {
 		VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
-		vreg_info->source = ARG;
-		vreg_info->val.arg_index = i;
 		vreg_info->assigned_register = argument_registers[i];
 		vreg_info->live_range_start = vreg_info->live_range_end = -1;
 	}

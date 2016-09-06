@@ -21,3 +21,16 @@ inline bool strneq(char *a, char *b, u32 length)
 {
 	return strncmp(a, b, length) == 0;
 }
+
+inline u32 lowest_set_bit(u32 x)
+{
+	assert(x != 0);
+
+	u32 i = 0;
+	while ((x & 1) != 1) {
+		x >>= 1;
+		i++;
+	}
+
+	return i;
+}

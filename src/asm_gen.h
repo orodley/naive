@@ -15,17 +15,6 @@ typedef struct VRegInfo
 	PhysicalRegister assigned_register;
 	i32 live_range_start;
 	i32 live_range_end;
-	enum
-	{
-		INSTR,
-		ARG,
-	} source;
-
-	union
-	{
-		u32 arg_index;
-		IrInstr *defining_instr;
-	} val;
 } VRegInfo;
 
 typedef struct AsmBuilder
