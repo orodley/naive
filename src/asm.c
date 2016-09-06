@@ -377,6 +377,7 @@ typedef struct EncodedInstr
 	u8 rex_prefix;
 	u8 opcode_size;
 	u8 opcode[MAX_OPCODE_SIZE];
+	u8 opcode_extension;
 	bool has_modrm;
 	u8 mod;
 	u8 reg;
@@ -500,9 +501,8 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 	encoded_instr.opcode_size = opcode_size;
 	memcpy(encoded_instr.opcode, opcode, opcode_size);
 	if (reg_in_opcode) {
-		u8 reg = encoded_register_number(get_register(instr->args));
-		assert(reg <= 8);
-		encoded_instr.opcode[0] |= reg;
+		encoded_instr.opcode_extension =
+			encoded_register_number(get_register(instr->args));
 	}
 
 	if (reg_and_rm) {
@@ -598,8 +598,14 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 			encoded_instr.rex_prefix |= 1 << 0;
 		}
 	}
+	if ((encoded_instr.opcode_extension & (1 << 3)) != 0) {
+		// Make sure we didn't already use REX.B for the RM or SIB field.
+		assert((encoded_instr.rex_prefix & (1 << 0)) == 0);
+		encoded_instr.rex_prefix |= 1 << 0;
+	}
 	if (encoded_instr.rex_prefix != 0)
 		write_u8(file, encoded_instr.rex_prefix);
+	encoded_instr.opcode[0] |= encoded_instr.opcode_extension & 7;
 	write_bytes(file, encoded_instr.opcode_size, encoded_instr.opcode);
 	if (encoded_instr.has_modrm) {
 		u8 mod = encoded_instr.mod;
