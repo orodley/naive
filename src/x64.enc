@@ -14,15 +14,13 @@ MOV r/m64, r64   = REX.W + 89 /r
 MOV r64,   r/m64 = REX.W + 8B /r
 MOV r64,   imm64 = REX.W + B8 +rd io
 
-POP r64          = 58 +rd
+NOP              =         90
 
-PUSH r64         = 50 +rd
+POP r64          =         58 +rd
+
+PUSH r64         =         50 +rd
 
 RET              =         C3
-
-# @TODO: This is a hack: it should be r/m8 but we don't support the single-byte
-# registers properly yet. For now this works, but it's not good at all.
-SETE r/m64       = [0F 94] /r
 
 SUB r/m64, imm8  = REX.W + 83 /5 ib
 

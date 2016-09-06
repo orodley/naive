@@ -165,6 +165,15 @@ static AsmArg pre_alloced_vreg(AsmBuilder *builder, PhysicalRegister reg)
 	return asm_virtual_register(vreg_number);
 }
 
+AsmLabel *append_label(AsmBuilder *builder, char *name)
+{
+	AsmLabel *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
+	label->name = name;
+	*ARRAY_APPEND(&builder->current_function->labels, AsmLabel *) = label;
+
+	return label;
+}
+
 static void asm_gen_instr(
 		IrFunction *ir_func, AsmBuilder *builder, IrInstr *instr)
 {
@@ -280,9 +289,13 @@ static void asm_gen_instr(
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
 		emit_instr2(builder, CMP, arg1, arg2);
-		// @TODO: SETE only sets the low byte. We need to zero out the rest of
-		// the register.
-		emit_instr1(builder, SETE, asm_virtual_register(next_vreg(builder)));
+		// @TODO: We should use SETE instead, once we have 1-byte registers
+		// working.
+		AsmLabel *new_label = append_label(builder, "OP_EQ_label");
+		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), asm_const32(1));
+		emit_instr1(builder, JE, asm_label(new_label));
+		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), asm_const32(0));
+		emit_instr0(builder, NOP)->label = new_label;
 
 		assign_vreg(builder, instr);
 		break;
@@ -492,10 +505,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
 		IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
-		AsmLabel *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
-		label->name = block->name;
-
-		*ARRAY_APPEND(&builder->current_function->labels, AsmLabel *) = label;
+		AsmLabel *label = append_label(builder, block->name);
 		block->label = label;
 	}
 

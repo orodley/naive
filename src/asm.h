@@ -90,6 +90,7 @@ typedef struct AsmArg
 } AsmArg;
 
 #define ASM_OPS \
+	X(NOP), \
 	X(MOV), \
 	X(RET), \
 	X(CALL), \
@@ -100,7 +101,6 @@ typedef struct AsmArg
 	X(POP), \
 	X(IMUL), \
 	X(CMP), \
-	X(SETE), \
 	X(JMP), \
 	X(JE)
 

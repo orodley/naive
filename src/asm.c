@@ -169,11 +169,11 @@ static void dump_asm_instr(AsmInstr *instr)
 		putchar(' ');
 		dump_asm_args(instr->args, 2);
 		break;
-	case PUSH: case POP: case CALL: case JMP: case JE: case SETE:
+	case PUSH: case POP: case CALL: case JMP: case JE:
 		putchar(' ');
 		dump_asm_args(instr->args, 1);
 		break;
-	case RET:
+	case RET: case NOP:
 		break;
 	}
 
