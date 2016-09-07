@@ -21,6 +21,7 @@ typedef struct AsmBuilder
 {
 	AsmModule asm_module;
 	AsmFunction *current_function;
+	Array(AsmInstr) *current_block;
 
 	Array(StackSlot) stack_slots;
 	Array(VRegInfo) virtual_registers;

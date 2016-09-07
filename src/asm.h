@@ -123,8 +123,12 @@ typedef struct AsmFunction
 {
 	char *name;
 
-	Array(AsmInstr) instrs;
+	Array(AsmInstr) prologue;
+	Array(AsmInstr) body;
+	Array(AsmInstr) epilogue;
+
 	Array(AsmLabel *) labels;
+	AsmLabel *ret_label;
 } AsmFunction;
 
 typedef struct AsmGlobal

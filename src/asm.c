@@ -24,7 +24,9 @@ void free_asm_module(AsmModule *asm_module)
 
 		if (global->type == ASM_GLOBAL_FUNCTION) {
 			AsmFunction *function = &global->val.function;
-			array_free(&function->instrs);
+			array_free(&function->prologue);
+			array_free(&function->body);
+			array_free(&function->epilogue);
 			array_free(&function->labels);
 		}
 	}
@@ -38,8 +40,11 @@ void init_asm_function(AsmFunction *function, char *name)
 {
 	function->name = name;
 
-	ARRAY_INIT(&function->instrs, AsmInstr, 20);
+	ARRAY_INIT(&function->prologue, AsmInstr, 10);
+	ARRAY_INIT(&function->body, AsmInstr, 20);
+	ARRAY_INIT(&function->epilogue, AsmInstr, 10);
 	ARRAY_INIT(&function->labels, AsmLabel *, 10);
+	function->ret_label = NULL;
 }
 
 AsmArg asm_virtual_register(u32 n)
@@ -254,9 +259,18 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 
 void dump_asm_function(AsmFunction *asm_function)
 {
-	for (u32 j = 0; j < asm_function->instrs.size; j++) {
-		AsmInstr *instr = ARRAY_REF(&asm_function->instrs, AsmInstr, j);
-		dump_asm_instr(instr);
+	Array(AsmInstr) *instr_blocks[] = {
+		&asm_function->prologue,
+		&asm_function->body,
+		&asm_function->epilogue,
+	};
+
+	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(instr_blocks); i++) {
+		Array(AsmInstr) *instr_block = instr_blocks[i];
+		for (u32 j = 0; j < instr_block->size; j++) {
+			AsmInstr *instr = ARRAY_REF(instr_block, AsmInstr, j);
+			dump_asm_instr(instr);
+		}
 	}
 }
 
@@ -661,13 +675,24 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 		u32 function_size = 0;
 		if (global->defined) {
 			function_start = checked_ftell(output_file);
-			for (u32 j = 0; j < function->instrs.size; j++) {
-				AsmInstr *instr = ARRAY_REF(&function->instrs, AsmInstr, j);
-				if (instr->label != NULL) {
-					instr->label->file_location = checked_ftell(output_file);
+
+			Array(AsmInstr) *instr_blocks[] = {
+				&function->prologue,
+				&function->body,
+				&function->epilogue,
+			};
+			for (u32 i = 0; i < STATIC_ARRAY_LENGTH(instr_blocks); i++) {
+				Array(AsmInstr) *instr_block = instr_blocks[i];
+
+				for (u32 j = 0; j < instr_block->size; j++) {
+					AsmInstr *instr = ARRAY_REF(instr_block, AsmInstr, j);
+					if (instr->label != NULL) {
+						instr->label->file_location = checked_ftell(output_file);
+					}
+					assemble_instr(output_file, asm_module, instr);
 				}
-				assemble_instr(output_file, asm_module, instr);
 			}
+
 			function_size = checked_ftell(output_file) - function_start;
 		}
 

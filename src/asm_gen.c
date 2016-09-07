@@ -35,6 +35,7 @@ static AsmGlobal *append_function(AsmBuilder *builder, char *name)
 	new_global->type = ASM_GLOBAL_FUNCTION;
 	init_asm_function(new_function, name);
 	builder->current_function = new_function;
+	builder->current_block = &new_function->body;
 
 	builder->local_stack_usage = 0;
 	if (ARRAY_IS_VALID(&builder->stack_slots))
@@ -46,7 +47,7 @@ static AsmGlobal *append_function(AsmBuilder *builder, char *name)
 
 AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 {
-	AsmInstr *instr = ARRAY_APPEND(&builder->current_function->instrs, AsmInstr);
+	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
 	instr->num_args = 0;
 	instr->label = NULL;
@@ -56,7 +57,7 @@ AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 
 AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmArg arg1)
 {
-	AsmInstr *instr = ARRAY_APPEND(&builder->current_function->instrs, AsmInstr);
+	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
 	instr->num_args = 1;
 	instr->args[0] = arg1;
@@ -67,7 +68,7 @@ AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmArg arg1)
 
 AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 {
-	AsmInstr *instr = ARRAY_APPEND(&builder->current_function->instrs, AsmInstr);
+	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
 	instr->num_args = 2;
 	instr->args[0] = arg1;
@@ -193,11 +194,8 @@ static void asm_gen_instr(
 		IrValue arg = instr->val.arg;
 		assert(ir_type_eq(ir_func->return_type, arg.type));
 
-		emit_instr2(builder, ADD, asm_physical_register(RSP),
-				asm_const32(builder->local_stack_usage));
 		emit_instr2(builder, MOV, asm_physical_register(RAX), asm_value(arg));
-		emit_instr1(builder, POP, asm_physical_register(RBP));
-		emit_instr0(builder, RET);
+		emit_instr1(builder, JMP, asm_label(builder->current_function->ret_label));
 
 		break;
 	}
@@ -356,9 +354,9 @@ static u32 reg_to_alloc_index[] = {
 // @TODO: Save all caller save registers that are live across calls.
 static void allocate_registers(AsmBuilder *builder)
 {
-	Array(AsmInstr) *instrs = &builder->current_function->instrs;
-	for (u32 i = 0; i < instrs->size; i++) {
-		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
+	Array(AsmInstr) *body = &builder->current_function->body;
+	for (u32 i = 0; i < body->size; i++) {
+		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 		for (u32 j = 0; j < instr->num_args; j++) {
 			AsmArg *arg = instr->args + j;
 			Register *reg = arg_reg(arg);
@@ -445,8 +443,8 @@ static void allocate_registers(AsmBuilder *builder)
 
 	array_free(&active_vregs);
 
-	for (u32 i = 0; i < instrs->size; i++) {
-		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
+	for (u32 i = 0; i < body->size; i++) {
+		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 
 		for (u32 j = 0; j < instr->num_args; j++) {
 			AsmArg *arg = instr->args + j;
@@ -473,11 +471,11 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	IrFunction *ir_func = &ir_global->val.function;
 
 	AsmGlobal *function = append_function(builder, ir_global->name);
-	AsmLabel *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
-	label->name = ir_global->name;
-	label->file_location = 0;
-	ir_func->label = label;
 	ir_global->asm_global = function;
+	AsmLabel *ret_label = pool_alloc(&builder->asm_module.pool, sizeof *ret_label);
+	ret_label->name = "ret";
+	ret_label->file_location = 0;
+	function->val.function.ret_label = ret_label;
 
 	function->defined = ir_global->defined;
 	if (!ir_global->defined) {
@@ -497,12 +495,6 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		vreg_info->live_range_start = vreg_info->live_range_end = -1;
 	}
 
-	AsmInstr *first_instr = emit_instr1(builder, PUSH, asm_physical_register(RBP));
-	first_instr->label = label;
-	emit_instr2(builder, MOV, asm_physical_register(RBP), asm_physical_register(RSP));
-	AsmInstr *reserve_stack = emit_instr2(builder, SUB,
-			asm_physical_register(RSP), asm_const32(0));
-
 	for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
 		IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
 		AsmLabel *label = append_label(builder, block->name);
@@ -512,22 +504,42 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
 		IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
 
-		u32 first_instr_of_block_index = builder->current_function->instrs.size;
+		u32 first_instr_of_block_index = builder->current_function->body.size;
 		Array(IrInstr *) *instrs = &block->instrs;
 		for (u32 i = 0; i < instrs->size; i++) {
 			asm_gen_instr(ir_func, builder, *ARRAY_REF(instrs, IrInstr *, i));
 		}
 
 		AsmInstr *first_instr_of_block = ARRAY_REF(
-				&builder->current_function->instrs,
+				&builder->current_function->body,
 				AsmInstr,
 				first_instr_of_block_index);
 		first_instr_of_block->label = block->label;
 	}
 
-	reserve_stack->args[1] = asm_const32(builder->local_stack_usage);
-
 	allocate_registers(builder);
+
+	builder->current_block = &builder->current_function->prologue;
+
+	AsmLabel *entry_label = pool_alloc(&builder->asm_module.pool, sizeof *entry_label);
+	entry_label->name = ir_global->name;
+	entry_label->file_location = 0;
+	ir_func->label = entry_label;
+
+	AsmInstr *prologue_first_instr =
+		emit_instr1(builder, PUSH, asm_physical_register(RBP));
+	prologue_first_instr->label = entry_label;
+	emit_instr2(builder, MOV, asm_physical_register(RBP), asm_physical_register(RSP));
+	emit_instr2(builder, SUB, asm_physical_register(RSP), asm_const32(builder->local_stack_usage));
+
+	builder->current_block = &builder->current_function->epilogue;
+
+	AsmInstr *epilogue_first_instr =
+		emit_instr2(builder, ADD, asm_physical_register(RSP),
+				asm_const32(builder->local_stack_usage));
+	epilogue_first_instr->label = ret_label;
+	emit_instr1(builder, POP, asm_physical_register(RBP));
+	emit_instr0(builder, RET);
 
 	return function;
 }
