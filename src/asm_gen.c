@@ -301,18 +301,6 @@ static void asm_gen_instr(
 	}
 }
 
-#if 0
-// We deliberately exclude RBP from this list, as we don't support omitting the
-// frame pointer and so we never use it for register allocation.
-static PhysicalRegister callee_save_registers[] = {
-	R15, R14, R13, R12, RBX,
-};
-
-static PhysicalRegister caller_save_registers[] = {
-	RAX, RDI, RSI, RDX, RCX, R8, R9, R10, R11,
-};
-#endif
-
 static Register *arg_reg(AsmArg *arg)
 {
 	if (arg->type == ASM_ARG_REGISTER)
@@ -350,7 +338,29 @@ static u32 reg_to_alloc_index[] = {
 };
 #undef X
 
-// @TODO: Save all callee save registers that we allocate.
+// We deliberately exclude RBP from this list, as we don't support omitting the
+// frame pointer and so we never use it for register allocation.
+static PhysicalRegister callee_save_registers[] = {
+	R15, R14, R13, R12, RBX,
+};
+
+static bool is_callee_save(PhysicalRegister reg)
+{
+	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(callee_save_registers); i++) {
+		if (callee_save_registers[i] == reg) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+#if 0
+static PhysicalRegister caller_save_registers[] = {
+	RAX, RDI, RSI, RDX, RCX, R8, R9, R10, R11,
+};
+#endif
+
 // @TODO: Save all caller save registers that are live across calls.
 static void allocate_registers(AsmBuilder *builder)
 {
@@ -519,6 +529,22 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	allocate_registers(builder);
 
+	PhysicalRegister used_callee_save_regs[
+		STATIC_ARRAY_LENGTH(callee_save_registers)] = { 0 };
+	u32 used_callee_save_regs_size = 0;
+	for (u32 i = 0; i < builder->current_function->body.size; i++) {
+		AsmInstr *instr = ARRAY_REF(&builder->current_function->body, AsmInstr, i);
+		for (u32 j = 0; j < instr->num_args; j++) {
+			Register *reg = arg_reg(instr->args + j);
+			if (reg != NULL &&
+					reg->type == PHYSICAL_REGISTER &&
+					is_callee_save(reg->val.physical_register)) {
+				used_callee_save_regs[used_callee_save_regs_size++] =
+					reg->val.physical_register;
+			}
+		}
+	}
+
 	builder->current_block = &builder->current_function->prologue;
 
 	AsmLabel *entry_label = pool_alloc(&builder->asm_module.pool, sizeof *entry_label);
@@ -530,6 +556,9 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		emit_instr1(builder, PUSH, asm_physical_register(RBP));
 	prologue_first_instr->label = entry_label;
 	emit_instr2(builder, MOV, asm_physical_register(RBP), asm_physical_register(RSP));
+	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
+		emit_instr1(builder, PUSH, asm_physical_register(used_callee_save_regs[i]));
+	}
 	emit_instr2(builder, SUB, asm_physical_register(RSP), asm_const32(builder->local_stack_usage));
 
 	builder->current_block = &builder->current_function->epilogue;
@@ -537,6 +566,9 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	AsmInstr *epilogue_first_instr =
 		emit_instr2(builder, ADD, asm_physical_register(RSP),
 				asm_const32(builder->local_stack_usage));
+	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
+		emit_instr1(builder, POP, asm_physical_register(used_callee_save_regs[i]));
+	}
 	epilogue_first_instr->label = ret_label;
 	emit_instr1(builder, POP, asm_physical_register(RBP));
 	emit_instr0(builder, RET);
