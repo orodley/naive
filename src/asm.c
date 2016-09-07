@@ -483,11 +483,20 @@ static inline void write_bytes(FILE *file, u32 size, u8 *bytes)
 	assert(items_written == size);
 }
 
+typedef enum RexPrefix
+{
+	REX_B = 1 << 0,
+	REX_X = 1 << 1,
+	REX_R = 1 << 2,
+	REX_W = 1 << 3,
+	REX_HIGH = 0x40,
+} RexPrefix;
+
 // Called by the generated function "assemble_instr".
 // @TODO: Rename rex_prefix? It seems like the only REX prefix we can get
 // passed is REX.W, all the rest are determined by us.
 static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
-		ArgOrder arg_order, i32 rex_prefix, u32 opcode_size, u8 opcode[],
+		ArgOrder arg_order, bool use_rex_w, u32 opcode_size, u8 opcode[],
 		bool reg_and_rm, i32 opcode_extension, i32 immediate_size, bool reg_in_opcode)
 {
 	EncodedInstr encoded_instr;
@@ -495,8 +504,8 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 	encoded_instr.displacement_size = -1;
 	encoded_instr.immediate_size = -1;
 
-	if (rex_prefix != -1)
-		encoded_instr.rex_prefix = (u8)rex_prefix;
+	if (use_rex_w)
+		encoded_instr.rex_prefix |= REX_W;
 
 	encoded_instr.opcode_size = opcode_size;
 	memcpy(encoded_instr.opcode, opcode, opcode_size);
@@ -584,27 +593,29 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 
 
 	if (encoded_instr.has_modrm) {
-		if ((encoded_instr.reg & (1 << 3)) != 0)
-			encoded_instr.rex_prefix |= 1 << 2;
-		if ((encoded_instr.rm & (1 << 3)) != 0)
-			encoded_instr.rex_prefix |= 1 << 0;
+		if (encoded_instr.reg >= 8)
+			encoded_instr.rex_prefix |= REX_R;
+		if (encoded_instr.rm >= 8)
+			encoded_instr.rex_prefix |= REX_B;
 	}
 	if (encoded_instr.has_sib) {
-		if ((encoded_instr.index & (1 << 3)) != 0)
-			encoded_instr.rex_prefix |= 1 << 1;
-		if ((encoded_instr.base & (1 << 3)) != 0) {
+		if (encoded_instr.index >= 8)
+			encoded_instr.rex_prefix |= REX_X;
+		if (encoded_instr.base >= 8) {
 			// Make sure we didn't already use REX.B for the RM field.
-			assert((encoded_instr.rex_prefix & (1 << 0)) == 0);
-			encoded_instr.rex_prefix |= 1 << 0;
+			assert((encoded_instr.rex_prefix & REX_B) == 0);
+			encoded_instr.rex_prefix |= REX_B;
 		}
 	}
-	if ((encoded_instr.opcode_extension & (1 << 3)) != 0) {
-		// Make sure we didn't already use REX.B for the RM or SIB field.
-		assert((encoded_instr.rex_prefix & (1 << 0)) == 0);
-		encoded_instr.rex_prefix |= 1 << 0;
+	if (encoded_instr.opcode_extension >= 8) {
+		// Make sure we didn't already use REX.B for the RM field or SIB.
+		assert((encoded_instr.rex_prefix & REX_B) == 0);
+		encoded_instr.rex_prefix |= REX_B;
 	}
-	if (encoded_instr.rex_prefix != 0)
+	if (encoded_instr.rex_prefix != 0) {
+		encoded_instr.rex_prefix |= REX_HIGH;
 		write_u8(file, encoded_instr.rex_prefix);
+	}
 	encoded_instr.opcode[0] |= encoded_instr.opcode_extension & 7;
 	write_bytes(file, encoded_instr.opcode_size, encoded_instr.opcode);
 	if (encoded_instr.has_modrm) {

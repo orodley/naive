@@ -13,7 +13,7 @@ pp = pprint.PrettyPrinter(indent=4)
 
 Instr = namedtuple('Instr', ['opcode', 'encodings'])
 Encoding = namedtuple('Encoding',
-        ['args', 'arg_order', 'rex_prefix', 'opcode_size', 'opcode',
+        ['args', 'arg_order', 'use_rex_w', 'opcode_size', 'opcode',
          'reg_and_rm', 'opcode_extension', 'immediate_size', 'reg_in_opcode'])
 
 def generate_encoder(input_filename, output_filename):
@@ -45,23 +45,14 @@ def generate_encoder(input_filename, output_filename):
             # further if there is an opcode with a 'c' immediate and ModR/M or
             # SIB bytes.
             match = re.match(
-                    r' *(?:REX\.(?P<prefix>[WRXB]+) *\+ *)? *' +
+                    r' *(?P<use_rex_w>REX\.W *\+ *)? *' +
                     r'(?P<opcode>([0-9a-fA-F]+|\[[0-9a-fA-F ]+\])) *' +
                     r'(?P<slash>/.)? *' +
                     r'(?P<reg_in_opcode>\+rd)? *' +
                     r'(?P<immediate>[ic][bdo])? *',
                     encoding)
 
-            rex_prefix = -1
-            if match.group('prefix'):
-                rex_prefix = 0b01000000
-                for c in match.group('prefix'):
-                    rex_prefix |= {
-                        'W': 1 << 3,
-                        'R': 1 << 2,
-                        'X': 1 << 1,
-                        'B': 1 << 0
-                    }[c]
+            use_rex_w = bool(match.group('use_rex_w'))
 
             opcode_str = match.group('opcode').strip('[]').replace(' ', '')
             opcode = [int(a + b, 16) for a, b in zip(opcode_str[0::2], opcode_str[1::2])]
@@ -90,7 +81,7 @@ def generate_encoder(input_filename, output_filename):
 
             reg_in_opcode = bool(match.group('reg_in_opcode'))
 
-            encoding = Encoding(args, arg_order, rex_prefix, opcode_size, opcode,
+            encoding = Encoding(args, arg_order, use_rex_w, opcode_size, opcode,
                     reg_and_rm, opcode_extension, immediate_size, reg_in_opcode)
             
             # @TODO: We should sort encodings by immediate size (ascending) so
@@ -129,7 +120,7 @@ static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *i
                            "%sreturn;\n")
                     % (indent,
                         ', '.join(map(to_c_val,
-                            [encoding.arg_order, encoding.rex_prefix,
+                            [encoding.arg_order, encoding.use_rex_w,
                             encoding.opcode_size, encoding.opcode,
                             encoding.reg_and_rm, encoding.opcode_extension,
                             encoding.immediate_size, encoding.reg_in_opcode])),
