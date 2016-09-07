@@ -289,14 +289,9 @@ static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 	case OP_LOCAL: case OP_LOAD: case OP_STORE:
 	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL:
 		UNREACHABLE;
-	case OP_BIT_XOR:
-		return arg1 ^ arg2;
-		break;
-	case OP_IMUL:
-		return arg1 * arg2;
-		break;
-	case OP_EQ:
-		return arg1 == arg2;
+	case OP_BIT_XOR: return arg1 ^ arg2;
+	case OP_IMUL: return arg1 * arg2;
+	case OP_EQ: return arg1 == arg2;
 	}
 }
 
