@@ -515,6 +515,9 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 				c_type_to_ir_type(&binding->term.ctype));
 		return rhs_term;
 	}
+	case COMMA_EXPR:
+		ir_gen_expression(builder, scope, expr->val.binary_op.arg1);
+		return ir_gen_expression(builder, scope, expr->val.binary_op.arg2);
 	default:
 		printf("%d\n", expr->type);
 		UNIMPLEMENTED;
