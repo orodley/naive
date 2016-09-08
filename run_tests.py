@@ -182,7 +182,7 @@ def run_testcase(testcase):
             return test_result
     if compile_stdout != testcase.expected_compile_stdout:
         test_result.error = "expected compile stdout:\n%s\ngot:\n%s" \
-                % (indent(testcas.expected_run_stdout, indent(compile_stdout)))
+                % (indent(testcase.expected_run_stdout), indent(compile_stdout))
 
     if not compiled_successfully:
         test_result.error = "compilation failed with stderr:\n" \
