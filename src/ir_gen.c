@@ -313,8 +313,6 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 				ASTDecl *decl = block_item_list->val.decl;
 				ASTInitDeclarator *init_declarator = decl->init_declarators;
 				while (init_declarator != NULL) {
-					assert(init_declarator->initializer == NULL);
-
 					CDecl cdecl;
 					decl_to_cdecl(decl->decl_specifier_list,
 							init_declarator->declarator,
@@ -322,6 +320,16 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 
 					Binding *binding = ARRAY_APPEND(&block_scope->bindings, Binding);
 					cdecl_to_binding(builder, &cdecl, binding);
+
+					ASTInitializer *initializer = init_declarator->initializer;
+					if (initializer != NULL) {
+						assert(initializer->type == EXPR_INITIALIZER);
+						build_store(
+							builder,
+							binding->term.value,
+							ir_gen_expression(builder, scope, initializer->val.expr).value,
+							c_type_to_ir_type(&binding->term.ctype));
+					}
 
 					init_declarator = init_declarator->next;
 				}
