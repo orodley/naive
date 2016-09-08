@@ -223,13 +223,6 @@ void dump_trans_unit(TransUnit *trans_unit)
 					}
 					dump_instr(instr);
 				}
-
-				if (instrs->size == 0)
-					break;
-
-				IrInstr *last_instr = *ARRAY_REF(instrs, IrInstr *, instrs->size - 1);
-				assert(last_instr->op == OP_RET || last_instr->op == OP_BRANCH
-						|| last_instr->op == OP_COND);
 			}
 
 			puts("}");
