@@ -53,3 +53,8 @@ void _array_remove(Array_ *array, u32 element_size, u32 removal_point)
 
 	array->size--;
 }
+
+void array_clear(Array_ *array)
+{
+	array->size = 0;
+}

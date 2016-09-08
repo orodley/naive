@@ -21,6 +21,7 @@ void array_delete_last(Array_ *array);
 void array_free(Array_ *array);
 void *_array_insert(Array_ *array, u32 element_size, u32 insertion_point);
 void _array_remove(Array_ *array, u32 element_size, u32 removal_point);
+void array_clear(Array_ *array);
 
 #define ARRAY_IS_VALID(array) ((array)->elements != NULL)
 #define ARRAY_ZEROED ((Array_){ 0, 0, 0 })

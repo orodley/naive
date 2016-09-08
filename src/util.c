@@ -20,3 +20,4 @@ extern inline bool streq(char *a, char *b);
 extern inline bool strneq(char *a, char *b, u32 length);
 
 extern inline u32 lowest_set_bit(u32 x);
+extern inline u32 bit_count(u32 x);

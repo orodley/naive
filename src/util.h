@@ -34,3 +34,14 @@ inline u32 lowest_set_bit(u32 x)
 
 	return i;
 }
+
+inline u32 bit_count(u32 x)
+{
+	u32 n = 0;
+	for (; x != 0; n++)
+	{
+		x &= x - 1; // clear the least significant bit set
+	}
+
+	return n;
+}
