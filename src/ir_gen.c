@@ -302,14 +302,33 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 {
 	switch (statement->type) {
 	case COMPOUND_STATEMENT: {
+		Scope *block_scope = malloc(sizeof *block_scope);
+		block_scope->parent_scope = scope;
+		ARRAY_INIT(&block_scope->bindings, Binding, 5);
+
 		ASTBlockItem *block_item_list = statement->val.block_item_list;
 		while (block_item_list != NULL) {
 			switch (block_item_list->type) {
-			case BLOCK_ITEM_DECL:
-				UNIMPLEMENTED;
+			case BLOCK_ITEM_DECL: {
+				ASTDecl *decl = block_item_list->val.decl;
+				ASTInitDeclarator *init_declarator = decl->init_declarators;
+				while (init_declarator != NULL) {
+					assert(init_declarator->initializer == NULL);
+
+					CDecl cdecl;
+					decl_to_cdecl(decl->decl_specifier_list,
+							init_declarator->declarator,
+							&cdecl);
+
+					Binding *binding = ARRAY_APPEND(&block_scope->bindings, Binding);
+					cdecl_to_binding(builder, &cdecl, binding);
+
+					init_declarator = init_declarator->next;
+				}
 				break;
+			}
 			case BLOCK_ITEM_STATEMENT:
-				ir_gen_statement(builder, scope, block_item_list->val.statement);
+				ir_gen_statement(builder, block_scope, block_item_list->val.statement);
 				break;
 			}
 
@@ -481,7 +500,23 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 
 		return (Term) { .ctype = *return_type, .value = value };
 	}
+	case ASSIGN_EXPR: {
+		ASTExpr *lhs = expr->val.binary_op.arg1;
+		ASTExpr *rhs = expr->val.binary_op.arg2;
+
+		Term rhs_term = ir_gen_expression(builder, scope, rhs);
+
+		assert(lhs->type == IDENTIFIER_EXPR);
+		Binding *binding = binding_for_name(scope, lhs->val.identifier);
+		build_store(
+				builder,
+				binding->term.value,
+				rhs_term.value,
+				c_type_to_ir_type(&binding->term.ctype));
+		return rhs_term;
+	}
 	default:
+		printf("%d\n", expr->type);
 		UNIMPLEMENTED;
 	}
 }
