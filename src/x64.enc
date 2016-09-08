@@ -1,27 +1,29 @@
-ADD r/m64, imm8  = REX.W + 83 /0 ib
+ADD r/m64, imm8        = REX.W + 83 /0 ib
 
-CALL sym         =         E8 cd
+CALL sym               =         E8 cd
 
-CMP r/m64 imm32  = REX.W + 81 /7 id
+CMP r/m64 imm32        = REX.W + 81 /7 id
 
-IMUL r64, r/m64  = REX.W + [0F AF] /r
+IMUL r64, r/m64        = REX.W + [0F AF] /r
+IMUL r64, r/m64, imm32 = REX.W + 69 /r id
 
-JE  sym          =         [0F 84] cd
+JE  sym                =         [0F 84] cd
 
-JMP sym          =         E9 cd
+JMP sym                =         E9 cd
 
-MOV r/m64, r64   = REX.W + 89 /r
-MOV r64,   r/m64 = REX.W + 8B /r
-MOV r64,   imm64 = REX.W + B8 +rd io
+MOV r/m64, r64         = REX.W + 89 /r
+MOV r/m64, imm32       = REX.W + C7 /0 id
+MOV r64,   r/m64       = REX.W + 8B /r
+MOV r64,   imm64       = REX.W + B8 +rd io
 
-NOP              =         90
+NOP                    =         90
 
-POP r64          =         58 +rd
+POP r64                =         58 +rd
 
-PUSH r64         =         50 +rd
+PUSH r64               =         50 +rd
 
-RET              =         C3
+RET                    =         C3
 
-SUB r/m64, imm8  = REX.W + 83 /5 ib
+SUB r/m64, imm8        = REX.W + 83 /5 ib
 
-XOR r/m64, r64   = REX.W + 31 /r
+XOR r/m64, r64         = REX.W + 31 /r

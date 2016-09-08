@@ -127,11 +127,7 @@ AsmArg asm_global(AsmGlobal *global)
 	return asm_arg;
 }
 
-static inline bool asm_arg_is_const(AsmArg asm_arg)
-{
-	return (asm_arg.type == ASM_ARG_CONST8) || (asm_arg.type == ASM_ARG_CONST16) ||
-		(asm_arg.type == ASM_ARG_CONST32) || (asm_arg.type == ASM_ARG_CONST64);
-}
+extern inline bool asm_arg_is_const(AsmArg asm_arg);
 
 // @TODO: Negative numbers
 static bool is_const_and_fits(AsmArg asm_arg, u32 bits)

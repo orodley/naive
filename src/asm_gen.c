@@ -78,6 +78,20 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 	return instr;
 }
 
+AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
+		AsmArg arg1, AsmArg arg2, AsmArg arg3)
+{
+	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
+	instr->op = op;
+	instr->num_args = 3;
+	instr->args[0] = arg1;
+	instr->args[1] = arg2;
+	instr->args[2] = arg3;
+	instr->label = NULL;
+
+	return instr;
+}
+
 static u32 size_of_ir_type(IrType type)
 {
 	switch (type.kind) {
@@ -277,8 +291,28 @@ static void asm_gen_instr(
 	case OP_IMUL: {
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), arg1);
-		emit_instr2(builder, IMUL, asm_virtual_register(next_vreg(builder)), arg2);
+
+		if (!asm_arg_is_const(arg1) && !asm_arg_is_const(arg2)) {
+			emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), arg1);
+			emit_instr2(builder, IMUL, asm_virtual_register(next_vreg(builder)), arg2);
+		} else {
+			AsmArg const_arg;
+			AsmArg non_const_arg;
+			if (asm_arg_is_const(arg1)) {
+				const_arg = arg1;
+				non_const_arg = arg2;
+			} else {
+				const_arg = arg2;
+				non_const_arg = arg1;
+			}
+
+			assert(!asm_arg_is_const(non_const_arg));
+
+			emit_instr3(builder, IMUL,
+					asm_virtual_register(next_vreg(builder)),
+					non_const_arg,
+					const_arg);
+		}
 
 		assign_vreg(builder, instr);
 		break;

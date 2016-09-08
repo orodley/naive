@@ -27,13 +27,13 @@ def generate_encoder(input_filename, output_filename):
             instr, encoding = line.rstrip('\n').split('=')
 
             instr_components = instr.replace(',', ' ').split()
-            assert 1 <= len(instr_components) <= 3
+            assert 1 <= len(instr_components) <= 4
             instr_name = instr_components[0]
             args = instr_components[1:]
 
-            if args == ['r64', 'r/m64']:
+            if args[:2] == ['r64', 'r/m64']:
                 arg_order = 'RM'
-            elif args == ['r/m64', 'r64']:
+            elif args[:2] == ['r/m64', 'r64']:
                 arg_order = 'MR'
             else:
                 arg_order = 'INVALID'
@@ -113,8 +113,10 @@ static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *i
             if len(encoding.args) == 0:
                 indent = '\t\t'
             else:
-                output.append("\t\tif (%s) {\n" % ' && '.join(
-                    arg_condition(arg, i) for i, arg in enumerate(encoding.args)))
+                output.append("\t\tif ((instr->num_args == %d) && %s) {\n" % \
+                        (len(encoding.args),
+                            ' && '.join(arg_condition(arg, i)
+                                for i, arg in enumerate(encoding.args))))
                 indent = '\t\t\t'
             output.append(("%sencode_instr(output_file, asm_module, instr, %s);\n" +
                            "%sreturn;\n")

@@ -115,7 +115,7 @@ typedef struct AsmInstr
 {
 	AsmOp op;
 	u32 num_args;
-	AsmArg args[2];
+	AsmArg args[3];
 	AsmLabel *label;
 } AsmInstr;
 
@@ -198,6 +198,12 @@ AsmArg asm_const32(i32 constant);
 AsmArg asm_deref(AsmArg asm_arg);
 AsmArg asm_global(AsmGlobal *global);
 AsmArg asm_label(AsmLabel *label);
+
+inline bool asm_arg_is_const(AsmArg asm_arg)
+{
+	return (asm_arg.type == ASM_ARG_CONST8) || (asm_arg.type == ASM_ARG_CONST16) ||
+		(asm_arg.type == ASM_ARG_CONST32) || (asm_arg.type == ASM_ARG_CONST64);
+}
 
 void dump_asm_function(AsmFunction *asm_function);
 void dump_asm_module(AsmModule *asm_module);
