@@ -28,7 +28,7 @@ build_decl =
 		decl_specifier_list, #0,
 		init_declarators, #1)
 
-init_declarator_list = list(ASTInitDeclarator, init_declarator)
+init_declarator_list = list(ASTInitDeclarator, init_declarator, TOK_COMMA)
 
 init_declarator =
 	seq(build_init_declarator,
