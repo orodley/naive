@@ -169,19 +169,8 @@ static void dump_asm_instr(AsmInstr *instr)
 	for (u32 i = 0; op_name[i] != '\0'; i++)
 		putchar(tolower(op_name[i]));
 
-	switch (instr->op) {
-	case MOV: case XOR: case ADD: case SUB: case IMUL: case CMP:
-		putchar(' ');
-		dump_asm_args(instr->args, 2);
-		break;
-	case PUSH: case POP: case CALL: case JMP: case JE:
-		putchar(' ');
-		dump_asm_args(instr->args, 1);
-		break;
-	case RET: case NOP:
-		break;
-	}
-
+	putchar(' ');
+	dump_asm_args(instr->args, instr->num_args);
 	putchar('\n');
 }
 
