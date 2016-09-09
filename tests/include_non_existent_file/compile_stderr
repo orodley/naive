@@ -1,0 +1,1 @@
+tests/include_non_existent_file/in.c:1:10: Error: File not found: 'Please, please never make a test file with this name!'

@@ -1,1 +1,0 @@
-const int *foo = NULL;
