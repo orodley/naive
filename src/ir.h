@@ -99,6 +99,7 @@ typedef struct IrValue
 #define IR_OPS \
 	X(OP_BIT_XOR), \
 	X(OP_IMUL), \
+	X(OP_ADD), \
 	X(OP_EQ), \
 	X(OP_CALL), \
 	X(OP_LOAD), \

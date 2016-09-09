@@ -445,6 +445,23 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 
 		return (Term) { .ctype = result_type, .value = value };
 	}
+	case ADD_EXPR: {
+		// @TODO: Determine type correctly.
+		CType result_type = {
+			.type = INTEGER_TYPE,
+			.val.integer.type = INT,
+			.val.integer.is_signed = true,
+		};
+
+		IrValue value = build_binary_instr(
+				builder,
+				// @TODO: generate fadds for float operands
+				OP_ADD,
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg1).value,
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg2).value);
+
+		return (Term) { .ctype = result_type, .value = value };
+	}
 	case EQUAL_EXPR: {
 		CType result_type = {
 			.type = INTEGER_TYPE,

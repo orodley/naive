@@ -1,4 +1,5 @@
 ADD r/m64, imm8        = REX.W + 83 /0 ib
+ADD r/m64, r64         = REX.W + 01 /r
 
 CALL sym               =         E8 cd
 
