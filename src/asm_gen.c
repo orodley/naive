@@ -120,8 +120,9 @@ static inline u32 next_vreg(AsmBuilder *builder)
 	return builder->virtual_registers.size;
 }
 
-static PhysicalRegister argument_registers[] = {
-	RDI, RSI, RDX, RCX, R8, R9,
+static RegClass argument_registers[] = {
+	REG_CLASS_DI, REG_CLASS_SI, REG_CLASS_D,
+	REG_CLASS_C, REG_CLASS_R8, REG_CLASS_R9,
 };
 
 static AsmArg asm_value(IrValue value)
@@ -131,17 +132,21 @@ static AsmArg asm_value(IrValue value)
 		assert((value.val.constant & 0xFFFFFFFF) == value.val.constant);
 		return asm_const32(value.val.constant & 0xFFFFFFFF);
 	case VALUE_INSTR: {
-		i32 vreg = value.val.instr->virtual_register;
-		assert(vreg != -1);
-		return asm_virtual_register(vreg);
+		i32 vreg_number = value.val.instr->vreg_number;
+		assert(vreg_number != -1);
+		assert(value.type.kind == IR_INT);
+		return asm_vreg(vreg_number, value.type.val.bit_width);
 	}
 	case VALUE_ARG: {
 		assert(value.type.kind == IR_INT);
 		assert(value.val.arg_index < STATIC_ARRAY_LENGTH(argument_registers));
+		assert(value.type.kind == IR_INT);
+
+		u8 width = value.type.val.bit_width;
 
 		// We always allocate virtual registers to arguments first, so arg at
 		// index i = virtual register i.
-		return asm_virtual_register(value.val.arg_index);
+		return asm_vreg(value.val.arg_index, width);
 	}
 	case VALUE_GLOBAL:
 		return asm_global(value.val.global->asm_global);
@@ -155,7 +160,7 @@ static VRegInfo *append_vreg(AsmBuilder *builder)
 		x = x;
 	}
 	VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
-	vreg_info->assigned_register = INVALID_REGISTER;
+	vreg_info->assigned_register = INVALID_REG_CLASS;
 	vreg_info->live_range_start = vreg_info->live_range_end = -1;
 
 	return vreg_info;
@@ -165,19 +170,19 @@ static VRegInfo *assign_vreg(AsmBuilder *builder, IrInstr *instr)
 {
 	u32 vreg_number = next_vreg(builder);
 	VRegInfo *vreg = append_vreg(builder);
-	instr->virtual_register = vreg_number;
+	instr->vreg_number = vreg_number;
 
 	return vreg;
 }
 
-static AsmArg pre_alloced_vreg(AsmBuilder *builder, PhysicalRegister reg)
+static AsmArg pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 {
 	u32 vreg_number = next_vreg(builder);
 
 	VRegInfo *vreg_info = append_vreg(builder);
-	vreg_info->assigned_register = reg;
+	vreg_info->assigned_register = class;
 
-	return asm_virtual_register(vreg_number);
+	return asm_vreg(vreg_number, width);
 }
 
 AsmLabel *append_label(AsmBuilder *builder, char *name)
@@ -207,8 +212,12 @@ static void asm_gen_instr(
 	case OP_RET: {
 		IrValue arg = instr->val.arg;
 		assert(ir_type_eq(ir_func->return_type, arg.type));
+		assert(ir_func->return_type.kind == IR_INT);
 
-		emit_instr2(builder, MOV, asm_physical_register(RAX), asm_value(arg));
+		emit_instr2(builder,
+				MOV,
+				asm_phys_reg(REG_CLASS_A, ir_func->return_type.val.bit_width),
+				asm_value(arg));
 		emit_instr1(builder, JMP, asm_label(builder->current_function->ret_label));
 
 		break;
@@ -228,7 +237,6 @@ static void asm_gen_instr(
 
 		assert(ir_type_eq(value.type, type));
 		assert(type.kind == IR_INT);
-		assert(type.val.bit_width == 32);
 
 		assert(pointer.kind == VALUE_INSTR);
 		IrInstr *pointer_instr = pointer.val.instr;
@@ -238,7 +246,7 @@ static void asm_gen_instr(
 		assert(slot != NULL);
 
 		emit_instr2(builder, MOV,
-				asm_deref(asm_offset_register(RSP, slot->stack_offset)),
+				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, slot->stack_offset)),
 				asm_value(value));
 		break;
 	}
@@ -247,7 +255,6 @@ static void asm_gen_instr(
 		IrType type = instr->val.load.type;
 
 		assert(type.kind == IR_INT);
-		assert(type.val.bit_width == 32);
 
 		assert(pointer.kind == VALUE_INSTR);
 		IrInstr *pointer_instr = pointer.val.instr;
@@ -257,53 +264,62 @@ static void asm_gen_instr(
 		assert(slot != NULL);
 
 		emit_instr2(builder, MOV,
-				asm_virtual_register(next_vreg(builder)),
-				asm_deref(asm_offset_register(RSP, slot->stack_offset)));
+				asm_vreg(next_vreg(builder), type.val.bit_width),
+				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, slot->stack_offset)));
 		assign_vreg(builder, instr);
 		break;
 	}
 	case OP_CALL: {
-		// @TODO: Save caller save registers. We could just push and pop
-		// everything and rely on some later pass to eliminate saves of
-		// registers that aren't live across the call, but that seems a little
-		// messy.
 		u32 arity = instr->val.call.arity;
 		assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
 		for (u32 i = 0; i < arity; i++) {
-			AsmArg arg_current_reg = asm_value(instr->val.call.arg_array[i]);
-			AsmArg arg_target_reg = pre_alloced_vreg(builder, argument_registers[i]);
-			emit_instr2(builder, MOV, arg_target_reg, arg_current_reg);
+			AsmArg arg = asm_value(instr->val.call.arg_array[i]);
+			// Use the 64-bit version of the register, as all argument
+			// registers are 64-bit.
+			if (arg.type == ASM_ARG_REGISTER)
+				arg.val.reg.width = 64;
+			AsmArg arg_target_reg = pre_alloced_vreg(builder, argument_registers[i], 64);
+			emit_instr2(builder, MOV, arg_target_reg, arg);
 		}
 
 		emit_instr1(builder, CALL, asm_value(instr->val.call.callee));
-		assign_vreg(builder, instr)->assigned_register = RAX;
+		assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
 		break;
 	}
 	case OP_BIT_XOR: {
+		assert(instr->type.kind == IR_INT);
+		u8 width = instr->type.val.bit_width;
+
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), arg1);
-		emit_instr2(builder, XOR, asm_virtual_register(next_vreg(builder)), arg2);
+		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
+		emit_instr2(builder, XOR, asm_vreg(next_vreg(builder), width), arg2);
 
 		assign_vreg(builder, instr);
 		break;
 	}
 	case OP_ADD: {
+		assert(instr->type.kind == IR_INT);
+		u8 width = instr->type.val.bit_width;
+
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), arg1);
-		emit_instr2(builder, ADD, asm_virtual_register(next_vreg(builder)), arg2);
+		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
+		emit_instr2(builder, ADD, asm_vreg(next_vreg(builder), width), arg2);
 
 		assign_vreg(builder, instr);
 		break;
 	}
 	case OP_MUL: {
+		assert(instr->type.kind == IR_INT);
+		u8 width = instr->type.val.bit_width;
+
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
 
 		if (!asm_arg_is_const(arg1) && !asm_arg_is_const(arg2)) {
-			emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), arg1);
-			emit_instr2(builder, IMUL, asm_virtual_register(next_vreg(builder)), arg2);
+			emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
+			emit_instr2(builder, IMUL, asm_vreg(next_vreg(builder), width), arg2);
 		} else {
 			AsmArg const_arg;
 			AsmArg non_const_arg;
@@ -318,7 +334,7 @@ static void asm_gen_instr(
 			assert(!asm_arg_is_const(non_const_arg));
 
 			emit_instr3(builder, IMUL,
-					asm_virtual_register(next_vreg(builder)),
+					asm_vreg(next_vreg(builder), width),
 					non_const_arg,
 					const_arg);
 		}
@@ -333,9 +349,9 @@ static void asm_gen_instr(
 		// @TODO: We should use SETE instead, once we have 1-byte registers
 		// working.
 		AsmLabel *new_label = append_label(builder, "OP_EQ_label");
-		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), asm_const32(1));
+		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), 32), asm_const32(1));
 		emit_instr1(builder, JE, asm_label(new_label));
-		emit_instr2(builder, MOV, asm_virtual_register(next_vreg(builder)), asm_const32(0));
+		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), 32), asm_const32(0));
 		emit_instr0(builder, NOP)->label = new_label;
 
 		assign_vreg(builder, instr);
@@ -354,23 +370,23 @@ static Register *arg_reg(AsmArg *arg)
 }
 
 #define ALLOCATION_ORDER \
-	X(0, R11), \
-	X(1, R10), \
-	X(2, R9), \
-	X(3, R8), \
-	X(4, RBX), \
-	X(5, R12), \
-	X(6, R13), \
-	X(7, R14), \
-	X(8, R15), \
-	X(9, RCX), \
-	X(10, RDX), \
-	X(11, RSI), \
-	X(12, RDI), \
-	X(13, RAX),
+	X(0, REG_CLASS_R11), \
+	X(1, REG_CLASS_R10), \
+	X(2, REG_CLASS_R9), \
+	X(3, REG_CLASS_R8), \
+	X(4, REG_CLASS_B), \
+	X(5, REG_CLASS_R12), \
+	X(6, REG_CLASS_R13), \
+	X(7, REG_CLASS_R14), \
+	X(8, REG_CLASS_R15), \
+	X(9, REG_CLASS_C), \
+	X(10, REG_CLASS_D), \
+	X(11, REG_CLASS_SI), \
+	X(12, REG_CLASS_DI), \
+	X(13, REG_CLASS_A),
 
 #define X(i, x) [i] = x
-static PhysicalRegister alloc_index_to_reg[] = {
+static RegClass alloc_index_to_reg[] = {
 	ALLOCATION_ORDER
 };
 #undef X
@@ -383,11 +399,11 @@ static u32 reg_to_alloc_index[] = {
 
 // We deliberately exclude RBP from this list, as we don't support omitting the
 // frame pointer and so we never use it for register allocation.
-static PhysicalRegister callee_save_registers[] = {
-	R15, R14, R13, R12, RBX,
+static RegClass callee_save_registers[] = {
+	REG_CLASS_R15, REG_CLASS_R14, REG_CLASS_R13, REG_CLASS_R12, REG_CLASS_B,
 };
 
-static bool is_callee_save(PhysicalRegister reg)
+static bool is_callee_save(RegClass reg)
 {
 	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(callee_save_registers); i++) {
 		if (callee_save_registers[i] == reg) {
@@ -399,8 +415,9 @@ static bool is_callee_save(PhysicalRegister reg)
 }
 
 #define CALLER_SAVE_REGS_BITMASK \
-	((1 << RAX) | (1 << RDI) | (1 << RSI) | (1 << RDX) | (1 << RCX) | \
-	 (1 << R8) | (1 << R9) | (1 << R10) | (1 << R11))
+	((1 << REG_CLASS_A) | (1 << REG_CLASS_DI) | (1 << REG_CLASS_SI) | \
+	 (1 << REG_CLASS_D) | (1 << REG_CLASS_C) | (1 << REG_CLASS_R8) | \
+	 (1 << REG_CLASS_R9) | (1 << REG_CLASS_R10) | (1 << REG_CLASS_R11))
 
 typedef struct CallSite
 {
@@ -417,8 +434,8 @@ static void allocate_registers(AsmBuilder *builder)
 		for (u32 j = 0; j < instr->num_args; j++) {
 			AsmArg *arg = instr->args + j;
 			Register *reg = arg_reg(arg);
-			if (reg != NULL && reg->type == VIRTUAL_REGISTER) {
-				u32 reg_num = reg->val.register_number;
+			if (reg != NULL && reg->type == V_REG) {
+				u32 reg_num = reg->val.vreg_number;
 				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
 						VRegInfo, reg_num);
 				if (vreg->live_range_start == -1) {
@@ -468,7 +485,7 @@ static void allocate_registers(AsmBuilder *builder)
 			ARRAY_REMOVE(&active_vregs, VRegInfo *, 0);
 		}
 
-		if (vreg->assigned_register  == INVALID_REGISTER) {
+		if (vreg->assigned_register  == INVALID_REG_CLASS) {
 			// @TODO: Insert spills when there are no free registers to assign.
 			assert(free_regs_bitset != 0);
 			u32 first_free_alloc_index = lowest_set_bit(free_regs_bitset);
@@ -508,7 +525,7 @@ static void allocate_registers(AsmBuilder *builder)
 				continue;
 			if ((u32)active_vreg->live_range_end >= i)
 				break;
-			assert(active_vreg->assigned_register != INVALID_REGISTER);
+			assert(active_vreg->assigned_register != INVALID_REG_CLASS);
 			live_regs_bitset &= ~(1 << active_vreg->assigned_register);
 
 			// @TODO: Remove all the invalidated vregs at once instead of
@@ -519,7 +536,7 @@ static void allocate_registers(AsmBuilder *builder)
 			VRegInfo *next_vreg =
 				ARRAY_REF(&builder->virtual_registers, VRegInfo, vreg_index);
 			if ((u32)next_vreg->live_range_start == i) {
-				assert(next_vreg->assigned_register != INVALID_REGISTER);
+				assert(next_vreg->assigned_register != INVALID_REG_CLASS);
 				live_regs_bitset |= 1 << next_vreg->assigned_register;
 
 				u32 insertion_point = active_vregs.size;
@@ -576,14 +593,14 @@ static void allocate_registers(AsmBuilder *builder)
 			if (reg == NULL)
 				continue;
 
-			if (reg->type == VIRTUAL_REGISTER) {
-				u32 reg_num = reg->val.register_number;
+			if (reg->type == V_REG) {
+				u32 vreg_number = reg->val.vreg_number;
 				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
-						VRegInfo, reg_num);
-				PhysicalRegister phys_reg = vreg->assigned_register;
+						VRegInfo, vreg_number);
+				RegClass class = vreg->assigned_register;
 
-				reg->type = PHYSICAL_REGISTER;
-				reg->val.physical_register = phys_reg;
+				reg->type = PHYS_REG;
+				reg->val.class = class;
 			}
 		}
 	}
@@ -643,7 +660,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	allocate_registers(builder);
 
-	PhysicalRegister used_callee_save_regs[
+	RegClass used_callee_save_regs[
 		STATIC_ARRAY_LENGTH(callee_save_registers)] = { 0 };
 	u32 used_callee_save_regs_size = 0;
 	for (u32 i = 0; i < builder->current_function->body.size; i++) {
@@ -651,10 +668,9 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		for (u32 j = 0; j < instr->num_args; j++) {
 			Register *reg = arg_reg(instr->args + j);
 			if (reg != NULL &&
-					reg->type == PHYSICAL_REGISTER &&
-					is_callee_save(reg->val.physical_register)) {
-				used_callee_save_regs[used_callee_save_regs_size++] =
-					reg->val.physical_register;
+					reg->type == PHYS_REG &&
+					is_callee_save(reg->val.class)) {
+				used_callee_save_regs[used_callee_save_regs_size++] = reg->val.class;
 			}
 		}
 	}
@@ -667,24 +683,32 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	ir_func->label = entry_label;
 
 	AsmInstr *prologue_first_instr =
-		emit_instr1(builder, PUSH, asm_physical_register(RBP));
+		emit_instr1(builder, PUSH, asm_phys_reg(REG_CLASS_BP, 64));
 	prologue_first_instr->label = entry_label;
-	emit_instr2(builder, MOV, asm_physical_register(RBP), asm_physical_register(RSP));
+	emit_instr2(builder,
+			MOV,
+			asm_phys_reg(REG_CLASS_BP, 64),
+			asm_phys_reg(REG_CLASS_SP, 64));
 	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
-		emit_instr1(builder, PUSH, asm_physical_register(used_callee_save_regs[i]));
+		emit_instr1(builder, PUSH, asm_phys_reg(used_callee_save_regs[i], 64));
 	}
-	emit_instr2(builder, SUB, asm_physical_register(RSP), asm_const32(builder->local_stack_usage));
+	emit_instr2(builder,
+			SUB,
+			asm_phys_reg(REG_CLASS_SP, 64),
+			asm_const32(builder->local_stack_usage));
 
 	builder->current_block = &builder->current_function->epilogue;
 
 	AsmInstr *epilogue_first_instr =
-		emit_instr2(builder, ADD, asm_physical_register(RSP),
+		emit_instr2(builder,
+				ADD,
+				asm_phys_reg(REG_CLASS_SP, 64),
 				asm_const32(builder->local_stack_usage));
 	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
-		emit_instr1(builder, POP, asm_physical_register(used_callee_save_regs[i]));
+		emit_instr1(builder, POP, asm_phys_reg(used_callee_save_regs[i], 64));
 	}
 	epilogue_first_instr->label = ret_label;
-	emit_instr1(builder, POP, asm_physical_register(RBP));
+	emit_instr1(builder, POP, asm_phys_reg(REG_CLASS_BP, 64));
 	emit_instr0(builder, RET);
 
 	return function;

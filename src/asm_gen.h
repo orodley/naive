@@ -12,7 +12,7 @@ typedef struct StackSlot
 
 typedef struct VRegInfo
 {
-	PhysicalRegister assigned_register;
+	RegClass assigned_register;
 	i32 live_range_start;
 	i32 live_range_end;
 } VRegInfo;

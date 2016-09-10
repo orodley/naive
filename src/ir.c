@@ -249,7 +249,7 @@ static inline IrInstr *append_instr(IrBuilder *builder)
 
 	IrInstr *instr = pool_alloc(&builder->trans_unit->pool, sizeof *instr);
 	instr->id = block->instrs.size;
-	instr->virtual_register = -1;
+	instr->vreg_number = -1;
 	*ARRAY_APPEND(&block->instrs, IrInstr *) = instr;
 
 	return instr;

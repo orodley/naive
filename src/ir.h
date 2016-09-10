@@ -33,7 +33,7 @@ typedef struct IrType
 
 	union
 	{
-		u32 bit_width;
+		u8 bit_width;
 	} val;
 } IrType;
 
@@ -121,7 +121,7 @@ typedef struct IrInstr
 	u32 id;
 	IrType type;
 	IrOp op;
-	i32 virtual_register; // used by asm_gen
+	i32 vreg_number; // used by asm_gen
 
 	union
 	{

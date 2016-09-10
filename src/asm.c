@@ -47,25 +47,27 @@ void init_asm_function(AsmFunction *function, char *name)
 	function->ret_label = NULL;
 }
 
-AsmArg asm_virtual_register(u32 n)
+AsmArg asm_vreg(u32 vreg_number, u8 width)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
 		.type = ASM_ARG_REGISTER,
-		.val.reg.type = VIRTUAL_REGISTER,
-		.val.reg.val.register_number = n,
+		.val.reg.width = width,
+		.val.reg.type = V_REG,
+		.val.reg.val.vreg_number = vreg_number,
 	};
 
 	return asm_arg;
 }
 
-AsmArg asm_physical_register(PhysicalRegister reg)
+AsmArg asm_phys_reg(RegClass reg, u8 width)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
 		.type = ASM_ARG_REGISTER,
-		.val.reg.type = PHYSICAL_REGISTER,
-		.val.reg.val.physical_register = reg,
+		.val.reg.width = width,
+		.val.reg.type = PHYS_REG,
+		.val.reg.val.class = reg,
 	};
 
 	return asm_arg;
@@ -77,16 +79,17 @@ AsmArg asm_deref(AsmArg asm_arg)
 	return asm_arg;
 }
 
-AsmArg asm_offset_register(PhysicalRegister reg, u64 offset)
+AsmArg asm_offset_reg(RegClass reg, u8 width, u64 offset)
 {
 	if (offset == 0) {
-		return asm_deref(asm_physical_register(reg));
+		return asm_deref(asm_phys_reg(reg, width));
 	} else {
 		AsmArg asm_arg = {
 			.is_deref = false,
 			.type = ASM_ARG_OFFSET_REGISTER,
-			.val.offset_register.reg.type = PHYSICAL_REGISTER,
-			.val.offset_register.reg.val.physical_register = reg,
+			.val.offset_register.reg.width = width,
+			.val.offset_register.reg.type = PHYS_REG,
+			.val.offset_register.reg.val.class = reg,
 			.val.offset_register.offset = offset,
 		};
 
@@ -170,23 +173,25 @@ static void dump_asm_instr(AsmInstr *instr)
 	putchar('\n');
 }
 
-#define X(x) #x
-static char *physical_register_names[] = {
-	PHYSICAL_REGISTERS
+#define X(x, b, d, w, o) { b, d, w, o }
+static char *physical_register_names[][4] = {
+	REG_CLASSES
 };
 #undef X
 
 static void dump_register(Register reg)
 {
 	switch (reg.type) {
-	case PHYSICAL_REGISTER: {
-		char *reg_name = physical_register_names[reg.val.physical_register];
+	case PHYS_REG: {
+		char *reg_name = physical_register_names
+				[reg.val.class]
+				[lowest_set_bit(reg.width) - 3];
 		for (u32 i = 0; reg_name[i] != '\0'; i++)
 			putchar(tolower(reg_name[i]));
 		break;
 	}
-	case VIRTUAL_REGISTER:
-		printf("#%u", reg.val.register_number);
+	case V_REG:
+		printf("#%u", reg.val.vreg_number);
 		break;
 	}
 }
@@ -335,7 +340,7 @@ static inline void write_int(FILE *file, u64 x, u32 size)
 	}
 }
 
-static inline PhysicalRegister get_register(AsmArg *arg)
+static inline RegClass get_reg_class(AsmArg *arg)
 {
 	Register reg;
 	if (arg->type == ASM_ARG_REGISTER) {
@@ -345,29 +350,29 @@ static inline PhysicalRegister get_register(AsmArg *arg)
 		reg = arg->val.offset_register.reg;
 	}
 
-	assert(reg.type == PHYSICAL_REGISTER);
-	return reg.val.physical_register;
+	assert(reg.type == PHYS_REG);
+	return reg.val.class;
 }
 
-static u32 encoded_register_number(PhysicalRegister reg)
+static u32 encoded_register_number(RegClass reg)
 {
 	switch (reg) {
-	case RAX: return 0;
-	case RCX: return 1;
-	case RDX: return 2;
-	case RBX: return 3;
-	case RSP: return 4;
-	case RBP: return 5;
-	case RSI: return 6;
-	case RDI: return 7;
-	case R8:  return 8;
-	case R9:  return 9;
-	case R10: return 10;
-	case R11: return 11;
-	case R12: return 12;
-	case R13: return 13;
-	case R14: return 14;
-	case R15: return 15;
+	case REG_CLASS_A: return 0;
+	case REG_CLASS_C: return 1;
+	case REG_CLASS_D: return 2;
+	case REG_CLASS_B: return 3;
+	case REG_CLASS_SP: return 4;
+	case REG_CLASS_BP: return 5;
+	case REG_CLASS_SI: return 6;
+	case REG_CLASS_DI: return 7;
+	case REG_CLASS_R8:  return 8;
+	case REG_CLASS_R9:  return 9;
+	case REG_CLASS_R10: return 10;
+	case REG_CLASS_R11: return 11;
+	case REG_CLASS_R12: return 12;
+	case REG_CLASS_R13: return 13;
+	case REG_CLASS_R14: return 14;
+	case REG_CLASS_R15: return 15;
 	default: UNIMPLEMENTED;
 	}
 }
@@ -399,16 +404,17 @@ static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
 	encoded_instr->has_modrm = true;
 
 	if (arg->type == ASM_ARG_REGISTER) {
-		PhysicalRegister reg = get_register(arg);
+		RegClass class = get_reg_class(arg);
 
 		if (arg->is_deref) {
-			switch (reg) {
-			case RAX: case RCX: case RDX: case RBX: case RSI: case RDI: {
+			switch (class) {
+			case REG_CLASS_A: case REG_CLASS_C: case REG_CLASS_D:
+			case REG_CLASS_B: case REG_CLASS_SI: case REG_CLASS_DI: {
 				encoded_instr->mod = 0;
-				encoded_instr->rm = encoded_register_number(reg);
+				encoded_instr->rm = encoded_register_number(class);
 				return;
 			}
-			case RSP: {
+			case REG_CLASS_SP: {
 				// Mod = 0, R/M = 4 means SIB addressing
 				encoded_instr->mod = 0;
 				encoded_instr->rm = 4;
@@ -420,7 +426,7 @@ static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
 
 				return;
 			}
-			case RBP: {
+			case REG_CLASS_BP: {
 				// Mod = 1, R/M = 5 means RBP + disp8
 				encoded_instr->mod = 1;
 				encoded_instr->rm = 5;
@@ -433,7 +439,7 @@ static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
 			}
 		} else {
 			encoded_instr->mod = 3;
-			encoded_instr->rm = encoded_register_number(reg);
+			encoded_instr->rm = encoded_register_number(class);
 			return;
 		}
 	} else if (arg->type == ASM_ARG_OFFSET_REGISTER) {
@@ -448,14 +454,15 @@ static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
 		else
 			assert(!"Offset too large!");
 
-		PhysicalRegister reg = get_register(arg);
+		RegClass reg = get_reg_class(arg);
 
 		switch (reg) {
-		case RAX: case RCX: case RDX: case RBX: case RBP: case RSI: case RDI: {
+		case REG_CLASS_A: case REG_CLASS_C: case REG_CLASS_D: case REG_CLASS_B:
+		case REG_CLASS_BP: case REG_CLASS_SI: case REG_CLASS_DI: {
 			encoded_instr->rm = encoded_register_number(reg);
 			return;
 		}
-		case RSP:
+		case REG_CLASS_SP:
 			// Same as above: SIB addressing
 			encoded_instr->rm = 4;
 			encoded_instr->has_sib = true;
@@ -513,7 +520,7 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 	memcpy(encoded_instr.opcode, opcode, opcode_size);
 	if (reg_in_opcode) {
 		encoded_instr.opcode_extension =
-			encoded_register_number(get_register(instr->args));
+			encoded_register_number(get_reg_class(instr->args));
 	}
 
 	if (reg_and_rm) {
@@ -535,8 +542,8 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		if (register_operand == NULL) {
 			encoded_instr.reg = 0;
 		} else {
-			PhysicalRegister r_register = get_register(register_operand);
-			encoded_instr.reg = encoded_register_number(r_register);
+			encoded_instr.reg =
+				encoded_register_number(get_reg_class(register_operand));
 		}
 		add_mod_rm_arg(&encoded_instr, memory_operand);
 	} else if (opcode_extension != -1) {

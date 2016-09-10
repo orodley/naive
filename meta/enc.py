@@ -31,10 +31,11 @@ def generate_encoder(input_filename, output_filename):
             instr_name = instr_components[0]
             args = instr_components[1:]
 
-            if args[:2] == ['r64', 'r/m64']:
-                arg_order = 'RM'
-            elif args[:2] == ['r/m64', 'r64']:
-                arg_order = 'MR'
+            if len(args) >= 2:
+                if args[1].startswith('r/m'):
+                    arg_order = 'RM'
+                elif args[0].startswith('r/m'):
+                    arg_order = 'MR'
             else:
                 arg_order = 'INVALID'
 
@@ -141,12 +142,23 @@ static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *i
     with open(output_filename, 'w') as f:
         f.writelines(output)
 
+def check_width(width):
+    assert int(width) in [8, 16, 32, 64]
+
 def arg_condition(arg, i):
-    if arg == 'r/m64':
-        return ('((instr->args[%d].type == ASM_ARG_REGISTER)'
-                + ' || (instr->args[%d].type == ASM_ARG_OFFSET_REGISTER))') % (i, i)
-    if arg == 'r64':
-        return '(instr->args[%d].type == ASM_ARG_REGISTER) && !instr->args[%d].is_deref' % (i, i)
+    if arg.startswith('r/m'):
+        width = arg[3:]
+        check_width(width)
+        return ('((instr->args[%d].type == ASM_ARG_REGISTER'
+                + ' && instr->args[%d].val.reg.width == %s)'
+                + ' || (instr->args[%d].is_deref'
+                + ' && instr->args[%d].val.reg.width == 64))') % (i, i, width, i, i)
+    if arg[0] == 'r':
+        width = arg[1:]
+        check_width(width)
+        return ('(instr->args[%d].type == ASM_ARG_REGISTER)'
+                + ' && instr->args[%d].val.reg.width == %s'
+                + ' && !instr->args[%d].is_deref') % (i, i, width, i)
     if arg == 'imm8':
         return '(is_const_and_fits(instr->args[%d], 8))' % i
     if arg == 'imm32':
