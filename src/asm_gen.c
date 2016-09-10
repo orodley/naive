@@ -345,9 +345,9 @@ static void asm_gen_instr(
 	case OP_EQ: {
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		emit_instr2(builder, CMP, arg1, arg2);
 		u32 vreg = next_vreg(builder);
 		emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
+		emit_instr2(builder, CMP, arg1, arg2);
 		emit_instr1(builder, SETE, asm_vreg(vreg, 8));
 
 		assign_vreg(builder, instr);
