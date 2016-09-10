@@ -346,13 +346,9 @@ static void asm_gen_instr(
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
 		emit_instr2(builder, CMP, arg1, arg2);
-		// @TODO: We should use SETE instead, once we have 1-byte registers
-		// working.
-		AsmLabel *new_label = append_label(builder, "OP_EQ_label");
-		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), 32), asm_const32(1));
-		emit_instr1(builder, JE, asm_label(new_label));
-		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), 32), asm_const32(0));
-		emit_instr0(builder, NOP)->label = new_label;
+		u32 vreg = next_vreg(builder);
+		emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
+		emit_instr1(builder, SETE, asm_vreg(vreg, 8));
 
 		assign_vreg(builder, instr);
 		break;

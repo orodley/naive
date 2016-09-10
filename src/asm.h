@@ -102,6 +102,7 @@ typedef struct AsmArg
 	X(POP), \
 	X(IMUL), \
 	X(CMP), \
+	X(SETE), \
 	X(JMP), \
 	X(JE)
 
