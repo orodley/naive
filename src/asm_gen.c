@@ -445,6 +445,7 @@ int compare_live_range_start(const void *a, const void *b)
 }
 
 // @TODO: Save all caller save registers that are live across calls.
+// @TODO: Do proper liveness analysis - right now we do nothing about jumps.
 static void allocate_registers(AsmBuilder *builder)
 {
 	Array(AsmInstr) *body = &builder->current_function->body;
