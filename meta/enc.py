@@ -95,11 +95,6 @@ def generate_encoder(input_filename, output_filename):
 // @NOTE: This is an automatically generated file! Do not edit it!
 //        It was generated from '%s', edit that instead
 
-typedef struct Bytes_
-{
-    u8 bytes[4];
-} Bytes_;
-
 static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *instr)
 {
 \tswitch (instr->op) {
@@ -174,7 +169,7 @@ def to_c_val(x):
     if isinstance(x, str):
         return x
     if isinstance(x, list):
-        return '((Bytes_){ .bytes = {' + ', '.join(map(to_c_val, x)) + '} }).bytes'
+        return '(u8[]){ %s }' % ', '.join(map(to_c_val, x))
 
     assert False
 
