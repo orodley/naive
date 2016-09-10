@@ -96,6 +96,7 @@ typedef struct AsmArg
 	X(RET), \
 	X(CALL), \
 	X(XOR), \
+	X(AND), \
 	X(ADD), \
 	X(SUB), \
 	X(PUSH), \
@@ -103,6 +104,7 @@ typedef struct AsmArg
 	X(IMUL), \
 	X(CMP), \
 	X(SETE), \
+	X(SETNE), \
 	X(JMP), \
 	X(JE)
 

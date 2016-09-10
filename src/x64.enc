@@ -3,9 +3,12 @@ ADD r/m32, r32         =         01 /r
 ADD r/m64, imm8        = REX.W + 83 /0 ib
 ADD r/m64, r64         = REX.W + 01 /r
 
+AND r/m32, imm8        =         83 /4 ib
+
 CALL sym               =         E8 cd
 
 CMP r/m32 imm32        =         81 /7 id
+CMP r/m32 r32          =         39 /r
 CMP r/m64 imm32        = REX.W + 81 /7 id
 
 IMUL r32, r/m32        =         [0F AF] /r
@@ -34,6 +37,8 @@ PUSH r64               =         50 +rd
 RET                    =         C3
 
 SETE r/m8              =         [0F 94] /0
+
+SETNE r/m8             =         [0F 95] /0
 
 SUB r/m64, imm8        = REX.W + 83 /5 ib
 

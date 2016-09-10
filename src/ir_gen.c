@@ -474,6 +474,21 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr)
 
 		return (Term) { .ctype = result_type, .value = value };
 	}
+	case NOT_EQUAL_EXPR: {
+		CType result_type = {
+			.type = INTEGER_TYPE,
+			.val.integer.type = INT,
+			.val.integer.is_signed = true,
+		};
+
+		IrValue value = build_binary_instr(
+				builder,
+				OP_NEQ,
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg1).value,
+				ir_gen_expression(builder, scope, expr->val.binary_op.arg2).value);
+
+		return (Term) { .ctype = result_type, .value = value };
+	}
 	case IDENTIFIER_EXPR: {
 		Binding *binding = binding_for_name(scope, expr->val.identifier);
 		assert(binding != NULL);

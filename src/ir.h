@@ -101,6 +101,7 @@ typedef struct IrValue
 	X(OP_MUL), \
 	X(OP_ADD), \
 	X(OP_EQ), \
+	X(OP_NEQ), \
 	X(OP_CALL), \
 	X(OP_LOAD), \
 	X(OP_STORE), \
