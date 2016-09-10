@@ -357,6 +357,7 @@ static inline RegClass get_reg_class(AsmArg *arg)
 static u32 encoded_register_number(RegClass reg)
 {
 	switch (reg) {
+	case INVALID_REG_CLASS: UNREACHABLE;
 	case REG_CLASS_A: return 0;
 	case REG_CLASS_C: return 1;
 	case REG_CLASS_D: return 2;
@@ -373,7 +374,6 @@ static u32 encoded_register_number(RegClass reg)
 	case REG_CLASS_R13: return 13;
 	case REG_CLASS_R14: return 14;
 	case REG_CLASS_R15: return 15;
-	default: UNIMPLEMENTED;
 	}
 }
 

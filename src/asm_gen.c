@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdlib.h>
 
 #include "array.h"
 #include "asm.h"
@@ -421,6 +422,17 @@ typedef struct CallSite
 	u32 active_caller_save_regs_bitset;
 } CallSite;
 
+int compare_live_range_start(const void *a, const void *b)
+{
+	const VRegInfo *live_range_a = (VRegInfo *)a, *live_range_b = (VRegInfo *)b;
+	int x = live_range_a->live_range_start, y = live_range_b->live_range_start;
+	if (x < y)
+		return -1;
+	if (x == y)
+		return 0;
+	return 1;
+}
+
 // @TODO: Save all caller save registers that are live across calls.
 static void allocate_registers(AsmBuilder *builder)
 {
@@ -458,16 +470,32 @@ static void allocate_registers(AsmBuilder *builder)
 	// Start with all regs free
 	free_regs_bitset = (1 << STATIC_ARRAY_LENGTH(alloc_index_to_reg)) - 1;
 
-	Array(VRegInfo *) active_vregs;
-	ARRAY_INIT(&active_vregs, VRegInfo *, 16);
+	// virtual_regsiters isn't necessarily sorted by live range start.
+	// i.e. if RAX is pre-allocated from a function call and we don't use it
+	// until later. Linear scan depends on this ordering, so we sort it first.
+	// We can't sort it in place because the indices are used to look vregs up
+	// by vreg number.
+	VRegInfo **live_ranges = malloc(builder->virtual_registers.size * sizeof *live_ranges);
+	u32 live_range_out_index = 0;
 	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
 		VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
-
 		// This indicates that we assigned a vreg to something that wasn't
 		// used, e.g. a pre-alloced RAX for the return value of a function.
 		if (vreg->live_range_start == -1) {
 			assert(vreg->live_range_end == -1);
+			continue;
 		}
+
+		live_ranges[live_range_out_index] = vreg;
+		live_range_out_index++;
+	}
+	u32 num_live_ranges = live_range_out_index;
+	qsort(live_ranges, num_live_ranges, sizeof live_ranges[0], compare_live_range_start);
+
+	Array(VRegInfo *) active_vregs;
+	ARRAY_INIT(&active_vregs, VRegInfo *, 16);
+	for (u32 i = 0; i < num_live_ranges; i++) {
+		VRegInfo *vreg = live_ranges[i];
 
 		while (active_vregs.size != 0) {
 			VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, 0);
@@ -506,6 +534,7 @@ static void allocate_registers(AsmBuilder *builder)
 		}
 		*ARRAY_INSERT(&active_vregs, VRegInfo *, insertion_point) = vreg;
 	}
+	free(live_ranges);
 
 	array_clear(&active_vregs);
 	Array(CallSite) callsites;
