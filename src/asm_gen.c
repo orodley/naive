@@ -297,7 +297,7 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
-	case OP_IMUL: {
+	case OP_MUL: {
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
 
