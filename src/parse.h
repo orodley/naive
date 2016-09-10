@@ -154,6 +154,23 @@ typedef enum ASTStatementType
 } ASTStatementType;
 #undef X
 
+typedef struct
+{
+	enum
+	{
+		FOR_INIT_DECL,
+		FOR_INIT_EXPR,
+	} init_type;
+	union
+	{
+		struct ASTDecl *decl;
+		ASTExpr *expr;
+	} init;
+	ASTExpr *condition;
+	ASTExpr *update_expr;
+	struct ASTStatement *body;
+} ASTForStatement;
+
 typedef struct ASTStatement
 {
 	ASTStatementType type;
@@ -177,23 +194,7 @@ typedef struct ASTStatement
 			struct ASTStatement *then_statement;
 			struct ASTStatement *else_statement;
 		} if_statement;
-		// @TODO: For loops with declarations.
-		struct
-		{
-			enum
-			{
-				FOR_INIT_DECL,
-				FOR_INIT_EXPR,
-			} init_type;
-			union
-			{
-				struct ASTDecl *decl;
-				ASTExpr *expr;
-			} init;
-			ASTExpr *condition;
-			ASTExpr *update_expr;
-			struct ASTStatement *body;
-		} for_statement;
+		ASTForStatement for_statement;
 		char *goto_label;
 		ASTExpr *expr;
 	} val;

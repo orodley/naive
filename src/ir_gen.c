@@ -298,45 +298,49 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	array_free(global_bindings);
 }
 
+static void add_decl_to_scope(IrBuilder *builder, Scope *scope, ASTDecl *decl)
+{
+	ASTInitDeclarator *init_declarator = decl->init_declarators;
+	while (init_declarator != NULL) {
+		CDecl cdecl;
+		decl_to_cdecl(decl->decl_specifier_list,
+				init_declarator->declarator,
+				&cdecl);
+
+		Binding *binding = ARRAY_APPEND(&scope->bindings, Binding);
+		cdecl_to_binding(builder, &cdecl, binding);
+
+		ASTInitializer *initializer = init_declarator->initializer;
+		if (initializer != NULL) {
+			assert(initializer->type == EXPR_INITIALIZER);
+			build_store(
+				builder,
+				binding->term.value,
+				ir_gen_expression(builder, scope, initializer->val.expr).value,
+				c_type_to_ir_type(&binding->term.ctype));
+		}
+
+		init_declarator = init_declarator->next;
+	}
+}
+
 static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *statement)
 {
 	switch (statement->type) {
 	case COMPOUND_STATEMENT: {
-		Scope *block_scope = malloc(sizeof *block_scope);
-		block_scope->parent_scope = scope;
-		ARRAY_INIT(&block_scope->bindings, Binding, 5);
+		Scope block_scope;
+		block_scope.parent_scope = scope;
+		ARRAY_INIT(&block_scope.bindings, Binding, 5);
 
 		ASTBlockItem *block_item_list = statement->val.block_item_list;
 		while (block_item_list != NULL) {
 			switch (block_item_list->type) {
 			case BLOCK_ITEM_DECL: {
-				ASTDecl *decl = block_item_list->val.decl;
-				ASTInitDeclarator *init_declarator = decl->init_declarators;
-				while (init_declarator != NULL) {
-					CDecl cdecl;
-					decl_to_cdecl(decl->decl_specifier_list,
-							init_declarator->declarator,
-							&cdecl);
-
-					Binding *binding = ARRAY_APPEND(&block_scope->bindings, Binding);
-					cdecl_to_binding(builder, &cdecl, binding);
-
-					ASTInitializer *initializer = init_declarator->initializer;
-					if (initializer != NULL) {
-						assert(initializer->type == EXPR_INITIALIZER);
-						build_store(
-							builder,
-							binding->term.value,
-							ir_gen_expression(builder, scope, initializer->val.expr).value,
-							c_type_to_ir_type(&binding->term.ctype));
-					}
-
-					init_declarator = init_declarator->next;
-				}
+				add_decl_to_scope(builder, &block_scope, block_item_list->val.decl);
 				break;
 			}
 			case BLOCK_ITEM_STATEMENT:
-				ir_gen_statement(builder, block_scope, block_item_list->val.statement);
+				ir_gen_statement(builder, &block_scope, block_item_list->val.statement);
 				break;
 			}
 
@@ -404,6 +408,43 @@ static void ir_gen_statement(IrBuilder *builder, Scope *scope, ASTStatement *sta
 
 		builder->current_block = body;
 		ir_gen_statement(builder, scope, body_statement);
+		build_branch(builder, pre_header);
+
+		builder->current_block = after;
+
+		break;
+	}
+	case FOR_STATEMENT: {
+		IrBlock *pre_header = add_block(builder, "for.ph");
+		IrBlock *body = add_block(builder, "for.body");
+		IrBlock *after = add_block(builder, "for.after");
+
+		Scope init_scope;
+		Scope *for_scope;
+
+		ASTForStatement *f = &statement->val.for_statement;
+		if (f->init_type == FOR_INIT_DECL) {
+			init_scope.parent_scope = scope;
+			ARRAY_INIT(&init_scope.bindings, Binding, 1);
+			add_decl_to_scope(builder, &init_scope, f->init.decl);
+
+			for_scope = &init_scope;
+		} else {
+			assert(f->init_type == FOR_INIT_EXPR);
+			ir_gen_expression(builder, scope, f->init.expr);
+			for_scope = scope;
+		}
+
+		build_branch(builder, pre_header);
+		builder->current_block = pre_header;
+		Term condition_term = ir_gen_expression(builder, for_scope, f->condition);
+
+		assert(condition_term.ctype.type == INTEGER_TYPE);
+		build_cond(builder, condition_term.value, body, after);
+
+		builder->current_block = body;
+		ir_gen_statement(builder, for_scope, f->body);
+		ir_gen_expression(builder, for_scope, f->update_expr);
 		build_branch(builder, pre_header);
 
 		builder->current_block = after;
