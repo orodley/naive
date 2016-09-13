@@ -598,6 +598,25 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 	}
 }
 
+static Term ir_gen_binary_operator(IrBuilder *builder, Scope *scope,
+		ASTExpr *expr, IrOp ir_op)
+{
+	// @TODO: Determine type correctly.
+	CType result_type = {
+		.type = INTEGER_TYPE,
+		.val.integer.type = INT,
+		.val.integer.is_signed = true,
+	};
+
+	IrValue value = build_binary_instr(
+			builder,
+			ir_op,
+			ir_gen_expression(builder, scope, expr->val.binary_op.arg1, RVALUE_CONTEXT).value,
+			ir_gen_expression(builder, scope, expr->val.binary_op.arg2, RVALUE_CONTEXT).value);
+
+	return (Term) { .ctype = result_type, .value = value };
+}
+
 static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr,
 		ExprContext context)
 {
@@ -683,84 +702,16 @@ static Term ir_gen_expression(IrBuilder *builder, Scope *scope, ASTExpr *expr,
 
 		return (Term) { .ctype = result_type, .value = value };
 	}
-	case BIT_XOR_EXPR: {
-		// @TODO: Determine type correctly.
-		CType result_type = {
-			.type = INTEGER_TYPE,
-			.val.integer.type = INT,
-			.val.integer.is_signed = true,
-		};
-
-		IrValue value = build_binary_instr(
-				builder,
-				OP_BIT_XOR,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg1, RVALUE_CONTEXT).value,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg2, RVALUE_CONTEXT).value);
-
-		return (Term) { .ctype = result_type, .value = value };
-	}
-	case MULTIPLY_EXPR: {
-		// @TODO: Determine type correctly.
-		CType result_type = {
-			.type = INTEGER_TYPE,
-			.val.integer.type = INT,
-			.val.integer.is_signed = true,
-		};
-
-		IrValue value = build_binary_instr(
-				builder,
-				OP_MUL,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg1, RVALUE_CONTEXT).value,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg2, RVALUE_CONTEXT).value);
-
-		return (Term) { .ctype = result_type, .value = value };
-	}
-	case ADD_EXPR: {
-		// @TODO: Determine type correctly.
-		CType result_type = {
-			.type = INTEGER_TYPE,
-			.val.integer.type = INT,
-			.val.integer.is_signed = true,
-		};
-
-		IrValue value = build_binary_instr(
-				builder,
-				OP_ADD,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg1, RVALUE_CONTEXT).value,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg2, RVALUE_CONTEXT).value);
-
-		return (Term) { .ctype = result_type, .value = value };
-	}
-	case EQUAL_EXPR: {
-		CType result_type = {
-			.type = INTEGER_TYPE,
-			.val.integer.type = INT,
-			.val.integer.is_signed = true,
-		};
-
-		IrValue value = build_binary_instr(
-				builder,
-				OP_EQ,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg1, RVALUE_CONTEXT).value,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg2, RVALUE_CONTEXT).value);
-
-		return (Term) { .ctype = result_type, .value = value };
-	}
-	case NOT_EQUAL_EXPR: {
-		CType result_type = {
-			.type = INTEGER_TYPE,
-			.val.integer.type = INT,
-			.val.integer.is_signed = true,
-		};
-
-		IrValue value = build_binary_instr(
-				builder,
-				OP_NEQ,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg1, RVALUE_CONTEXT).value,
-				ir_gen_expression(builder, scope, expr->val.binary_op.arg2, RVALUE_CONTEXT).value);
-
-		return (Term) { .ctype = result_type, .value = value };
-	}
+	case BIT_XOR_EXPR:
+		return ir_gen_binary_operator(builder, scope, expr, OP_BIT_XOR);
+	case MULTIPLY_EXPR:
+		return ir_gen_binary_operator(builder, scope, expr, OP_MUL);
+	case ADD_EXPR:
+		return ir_gen_binary_operator(builder, scope, expr, OP_ADD);
+	case EQUAL_EXPR:
+		return ir_gen_binary_operator(builder, scope, expr, OP_EQ);
+	case NOT_EQUAL_EXPR:
+		return ir_gen_binary_operator(builder, scope, expr, OP_NEQ);
 	case FUNCTION_CALL_EXPR: {
 		Term callee = ir_gen_expression(builder, scope,
 				expr->val.function_call.callee, RVALUE_CONTEXT);
