@@ -286,7 +286,7 @@ for (;;) {
 \t\treturn first;
 """ % self.generate_parser(args[2])
             else:
-                seperator = ""
+                seperator = "\n"
 
             return self.emit_function(
 """
@@ -295,8 +295,9 @@ if (!first.success)
 \treturn %s;
 
 %s *curr = first.result;
-for (;;) {%s
+for (;;) {
 \tcurr->next = NULL;
+%s
 \tParserResult next = %s(parser);
 \tif (!next.success)
 \t\treturn first;

@@ -23,6 +23,7 @@ static void block_free(IrBlock *block)
 void trans_unit_init(TransUnit *trans_unit)
 {
 	ARRAY_INIT(&trans_unit->globals, IrGlobal *, 10);
+	ARRAY_INIT(&trans_unit->types, IrGlobal *, 5);
 	pool_init(&trans_unit->pool, 512);
 }
 
@@ -42,6 +43,7 @@ void trans_unit_free(TransUnit *trans_unit)
 	}
 
 	array_free(&trans_unit->globals);
+	array_free(&trans_unit->types);
 	pool_free(&trans_unit->pool);
 }
 
@@ -78,16 +80,32 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	return new_global;
 }
 
-bool ir_type_eq(IrType a, IrType b)
+IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields)
 {
-	if (a.kind != b.kind)
+	IrType *new_type = pool_alloc(&trans_unit->pool, sizeof *new_type);
+	*ARRAY_APPEND(&trans_unit->types, IrType *) = new_type;
+
+	new_type->kind = IR_STRUCT;
+	new_type->val.strukt.name = name;
+	new_type->val.strukt.num_fields = num_fields;
+	IrStructField *fields = pool_alloc(&trans_unit->pool, num_fields * sizeof *fields);
+	new_type->val.strukt.fields = fields;
+
+	return new_type;
+}
+
+bool ir_type_eq(IrType *a, IrType *b)
+{
+	if (a->kind != b->kind)
 		return false;
 
-	switch (a.kind) {
+	switch (a->kind) {
 	case IR_INT:
-		return a.val.bit_width == b.val.bit_width;
+		return a->val.bit_width == b->val.bit_width;
 	case IR_POINTER: case IR_FUNCTION:
 		return true;
+	case IR_STRUCT:
+		return streq(a->val.strukt.name, b->val.strukt.name);
 	}
 }
 
@@ -103,6 +121,8 @@ void dump_ir_type(IrType type)
 	case IR_FUNCTION:
 		fputs("fn", stdout);
 		break;
+	case IR_STRUCT:
+		printf("$%s", type.val.strukt.name);
 	}
 }
 
@@ -140,6 +160,12 @@ static void dump_instr(IrInstr *instr)
 	switch (instr->op) {
 	case OP_LOCAL:
 		dump_ir_type(instr->val.type);
+		break;
+	case OP_FIELD:
+		dump_value(instr->val.field.struct_ptr);
+		fputs(", ", stdout);
+		dump_ir_type(instr->val.field.struct_type);
+		printf(", %d", instr->val.field.field_number);
 		break;
 	case OP_LOAD:
 		dump_ir_type(instr->val.load.type);
@@ -183,9 +209,22 @@ static void dump_instr(IrInstr *instr)
 
 void dump_trans_unit(TransUnit *trans_unit)
 {
-	Array(IrGlobal *) *globals = &trans_unit->globals;
-	for (u32 i = 0; i < globals->size; i++) {
-		IrGlobal *global = *ARRAY_REF(globals, IrGlobal *, i);
+	for (u32 i = 0; i < trans_unit->types.size; i++) {
+		IrType *type = *ARRAY_REF(&trans_unit->types, IrType *, i);
+		assert(type->kind == IR_STRUCT);
+
+		printf("struct $%s\n{\n", type->val.strukt.name);
+		for (u32 i = 0; i < type->val.strukt.num_fields; i++) {
+			putchar('\t');
+			dump_ir_type(type->val.strukt.fields[i].type);
+			putchar('\n');
+		}
+		puts("}");
+	}
+	putchar('\n');
+
+	for (u32 i = 0; i < trans_unit->globals.size; i++) {
+		IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
 
 		switch (global->kind) {
 		case IR_GLOBAL_FUNCTION: {
@@ -232,7 +271,7 @@ void dump_trans_unit(TransUnit *trans_unit)
 			UNIMPLEMENTED;
 		}
 
-		if (i != globals->size - 1)
+		if (i != trans_unit->globals.size - 1)
 			putchar('\n');
 	}
 }
@@ -279,7 +318,7 @@ IrInstr *build_cond(IrBuilder *builder,
 static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 {
 	switch (op) {
-	case OP_LOCAL: case OP_LOAD: case OP_STORE:
+	case OP_LOCAL: case OP_FIELD: case OP_LOAD: case OP_STORE:
 	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL:
 		UNREACHABLE;
 	case OP_BIT_XOR: return arg1 ^ arg2;
@@ -305,6 +344,19 @@ IrValue build_local(IrBuilder *builder, IrType type)
 	instr->type = (IrType) { .kind = IR_POINTER };
 	instr->op = OP_LOCAL;
 	instr->val.type = type;
+
+	return value_instr(instr);
+}
+
+IrValue build_field(IrBuilder *builder, IrValue struct_ptr, IrType struct_type,
+		u32 field_number)
+{
+	IrInstr *instr = append_instr(builder);
+	instr->type = (IrType) { .kind = IR_POINTER };
+	instr->op = OP_FIELD;
+	instr->val.field.struct_ptr = struct_ptr;
+	instr->val.field.struct_type = struct_type;
+	instr->val.field.field_number = field_number;
 
 	return value_instr(instr);
 }
@@ -346,7 +398,7 @@ IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg)
 
 IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2)
 {
-	assert(ir_type_eq(arg1.type, arg2.type));
+	assert(ir_type_eq(&arg1.type, &arg2.type));
 
 	IrType type = arg1.type;
 

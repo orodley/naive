@@ -4,12 +4,6 @@
 #include "asm.h"
 #include "ir.h"
 
-typedef struct StackSlot
-{
-	u32 ir_instr_id;
-	u32 stack_offset;
-} StackSlot;
-
 typedef struct VRegInfo
 {
 	RegClass assigned_register;
@@ -23,7 +17,6 @@ typedef struct AsmBuilder
 	AsmFunction *current_function;
 	Array(AsmInstr) *current_block;
 
-	Array(StackSlot) stack_slots;
 	Array(VRegInfo) virtual_registers;
 	u32 local_stack_usage;
 } AsmBuilder;

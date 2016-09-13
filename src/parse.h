@@ -114,7 +114,7 @@ typedef struct ASTExpr
 		} ternary_op;
 		struct
 		{
-			struct ASTExpr *struct_value;
+			struct ASTExpr *struct_expr;
 			char *field_name;
 		} struct_field;
 		struct

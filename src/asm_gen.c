@@ -13,7 +13,6 @@ void init_asm_builder(AsmBuilder *builder)
 	init_asm_module(&builder->asm_module);
 
 	builder->local_stack_usage = 0;
-	builder->stack_slots = ARRAY_ZEROED;
 	builder->virtual_registers = ARRAY_ZEROED;
 }
 
@@ -21,8 +20,6 @@ void free_asm_builder(AsmBuilder *builder)
 {
 	free_asm_module(&builder->asm_module);
 
-	if (ARRAY_IS_VALID(&builder->stack_slots))
-		array_free(&builder->stack_slots);
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
 }
@@ -39,9 +36,6 @@ static AsmGlobal *append_function(AsmBuilder *builder, char *name)
 	builder->current_block = &new_function->body;
 
 	builder->local_stack_usage = 0;
-	if (ARRAY_IS_VALID(&builder->stack_slots))
-		array_free(&builder->stack_slots);
-	ARRAY_INIT(&builder->stack_slots, StackSlot, 5);
 
 	return new_global;
 }
@@ -97,21 +91,12 @@ static u32 size_of_ir_type(IrType type)
 {
 	switch (type.kind) {
 	case IR_INT:
-		return type.val.bit_width;
+		return type.val.bit_width / 8;
 	case IR_POINTER: case IR_FUNCTION:
 		return 8;
+	case IR_STRUCT:
+		UNIMPLEMENTED;
 	}
-}
-
-static StackSlot *stack_slot_for_id(AsmBuilder *builder, u32 id)
-{
-	for (u32 i = 0; i < builder->stack_slots.size; i++) {
-		StackSlot *stack_slot = ARRAY_REF(&builder->stack_slots, StackSlot, i);
-		if (stack_slot->ir_instr_id == id)
-			return stack_slot;
-	}
-
-	return NULL;
 }
 
 // @TODO: Rethink name? "next" kinda suggests side effects, i.e. "move to the
@@ -133,10 +118,13 @@ static AsmArg asm_value(IrValue value)
 		assert((value.val.constant & 0xFFFFFFFF) == value.val.constant);
 		return asm_const32(value.val.constant & 0xFFFFFFFF);
 	case VALUE_INSTR: {
-		i32 vreg_number = value.val.instr->vreg_number;
+		IrInstr *instr = value.val.instr;
+
+		i32 vreg_number = instr->vreg_number;
 		assert(vreg_number != -1);
-		assert(value.type.kind == IR_INT);
-		return asm_vreg(vreg_number, value.type.val.bit_width);
+
+		assert(value.type.kind == IR_INT || value.type.kind == IR_POINTER);
+		return asm_vreg(vreg_number, size_of_ir_type(instr->type) * 8);
 	}
 	case VALUE_ARG: {
 		assert(value.type.kind == IR_INT);
@@ -200,19 +188,45 @@ static void asm_gen_instr(
 {
 	switch (instr->op) {
 	case OP_LOCAL: {
-		StackSlot *slot = ARRAY_APPEND(&builder->stack_slots, StackSlot);
-		slot->ir_instr_id = instr->id;
-
 		// @TODO: Alignment of stack slots. This could probably use similar
 		// logic to that of struct layout.
-		slot->stack_offset = builder->local_stack_usage;
+		emit_instr2(builder,
+				MOV,
+				asm_vreg(next_vreg(builder), 64),
+				asm_phys_reg(REG_CLASS_SP, 64));
+		emit_instr2(builder,
+				ADD,
+				asm_vreg(next_vreg(builder), 64),
+				asm_const32(builder->local_stack_usage));
+		assign_vreg(builder, instr);
+
 		builder->local_stack_usage += size_of_ir_type(instr->type);
+
+		break;
+	}
+	case OP_FIELD: {
+		IrValue struct_ptr = instr->val.field.struct_ptr;
+		IrType struct_type = instr->val.field.struct_type;
+		assert(struct_ptr.type.kind == IR_POINTER);
+		assert(struct_type.kind == IR_STRUCT);
+		IrStructField *field =
+			struct_type.val.strukt.fields + instr->val.field.field_number;
+		assert(field->offset != -1);
+		emit_instr2(builder,
+				MOV,
+				asm_vreg(next_vreg(builder), 64),
+				asm_value(struct_ptr));
+		emit_instr2(builder,
+				ADD,
+				asm_vreg(next_vreg(builder), 64),
+				asm_const32(field->offset));
+		assign_vreg(builder, instr);
 
 		break;
 	}
 	case OP_RET: {
 		IrValue arg = instr->val.arg;
-		assert(ir_type_eq(ir_func->return_type, arg.type));
+		assert(ir_type_eq(&ir_func->return_type, &arg.type));
 		assert(ir_func->return_type.kind == IR_INT);
 
 		emit_instr2(builder,
@@ -236,37 +250,18 @@ static void asm_gen_instr(
 		IrValue value = instr->val.store.value;
 		IrType type = instr->val.store.type;
 
-		assert(ir_type_eq(value.type, type));
-		assert(type.kind == IR_INT);
+		assert(ir_type_eq(&value.type, &type));
 
-		assert(pointer.kind == VALUE_INSTR);
-		IrInstr *pointer_instr = pointer.val.instr;
-		assert(pointer_instr->op == OP_LOCAL);
-
-		StackSlot *slot = stack_slot_for_id(builder, pointer_instr->id);
-		assert(slot != NULL);
-
-		emit_instr2(builder, MOV,
-				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, slot->stack_offset)),
-				asm_value(value));
+		emit_instr2(builder, MOV, asm_deref(asm_value(pointer)), asm_value(value));
 		break;
 	}
 	case OP_LOAD: {
 		IrValue pointer = instr->val.load.pointer;
 		IrType type = instr->val.load.type;
 
-		assert(type.kind == IR_INT);
-
-		assert(pointer.kind == VALUE_INSTR);
-		IrInstr *pointer_instr = pointer.val.instr;
-		assert(pointer_instr->op == OP_LOCAL);
-
-		StackSlot *slot = stack_slot_for_id(builder, pointer_instr->id);
-		assert(slot != NULL);
-
 		emit_instr2(builder, MOV,
-				asm_vreg(next_vreg(builder), type.val.bit_width),
-				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, slot->stack_offset)));
+				asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8),
+				asm_deref(asm_value(pointer)));
 		assign_vreg(builder, instr);
 		break;
 	}
@@ -753,6 +748,22 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 {
+	for (u32 i = 0; i < trans_unit->types.size; i++) {
+		IrType *type = *ARRAY_REF(&trans_unit->types, IrType *, i);
+		assert(type->kind == IR_STRUCT);
+
+		u32 current_offset = 0;
+		for (u32 j = 0; j < type->val.strukt.num_fields; j++) {
+			IrStructField *field = type->val.strukt.fields + j;
+			u32 field_size = size_of_ir_type(field->type);
+			if (current_offset % field_size != 0)
+				current_offset += field_size - (current_offset % field_size);
+
+			field->offset = current_offset;
+			current_offset += field_size;
+		}
+	}
+
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
 		AsmGlobal *asm_global = NULL;

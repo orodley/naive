@@ -408,34 +408,32 @@ static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
 
 		if (arg->is_deref) {
 			switch (class) {
-			case REG_CLASS_A: case REG_CLASS_C: case REG_CLASS_D:
-			case REG_CLASS_B: case REG_CLASS_SI: case REG_CLASS_DI: {
+			default: {
 				encoded_instr->mod = 0;
 				encoded_instr->rm = encoded_register_number(class);
 				return;
 			}
-			case REG_CLASS_SP: {
+			case REG_CLASS_SP: case REG_CLASS_R12: {
 				// Mod = 0, R/M = 4 means SIB addressing
 				encoded_instr->mod = 0;
 				encoded_instr->rm = 4;
-				// RSP base with no index/scale
+				// no index/scale
 				encoded_instr->has_sib = true;
 				encoded_instr->scale = 0;
 				encoded_instr->index = 4;
-				encoded_instr->base = 4;
+				encoded_instr->base = encoded_register_number(class);
 
 				return;
 			}
-			case REG_CLASS_BP: {
-				// Mod = 1, R/M = 5 means RBP + disp8
+			case REG_CLASS_BP: case REG_CLASS_R13: {
+				// Mod = 1 means 8-bit displacement
 				encoded_instr->mod = 1;
-				encoded_instr->rm = 5;
+				encoded_instr->rm = encoded_register_number(class);
 				encoded_instr->displacement_size = 1;
 				encoded_instr->displacement = 0;
 
 				return;
 			}
-			default: UNIMPLEMENTED;
 			}
 		} else {
 			encoded_instr->mod = 3;

@@ -190,12 +190,12 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 		return next;
 	case 2:
 		next->type = STRUCT_DOT_FIELD_EXPR;
-		next->val.struct_field.struct_value = curr;
+		next->val.struct_field.struct_expr = curr;
 		next->val.struct_field.field_name = ((Token *)which->result)->val.symbol;
 		return next;
 	case 3:
 		next->type = STRUCT_ARROW_FIELD_EXPR;
-		next->val.struct_field.struct_value = curr;
+		next->val.struct_field.struct_expr = curr;
 		next->val.struct_field.field_name = which->result;
 		return next;
 	case 4:
@@ -671,7 +671,7 @@ static void dump_expr(ASTExpr *expr)
 		pretty_printf("%s", expr->val.identifier);
 		break;
 	case STRUCT_DOT_FIELD_EXPR: case STRUCT_ARROW_FIELD_EXPR:
-		dump_expr(expr->val.struct_field.struct_value);
+		dump_expr(expr->val.struct_field.struct_expr);
 		pretty_printf(",%s", expr->val.struct_field.field_name);
 		break;
 	case POST_INCREMENT_EXPR: case POST_DECREMENT_EXPR:
