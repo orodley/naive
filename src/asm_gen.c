@@ -714,9 +714,8 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	entry_label->file_location = 0;
 	ir_func->label = entry_label;
 
-	AsmInstr *prologue_first_instr =
-		emit_instr1(builder, PUSH, asm_phys_reg(REG_CLASS_BP, 64));
-	prologue_first_instr->label = entry_label;
+
+	emit_instr1(builder, PUSH, asm_phys_reg(REG_CLASS_BP, 64));
 	emit_instr2(builder,
 			MOV,
 			asm_phys_reg(REG_CLASS_BP, 64),
@@ -724,24 +723,32 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
 		emit_instr1(builder, PUSH, asm_phys_reg(used_callee_save_regs[i], 64));
 	}
-	emit_instr2(builder,
-			SUB,
-			asm_phys_reg(REG_CLASS_SP, 64),
-			asm_const32(builder->local_stack_usage));
+	if (builder->local_stack_usage != 0) {
+		emit_instr2(builder,
+				SUB,
+				asm_phys_reg(REG_CLASS_SP, 64),
+				asm_const32(builder->local_stack_usage));
+	}
+	AsmInstr *prologue_first_instr = ARRAY_REF(builder->current_block, AsmInstr, 0);
+	prologue_first_instr->label = entry_label;
+
 
 	builder->current_block = &builder->current_function->epilogue;
 
-	AsmInstr *epilogue_first_instr =
+	if (builder->local_stack_usage != 0) {
 		emit_instr2(builder,
 				ADD,
 				asm_phys_reg(REG_CLASS_SP, 64),
 				asm_const32(builder->local_stack_usage));
+	}
 	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
 		emit_instr1(builder, POP, asm_phys_reg(used_callee_save_regs[i], 64));
 	}
-	epilogue_first_instr->label = ret_label;
 	emit_instr1(builder, POP, asm_phys_reg(REG_CLASS_BP, 64));
 	emit_instr0(builder, RET);
+
+	AsmInstr *epilogue_first_instr = ARRAY_REF(builder->current_block, AsmInstr, 0);
+	epilogue_first_instr->label = ret_label;
 
 	return function;
 }
