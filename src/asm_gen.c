@@ -539,7 +539,7 @@ static void allocate_registers(AsmBuilder *builder)
 		u32 insertion_point = active_vregs.size;
 		for (u32 j = 0; j < active_vregs.size; j++) {
 			VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, j);
-			if (active_vreg->live_range_end < vreg->live_range_end) {
+			if (active_vreg->live_range_end > vreg->live_range_end) {
 				insertion_point = j;
 				break;
 			}
