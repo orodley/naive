@@ -361,6 +361,8 @@ primary_expr =
         constant,
         seq(middle, TOK_LROUND, expr, TOK_RROUND))
 
+identifier = seq(build_identifier, TOK_SYMBOL)
+
 constant =
 	seq(build_constant,
 		or(TOK_INT_LITERAL, TOK_FLOAT_LITERAL, TOK_STRING_LITERAL))
@@ -370,16 +372,14 @@ postfix_expr =
 			primary_expr,
 			which(seq(middle, TOK_LSQUARE, expr, TOK_RSQUARE),
 				seq(middle, TOK_LROUND, argument_expr_list, TOK_RROUND),
-				seq(second, TOK_DOT, identifier),
-				seq(second, TOK_ARROW, identifier),
+				seq(second, TOK_DOT, TOK_SYMBOL),
+				seq(second, TOK_ARROW, TOK_SYMBOL),
 				TOK_INCREMENT,
 				TOK_DECREMENT)),
         seq(build_compound_initializer,
 			TOK_LROUND, type_name, TOK_RROUND, TOK_LCURLY,
             initializer_list, opt(TOK_COMMA),
             TOK_RCURLY))
-
-identifier = seq(build_identifier, TOK_SYMBOL)
 
 build_identifier =
 	build(ASTExpr, 1,

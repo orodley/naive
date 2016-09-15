@@ -644,6 +644,44 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 	}
 }
 
+static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
+		char *field_name, ExprContext context)
+{
+		assert(struct_term.value.type.kind == IR_POINTER);
+
+		CType *ctype = struct_term.ctype;
+		if (struct_term.ctype->type == POINTER_TYPE) {
+			ctype = ctype->val.pointee_type;
+		}
+
+		assert(ctype->type == STRUCT_TYPE);
+		Array(CDecl) *fields = &ctype->val.strukt.fields;
+		CDecl *selected_field = NULL;
+		u32 field_number;
+		for (u32 i = 0; i < fields->size; i++) {
+			CDecl *field = ARRAY_REF(fields, CDecl, i);
+			if (streq(field->name, field_name)) {
+				selected_field = field;
+				field_number = i;
+				break;
+			}
+		}
+		assert(selected_field != NULL);
+
+		IrValue value = build_field(builder, struct_term.value,
+				*ctype->val.strukt.ir_type, field_number);
+		if (context == RVALUE_CONTEXT) {
+			IrType *struct_ir_type = ctype->val.strukt.ir_type;
+			assert(struct_ir_type->kind == IR_STRUCT);
+			IrType field_type = struct_ir_type->val.strukt.fields[field_number].type;
+			value = build_load(builder, value, field_type);
+		} else {
+			assert(context == LVALUE_CONTEXT);
+		}
+
+		return (Term) { .ctype = selected_field->type, .value = value };
+}
+
 static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrOp ir_op)
 {
@@ -672,7 +710,8 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 				|| type == INDEX_EXPR
 				|| type == DEREF_EXPR);
 
-		if (type != IDENTIFIER_EXPR && type != STRUCT_DOT_FIELD_EXPR)
+		if (type != IDENTIFIER_EXPR && type != STRUCT_DOT_FIELD_EXPR
+				&& type != STRUCT_ARROW_FIELD_EXPR)
 			UNIMPLEMENTED;
 	}
 
@@ -683,8 +722,10 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrValue value;
 		IrType ir_type = c_type_to_ir_type(binding->term.ctype);
 
-		// Functions implicitly have their address taken.
-		if (binding->term.ctype->type == FUNCTION_TYPE || context == LVALUE_CONTEXT) {
+		// Functions implicitly have their address taken. As do structs.
+		if (context == LVALUE_CONTEXT
+				|| binding->term.ctype->type == FUNCTION_TYPE
+				|| binding->term.ctype->type == STRUCT_TYPE) {
 			value = binding->term.value;
 		} else {
 			assert(context == RVALUE_CONTEXT);
@@ -696,39 +737,24 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 		return (Term) { .ctype = binding->term.ctype, .value = value };
 	}
+	case STRUCT_ARROW_FIELD_EXPR: {
+		ASTExpr *struct_expr = expr->val.struct_field.struct_expr;
+		Term struct_term =
+			ir_gen_expression(builder, env, struct_expr, RVALUE_CONTEXT);
+		assert(struct_term.ctype->type == POINTER_TYPE);
+		assert(struct_term.ctype->val.pointee_type->type == STRUCT_TYPE);
+
+		return ir_gen_struct_field(builder, struct_term,
+				expr->val.struct_field.field_name, context);
+	}
 	case STRUCT_DOT_FIELD_EXPR: {
 		ASTExpr *struct_expr = expr->val.struct_field.struct_expr;
-		char *field_name = expr->val.struct_field.field_name;
 		Term struct_term =
-			ir_gen_expression(builder, env, struct_expr, LVALUE_CONTEXT);
-
+			ir_gen_expression(builder, env, struct_expr, RVALUE_CONTEXT);
 		assert(struct_term.ctype->type == STRUCT_TYPE);
 
-		Array(CDecl) *fields = &struct_term.ctype->val.strukt.fields;
-		CDecl *selected_field = NULL;
-		u32 field_number;
-		for (u32 i = 0; i < fields->size; i++) {
-			CDecl *field = ARRAY_REF(fields, CDecl, i);
-			if (streq(field->name, field_name)) {
-				selected_field = field;
-				field_number = i;
-				break;
-			}
-		}
-		assert(selected_field != NULL);
-
-		IrValue value = build_field(builder, struct_term.value,
-				*struct_term.ctype->val.strukt.ir_type, field_number);
-		if (context == RVALUE_CONTEXT) {
-			IrType *struct_ir_type = struct_term.ctype->val.strukt.ir_type;
-			assert(struct_ir_type->kind == IR_STRUCT);
-			IrType field_type = struct_ir_type->val.strukt.fields[field_number].type;
-			value = build_load(builder, value, field_type);
-		} else {
-			assert(context == LVALUE_CONTEXT);
-		}
-
-		return (Term) { .ctype = selected_field->type, .value = value };
+		return ir_gen_struct_field(builder, struct_term,
+				expr->val.struct_field.field_name, context);
 	}
 	case ADDRESS_OF_EXPR: {
 		ASTExpr *inner_expr = expr->val.unary_arg;
