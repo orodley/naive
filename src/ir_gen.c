@@ -195,13 +195,18 @@ static CType *type_spec_to_c_type(IrBuilder *builder, TypeEnv *type_env,
 		Array(CDecl) *fields = &type->val.strukt.fields;
 		ARRAY_INIT(fields, CDecl, 5);
 		while (field_list != NULL) {
-			CDecl *cdecl = ARRAY_APPEND(fields, CDecl);
 			ASTDeclSpecifier *decl_specs = field_list->decl_specifier_list;
 			ASTFieldDeclarator *field_declarator = field_list->field_declarator_list;
-			assert(field_declarator->type == NORMAL_FIELD_DECLARATOR);
-			ASTDeclarator *declarator = field_declarator->val.declarator;
+			while (field_declarator != NULL) {
+				assert(field_declarator->type == NORMAL_FIELD_DECLARATOR);
+				ASTDeclarator *declarator = field_declarator->val.declarator;
 
-			decl_to_cdecl(builder, type_env, decl_specs, declarator, cdecl);
+				CDecl *cdecl = ARRAY_APPEND(fields, CDecl);
+				decl_to_cdecl(builder, type_env, decl_specs, declarator, cdecl);
+
+				field_declarator = field_declarator->next;
+			}
+
 			field_list = field_list->next;
 		}
 
