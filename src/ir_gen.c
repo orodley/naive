@@ -710,8 +710,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 				|| type == INDEX_EXPR
 				|| type == DEREF_EXPR);
 
-		if (type != IDENTIFIER_EXPR && type != STRUCT_DOT_FIELD_EXPR
-				&& type != STRUCT_ARROW_FIELD_EXPR)
+		if (type == INDEX_EXPR)
 			UNIMPLEMENTED;
 	}
 
@@ -764,19 +763,21 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ASTExpr *inner_expr = expr->val.unary_arg;
 		Term pointer = ir_gen_expression(builder, env, inner_expr, RVALUE_CONTEXT);
 		assert(pointer.ctype->type == POINTER_TYPE);
+		CType *pointee_type = pointer.ctype->val.pointee_type;
 
+		IrValue value;
 		if (context == LVALUE_CONTEXT) {
-			return pointer;
+			value = pointer.value;
 		} else {
 			assert(context == RVALUE_CONTEXT);
 
-			CType *pointee_type = pointer.ctype->val.pointee_type;
-			IrValue value = build_load(
+			value = build_load(
 					builder,
 					pointer.value,
 					c_type_to_ir_type(pointee_type));
-			return (Term) { .ctype = pointee_type, .value = value };
 		}
+
+		return (Term) { .ctype = pointee_type, .value = value };
 	}
 	case INT_LITERAL_EXPR: {
 		// @TODO: Determine types of constants correctly.
