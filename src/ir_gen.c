@@ -185,7 +185,8 @@ static CType *type_spec_to_c_type(IrBuilder *builder, TypeEnv *type_env,
 
 		TypeEnvEntry *struct_type =
 			ARRAY_APPEND(&type_env->struct_types, TypeEnvEntry);
-		assert(name != NULL);
+		if (name == NULL)
+			name = "<anonymous struct>";
 		struct_type->name = name;
 
 		CType *type = &struct_type->type;
