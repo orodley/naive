@@ -90,6 +90,7 @@ IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields)
 	new_type->val.strukt.num_fields = num_fields;
 	IrStructField *fields = pool_alloc(&trans_unit->pool, num_fields * sizeof *fields);
 	new_type->val.strukt.fields = fields;
+	new_type->val.strukt.total_size = 0;
 
 	return new_type;
 }
@@ -106,6 +107,18 @@ bool ir_type_eq(IrType *a, IrType *b)
 		return true;
 	case IR_STRUCT:
 		return streq(a->val.strukt.name, b->val.strukt.name);
+	}
+}
+
+u32 size_of_ir_type(IrType type)
+{
+	switch (type.kind) {
+	case IR_INT:
+		return type.val.bit_width / 8;
+	case IR_POINTER: case IR_FUNCTION:
+		return 8;
+	case IR_STRUCT:
+		return type.val.strukt.total_size;
 	}
 }
 

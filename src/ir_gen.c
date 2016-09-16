@@ -212,11 +212,22 @@ static CType *type_spec_to_c_type(IrBuilder *builder, TypeEnv *type_env,
 
 		IrType *ir_struct =
 			trans_unit_add_struct(builder->trans_unit, name, fields->size);
+		u32 current_offset = 0;
 		for (u32 i = 0; i < fields->size; i++) {
 			CDecl *field = ARRAY_REF(fields, CDecl, i);
-			ir_struct->val.strukt.fields[i].type = c_type_to_ir_type(field->type);
-			ir_struct->val.strukt.fields[i].offset = -1;
+			IrType field_type = c_type_to_ir_type(field->type);
+			u32 field_size = size_of_ir_type(field_type);
+
+			// @TODO: This is stricter than necessary for structs.
+			if (current_offset % field_size != 0)
+				current_offset += field_size - (current_offset % field_size);
+
+			ir_struct->val.strukt.fields[i].type = field_type;
+			ir_struct->val.strukt.fields[i].offset = current_offset;
+
+			current_offset += field_size;
 		}
+		ir_struct->val.strukt.total_size = current_offset;
 		type->val.strukt.ir_type = ir_struct;
 
 		return &struct_type->type;
@@ -675,13 +686,12 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 
 		IrValue value = build_field(builder, struct_term.value,
 				*ctype->val.strukt.ir_type, field_number);
-		if (context == RVALUE_CONTEXT) {
-			IrType *struct_ir_type = ctype->val.strukt.ir_type;
-			assert(struct_ir_type->kind == IR_STRUCT);
-			IrType field_type = struct_ir_type->val.strukt.fields[field_number].type;
+		IrType *struct_ir_type = ctype->val.strukt.ir_type;
+		assert(struct_ir_type->kind == IR_STRUCT);
+		IrType field_type = struct_ir_type->val.strukt.fields[field_number].type;
+
+		if (context == RVALUE_CONTEXT && selected_field->type->type != STRUCT_TYPE) {
 			value = build_load(builder, value, field_type);
-		} else {
-			assert(context == LVALUE_CONTEXT);
 		}
 
 		return (Term) { .ctype = selected_field->type, .value = value };

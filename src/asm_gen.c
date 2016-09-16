@@ -87,18 +87,6 @@ AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
 	return instr;
 }
 
-static u32 size_of_ir_type(IrType type)
-{
-	switch (type.kind) {
-	case IR_INT:
-		return type.val.bit_width / 8;
-	case IR_POINTER: case IR_FUNCTION:
-		return 8;
-	case IR_STRUCT:
-		UNIMPLEMENTED;
-	}
-}
-
 // @TODO: Rethink name? "next" kinda suggests side effects, i.e. "move to the
 // next vreg number".
 static inline u32 next_vreg(AsmBuilder *builder)
@@ -211,7 +199,6 @@ static void asm_gen_instr(
 		assert(struct_type.kind == IR_STRUCT);
 		IrStructField *field =
 			struct_type.val.strukt.fields + instr->val.field.field_number;
-		assert(field->offset != -1);
 		emit_instr2(builder,
 				MOV,
 				asm_vreg(next_vreg(builder), 64),
@@ -755,22 +742,6 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 {
-	for (u32 i = 0; i < trans_unit->types.size; i++) {
-		IrType *type = *ARRAY_REF(&trans_unit->types, IrType *, i);
-		assert(type->kind == IR_STRUCT);
-
-		u32 current_offset = 0;
-		for (u32 j = 0; j < type->val.strukt.num_fields; j++) {
-			IrStructField *field = type->val.strukt.fields + j;
-			u32 field_size = size_of_ir_type(field->type);
-			if (current_offset % field_size != 0)
-				current_offset += field_size - (current_offset % field_size);
-
-			field->offset = current_offset;
-			current_offset += field_size;
-		}
-	}
-
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
 		AsmGlobal *asm_global = NULL;
