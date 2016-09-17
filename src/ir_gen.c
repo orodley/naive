@@ -455,7 +455,26 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ASTInitDeclarator *init_declarator = decl->init_declarators;
 			assert(decl_specifier_list != NULL);
 
-			if (init_declarator == NULL) {
+			Array(TypeEnvEntry) *bare_types = &env.type_env.bare_types;
+
+			if (decl_specifier_list->type == STORAGE_CLASS_SPECIFIER &&
+					decl_specifier_list->val.storage_class_specifier == TYPEDEF_SPECIFIER) {
+				assert(init_declarator != NULL);
+				decl_specifier_list = decl_specifier_list->next;
+
+				while (init_declarator != NULL) {
+					assert(init_declarator->initializer == NULL);
+					CDecl cdecl;
+					decl_to_cdecl(builder, &env.type_env, decl_specifier_list,
+							init_declarator->declarator, &cdecl);
+
+					TypeEnvEntry *new_type_alias = ARRAY_APPEND(bare_types, TypeEnvEntry);
+					new_type_alias->name = cdecl.name;
+					new_type_alias->type = *cdecl.type;
+
+					init_declarator = init_declarator->next;
+				}
+			} else if (init_declarator == NULL) {
 				assert(decl_specifier_list->next == NULL);
 				assert(decl_specifier_list->type == TYPE_SPECIFIER);
 				ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;

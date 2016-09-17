@@ -154,6 +154,63 @@ static inline void *ignore(Parser *parser, ...)
 	return NULL;
 }
 
+static char *direct_declarator_name(ASTDirectDeclarator *declarator);
+
+static char *declarator_name(ASTDeclarator *declarator)
+{
+	switch (declarator->type) {
+	case POINTER_DECLARATOR:
+		return declarator_name(declarator->val.pointer_declarator.pointee);
+	case DIRECT_DECLARATOR:
+		return direct_declarator_name(declarator->val.direct_declarator);
+	}
+}
+
+static char *direct_declarator_name(ASTDirectDeclarator *declarator)
+{
+	switch (declarator->type) {
+	case IDENTIFIER_DECLARATOR:
+		return declarator->val.name;
+	case ARRAY_DECLARATOR:
+		return direct_declarator_name(declarator->val.array_declarator.element_declarator);
+	case FUNCTION_DECLARATOR:
+		return direct_declarator_name(declarator->val.function_declarator.declarator);
+	case DECLARATOR:
+		return declarator_name(declarator->val.declarator);
+	}
+}
+
+ASTDecl *build_decl(Parser *parser, ASTDeclSpecifier *decl_specifier_list,
+		ASTInitDeclarator *init_declarator_list, Token *semi)
+{
+	IGNORE(semi);
+
+	ASTDecl *decl = pool_alloc(parser->pool, sizeof *decl);
+	decl->decl_specifier_list = decl_specifier_list;
+	decl->init_declarators = init_declarator_list;
+	decl->next = NULL;
+
+	while (decl_specifier_list != NULL) {
+		if (decl_specifier_list->type == STORAGE_CLASS_SPECIFIER
+				&& decl_specifier_list->val.storage_class_specifier == TYPEDEF_SPECIFIER) {
+			while (init_declarator_list != NULL) {
+				TypeTableEntry entry = {
+					.type_name = declarator_name(init_declarator_list->declarator)
+				};
+				type_table_add_entry(&parser->defined_types, entry);
+
+				init_declarator_list = init_declarator_list->next;
+			}
+
+			break;
+		}
+
+		decl_specifier_list = decl_specifier_list->next;
+	}
+
+	return decl;
+}
+
 static ASTExpr *build_constant(Parser *parser, Token *token)
 {
 	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
@@ -216,7 +273,7 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 static ASTExpr *build_compound_initializer(Parser *parser,
 		void *a, void *b, void *c, void *d, void *e, void *f, void *g)
 {
-	/// @TODO
+	// @TODO
 	IGNORE(parser);
 	IGNORE(a); IGNORE(b); IGNORE(c); IGNORE(d); IGNORE(e); IGNORE(f); IGNORE(g);
 	return NULL;
@@ -412,8 +469,6 @@ static ASTDeclSpecifier *build_type_qualifier(Parser *parser, WhichResult *keywo
 	return result;
 }
 
-// @TODO: We currently don't add anything to the type table apart from builtin
-// types. We need to add typedefs and named tagged types as we go.
 static ParserResult named_type(Parser *parser)
 {
 	if (parser->position >= parser->tokens->size)

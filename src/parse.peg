@@ -23,12 +23,6 @@ decl_specifiers =
 decl =
 	seq(build_decl, decl_specifiers, opt(init_declarator_list), TOK_SEMICOLON)
 
-build_decl =
-	build(ASTDecl, 3,
-		decl_specifier_list, #0,
-		init_declarators, #1,
-		next, NULL)
-
 init_declarator_list = list(ASTInitDeclarator, init_declarator, TOK_COMMA)
 
 init_declarator =
