@@ -64,9 +64,9 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	*ARRAY_APPEND(&trans_unit->globals, IrGlobal *) = new_global;
 	ZERO_STRUCT(new_global);
 
+	new_global->kind = IR_GLOBAL_FUNCTION;
 	new_global->name = name;
 	new_global->ir_type.kind = IR_FUNCTION;
-	new_global->kind = IR_GLOBAL_FUNCTION;
 
 	IrFunction *new_function = &new_global->val.function;
 	new_function->return_type = return_type;
@@ -76,6 +76,19 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 
 	ARRAY_INIT(&new_function->blocks, IrBlock *, 5);
 	add_block_to_function(trans_unit, new_function, "entry");
+
+	return new_global;
+}
+
+IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type)
+{
+	IrGlobal *new_global = pool_alloc(&trans_unit->pool, sizeof *new_global);
+	*ARRAY_APPEND(&trans_unit->globals, IrGlobal *) = new_global;
+	ZERO_STRUCT(new_global);
+
+	new_global->kind = IR_GLOBAL_VAR;
+	new_global->name = name;
+	new_global->ir_type = type;
 
 	return new_global;
 }
@@ -280,8 +293,10 @@ void dump_trans_unit(TransUnit *trans_unit)
 			puts("}");
 			break;
 		}
-		case IR_GLOBAL_SCALAR:
-			UNIMPLEMENTED;
+		case IR_GLOBAL_VAR:
+			dump_ir_type(global->ir_type);
+			printf(" %s\n", global->name);
+			break;
 		}
 
 		if (i != trans_unit->globals.size - 1)
@@ -480,7 +495,7 @@ AsmLabel *global_label(IrGlobal *global)
 	switch (global->kind) {
 	case IR_GLOBAL_FUNCTION:
 		return global->val.function.label;
-	case IR_GLOBAL_SCALAR:
+	case IR_GLOBAL_VAR:
 		UNIMPLEMENTED;
 	}
 }

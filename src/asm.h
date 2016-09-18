@@ -140,6 +140,7 @@ typedef struct AsmGlobal
 	enum
 	{
 		ASM_GLOBAL_FUNCTION,
+		ASM_GLOBAL_VAR,
 	} type;
 
 	char *name;
@@ -150,6 +151,7 @@ typedef struct AsmGlobal
 	union
 	{
 		AsmFunction function;
+		u32 var_size_bytes;
 	} val;
 } AsmGlobal;
 

@@ -750,7 +750,18 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 		case IR_GLOBAL_FUNCTION:
 			asm_global = asm_gen_function(builder, ir_global);
 			break;
-		case IR_GLOBAL_SCALAR: UNIMPLEMENTED;
+		case IR_GLOBAL_VAR: {
+			asm_global = pool_alloc(&builder->asm_module.pool, sizeof *asm_global);
+			*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = asm_global;
+
+			asm_global->type = ASM_GLOBAL_VAR;
+			asm_global->defined = true;
+			asm_global->val.var_size_bytes = size_of_ir_type(ir_global->ir_type);
+
+			ir_global->asm_global = asm_global;
+
+			break;
+		}
 		}
 
 		asm_global->name = ir_global->name;

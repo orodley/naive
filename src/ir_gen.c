@@ -315,7 +315,7 @@ static inline IrBlock *add_block(IrBuilder *builder, char *name)
 	return add_block_to_function(builder->trans_unit, builder->current_function, name);
 }
 
-static IrGlobal *ir_global_for_function(IrBuilder *builder, TypeEnv *type_env,
+static IrGlobal *ir_global_for_decl(IrBuilder *builder, TypeEnv *type_env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
 		CType **result_c_type)
 {
@@ -324,56 +324,66 @@ static IrGlobal *ir_global_for_function(IrBuilder *builder, TypeEnv *type_env,
 	CType *return_c_type = cdecl.type;
 	IrType return_ir_type = c_type_to_ir_type(return_c_type);
 
-	assert(declarator->type == DIRECT_DECLARATOR);
 	ASTDirectDeclarator *direct_declarator =
 		declarator->val.direct_declarator;
-	assert(direct_declarator->type == FUNCTION_DECLARATOR);
+	if (declarator->type == DIRECT_DECLARATOR &&
+			direct_declarator->type == FUNCTION_DECLARATOR) {
+		ASTParameterDecl *first_param =
+			direct_declarator->val.function_declarator.parameters;
+		ASTParameterDecl *params = first_param;
 
-	ASTParameterDecl *first_param =
-		direct_declarator->val.function_declarator.parameters;
-	ASTParameterDecl *params = first_param;
+		u32 arity = 0;
+		while (params != NULL) {
+			arity++;
+			params = params->next;
+		}
 
-	u32 arity = 0;
-	while (params != NULL) {
-		arity++;
-		params = params->next;
-	}
+		params = first_param;
 
-	params = first_param;
+		IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
+		CType **arg_c_types = pool_alloc(
+				&builder->trans_unit->pool,
+				sizeof(*arg_c_types) * arity);
 
-	IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
-	CType **arg_c_types = pool_alloc(
-			&builder->trans_unit->pool,
-			sizeof(*arg_c_types) * arity);
+		for (u32 i = 0; i < arity; i++) {
+			CDecl cdecl;
+			decl_to_cdecl(builder, type_env, params->decl_specifier_list,
+					params->declarator, &cdecl);
+			arg_ir_types[i] = c_type_to_ir_type(cdecl.type);
+			arg_c_types[i] = cdecl.type;
 
-	for (u32 i = 0; i < arity; i++) {
+			params = params->next;
+		}
+
+		// @TODO: Search through the currently defined globals for one of the same
+		// name. If found, check that the CType matches and use that one instead of
+		// adding a new one.
+		IrGlobal *global = trans_unit_add_function(
+				builder->trans_unit,
+				direct_declarator->val.function_declarator.declarator->val.name,
+				return_ir_type, arity, arg_ir_types);
+
+		assert(global->kind == IR_GLOBAL_FUNCTION);
+
+		CType *ctype = pool_alloc(&builder->trans_unit->pool, sizeof *ctype);
+		ctype->type = FUNCTION_TYPE;
+		ctype->val.function.arity = arity;
+		ctype->val.function.arg_type_array = arg_c_types;
+		ctype->val.function.return_type = return_c_type;
+		*result_c_type = ctype;
+
+		return global;
+	} else {
 		CDecl cdecl;
-		decl_to_cdecl(builder, type_env, params->decl_specifier_list,
-				params->declarator, &cdecl);
-		arg_ir_types[i] = c_type_to_ir_type(cdecl.type);
-		arg_c_types[i] = cdecl.type;
+		decl_to_cdecl(builder, type_env, decl_specifier_list, declarator, &cdecl);
+		IrGlobal *global = trans_unit_add_var(
+				builder->trans_unit,
+				cdecl.name,
+				c_type_to_ir_type(cdecl.type));
+		*result_c_type = cdecl.type;
 
-		params = params->next;
+		return global;
 	}
-
-	// @TODO: Search through the currently defined globals for one of the same
-	// name. If found, check that the CType matches and use that one instead of
-	// adding a new one.
-	IrGlobal *global = trans_unit_add_function(
-			builder->trans_unit,
-			direct_declarator->val.function_declarator.declarator->val.name,
-			return_ir_type, arity, arg_ir_types);
-
-	assert(global->kind == IR_GLOBAL_FUNCTION);
-
-	CType *ctype = pool_alloc(&builder->trans_unit->pool, sizeof *ctype);
-	ctype->type = FUNCTION_TYPE;
-	ctype->val.function.arity = arity;
-	ctype->val.function.arg_type_array = arg_c_types;
-	ctype->val.function.return_type = return_c_type;
-	*result_c_type = ctype;
-
-	return global;
 }
 
 static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *statement);
@@ -408,7 +418,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ASTDeclSpecifier *decl_specifier_list = func->decl_specifier_list;
 			ASTDeclarator *declarator = func->declarator;
 
-			global = ir_global_for_function(builder, &env.type_env,
+			global = ir_global_for_decl(builder, &env.type_env,
 					decl_specifier_list, declarator, &global_type);
 			IrFunction *function = &global->val.function;
 
@@ -484,9 +494,10 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 				assert(init_declarator->next == NULL);
 				ASTDeclarator *declarator = init_declarator->declarator;
 
-				global = ir_global_for_function(builder, &env.type_env,
+				// @TODO: Multiple declarators in one global decl.
+				global = ir_global_for_decl(builder, &env.type_env,
 						decl_specifier_list, declarator, &global_type);
-				global->defined = false;
+				global->defined = global_type->type != FUNCTION_TYPE;
 			}
 
 			break;

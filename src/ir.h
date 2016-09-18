@@ -70,7 +70,7 @@ typedef struct IrGlobal
 
 	enum
 	{
-		IR_GLOBAL_SCALAR,
+		IR_GLOBAL_VAR,
 		IR_GLOBAL_FUNCTION,
 	} kind;
 
@@ -188,6 +188,7 @@ void trans_unit_init(TransUnit *trans_unit);
 void trans_unit_free(TransUnit *trans_unit);
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 		IrType return_type, u32 arity, IrType *arg_types);
+IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type);
 IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields);
 
 IrBlock *add_block_to_function(
