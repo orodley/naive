@@ -115,15 +115,12 @@ static AsmArg asm_value(IrValue value)
 		return asm_vreg(vreg_number, size_of_ir_type(instr->type) * 8);
 	}
 	case VALUE_ARG: {
-		assert(value.type.kind == IR_INT);
+		assert(value.type.kind == IR_INT || value.type.kind == IR_POINTER);
 		assert(value.val.arg_index < STATIC_ARRAY_LENGTH(argument_registers));
-		assert(value.type.kind == IR_INT);
-
-		u8 width = value.type.val.bit_width;
 
 		// We always allocate virtual registers to arguments first, so arg at
 		// index i = virtual register i.
-		return asm_vreg(value.val.arg_index, width);
+		return asm_vreg(value.val.arg_index, size_of_ir_type(value.type) * 8);
 	}
 	case VALUE_GLOBAL:
 		return asm_global(value.val.global->asm_global);
