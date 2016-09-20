@@ -219,9 +219,10 @@ static CType *type_spec_to_c_type(IrBuilder *builder, TypeEnv *type_env,
 			IrType field_type = c_type_to_ir_type(field->type);
 			u32 field_size = size_of_ir_type(field_type);
 
-			// @TODO: This is stricter than necessary for structs.
-			if (current_offset % field_size != 0)
-				current_offset += field_size - (current_offset % field_size);
+			// @TODO: This is stricter than necessary for structs. We should
+			// track not only the size of a type, but its alignment
+			// requirements.
+			current_offset = align_to(current_offset, field_size);
 
 			ir_struct->val.strukt.fields[i].type = field_type;
 			ir_struct->val.strukt.fields[i].offset = current_offset;

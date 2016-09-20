@@ -104,7 +104,7 @@ static AsmArg asm_value(IrValue value)
 	switch (value.kind) {
 	case VALUE_CONST:
 		assert((value.val.constant & 0xFFFFFFFF) == value.val.constant);
-		return asm_const32(value.val.constant & 0xFFFFFFFF);
+		return asm_const(value.val.constant & 0xFFFFFFFF);
 	case VALUE_INSTR: {
 		IrInstr *instr = value.val.instr;
 
@@ -185,7 +185,7 @@ static void asm_gen_instr(
 		emit_instr2(builder,
 				ADD,
 				asm_vreg(next_vreg(builder), 64),
-				asm_const32(builder->local_stack_usage));
+				asm_const(builder->local_stack_usage));
 		assign_vreg(builder, instr);
 
 		builder->local_stack_usage += size_of_ir_type(instr->type);
@@ -206,7 +206,7 @@ static void asm_gen_instr(
 		emit_instr2(builder,
 				ADD,
 				asm_vreg(next_vreg(builder), 64),
-				asm_const32(field->offset));
+				asm_const(field->offset));
 		assign_vreg(builder, instr);
 
 		break;
@@ -228,7 +228,7 @@ static void asm_gen_instr(
 		emit_instr1(builder, JMP, asm_label(instr->val.target_block->label));
 		break;
 	case OP_COND:
-		emit_instr2(builder, CMP, asm_value(instr->val.cond.condition), asm_const32(0));
+		emit_instr2(builder, CMP, asm_value(instr->val.cond.condition), asm_const(0));
 		emit_instr1(builder, JE, asm_label(instr->val.cond.else_block->label));
 		emit_instr1(builder, JMP, asm_label(instr->val.cond.then_block->label));
 		break;
@@ -236,20 +236,56 @@ static void asm_gen_instr(
 		IrValue pointer = instr->val.store.pointer;
 		IrValue value = instr->val.store.value;
 		IrType type = instr->val.store.type;
-
 		assert(ir_type_eq(&value.type, &type));
 
-		emit_instr2(builder, MOV, asm_deref(asm_value(pointer)), asm_value(value));
+		// @TODO: Do this properly, so that we can do arbitrary things with
+		// globals, not just loads and stores.
+		if (pointer.kind == VALUE_GLOBAL
+				&& pointer.val.global->kind == IR_GLOBAL_VAR) {
+			AsmArg rip_relative_addr =
+				asm_offset_reg(
+						REG_CLASS_IP,
+						64,
+						(AsmConst) {
+							.type = ASM_CONST_GLOBAL,
+							.val.global = pointer.val.global->asm_global
+						});
+			emit_instr2(builder,
+					MOV,
+					asm_deref(rip_relative_addr),
+					asm_value(value));
+		} else {
+			emit_instr2(builder, MOV, asm_deref(asm_value(pointer)), asm_value(value));
+		}
+
 		break;
 	}
 	case OP_LOAD: {
 		IrValue pointer = instr->val.load.pointer;
 		IrType type = instr->val.load.type;
-
-		emit_instr2(builder, MOV,
-				asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8),
-				asm_deref(asm_value(pointer)));
+		AsmArg target = asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8);
 		assign_vreg(builder, instr);
+
+		// @TODO: Do this properly, so that we can do arbitrary things with
+		// globals, not just loads and stores.
+		if (pointer.kind == VALUE_GLOBAL
+				&& pointer.val.global->kind == IR_GLOBAL_VAR) {
+			AsmArg rip_relative_addr =
+				asm_offset_reg(
+						REG_CLASS_IP,
+						64,
+						(AsmConst) {
+							.type = ASM_CONST_GLOBAL,
+							.val.global = pointer.val.global->asm_global
+						});
+			emit_instr2(builder,
+					MOV,
+					target,
+					asm_deref(rip_relative_addr));
+		} else {
+			emit_instr2(builder, MOV, target, asm_deref(asm_value(pointer)));
+		}
+
 		break;
 	}
 	case OP_CALL: {
@@ -300,13 +336,13 @@ static void asm_gen_instr(
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
 
-		if (!asm_arg_is_const(arg1) && !asm_arg_is_const(arg2)) {
+		if (arg1.type != ASM_ARG_CONST && arg2.type != ASM_ARG_CONST) {
 			emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
 			emit_instr2(builder, IMUL, asm_vreg(next_vreg(builder), width), arg2);
 		} else {
 			AsmArg const_arg;
 			AsmArg non_const_arg;
-			if (asm_arg_is_const(arg1)) {
+			if (arg1.type == ASM_ARG_CONST) {
 				const_arg = arg1;
 				non_const_arg = arg2;
 			} else {
@@ -314,7 +350,7 @@ static void asm_gen_instr(
 				non_const_arg = arg1;
 			}
 
-			assert(!asm_arg_is_const(non_const_arg));
+			assert(non_const_arg.type != ASM_ARG_CONST);
 
 			emit_instr3(builder, IMUL,
 					asm_vreg(next_vreg(builder), width),
@@ -714,7 +750,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		emit_instr2(builder,
 				SUB,
 				asm_phys_reg(REG_CLASS_SP, 64),
-				asm_const32(builder->local_stack_usage));
+				asm_const(builder->local_stack_usage));
 	}
 	AsmInstr *prologue_first_instr = ARRAY_REF(builder->current_block, AsmInstr, 0);
 	prologue_first_instr->label = entry_label;
@@ -726,7 +762,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		emit_instr2(builder,
 				ADD,
 				asm_phys_reg(REG_CLASS_SP, 64),
-				asm_const32(builder->local_stack_usage));
+				asm_const(builder->local_stack_usage));
 	}
 	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
 		emit_instr1(builder, POP, asm_phys_reg(used_callee_save_regs[i], 64));

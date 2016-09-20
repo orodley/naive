@@ -167,7 +167,7 @@ def arg_condition(arg, i):
         return '(is_const_and_fits(instr->args[%d], 64))' % i
     if arg == 'sym':
         return ('(instr->args[%d].type == ASM_ARG_LABEL'
-                + ' || instr->args[%d].type == ASM_ARG_GLOBAL)') % (i, i)
+                + ' || instr->args[%d].type == ASM_ARG_CONST)') % (i, i)
 
     print "Unknown arg type: '%s'" % arg
     assert False

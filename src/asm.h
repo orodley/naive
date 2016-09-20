@@ -24,6 +24,7 @@
 	X(REG_CLASS_R13, "R13B", "R13W", "R13D", "R13"), \
 	X(REG_CLASS_R14, "R14B", "R14W", "R14D", "R14"), \
 	X(REG_CLASS_R15, "R15B", "R15W", "R15D", "R15"), \
+	X(REG_CLASS_IP, "INVALID", "INVALID", "INVALID", "RIP"), \
 	
 #define X(x, b, w, d, o) x
 typedef enum RegClass
@@ -55,6 +56,21 @@ typedef struct AsmLabel
 	u32 file_location;
 } AsmLabel;
 
+typedef struct AsmConst
+{
+	enum
+	{
+		ASM_CONST_IMMEDIATE,
+		ASM_CONST_GLOBAL,
+	} type;
+
+	union
+	{
+		u64 immediate;
+		struct AsmGlobal *global;
+	} val;
+} AsmConst;
+
 typedef struct AsmArg
 {
 	// @TODO: This is kinda messy considering that OFFSET_REGISTER doesn't make
@@ -66,14 +82,7 @@ typedef struct AsmArg
 		ASM_ARG_REGISTER,
 		ASM_ARG_OFFSET_REGISTER,
 		ASM_ARG_LABEL,
-		ASM_ARG_GLOBAL,
-
-		// @TODO: Do we want to encode the size of the immediate here rather
-		// than just having one type for all constants? Seems unnecessary.
-		ASM_ARG_CONST8,
-		ASM_ARG_CONST16,
-		ASM_ARG_CONST32,
-		ASM_ARG_CONST64,
+		ASM_ARG_CONST,
 	} type;
 
 	union
@@ -82,11 +91,10 @@ typedef struct AsmArg
 		struct
 		{
 			Register reg;
-			u64 offset;
+			AsmConst offset;
 		} offset_register;
-		u64 constant;
+		AsmConst constant;
 		AsmLabel *label;
-		struct AsmGlobal *global;
 	} val;
 } AsmArg;
 
@@ -185,6 +193,11 @@ typedef struct AsmModule
 typedef struct AsmSymbol
 {
 	char *name;
+	enum
+	{
+		TEXT_SECTION,
+		BSS_SECTION,
+	} section;
 	u32 defined;
 	u32 symtab_index;
 	u32 string_table_offset_for_name;
@@ -199,17 +212,11 @@ void free_asm_module(AsmModule *asm_module);
 
 AsmArg asm_vreg(u32 vreg_number, u8 width);
 AsmArg asm_phys_reg(RegClass reg, u8 width);
-AsmArg asm_offset_reg(RegClass reg, u8 width, u64 offset);
-AsmArg asm_const32(i32 constant);
+AsmArg asm_offset_reg(RegClass reg, u8 width, AsmConst offset);
+AsmArg asm_const(u64 constant);
 AsmArg asm_deref(AsmArg asm_arg);
 AsmArg asm_global(AsmGlobal *global);
 AsmArg asm_label(AsmLabel *label);
-
-inline bool asm_arg_is_const(AsmArg asm_arg)
-{
-	return (asm_arg.type == ASM_ARG_CONST8) || (asm_arg.type == ASM_ARG_CONST16) ||
-		(asm_arg.type == ASM_ARG_CONST32) || (asm_arg.type == ASM_ARG_CONST64);
-}
 
 void dump_asm_function(AsmFunction *asm_function);
 void dump_asm_module(AsmModule *asm_module);

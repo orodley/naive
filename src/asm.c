@@ -79,9 +79,9 @@ AsmArg asm_deref(AsmArg asm_arg)
 	return asm_arg;
 }
 
-AsmArg asm_offset_reg(RegClass reg, u8 width, u64 offset)
+AsmArg asm_offset_reg(RegClass reg, u8 width, AsmConst offset)
 {
-	if (offset == 0) {
+	if (offset.type == ASM_CONST_IMMEDIATE && offset.val.immediate == 0) {
 		return asm_deref(asm_phys_reg(reg, width));
 	} else {
 		AsmArg asm_arg = {
@@ -97,12 +97,15 @@ AsmArg asm_offset_reg(RegClass reg, u8 width, u64 offset)
 	}
 }
 
-AsmArg asm_const32(i32 constant)
+AsmArg asm_const(u64 constant)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
-		.type = ASM_ARG_CONST32,
-		.val.constant = constant,
+		.type = ASM_ARG_CONST,
+		.val.constant = (AsmConst) {
+			.type = ASM_CONST_IMMEDIATE,
+			.val.immediate = constant,
+		},
 	};
 
 	return asm_arg;
@@ -123,22 +126,25 @@ AsmArg asm_global(AsmGlobal *global)
 {
 	AsmArg asm_arg = {
 		.is_deref = false,
-		.type = ASM_ARG_GLOBAL,
-		.val.global = global,
+		.type = ASM_ARG_CONST,
+		.val.constant = (AsmConst) {
+			.type = ASM_CONST_GLOBAL,
+			.val.global = global,
+		},
 	};
 
 	return asm_arg;
 }
 
-extern inline bool asm_arg_is_const(AsmArg asm_arg);
-
 // @TODO: Negative numbers
 static bool is_const_and_fits(AsmArg asm_arg, u32 bits)
 {
-	if (!asm_arg_is_const(asm_arg))
+	if (asm_arg.type != ASM_ARG_CONST ||
+			asm_arg.val.constant.type != ASM_CONST_IMMEDIATE) {
 		return false;
+	}
 
-	u64 constant = asm_arg.val.constant;
+	u64 constant = asm_arg.val.constant.val.immediate;
 	u64 truncated;
 
 	// Handle this case specially, as 1 << 64 - 1 doesn't work to get a 64-bit
@@ -196,6 +202,25 @@ static void dump_register(Register reg)
 	}
 }
 
+static void dump_asm_const(AsmConst constant)
+{
+	switch (constant.type) {
+	case ASM_CONST_IMMEDIATE: {
+		u64 x = constant.val.immediate;
+		if ((i64)x < 0)
+			printf("%" PRId64, (i64)x);
+		else
+			printf("%" PRIu64, (i64)x);
+		break;
+	}
+	case ASM_CONST_GLOBAL:
+		printf("%s", constant.val.global->name);
+		break;
+	default:
+		UNREACHABLE;
+	}
+}
+
 static void dump_asm_args(AsmArg *args, u32 num_args)
 {
 	for (u32 i = 0; i < num_args; i++) {
@@ -211,35 +236,14 @@ static void dump_asm_args(AsmArg *args, u32 num_args)
 			break;
 		case ASM_ARG_OFFSET_REGISTER:
 			dump_register(arg->val.offset_register.reg);
-			printf(" + %" PRIu64, arg->val.offset_register.offset);
+			fputs(" + ", stdout);
+			dump_asm_const(arg->val.offset_register.offset);
 			break;
 		case ASM_ARG_LABEL:
 			printf("%s", arg->val.label->name);
 			break;
-		case ASM_ARG_GLOBAL:
-			printf("%s", arg->val.global->name);
-			break;
-		case ASM_ARG_CONST8:
-			if ((i8)arg->val.constant < 0)
-				printf("%" PRId8, (i8)arg->val.constant);
-			else
-				printf("%" PRIu8, (i8)arg->val.constant);
-		case ASM_ARG_CONST16:
-			if ((i16)arg->val.constant < 0)
-				printf("%" PRId16, (i16)arg->val.constant);
-			else
-				printf("%" PRIu16, (i16)arg->val.constant);
-		case ASM_ARG_CONST32:
-			if ((i32)arg->val.constant < 0)
-				printf("%" PRId32, (i32)arg->val.constant);
-			else
-				printf("%" PRIu32, (i32)arg->val.constant);
-			break;
-		case ASM_ARG_CONST64:
-			if ((i64)arg->val.constant < 0)
-				printf("%" PRId64, (i64)arg->val.constant);
-			else
-				printf("%" PRIu64, (i64)arg->val.constant);
+		case ASM_ARG_CONST:
+			dump_asm_const(arg->val.constant);
 			break;
 		}
 		if (arg->is_deref)
@@ -374,6 +378,7 @@ static u32 encoded_register_number(RegClass reg)
 	case REG_CLASS_R13: return 13;
 	case REG_CLASS_R14: return 14;
 	case REG_CLASS_R15: return 15;
+	case REG_CLASS_IP: UNIMPLEMENTED;
 	}
 }
 
@@ -395,11 +400,14 @@ typedef struct EncodedInstr
 	u8 base;
 	i8 displacement_size;
 	u64 displacement;
+	Fixup *disp_fixup;
 	i8 immediate_size;
 	u64 immediate;
+	Fixup *imm_fixup;
 } EncodedInstr;
 
-static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
+static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
+		AsmArg *arg)
 {
 	encoded_instr->has_modrm = true;
 
@@ -441,16 +449,32 @@ static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
 			return;
 		}
 	} else if (arg->type == ASM_ARG_OFFSET_REGISTER) {
+		// @TODO: Clean up the control flow in this block
 		assert(arg->is_deref);
 
-		u64 offset = arg->val.offset_register.offset;
-		// @TODO: Negative numbers
-		if ((offset & 0xFF) == offset)
-			encoded_instr->mod = 1;
-		else if ((offset & 0xFFFFFFFF) == offset)
+		AsmConst asm_const = arg->val.offset_register.offset;
+		u64 offset;
+		if (asm_const.type == ASM_CONST_GLOBAL) {
 			encoded_instr->mod = 2;
-		else
-			assert(!"Offset too large!");
+
+			// Dummy value, gets patched later.
+			offset = 0;
+
+			encoded_instr->disp_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
+			encoded_instr->disp_fixup->size_bytes = 4;
+			encoded_instr->disp_fixup->type = FIXUP_GLOBAL;
+			encoded_instr->disp_fixup->val.global = asm_const.val.global;
+		} else {
+			assert(asm_const.type == ASM_CONST_IMMEDIATE);
+			offset = asm_const.val.immediate;
+			// @TODO: Negative numbers
+			if ((offset & 0xFF) == offset)
+				encoded_instr->mod = 1;
+			else if ((offset & 0xFFFFFFFF) == offset)
+				encoded_instr->mod = 2;
+			else
+				assert(!"Offset too large!");
+		}
 
 		RegClass reg = get_reg_class(arg);
 
@@ -468,6 +492,12 @@ static void add_mod_rm_arg(EncodedInstr *encoded_instr, AsmArg *arg)
 			encoded_instr->index = 4;
 			encoded_instr->base = 4;
 			break;
+		case REG_CLASS_IP:
+			encoded_instr->mod = 0;
+			encoded_instr->rm = 5;
+			encoded_instr->displacement_size = 4;
+			encoded_instr->displacement = 0;
+			return;
 		default:
 			UNIMPLEMENTED;
 		}
@@ -543,10 +573,10 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 			encoded_instr.reg =
 				encoded_register_number(get_reg_class(register_operand));
 		}
-		add_mod_rm_arg(&encoded_instr, memory_operand);
+		add_mod_rm_arg(asm_module, &encoded_instr, memory_operand);
 	} else if (opcode_extension != -1) {
 		encoded_instr.reg = opcode_extension;
-		add_mod_rm_arg(&encoded_instr, instr->args);
+		add_mod_rm_arg(asm_module, &encoded_instr, instr->args);
 	} else {
 		// @NOTE: I'm not sure this is true in general, but it seems like there
 		// are three cases:
@@ -557,17 +587,14 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		// opcode above there's nothing left to do.
 	}
 
-	Fixup *fixup = NULL;
-
 	// @TODO: This seems kinda redundant considering we already encode the
 	// immediate size in AsmArg.
 	if (immediate_size != -1) {
 		encoded_instr.immediate_size = immediate_size;
 		AsmArg* immediate_arg = NULL;
 		for (u32 i = 0; i < instr->num_args; i++) {
-			if (asm_arg_is_const(instr->args[i])
-					|| instr->args[i].type == ASM_ARG_LABEL
-					|| instr->args[i].type == ASM_ARG_GLOBAL) {
+			if (instr->args[i].type == ASM_ARG_CONST
+					|| instr->args[i].type == ASM_ARG_LABEL) {
 				// Check that we only have one immediate.
 				assert(immediate_arg == NULL);
 				immediate_arg = instr->args + i;
@@ -575,26 +602,31 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		}
 		assert(immediate_arg != NULL);
 
-		if (asm_arg_is_const(*immediate_arg)) {
-			encoded_instr.immediate = immediate_arg->val.constant;
-		} else if (immediate_arg->type == ASM_ARG_LABEL ||
-				immediate_arg->type == ASM_ARG_GLOBAL) {
-			fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
-
-			fixup->size_bytes = 4;
-			if (immediate_arg->type == ASM_ARG_LABEL) {
-				fixup->type = FIXUP_LABEL;
-				fixup->val.label = immediate_arg->val.label;
-			} else {
-				fixup->type = FIXUP_GLOBAL;
-				fixup->val.global = immediate_arg->val.global;
-			}
+		if (immediate_arg->type == ASM_ARG_LABEL) {
+			encoded_instr.imm_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
+			encoded_instr.imm_fixup->size_bytes = 4;
+			encoded_instr.imm_fixup->type = FIXUP_LABEL;
+			encoded_instr.imm_fixup->val.label = immediate_arg->val.label;
 
 			// Dummy value, gets patched later.
 			encoded_instr.immediate = 0;
+		} else if (immediate_arg->type == ASM_ARG_CONST) {
+			AsmConst constant = immediate_arg->val.constant;
+			switch (constant.type) {
+			case ASM_CONST_GLOBAL:
+				encoded_instr.imm_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
+				encoded_instr.imm_fixup->size_bytes = 4;
+				encoded_instr.imm_fixup->type = FIXUP_GLOBAL;
+				encoded_instr.imm_fixup->val.global = constant.val.global;
+
+				// Dummy value, gets patched later.
+				encoded_instr.immediate = 0;
+			case ASM_CONST_IMMEDIATE:
+				encoded_instr.immediate = constant.val.immediate;
+			}
+
 		} else {
-			assert(asm_arg_is_const(*immediate_arg));
-			encoded_instr.immediate = immediate_arg->val.constant;
+			UNREACHABLE;
 		}
 	}
 
@@ -640,10 +672,12 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		u8 sib_byte = ((scale  & 3) << 6) | ((index & 7) << 3) | (base & 7);
 		write_u8(file, sib_byte);
 	}
+	if (encoded_instr.disp_fixup != NULL)
+		encoded_instr.disp_fixup->file_location = (u32)checked_ftell(file);
 	if (encoded_instr.displacement_size != -1)
 		write_int(file, encoded_instr.displacement, encoded_instr.displacement_size);
-	if (fixup != NULL)
-		fixup->file_location = (u32)checked_ftell(file);
+	if (encoded_instr.imm_fixup != NULL)
+		encoded_instr.imm_fixup->file_location = (u32)checked_ftell(file);
 	if (encoded_instr.immediate_size != -1)
 		write_int(file, encoded_instr.immediate, encoded_instr.immediate_size);
 }
@@ -654,48 +688,67 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbols)
 {
 	u64 initial_file_location = checked_ftell(output_file);
+	u32 curr_bss_offset = 0;
 
 	for (u32 i = 0; i < asm_module->globals.size; i++) {
 		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
-		if (global->type != ASM_GLOBAL_FUNCTION)
-			continue;
-		AsmFunction *function = &global->val.function;
-
-		u32 function_start = initial_file_location;
-		u32 function_size = 0;
-		if (global->defined) {
-			function_start = checked_ftell(output_file);
-
-			Array(AsmInstr) *instr_blocks[] = {
-				&function->prologue,
-				&function->body,
-				&function->epilogue,
-			};
-			for (u32 i = 0; i < STATIC_ARRAY_LENGTH(instr_blocks); i++) {
-				Array(AsmInstr) *instr_block = instr_blocks[i];
-
-				for (u32 j = 0; j < instr_block->size; j++) {
-					AsmInstr *instr = ARRAY_REF(instr_block, AsmInstr, j);
-					if (instr->label != NULL) {
-						instr->label->file_location = checked_ftell(output_file);
-					}
-					assemble_instr(output_file, asm_module, instr);
-				}
-			}
-
-			function_size = checked_ftell(output_file) - function_start;
-		}
 
 		AsmSymbol *symbol = ARRAY_APPEND(symbols, AsmSymbol);
 		symbol->defined = global->defined;
-		symbol->name = function->name;
-		// Offset is relative to the start of the section.
-		symbol->offset = function_start - initial_file_location;
-		symbol->size = function_size;
 		// Add one to account for 0 = undef symbol index
 		symbol->symtab_index = i + 1;
 
 		global->symbol = symbol;
+
+		switch (global->type) {
+		case ASM_GLOBAL_FUNCTION: {
+			AsmFunction *function = &global->val.function;
+
+			u32 function_start = initial_file_location;
+			u32 function_size = 0;
+			if (global->defined) {
+				function_start = checked_ftell(output_file);
+
+				Array(AsmInstr) *instr_blocks[] = {
+					&function->prologue,
+					&function->body,
+					&function->epilogue,
+				};
+				for (u32 i = 0; i < STATIC_ARRAY_LENGTH(instr_blocks); i++) {
+					Array(AsmInstr) *instr_block = instr_blocks[i];
+
+					for (u32 j = 0; j < instr_block->size; j++) {
+						AsmInstr *instr = ARRAY_REF(instr_block, AsmInstr, j);
+						if (instr->label != NULL) {
+							instr->label->file_location = checked_ftell(output_file);
+						}
+						assemble_instr(output_file, asm_module, instr);
+					}
+				}
+
+				function_size = checked_ftell(output_file) - function_start;
+			}
+
+			symbol->section = TEXT_SECTION;
+			// @TODO: Change to global->name and move out?
+			symbol->name = function->name;
+			// Offset is relative to the start of the section.
+			symbol->offset = function_start - initial_file_location;
+			symbol->size = function_size;
+
+			break;
+		} 
+		case ASM_GLOBAL_VAR: {
+			symbol->section = BSS_SECTION;
+			symbol->name = global->name;
+			symbol->size = global->val.var_size_bytes;
+
+			curr_bss_offset = align_to(curr_bss_offset, symbol->size);
+			symbol->offset = curr_bss_offset;
+			curr_bss_offset += symbol->size;
+			break;
+		}
+		}
 	}
 	u64 final_file_position = checked_ftell(output_file);
 

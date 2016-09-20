@@ -45,3 +45,11 @@ inline u32 bit_count(u32 x)
 
 	return n;
 }
+
+inline u32 align_to(u32 n, u32 align)
+{
+	if (n % align != 0)
+		n += align - (n % align);
+
+	return n;
+}
