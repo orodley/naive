@@ -1,0 +1,48 @@
+FUNCTION_DEF(
+    DECL_SPECIFIER(
+        NAMED_TYPE_SPECIFIER(
+            int
+        )
+    ),
+    DIRECT_DECLARATOR(
+        FUNCTION_DECLARATOR(
+            IDENTIFIER_DECLARATOR(
+                foo
+            ),
+            PARAM_DECLS(
+                PARAM(
+                    DECL_SPECIFIER(
+                        NAMED_TYPE_SPECIFIER(
+                            int
+                        )
+                    ),
+                    POINTER_DECLARATOR(
+                        DECL_SPECIFIER(
+                            
+                        ),
+                        DIRECT_DECLARATOR(
+                            IDENTIFIER_DECLARATOR(
+                                x
+                            )
+                        )
+                    )
+                ),
+                
+            )
+        )
+    ),
+    OLD_STYLE_PARAM_DECL_LIST(
+        
+    ),
+    COMPOUND_STATEMENT(
+        BLOCK_ITEM_STATEMENT(
+            RETURN_STATEMENT(
+                DEREF_EXPR(
+                    IDENTIFIER_EXPR(
+                        x
+                    )
+                )
+            )
+        )
+    )
+)
