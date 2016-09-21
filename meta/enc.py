@@ -14,7 +14,8 @@ pp = pprint.PrettyPrinter(indent=4)
 Instr = namedtuple('Instr', ['opcode', 'encodings'])
 Encoding = namedtuple('Encoding',
         ['args', 'arg_order', 'use_rex_w', 'opcode_size', 'opcode',
-         'reg_and_rm', 'opcode_extension', 'immediate_size', 'reg_in_opcode'])
+         'reg_and_rm', 'opcode_extension', 'immediate_size', 'reg_in_opcode',
+         'fixup_type'])
 
 def generate_encoder(input_filename, output_filename):
     instrs = {}
@@ -38,6 +39,11 @@ def generate_encoder(input_filename, output_filename):
                     arg_order = 'MR'
             else:
                 arg_order = 'INVALID'
+
+            if 'rel' in args:
+                fixup_type = 'FIXUP_RELATIVE'
+            else:
+                fixup_type = 'FIXUP_ABSOLUTE'
 
             # @TODO: We treat 'i' immediates the same as 'c' immediates. It's
             # not entirely clear whether they are actually encoded the same, as
@@ -83,7 +89,8 @@ def generate_encoder(input_filename, output_filename):
             reg_in_opcode = bool(match.group('reg_in_opcode'))
 
             encoding = Encoding(args, arg_order, use_rex_w, opcode_size, opcode,
-                    reg_and_rm, opcode_extension, immediate_size, reg_in_opcode)
+                    reg_and_rm, opcode_extension, immediate_size, reg_in_opcode,
+                    fixup_type)
             
             # @TODO: We should sort encodings by immediate size (ascending) so
             # that the smallest encoding gets selected automatically.
@@ -121,7 +128,8 @@ static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *i
                             [encoding.arg_order, encoding.use_rex_w,
                             encoding.opcode_size, encoding.opcode,
                             encoding.reg_and_rm, encoding.opcode_extension,
-                            encoding.immediate_size, encoding.reg_in_opcode])),
+                            encoding.immediate_size, encoding.reg_in_opcode,
+                            encoding.fixup_type])),
                         indent))
             if len(encoding.args) != 0:
                 output.append("\t\t}\n")
@@ -153,7 +161,7 @@ def arg_condition(arg, i):
                 + ' && instr->args[%d].val.reg.width == %s)'
                 + ' || (instr->args[%d].is_deref'
                 + ' && instr->args[%d].val.reg.width == 64))') % (i, i, width, i, i)
-    if arg[0] == 'r':
+    if arg[0] == 'r' and all(c.isdigit() for c in arg[1:]):
         width = arg[1:]
         check_width(width)
         return ('(instr->args[%d].type == ASM_ARG_REGISTER)'
@@ -165,7 +173,7 @@ def arg_condition(arg, i):
         return '(is_const_and_fits(instr->args[%d], 32))' % i
     if arg == 'imm64':
         return '(is_const_and_fits(instr->args[%d], 64))' % i
-    if arg == 'sym':
+    if arg == 'rel':
         return ('(instr->args[%d].type == ASM_ARG_LABEL'
                 + ' || instr->args[%d].type == ASM_ARG_CONST)') % (i, i)
 

@@ -235,8 +235,6 @@ static void asm_gen_instr(
 		IrType type = instr->val.store.type;
 		assert(ir_type_eq(&value.type, &type));
 
-		// @TODO: Do this properly, so that we can do arbitrary things with
-		// globals, not just loads and stores.
 		if (pointer.kind == VALUE_GLOBAL
 				&& pointer.val.global->kind == IR_GLOBAL_VAR) {
 			AsmArg rip_relative_addr =
@@ -263,8 +261,6 @@ static void asm_gen_instr(
 		AsmArg target = asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8);
 		assign_vreg(builder, instr);
 
-		// @TODO: Do this properly, so that we can do arbitrary things with
-		// globals, not just loads and stores.
 		if (pointer.kind == VALUE_GLOBAL
 				&& pointer.val.global->kind == IR_GLOBAL_VAR) {
 			AsmArg rip_relative_addr =

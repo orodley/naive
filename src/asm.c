@@ -139,21 +139,28 @@ AsmArg asm_global(AsmGlobal *global)
 // @TODO: Negative numbers
 static bool is_const_and_fits(AsmArg asm_arg, u32 bits)
 {
-	if (asm_arg.type != ASM_ARG_CONST ||
-			asm_arg.val.constant.type != ASM_CONST_IMMEDIATE) {
+	if (asm_arg.type != ASM_ARG_CONST) {
 		return false;
 	}
 
-	u64 constant = asm_arg.val.constant.val.immediate;
-	u64 truncated;
+	AsmConst constant = asm_arg.val.constant;
+	switch (constant.type) {
+	case ASM_CONST_IMMEDIATE: {
+		u64 imm = constant.val.immediate;
 
-	// Handle this case specially, as 1 << 64 - 1 doesn't work to get a 64-bit
-	// mask.
-	if (bits == 64)
-		truncated = constant;
-	else
-		truncated = constant & ((1ull << bits) - 1);
-	return truncated == constant;
+		u64 truncated;
+
+		// Handle this case specially, as 1 << 64 - 1 doesn't work to get a 64-bit
+		// mask.
+		if (bits == 64)
+			truncated = imm;
+		else
+			truncated = imm & ((1ull << bits) - 1);
+		return truncated == imm;
+	}
+	case ASM_CONST_GLOBAL:
+		return bits == 64;
+	}
 }
 
 static void dump_asm_args(AsmArg *args, u32 num_args);
@@ -407,7 +414,7 @@ typedef struct EncodedInstr
 } EncodedInstr;
 
 static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
-		AsmArg *arg)
+		AsmArg *arg, FixupType fixup_type)
 {
 	encoded_instr->has_modrm = true;
 
@@ -453,6 +460,8 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 		assert(arg->is_deref);
 
 		AsmConst asm_const = arg->val.offset_register.offset;
+		RegClass reg = get_reg_class(arg);
+
 		u64 offset;
 		if (asm_const.type == ASM_CONST_GLOBAL) {
 			encoded_instr->mod = 2;
@@ -460,9 +469,13 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 			// Dummy value, gets patched later.
 			offset = 0;
 
+			if (reg == REG_CLASS_IP)
+				fixup_type = FIXUP_RELATIVE;
+
 			encoded_instr->disp_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
+			encoded_instr->disp_fixup->type = fixup_type;
 			encoded_instr->disp_fixup->size_bytes = 4;
-			encoded_instr->disp_fixup->type = FIXUP_GLOBAL;
+			encoded_instr->disp_fixup->source = FIXUP_GLOBAL;
 			encoded_instr->disp_fixup->val.global = asm_const.val.global;
 		} else {
 			assert(asm_const.type == ASM_CONST_IMMEDIATE);
@@ -475,8 +488,6 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 			else
 				assert(!"Offset too large!");
 		}
-
-		RegClass reg = get_reg_class(arg);
 
 		switch (reg) {
 		case REG_CLASS_A: case REG_CLASS_C: case REG_CLASS_D: case REG_CLASS_B:
@@ -534,7 +545,8 @@ typedef enum RexPrefix
 // passed is REX.W, all the rest are determined by us.
 static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		ArgOrder arg_order, bool use_rex_w, u32 opcode_size, u8 opcode[],
-		bool reg_and_rm, i32 opcode_extension, i32 immediate_size, bool reg_in_opcode)
+		bool reg_and_rm, i32 opcode_extension, i32 immediate_size,
+		bool reg_in_opcode, FixupType fixup_type)
 {
 	EncodedInstr encoded_instr;
 	ZERO_STRUCT(&encoded_instr);
@@ -573,10 +585,10 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 			encoded_instr.reg =
 				encoded_register_number(get_reg_class(register_operand));
 		}
-		add_mod_rm_arg(asm_module, &encoded_instr, memory_operand);
+		add_mod_rm_arg(asm_module, &encoded_instr, memory_operand, fixup_type);
 	} else if (opcode_extension != -1) {
 		encoded_instr.reg = opcode_extension;
-		add_mod_rm_arg(asm_module, &encoded_instr, instr->args);
+		add_mod_rm_arg(asm_module, &encoded_instr, instr->args, fixup_type);
 	} else {
 		// @NOTE: I'm not sure this is true in general, but it seems like there
 		// are three cases:
@@ -605,7 +617,7 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		if (immediate_arg->type == ASM_ARG_LABEL) {
 			encoded_instr.imm_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
 			encoded_instr.imm_fixup->size_bytes = 4;
-			encoded_instr.imm_fixup->type = FIXUP_LABEL;
+			encoded_instr.imm_fixup->source = FIXUP_LABEL;
 			encoded_instr.imm_fixup->val.label = immediate_arg->val.label;
 
 			// Dummy value, gets patched later.
@@ -615,14 +627,17 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 			switch (constant.type) {
 			case ASM_CONST_GLOBAL:
 				encoded_instr.imm_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
+				encoded_instr.imm_fixup->type = fixup_type;
 				encoded_instr.imm_fixup->size_bytes = 4;
-				encoded_instr.imm_fixup->type = FIXUP_GLOBAL;
+				encoded_instr.imm_fixup->source = FIXUP_GLOBAL;
 				encoded_instr.imm_fixup->val.global = constant.val.global;
 
 				// Dummy value, gets patched later.
 				encoded_instr.immediate = 0;
+				break;
 			case ASM_CONST_IMMEDIATE:
 				encoded_instr.immediate = constant.val.immediate;
+				break;
 			}
 
 		} else {
@@ -680,6 +695,11 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		encoded_instr.imm_fixup->file_location = (u32)checked_ftell(file);
 	if (encoded_instr.immediate_size != -1)
 		write_int(file, encoded_instr.immediate, encoded_instr.immediate_size);
+
+	if (encoded_instr.disp_fixup != NULL)
+		encoded_instr.disp_fixup->next_instr_file_location = (u32)checked_ftell(file);
+	if (encoded_instr.imm_fixup != NULL)
+		encoded_instr.imm_fixup->next_instr_file_location = (u32)checked_ftell(file);
 }
 
 // This is generated from "x64.enc", and defines the function "assemble_instr".
@@ -756,9 +776,9 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 	for (u32 i = 0; i < asm_module->fixups.size; i++) {
 		Fixup *fixup = ARRAY_REF(&asm_module->fixups, Fixup, i);
 		u32 file_location;
-		if (fixup->type == FIXUP_GLOBAL) {
+		if (fixup->source == FIXUP_GLOBAL) {
 			AsmGlobal *global = fixup->val.global;
-			if (global->defined)
+			if (global->defined && global->type == ASM_GLOBAL_FUNCTION)
 				file_location = global->offset + initial_file_location;
 			else
 				continue;

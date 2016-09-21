@@ -148,6 +148,7 @@ typedef struct ELF64Rela
 // instead of R_386.
 typedef enum ELF64RelocType
 {
+	R_X86_64_64 = 1,
 	R_X86_64_PC32 = 2,
 } ELF64RelocType;
 
@@ -242,16 +243,26 @@ static void finish_text_section(ELFFile *elf_file, Array(Fixup) *fixups)
 
 	for (u32 i = 0; i < fixups->size; i++) {
 		Fixup *fixup = ARRAY_REF(fixups, Fixup, i);
-		if (fixup->type == FIXUP_LABEL)
+		if (fixup->source == FIXUP_LABEL)
 			continue;
 
 		u32 symbol = fixup->val.global->symbol->symtab_index;
+		ELF64RelocType reloc_type;
+		u32 addend;
+		switch (fixup->type) {
+		case FIXUP_RELATIVE:
+			reloc_type = R_X86_64_PC32;
+			addend = (i64)fixup->file_location - (i64)fixup->next_instr_file_location;
+			break;
+		case FIXUP_ABSOLUTE:
+			reloc_type = R_X86_64_64;
+			addend = 0;
+			break;
+		}
 		ELF64Rela rela = {
 			.section_offset = fixup->file_location - text_info->offset,
-			.type_and_symbol = ELF64_RELA_TYPE_AND_SYMBOL(R_X86_64_PC32, symbol),
-			// We assume this is RIP-relative, which means relative to the next
-			// instruction, which is just after the fixup.
-			.addend = -(i64)fixup->size_bytes,
+			.type_and_symbol = ELF64_RELA_TYPE_AND_SYMBOL(reloc_type, symbol),
+			.addend = addend,
 		};
 
 		checked_fwrite(&rela, sizeof rela, 1, elf_file->output_file);
@@ -802,17 +813,11 @@ static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
 			Symbol *corresponding_symbol = file_symbols[symtab_index];
 			assert(corresponding_symbol != NULL);
 
-			Relocation *reloc;
-			Relocation _reloc;
-			if (!corresponding_symbol->defined) {
-				reloc = ARRAY_APPEND(&corresponding_symbol->relocs, Relocation);
-			} else {
-				reloc = &_reloc;
-			}
+			Relocation *reloc = ARRAY_APPEND(&corresponding_symbol->relocs, Relocation);
 			reloc->type = type;
 			reloc->addend = rela.addend;
 			reloc->section_index = TEXT_INDEX;
-			reloc->section_offset = rela.section_offset;
+			reloc->section_offset = new_text_section_data_offset + rela.section_offset;
 		}
 	}
 
@@ -948,12 +953,14 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 			goto cleanup;
 		}
 
-		SectionInfo *section_info = elf_file->section_info + symbol->section_index;
+		SectionInfo *symbol_section_info =
+			elf_file->section_info + symbol->section_index;
 
 		// Since this is an executable, the symbol value is the location of the
 		// symbol in memory once loaded, not an offset into the corresponding
 		// section.
-		u32 symbol_mem_location = section_info->virtual_address + symbol->section_offset;
+		u32 symbol_mem_location =
+			symbol_section_info->virtual_address + symbol->section_offset;
 
 		ELFSymbolType type;
 		switch (symbol->section_index) {
@@ -968,38 +975,49 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 		u32 prev_location = checked_ftell(output_file);
 		for (u32 i = 0; i < symbol->relocs.size; i++) {
 			Relocation *reloc = ARRAY_REF(&symbol->relocs, Relocation, i);
+			SectionInfo *reloc_section_info =
+				elf_file->section_info + reloc->section_index;
 			u32 reloc_mem_location =
-				elf_file->section_info[reloc->section_index].virtual_address
-				+ reloc->section_offset;
+				reloc_section_info->virtual_address + reloc->section_offset;
 
+			u32 final_value;
 			switch (reloc->type) {
-			case R_X86_64_PC32: {
-				u32 final_value =
+			case R_X86_64_PC32:
+				final_value =
 					symbol_mem_location + reloc->addend - (i32)reloc_mem_location;
-				u8 final_value_bytes[] = {
-					final_value & 0xFF,
-					(final_value >> 8) & 0xFF,
-					(final_value >> 16) & 0xFF,
-					(final_value >> 24) & 0xFF,
-				};
-
-				u32 file_offset =
-					reloc_mem_location -
-					section_info->virtual_address +
-					section_info->offset;
-				checked_fseek(output_file, file_offset, SEEK_SET);
-				checked_fwrite(final_value_bytes,
-						1,
-						sizeof final_value_bytes,
-						output_file);
-
+				break;
+			case R_X86_64_64:
+				final_value = symbol_mem_location + reloc->addend;
 				break;
 			}
-			default:
-				UNIMPLEMENTED;
-			}
+
+			u8 final_value_bytes[] = {
+				final_value & 0xFF,
+				(final_value >> 8) & 0xFF,
+				(final_value >> 16) & 0xFF,
+				(final_value >> 24) & 0xFF,
+			};
+
+			u32 file_offset =
+				reloc_mem_location -
+				reloc_section_info->virtual_address +
+				reloc_section_info->offset;
+			checked_fseek(output_file, file_offset, SEEK_SET);
+			checked_fwrite(final_value_bytes,
+					1,
+					sizeof final_value_bytes,
+					output_file);
+
+#if 0
+			printf("Relocation %u for '%s': wrote 0x%x at offset 0x%x\n",
+					i, symbol->name, final_value, file_offset);
+			printf("rml = 0x%x, va = 0x%x, o = 0x%x\n", reloc_mem_location,
+					reloc_section_info->virtual_address, reloc_section_info->offset);
+#endif
 		}
 		checked_fseek(output_file, prev_location, SEEK_SET);
+
+		array_free(&symbol->relocs);
 	}
 	finish_symtab_section(elf_file);
 

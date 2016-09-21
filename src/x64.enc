@@ -5,7 +5,7 @@ ADD r/m64, r64         = REX.W + 01 /r
 
 AND r/m32, imm8        =         83 /4 ib
 
-CALL sym               =         E8 cd
+CALL rel               =         E8 cd
 
 CMP r/m32 imm32        =         81 /7 id
 CMP r/m32 r32          =         39 /r
@@ -16,9 +16,9 @@ IMUL r32, r/m32, imm32 =         69 /r id
 IMUL r64, r/m64        = REX.W + [0F AF] /r
 IMUL r64, r/m64, imm32 = REX.W + 69 /r id
 
-JE  sym                =         [0F 84] cd
+JE  rel                =         [0F 84] cd
 
-JMP sym                =         E9 cd
+JMP rel                =         E9 cd
 
 MOV r/m32, r32         =         89 /r
 MOV r32, r/m32         =         8B /r

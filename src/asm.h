@@ -163,16 +163,25 @@ typedef struct AsmGlobal
 	} val;
 } AsmGlobal;
 
+typedef enum FixupType
+{
+	FIXUP_RELATIVE,
+	FIXUP_ABSOLUTE,
+} FixupType;
+
 typedef struct Fixup
 {
+	FixupType type;
+
+	u32 file_location;
+	u32 next_instr_file_location;
+	u32 size_bytes;
+
 	enum
 	{
 		FIXUP_LABEL,
 		FIXUP_GLOBAL,
-	} type;
-
-	u32 file_location;
-	u32 size_bytes;
+	} source;
 
 	union
 	{
