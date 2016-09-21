@@ -602,12 +602,12 @@ static void allocate_registers(AsmBuilder *builder)
 		}
 
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
-		if (instr->op == OP_CALL) {
+		if (instr->op == CALL) {
 			CallSite *callsite = ARRAY_APPEND(&callsites, CallSite);
 			callsite->instr_index = i;
 			callsite->active_caller_save_regs_bitset =
 				live_regs_bitset & CALLER_SAVE_REGS_BITMASK;
-			total_regs_to_save += bit_count(live_regs_bitset);
+			total_regs_to_save += bit_count(callsite->active_caller_save_regs_bitset);
 		}
 	}
 	array_free(&active_vregs);
