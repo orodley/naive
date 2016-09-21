@@ -21,7 +21,7 @@ typedef struct AsmBuilder
 	u32 local_stack_usage;
 } AsmBuilder;
 
-void init_asm_builder(AsmBuilder *builder);
+void init_asm_builder(AsmBuilder *builder, char *input_file_name);
 void free_asm_builder(AsmBuilder *builder);
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit);
 

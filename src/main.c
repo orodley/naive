@@ -244,7 +244,7 @@ static int compile_file(char *input_filename, char *output_filename, bool syntax
 	}
 
 	AsmBuilder asm_builder;
-	init_asm_builder(&asm_builder);
+	init_asm_builder(&asm_builder, input_filename);
 	generate_asm_module(&asm_builder, &tu); 
 
 	trans_unit_free(&tu);
@@ -255,18 +255,12 @@ static int compile_file(char *input_filename, char *output_filename, bool syntax
 		dump_asm_module(&asm_builder.asm_module);
 	}
 
-	FILE *output_file = fopen(output_filename, "wb");
-	if (output_file == NULL) {
-		perror("Unable to open output file");
-		return 4;
-	}
 	// @NOTE: Needs to be changed if we support different object file
 	// formats.
-	write_elf_object_file(output_file, &asm_builder.asm_module);
+	if (!write_elf_object_file(output_filename, &asm_builder.asm_module))
+		return 4;
 
 	free_asm_builder(&asm_builder);
-
-	fclose(output_file);
 
 	return 0;
 }

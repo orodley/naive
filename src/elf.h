@@ -6,7 +6,7 @@
 #include "array.h"
 #include "asm.h"
 
-void write_elf_object_file(FILE *output_file, AsmModule *asm_module);
+bool write_elf_object_file(char *output_file_name, AsmModule *asm_module);
 
 bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_filenames);
 

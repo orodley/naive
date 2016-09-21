@@ -3,24 +3,23 @@
 
 #include "misc.h"
 
-// @TODO: Rename this? PoolBlock or something, Entry isn't a good description.
-typedef struct PoolEntry
+typedef struct PoolBlock
 {
 	size_t used;
 	u8 *memory;
 
-	struct PoolEntry *next;
-} PoolEntry;
+	struct PoolBlock *next;
+} PoolBlock;
 
 typedef struct Pool
 {
-	size_t entry_size;
+	size_t block_size;
 
-	PoolEntry *first_entry;
-	PoolEntry *first_entry_with_space;
+	PoolBlock *first_block;
+	PoolBlock *first_block_with_space;
 } Pool;
 
-void pool_init(Pool *pool, size_t entry_size);
+void pool_init(Pool *pool, size_t block_size);
 void *pool_alloc(Pool *pool, size_t size);
 void pool_free(Pool *pool);
 

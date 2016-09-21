@@ -9,12 +9,14 @@
 #include "file.h"
 #include "util.h"
 
-void init_asm_module(AsmModule *asm_module)
+void init_asm_module(AsmModule *asm_module, char *input_file_name)
 {
-	ARRAY_INIT(&asm_module->globals, AsmGlobal *, 10);
-	ARRAY_INIT(&asm_module->fixups, Fixup, 10);
+	asm_module->input_file_name = input_file_name;
 
 	pool_init(&asm_module->pool, 1024);
+
+	ARRAY_INIT(&asm_module->globals, AsmGlobal *, 10);
+	ARRAY_INIT(&asm_module->fixups, Fixup, 10);
 }
 
 void free_asm_module(AsmModule *asm_module)
@@ -456,7 +458,6 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 			return;
 		}
 	} else if (arg->type == ASM_ARG_OFFSET_REGISTER) {
-		// @TODO: Clean up the control flow in this block
 		assert(arg->is_deref);
 
 		AsmConst asm_const = arg->val.offset_register.offset;
@@ -493,7 +494,7 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 		case REG_CLASS_A: case REG_CLASS_C: case REG_CLASS_D: case REG_CLASS_B:
 		case REG_CLASS_BP: case REG_CLASS_SI: case REG_CLASS_DI: {
 			encoded_instr->rm = encoded_register_number(reg);
-			return;
+			break;
 		}
 		case REG_CLASS_SP:
 			// Same as above: SIB addressing
@@ -502,22 +503,23 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 			encoded_instr->scale = 0;
 			encoded_instr->index = 4;
 			encoded_instr->base = 4;
+
+			if (encoded_instr->mod == 1)
+				encoded_instr->displacement_size = 1;
+			else
+				encoded_instr->displacement_size = 4;
+			encoded_instr->displacement = offset;
+
 			break;
 		case REG_CLASS_IP:
 			encoded_instr->mod = 0;
 			encoded_instr->rm = 5;
 			encoded_instr->displacement_size = 4;
 			encoded_instr->displacement = 0;
-			return;
+			break;
 		default:
 			UNIMPLEMENTED;
 		}
-
-		if (encoded_instr->mod == 1)
-			encoded_instr->displacement_size = 1;
-		else
-			encoded_instr->displacement_size = 4;
-		encoded_instr->displacement = offset;
 	} else {
 		UNIMPLEMENTED;
 	}
@@ -541,8 +543,6 @@ typedef enum RexPrefix
 } RexPrefix;
 
 // Called by the generated function "assemble_instr".
-// @TODO: Rename rex_prefix? It seems like the only REX prefix we can get
-// passed is REX.W, all the rest are determined by us.
 static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		ArgOrder arg_order, bool use_rex_w, u32 opcode_size, u8 opcode[],
 		bool reg_and_rm, i32 opcode_extension, i32 immediate_size,
@@ -714,6 +714,7 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
 
 		AsmSymbol *symbol = ARRAY_APPEND(symbols, AsmSymbol);
+		symbol->name = global->name;
 		symbol->defined = global->defined;
 		// Add one to account for 0 = undef symbol index
 		symbol->symtab_index = i + 1;
@@ -750,8 +751,6 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 			}
 
 			symbol->section = TEXT_SECTION;
-			// @TODO: Change to global->name and move out?
-			symbol->name = function->name;
 			// Offset is relative to the start of the section.
 			symbol->offset = function_start - initial_file_location;
 			symbol->size = function_size;
@@ -760,7 +759,6 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 		} 
 		case ASM_GLOBAL_VAR: {
 			symbol->section = BSS_SECTION;
-			symbol->name = global->name;
 			symbol->size = global->val.var_size_bytes;
 
 			curr_bss_offset = align_to(curr_bss_offset, symbol->size);

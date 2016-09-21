@@ -192,11 +192,12 @@ typedef struct Fixup
 
 typedef struct AsmModule
 {
-	Array(AsmGlobal *) globals;
-
-	Array(Fixup) fixups;
+	char *input_file_name;
 
 	Pool pool;
+
+	Array(AsmGlobal *) globals;
+	Array(Fixup) fixups;
 } AsmModule;
 
 typedef struct AsmSymbol
@@ -215,7 +216,7 @@ typedef struct AsmSymbol
 } AsmSymbol;
 
 void init_asm_function(AsmFunction *func, char *name);
-void init_asm_module(AsmModule *asm_module);
+void init_asm_module(AsmModule *asm_module, char *input_file_name);
 
 void free_asm_module(AsmModule *asm_module);
 

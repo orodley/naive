@@ -20,8 +20,6 @@ typedef enum ELFIdentIndex
 	ELF_IDENT_NIDENT = 16,
 } ELFIdentIndex;
 
-// @TODO: Turn all these #defines into enums.
-
 #define ELFCLASS64 2
 #define ELFDATA2LSB 1
 #define EV_CURRENT 1
@@ -58,12 +56,6 @@ typedef struct ELFHeader
 	u16 shstrtab_index;
 } __attribute__((packed)) ELFHeader;
 
-#define PT_LOAD 1
-
-#define PF_X (1 << 0)
-#define PF_W (1 << 1)
-#define PF_R (1 << 2)
-
 typedef struct ELFProgramHeader
 {
 	u32 type;
@@ -75,6 +67,18 @@ typedef struct ELFProgramHeader
 	u64 segment_size_in_process;
 	u64 alignment;
 } __attribute__((packed)) ELFProgramHeader;
+
+typedef enum ELFProgramHeaderType
+{
+	PT_LOAD = 1,
+} ELFProgramHeaderType;
+
+typedef enum ELFProgramHeaderFlags
+{
+	PF_X = 1 << 0,
+	PF_W = 1 << 1,
+	PF_R = 1 << 2,
+} ELFProgramHeaderFlags;
 
 typedef struct ELFSectionHeader
 {
@@ -90,19 +94,25 @@ typedef struct ELFSectionHeader
 	u64 entry_size;
 } __attribute__((packed)) ELFSectionHeader;
 
+typedef enum ELFSectionHeaderType
+{
+	SHT_NULL = 0,
+	SHT_PROGBITS = 1,
+	SHT_SYMTAB = 2,
+	SHT_STRTAB = 3,
+	SHT_RELA = 4,
+	SHT_NOBITS = 8,
+} ELFSectionHeaderType;
+
+typedef enum ELFSectionHeaderFlags
+{
+	SHF_WRITE = 1,
+	SHF_ALLOC = 2,
+	SHF_EXECINSTR = 4,
+} ELFSectionHeaderFlags;
+
 #define SHN_UNDEF 0
 #define SHN_ABS 0xFFF1
-
-#define SHT_NULL 0
-#define SHT_PROGBITS 1
-#define SHT_SYMTAB 2
-#define SHT_STRTAB 3
-#define SHT_RELA 4
-#define SHT_NOBITS 8
-
-#define SHF_WRITE 1
-#define SHF_ALLOC 2
-#define SHF_EXECINSTR 4
 
 typedef struct ELF64Symbol
 {
@@ -128,7 +138,7 @@ typedef enum ELFSymbolType
 	STT_FILE = 4,
 } ELFSymbolType;
 
-// @TODO: Macro to create
+#define ELF64_SYMBOL_TYPE_AND_BINDING(t, b) (((b) << 4) | (t))
 #define ELF64_SYMBOL_BINDING(x) ((x) >> 4)
 #define ELF64_SYMBOL_TYPE(x) ((x) & 0xF)
 
@@ -307,7 +317,7 @@ static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
 	ELF64Symbol symbol;
 	ZERO_STRUCT(&symbol);
 	symbol.strtab_index_for_name = elf_file->next_string_index;
-	symbol.type_and_binding = (binding << 4) | type;
+	symbol.type_and_binding = ELF64_SYMBOL_TYPE_AND_BINDING(type, binding);
 	symbol.section = section;
 	symbol.value = value;
 	symbol.size = size;
@@ -520,8 +530,14 @@ static void finish_strtab_section(ELFFile *elf_file)
 	}
 }
 
-void write_elf_object_file(FILE *output_file, AsmModule *asm_module)
+bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 {
+	FILE *output_file = fopen(output_file_name, "wb");
+	if (output_file == NULL) {
+		perror("Unable to open output file");
+		return false;
+	}
+
 	ELFFile _elf_file;
 	ELFFile *elf_file = &_elf_file;
 	init_elf_file(elf_file, output_file, ET_REL);
@@ -546,19 +562,19 @@ void write_elf_object_file(FILE *output_file, AsmModule *asm_module)
 		add_symbol(elf_file, STT_FUNC, STB_GLOBAL, section,
 				symbol->name, symbol->offset, symbol->size);
 	}
-	// @TODO: Pass the file name through so we have it here
-	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, "foo.c", 0, 0);
+	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, asm_module->input_file_name, 0, 0);
 	finish_symtab_section(elf_file);
 
 	for (u32 i = 0; i < symbols.size; i++) {
 		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
 		add_string(elf_file, symbol->name);
 	}
-	// @TODO: Pass the file name through so we have it here
-	add_string(elf_file, "foo.c");
+	add_string(elf_file, asm_module->input_file_name);
 	finish_strtab_section(elf_file);
 
 	array_free(&symbols);
+	fclose(output_file);
+	return true;
 }
 
 typedef struct Relocation
@@ -842,14 +858,12 @@ typedef struct ArFileHeader
 	char magic[2];
 } __attribute__((packed)) ArFileHeader;
 
-// @TODO: Write symbol table. We'll need to keep track of local symbols too for
-// full coverage.
 // @TODO: Add .note.GNU-STACK section header to prevent executable stack.
-bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_filenames)
+bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input_filenames)
 {
 	bool ret = true;
 
-	FILE *output_file = fopen(executable_filename, "wb");
+	FILE *output_file = fopen(executable_file_name, "wb");
 	if (output_file == NULL) {
 		perror("Failed to open linker output");
 		return false;
@@ -943,7 +957,7 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 	};
 	finish_text_section(elf_file, &empty_array);
 
-	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, executable_filename, 0, 0);
+	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, executable_file_name, 0, 0);
 	for (u32 i = 0; i < symbol_table.size; i++) {
 		Symbol *symbol = ARRAY_REF(&symbol_table, Symbol, i);
 
@@ -1021,7 +1035,7 @@ bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_
 	}
 	finish_symtab_section(elf_file);
 
-	add_string(elf_file, executable_filename);
+	add_string(elf_file, executable_file_name);
 	for (u32 i = 0; i < symbol_table.size; i++) {
 		Symbol *symbol = ARRAY_REF(&symbol_table, Symbol, i);
 		add_string(elf_file, symbol->name);

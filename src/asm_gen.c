@@ -8,9 +8,9 @@
 #include "ir.h"
 #include "util.h"
 
-void init_asm_builder(AsmBuilder *builder)
+void init_asm_builder(AsmBuilder *builder, char *input_file_name)
 {
-	init_asm_module(&builder->asm_module);
+	init_asm_module(&builder->asm_module, input_file_name);
 
 	builder->local_stack_usage = 0;
 	builder->virtual_registers = ARRAY_ZEROED;

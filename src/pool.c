@@ -2,48 +2,48 @@
 
 #include "pool.h"
 
-static inline void entry_init(PoolEntry *entry, size_t size)
+static inline void block_init(PoolBlock *block, size_t size)
 {
-	entry->used = 0;
-	entry->memory = malloc(size);
-	entry->next = NULL;
+	block->used = 0;
+	block->memory = malloc(size);
+	block->next = NULL;
 }
 
-void pool_init(Pool *pool, size_t entry_size)
+void pool_init(Pool *pool, size_t block_size)
 {
-	pool->first_entry = malloc(sizeof *pool->first_entry);
-	entry_init(pool->first_entry, entry_size);
-	pool->first_entry_with_space = pool->first_entry;
-	pool->entry_size = entry_size;
+	pool->first_block = malloc(sizeof *pool->first_block);
+	block_init(pool->first_block, block_size);
+	pool->first_block_with_space = pool->first_block;
+	pool->block_size = block_size;
 }
 
 void *pool_alloc(Pool *pool, size_t size)
 {
-	PoolEntry *entry = pool->first_entry_with_space;
-	if (entry->used + size > pool->entry_size) {
-		PoolEntry *new_entry = malloc(sizeof *new_entry);
-		entry_init(new_entry, pool->entry_size);
-		pool->first_entry_with_space->next = new_entry;
-		pool->first_entry_with_space = new_entry;
+	PoolBlock *block = pool->first_block_with_space;
+	if (block->used + size > pool->block_size) {
+		PoolBlock *new_block = malloc(sizeof *new_block);
+		block_init(new_block, pool->block_size);
+		pool->first_block_with_space->next = new_block;
+		pool->first_block_with_space = new_block;
 
-		entry = new_entry;
+		block = new_block;
 	}
 
-	entry->used += size;
+	block->used += size;
 
-	return entry->memory + entry->used - size;
+	return block->memory + block->used - size;
 }
 
 void pool_free(Pool *pool)
 {
-	PoolEntry *entry = pool->first_entry;
+	PoolBlock *block = pool->first_block;
 
-	while (entry != NULL) {
-		PoolEntry *next_entry = entry->next;
+	while (block != NULL) {
+		PoolBlock *next_block = block->next;
 
-		free(entry->memory);
-		free(entry);
+		free(block->memory);
+		free(block);
 
-		entry = next_entry;
+		block = next_block;
 	}
 }
