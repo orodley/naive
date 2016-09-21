@@ -389,15 +389,15 @@ static Register *arg_reg(AsmArg *arg)
 }
 
 #define ALLOCATION_ORDER \
-	X(0, REG_CLASS_R11), \
-	X(1, REG_CLASS_R10), \
-	X(2, REG_CLASS_R9), \
-	X(3, REG_CLASS_R8), \
+	X(0, REG_CLASS_R12), \
+	X(1, REG_CLASS_R13), \
+	X(2, REG_CLASS_R14), \
+	X(3, REG_CLASS_R15), \
 	X(4, REG_CLASS_B), \
-	X(5, REG_CLASS_R12), \
-	X(6, REG_CLASS_R13), \
-	X(7, REG_CLASS_R14), \
-	X(8, REG_CLASS_R15), \
+	X(5, REG_CLASS_R11), \
+	X(6, REG_CLASS_R10), \
+	X(7, REG_CLASS_R9), \
+	X(8, REG_CLASS_R8), \
 	X(9, REG_CLASS_C), \
 	X(10, REG_CLASS_D), \
 	X(11, REG_CLASS_SI), \
