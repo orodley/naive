@@ -708,9 +708,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	allocate_registers(builder);
 
-	RegClass used_callee_save_regs[
-		STATIC_ARRAY_LENGTH(callee_save_registers)] = { 0 };
-	u32 used_callee_save_regs_size = 0;
+	u32 used_callee_save_regs_bitset = 0;
 	for (u32 i = 0; i < builder->current_function->body.size; i++) {
 		AsmInstr *instr = ARRAY_REF(&builder->current_function->body, AsmInstr, i);
 		for (u32 j = 0; j < instr->num_args; j++) {
@@ -718,7 +716,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 			if (reg != NULL &&
 					reg->type == PHYS_REG &&
 					is_callee_save(reg->val.class)) {
-				used_callee_save_regs[used_callee_save_regs_size++] = reg->val.class;
+				used_callee_save_regs_bitset |= 1 << reg->val.class;
 			}
 		}
 	}
@@ -736,8 +734,11 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 			MOV,
 			asm_phys_reg(REG_CLASS_BP, 64),
 			asm_phys_reg(REG_CLASS_SP, 64));
-	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
-		emit_instr1(builder, PUSH, asm_phys_reg(used_callee_save_regs[i], 64));
+	u32 temp_regs_bitset = used_callee_save_regs_bitset;
+	while (temp_regs_bitset != 0) {
+		RegClass reg = lowest_set_bit(temp_regs_bitset);
+		emit_instr1(builder, PUSH, asm_phys_reg(reg, 64));
+		temp_regs_bitset &= ~(1 << reg);
 	}
 	if (builder->local_stack_usage != 0) {
 		emit_instr2(builder,
@@ -757,8 +758,13 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 				asm_phys_reg(REG_CLASS_SP, 64),
 				asm_const(builder->local_stack_usage));
 	}
-	for (u32 i = 0; i < used_callee_save_regs_size; i++) {
-		emit_instr1(builder, POP, asm_phys_reg(used_callee_save_regs[i], 64));
+	temp_regs_bitset = used_callee_save_regs_bitset;
+	while (temp_regs_bitset != 0) {
+		// We use highest_set_bit so that we iterate in reverse order to the
+		// PUSHes we emit above.
+		RegClass reg = highest_set_bit(temp_regs_bitset);
+		emit_instr1(builder, POP, asm_phys_reg(reg, 64));
+		temp_regs_bitset &= ~(1 << reg);
 	}
 	emit_instr1(builder, POP, asm_phys_reg(REG_CLASS_BP, 64));
 	emit_instr0(builder, RET);

@@ -35,6 +35,23 @@ inline u32 lowest_set_bit(u32 x)
 	return i;
 }
 
+inline u32 highest_set_bit(u32 x)
+{
+	assert(x != 0);
+
+	u32 n;
+	u32 i = 0;
+	while (x != 0) {
+		if ((x & 1) == 1)
+			n = i;
+
+		i++;
+		x >>= 1;
+	}
+
+	return n;
+}
+
 inline u32 bit_count(u32 x)
 {
 	u32 n = 0;
