@@ -230,6 +230,7 @@ static void init_elf_file(ELFFile *elf_file, FILE *output_file, ELFFileType type
 	elf_file->output_file = output_file;
 	elf_file->type = type;
 	elf_file->next_string_index = 1;
+	elf_file->bss_memory_size = 0;
 }
 
 static void start_text_section(ELFFile *elf_file)
@@ -311,7 +312,8 @@ static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
 		elf_file->entry_point_virtual_address = value;
 	}
 	if (section == BSS_INDEX) {
-		elf_file->bss_memory_size = value + size;
+		elf_file->bss_memory_size = value + size
+			- elf_file->section_info[BSS_INDEX].virtual_address;
 	}
 
 	ELF64Symbol symbol;
@@ -395,6 +397,7 @@ static void finish_strtab_section(ELFFile *elf_file)
 			bss_segment_header.type = PT_LOAD;
 			bss_segment_header.segment_location = section_info->offset;
 			bss_segment_header.segment_size_in_file = 0;
+			printf("bss_memory_size = %u\n", elf_file->bss_memory_size);
 			bss_segment_header.segment_size_in_process = elf_file->bss_memory_size;
 			bss_segment_header.base_virtual_address = section_info->virtual_address;
 			bss_segment_header.flags = PF_R | PF_W;
