@@ -217,6 +217,11 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		dump_ir_type(instr->val.store.type);
 		break;
+	case OP_CAST: case OP_ZEXT:
+		dump_value(instr->val.arg);
+		fputs(", ", stdout);
+		dump_ir_type(instr->type);
+		break;
 	case OP_BRANCH:
 		fputs(instr->val.target_block->name, stdout);
 		break;
@@ -358,8 +363,8 @@ IrInstr *build_cond(IrBuilder *builder,
 static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 {
 	switch (op) {
-	case OP_LOCAL: case OP_FIELD: case OP_LOAD: case OP_STORE:
-	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL:
+	case OP_LOCAL: case OP_FIELD: case OP_LOAD: case OP_STORE: case OP_CAST:
+	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL: case OP_ZEXT:
 		UNREACHABLE;
 	case OP_BIT_XOR: return arg1 ^ arg2;
 	case OP_MUL: return arg1 * arg2;
@@ -465,6 +470,26 @@ IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 a
 	instr->val.call.callee = callee;
 	instr->val.call.arity = arity;
 	instr->val.call.arg_array = arg_array;
+
+	return value_instr(instr);
+}
+
+IrValue build_cast(IrBuilder *builder, IrValue value, IrType result_type)
+{
+	IrInstr *instr = append_instr(builder);
+	instr->op = OP_CAST;
+	instr->type = result_type;
+	instr->val.arg = value;
+
+	return value_instr(instr);
+}
+
+IrValue build_zext(IrBuilder *builder, IrValue value, IrType result_type)
+{
+	IrInstr *instr = append_instr(builder);
+	instr->op = OP_ZEXT;
+	instr->type = result_type;
+	instr->val.arg = value;
 
 	return value_instr(instr);
 }

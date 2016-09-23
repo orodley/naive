@@ -124,6 +124,8 @@ typedef struct IrValue
 	X(OP_EQ), \
 	X(OP_NEQ), \
 	X(OP_CALL), \
+	X(OP_CAST), \
+	X(OP_ZEXT), \
 	X(OP_FIELD), \
 	X(OP_LOAD), \
 	X(OP_STORE), \
@@ -226,5 +228,7 @@ IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type);
 IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType type);
 IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 arity,
 		IrValue *arg_array);
+IrValue build_cast(IrBuilder *builder, IrValue value, IrType result_type);
+IrValue build_zext(IrBuilder *builder, IrValue value, IrType result_type);
 
 #endif

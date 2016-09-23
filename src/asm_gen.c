@@ -281,6 +281,30 @@ static void asm_gen_instr(
 
 		break;
 	}
+	case OP_CAST: {
+		assert(instr->val.arg.kind == VALUE_INSTR);
+		instr->vreg_number = instr->val.arg.val.instr->vreg_number;
+
+		break;
+	}
+	case OP_ZEXT: {
+		assert(instr->type.kind == IR_INT);
+		assert(instr->val.arg.type.kind == IR_INT);
+
+		if (instr->type.val.bit_width == 64
+				&& instr->val.arg.type.val.bit_width == 32) {
+			// Implicit zero-extending of MOV 32 - 64
+			emit_instr2(builder,
+					MOV,
+					asm_vreg(next_vreg(builder), 64),
+					asm_value(instr->val.arg));
+			assign_vreg(builder, instr);
+		} else {
+			UNIMPLEMENTED;
+		}
+
+		break;
+	}
 	case OP_CALL: {
 		u32 arity = instr->val.call.arity;
 		assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
