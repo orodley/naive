@@ -20,6 +20,7 @@ typedef struct IrType
 	{
 		IR_INT,
 		IR_POINTER,
+		IR_ARRAY,
 		IR_FUNCTION,
 		IR_STRUCT,
 	} kind;
@@ -34,6 +35,11 @@ typedef struct IrType
 			struct IrStructField *fields;
 			u32 total_size;
 		} strukt;
+		struct
+		{
+			struct IrType *elem_type;
+			u64 size;
+		} array;
 	} val;
 } IrType;
 

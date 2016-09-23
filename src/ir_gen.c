@@ -13,6 +13,7 @@ typedef enum CTypeType
 	FUNCTION_TYPE,
 	STRUCT_TYPE,
 	POINTER_TYPE,
+	ARRAY_TYPE,
 } CTypeType;
 
 typedef struct CType
@@ -47,6 +48,12 @@ typedef struct CType
 			IrType *ir_type;
 		} strukt;
 		struct CType *pointee_type;
+		struct
+		{
+			struct CType *elem_type;
+			u64 size;
+			IrType *ir_type;
+		} array;
 	} val;
 } CType;
 
@@ -68,12 +75,14 @@ static IrType c_type_to_ir_type(CType *ctype)
 			.val.bit_width = bit_width,
 		};
 	}
+	case POINTER_TYPE:
+		return (IrType) { .kind = IR_POINTER };
+	case ARRAY_TYPE:
+		return *ctype->val.array.ir_type;
 	case FUNCTION_TYPE:
 		return (IrType) { .kind = FUNCTION_TYPE };
 	case STRUCT_TYPE:
 		return *ctype->val.strukt.ir_type;
-	case POINTER_TYPE:
-		return (IrType) { .kind = IR_POINTER };
 	}
 }
 
@@ -267,6 +276,127 @@ static CType *pointer_type(TypeEnv *type_env, CType *type)
 	return pointer_type;
 }
 
+static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type,
+		u64 size)
+{
+	CType *array_type =
+		pool_alloc(&type_env->derived_types_pool, sizeof *array_type);
+	array_type->type = ARRAY_TYPE;
+	array_type->cached_pointer_type = NULL;
+	array_type->val.array.elem_type = type;
+	array_type->val.array.size = size;
+
+	IrType *ir_array_type =
+		pool_alloc(&builder->trans_unit->pool, sizeof *ir_array_type);
+	ir_array_type->kind = IR_ARRAY;
+
+	IrType elem_type = c_type_to_ir_type(type);
+	IrType *ir_elem_type;
+
+	if (elem_type.kind == IR_ARRAY) {
+		size *= elem_type.val.array.size;
+		ir_elem_type = elem_type.val.array.elem_type;
+	} else {
+		ir_elem_type =
+			pool_alloc(&builder->trans_unit->pool, sizeof *ir_elem_type);
+		*ir_elem_type = c_type_to_ir_type(type);
+	}
+	ir_array_type->val.array.elem_type = ir_elem_type;
+	ir_array_type->val.array.size = size;
+
+	array_type->val.array.ir_type = ir_array_type;
+
+	return array_type;
+}
+
+static u64 eval_constant_expr(ASTExpr *constant_expr)
+{
+	switch (constant_expr->type) {
+	case INT_LITERAL_EXPR:
+		return constant_expr->val.int_literal;
+	default:
+		UNIMPLEMENTED;
+	}
+}
+
+static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
+		ASTDeclSpecifier *decl_specifier_list,
+		ASTDirectDeclarator *direct_declarator, CDecl *cdecl) {
+	switch (direct_declarator->type) {
+	case FUNCTION_DECLARATOR: {
+		ASTDirectDeclarator *function_declarator =
+			direct_declarator->val.function_declarator.declarator;
+		assert(function_declarator->type == IDENTIFIER_DECLARATOR);
+
+		cdecl->name = function_declarator->val.name;
+
+		assert(decl_specifier_list->next == NULL);
+		assert(decl_specifier_list->type == TYPE_SPECIFIER);
+		CType *return_c_type =
+			type_spec_to_c_type(builder, type_env, decl_specifier_list->val.type_specifier);
+
+		ASTParameterDecl *first_param =
+			direct_declarator->val.function_declarator.parameters;
+		ASTParameterDecl *params = first_param;
+
+		u32 arity = 0;
+		while (params != NULL) {
+			arity++;
+			params = params->next;
+		}
+
+		params = first_param;
+
+		CType **arg_c_types = pool_alloc(
+				&builder->trans_unit->pool,
+				sizeof(*arg_c_types) * arity);
+
+		for (u32 i = 0; i < arity; i++) {
+			CDecl cdecl;
+			decl_to_cdecl(builder, type_env, params->decl_specifier_list,
+					params->declarator, &cdecl);
+			arg_c_types[i] = cdecl.type;
+
+			params = params->next;
+		}
+
+		CType *ctype = pool_alloc(&builder->trans_unit->pool, sizeof *ctype);
+		ctype->type = FUNCTION_TYPE;
+		ctype->val.function.arity = arity;
+		ctype->val.function.arg_type_array = arg_c_types;
+		ctype->val.function.return_type = return_c_type;
+
+		cdecl->type = ctype;
+		break;
+	}
+	case IDENTIFIER_DECLARATOR: {
+		cdecl->name = direct_declarator->val.name;
+		assert(decl_specifier_list->next == NULL);
+		assert(decl_specifier_list->type == TYPE_SPECIFIER);
+
+		ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;
+		cdecl->type = type_spec_to_c_type(builder, type_env, type_spec);
+		break;
+	}
+	case ARRAY_DECLARATOR: {
+		ASTDirectDeclarator *elem_declarator =
+			direct_declarator->val.array_declarator.element_declarator;
+		ASTExpr *array_length_expr =
+			direct_declarator->val.array_declarator.array_length;
+
+		CDecl elem_cdecl;
+		direct_declarator_to_cdecl(builder, type_env, decl_specifier_list,
+				elem_declarator, &elem_cdecl);
+		cdecl->name = elem_cdecl.name;
+		cdecl->type = array_type(builder, type_env, elem_cdecl.type,
+				eval_constant_expr(array_length_expr));
+		break;
+	} 
+	default:
+		UNIMPLEMENTED;
+	}
+}
+
 static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
 		CDecl *cdecl)
@@ -282,23 +412,9 @@ static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		assert(declarator->type == DIRECT_DECLARATOR);
 		ASTDirectDeclarator *direct_declarator = declarator->val.direct_declarator;
 
-		if (direct_declarator->type == FUNCTION_DECLARATOR) {
-			ASTDirectDeclarator *function_declarator =
-				direct_declarator->val.function_declarator.declarator;
-			assert(function_declarator->type == IDENTIFIER_DECLARATOR);
+		direct_declarator_to_cdecl(builder, type_env, decl_specifier_list,
+				direct_declarator, cdecl);
 
-			cdecl->name = function_declarator->val.name;
-		} else if (direct_declarator->type == IDENTIFIER_DECLARATOR) {
-			cdecl->name = direct_declarator->val.name;
-		} else {
-			UNIMPLEMENTED;
-		}
-
-		assert(decl_specifier_list->next == NULL);
-		assert(decl_specifier_list->type == TYPE_SPECIFIER);
-
-		ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;
-		cdecl->type = type_spec_to_c_type(builder, type_env, type_spec);
 	}
 }
 
@@ -322,55 +438,25 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, TypeEnv *type_env,
 {
 	CDecl cdecl;
 	decl_to_cdecl(builder, type_env, decl_specifier_list, declarator, &cdecl);
-	CType *return_c_type = cdecl.type;
-	IrType return_ir_type = c_type_to_ir_type(return_c_type);
-
-	ASTDirectDeclarator *direct_declarator =
-		declarator->val.direct_declarator;
-	if (declarator->type == DIRECT_DECLARATOR &&
-			direct_declarator->type == FUNCTION_DECLARATOR) {
-		ASTParameterDecl *first_param =
-			direct_declarator->val.function_declarator.parameters;
-		ASTParameterDecl *params = first_param;
-
-		u32 arity = 0;
-		while (params != NULL) {
-			arity++;
-			params = params->next;
-		}
-
-		params = first_param;
-
+	CType *ctype = cdecl.type;
+	if (ctype->type == FUNCTION_TYPE) {
+		u32 arity = ctype->val.function.arity;
 		IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
-		CType **arg_c_types = pool_alloc(
-				&builder->trans_unit->pool,
-				sizeof(*arg_c_types) * arity);
-
+		
 		for (u32 i = 0; i < arity; i++) {
-			CDecl cdecl;
-			decl_to_cdecl(builder, type_env, params->decl_specifier_list,
-					params->declarator, &cdecl);
-			arg_ir_types[i] = c_type_to_ir_type(cdecl.type);
-			arg_c_types[i] = cdecl.type;
-
-			params = params->next;
+			CType *arg_c_type = cdecl.type->val.function.arg_type_array[i];
+			arg_ir_types[i] = c_type_to_ir_type(arg_c_type);
 		}
 
 		// @TODO: Search through the currently defined globals for one of the same
 		// name. If found, check that the CType matches and use that one instead of
 		// adding a new one.
 		IrGlobal *global = trans_unit_add_function(
-				builder->trans_unit,
-				direct_declarator->val.function_declarator.declarator->val.name,
-				return_ir_type, arity, arg_ir_types);
+				builder->trans_unit, cdecl.name,
+				c_type_to_ir_type(ctype->val.function.return_type),
+				arity, arg_ir_types);
 
 		assert(global->kind == IR_GLOBAL_FUNCTION);
-
-		CType *ctype = pool_alloc(&builder->trans_unit->pool, sizeof *ctype);
-		ctype->type = FUNCTION_TYPE;
-		ctype->val.function.arity = arity;
-		ctype->val.function.arg_type_array = arg_c_types;
-		ctype->val.function.return_type = return_c_type;
 		*result_c_type = ctype;
 
 		return global;
@@ -380,7 +466,7 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, TypeEnv *type_env,
 		IrGlobal *global = trans_unit_add_var(
 				builder->trans_unit,
 				cdecl.name,
-				c_type_to_ir_type(cdecl.type));
+				c_type_to_ir_type(ctype));
 		*result_c_type = cdecl.type;
 
 		return global;
@@ -768,9 +854,10 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrValue value;
 		IrType ir_type = c_type_to_ir_type(binding->term.ctype);
 
-		// Functions implicitly have their address taken. As do structs.
+		// Functions, arrays, and structs implicitly have their address taken.
 		if (context == LVALUE_CONTEXT
 				|| binding->term.ctype->type == FUNCTION_TYPE
+				|| binding->term.ctype->type == ARRAY_TYPE
 				|| binding->term.ctype->type == STRUCT_TYPE) {
 			value = binding->term.value;
 		} else {
@@ -809,7 +896,9 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case DEREF_EXPR: {
 		ASTExpr *inner_expr = expr->val.unary_arg;
 		Term pointer = ir_gen_expression(builder, env, inner_expr, RVALUE_CONTEXT);
-		assert(pointer.ctype->type == POINTER_TYPE);
+		// @TODO: Function which does this. Use for IDENTIFIER_EXPR as well.
+		assert(pointer.ctype->type == POINTER_TYPE
+				|| pointer.ctype->type == ARRAY_TYPE);
 		CType *pointee_type = pointer.ctype->val.pointee_type;
 
 		IrValue value;

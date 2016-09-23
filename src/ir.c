@@ -120,6 +120,9 @@ bool ir_type_eq(IrType *a, IrType *b)
 		return true;
 	case IR_STRUCT:
 		return streq(a->val.strukt.name, b->val.strukt.name);
+	case IR_ARRAY:
+		return ir_type_eq(a->val.array.elem_type, b->val.array.elem_type)
+			&& a->val.array.size == b->val.array.size;
 	}
 }
 
@@ -132,6 +135,9 @@ u32 size_of_ir_type(IrType type)
 		return 8;
 	case IR_STRUCT:
 		return type.val.strukt.total_size;
+	case IR_ARRAY:
+		// @TODO: Alignment.
+		return type.val.array.size * size_of_ir_type(*type.val.array.elem_type);
 	}
 }
 
@@ -149,6 +155,12 @@ void dump_ir_type(IrType type)
 		break;
 	case IR_STRUCT:
 		printf("$%s", type.val.strukt.name);
+		break;
+	case IR_ARRAY:
+		printf("[%lu x ", type.val.array.size);
+		dump_ir_type(*type.val.array.elem_type);
+		putchar(']');
+		break;
 	}
 }
 
