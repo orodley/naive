@@ -282,13 +282,10 @@ void dump_asm_module(AsmModule *asm_module)
 	for (u32 i = 0; i < asm_module->globals.size; i++) {
 		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
 
-		if (!global->defined) {
-			printf("extern %s\n", global->name);
-		} else {
-			if (global->type == ASM_GLOBAL_FUNCTION) {
-				AsmFunction *func = &global->val.function;
-				dump_asm_function(func);
-			}
+		printf("global %s\n", global->name);
+		if (global->defined && global->type == ASM_GLOBAL_FUNCTION) {
+			AsmFunction *func = &global->val.function;
+			dump_asm_function(func);
 		}
 
 		putchar('\n');
