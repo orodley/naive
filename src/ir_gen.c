@@ -808,7 +808,9 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 		assert(struct_ir_type->kind == IR_STRUCT);
 		IrType field_type = struct_ir_type->val.strukt.fields[field_number].type;
 
-		if (context == RVALUE_CONTEXT && selected_field->type->type != STRUCT_TYPE) {
+		if (context == RVALUE_CONTEXT
+				&& selected_field->type->type != STRUCT_TYPE
+				&& selected_field->type->type != ARRAY_TYPE) {
 			value = build_load(builder, value, field_type);
 		}
 
