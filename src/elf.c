@@ -397,7 +397,6 @@ static void finish_strtab_section(ELFFile *elf_file)
 			bss_segment_header.type = PT_LOAD;
 			bss_segment_header.segment_location = section_info->offset;
 			bss_segment_header.segment_size_in_file = 0;
-			printf("bss_memory_size = %u\n", elf_file->bss_memory_size);
 			bss_segment_header.segment_size_in_process = elf_file->bss_memory_size;
 			bss_segment_header.base_virtual_address = section_info->virtual_address;
 			bss_segment_header.flags = PF_R | PF_W;
