@@ -832,6 +832,11 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, ASTExpr *expr,
 	return (Term) { .ctype = result_type, .value = value };
 }
 
+static inline bool converts_to_pointer(CType *type)
+{
+	return type->type == POINTER_TYPE || type->type == ARRAY_TYPE;
+}
+
 static Term ir_gen_add(IrBuilder *builder, Env *env, ASTExpr *expr)
 {
 	Term arg1 =
@@ -847,13 +852,17 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, ASTExpr *expr)
 			.ctype = arg1.ctype,
 			.value = value,
 		};
-	} else if ((arg1.ctype->type == POINTER_TYPE)
-			^ (arg2.ctype->type == POINTER_TYPE)) {
-		Term pointee = arg1.ctype->type == POINTER_TYPE ? arg1 : arg2;
-		Term other = arg1.ctype->type == POINTER_TYPE ? arg2 : arg1;
+	} else if (converts_to_pointer(arg1.ctype)
+			^ converts_to_pointer(arg2.ctype)) {
+		Term pointee = converts_to_pointer(arg1.ctype) ? arg1 : arg2;
+		Term other = converts_to_pointer(arg1.ctype) ? arg2 : arg1;
 		assert(other.ctype->type == INTEGER_TYPE);
 
 		CType *result_type = pointee.ctype;
+		if (result_type->type == ARRAY_TYPE) {
+			result_type =
+				pointer_type(&env->type_env, result_type->val.array.elem_type);
+		}
 
 		// @TODO: Determine type correctly
 		// @TODO: Don't hardcode in the size of a pointer!
