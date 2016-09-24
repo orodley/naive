@@ -448,13 +448,23 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, TypeEnv *type_env,
 			arg_ir_types[i] = c_type_to_ir_type(arg_c_type);
 		}
 
-		// @TODO: Search through the currently defined globals for one of the same
-		// name. If found, check that the CType matches and use that one instead of
-		// adding a new one.
-		IrGlobal *global = trans_unit_add_function(
-				builder->trans_unit, cdecl.name,
-				c_type_to_ir_type(ctype->val.function.return_type),
-				arity, arg_ir_types);
+		IrGlobal *global = NULL;
+		Array(IrGlobal *) *globals = &builder->trans_unit->globals;
+		for (u32 i = 0; i < globals->size; i++) {
+			IrGlobal *curr_global = *ARRAY_REF(globals, IrGlobal *, i);
+			if (streq(curr_global->name, cdecl.name)) {
+				// @TODO: Check C type matches
+				global = curr_global;
+				break;
+			}
+		}
+		
+		if (global == NULL) {
+			global = trans_unit_add_function(
+					builder->trans_unit, cdecl.name,
+					c_type_to_ir_type(ctype->val.function.return_type),
+					arity, arg_ir_types);
+		}
 
 		assert(global->kind == IR_GLOBAL_FUNCTION);
 		*result_c_type = ctype;
@@ -463,10 +473,25 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, TypeEnv *type_env,
 	} else {
 		CDecl cdecl;
 		decl_to_cdecl(builder, type_env, decl_specifier_list, declarator, &cdecl);
-		IrGlobal *global = trans_unit_add_var(
-				builder->trans_unit,
-				cdecl.name,
-				c_type_to_ir_type(ctype));
+
+		IrGlobal *global = NULL;
+		Array(IrGlobal *) *globals = &builder->trans_unit->globals;
+		for (u32 i = 0; i < globals->size; i++) {
+			IrGlobal *curr_global = *ARRAY_REF(globals, IrGlobal *, i);
+			if (streq(curr_global->name, cdecl.name)) {
+				// @TODO: Check C type matches
+				global = curr_global;
+				break;
+			}
+		}
+
+		if (global == NULL) {
+			global = trans_unit_add_var(
+					builder->trans_unit,
+					cdecl.name,
+					c_type_to_ir_type(ctype));
+		}
+
 		*result_c_type = cdecl.type;
 
 		return global;
@@ -507,6 +532,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 			global = ir_global_for_decl(builder, &env.type_env,
 					decl_specifier_list, declarator, &global_type);
+			assert(!global->defined);
 			IrFunction *function = &global->val.function;
 
 			builder->current_function = function;
