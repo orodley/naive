@@ -868,8 +868,10 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, ASTExpr *expr)
 		// @TODO: Don't hardcode in the size of a pointer!
 		IrType pointer_int_type = (IrType) { .kind = IR_INT, .val.bit_width = 64 };
 
-		IrValue zext = build_zext(builder, other.value, pointer_int_type);
-		IrValue ptr_to_int = build_cast(builder, pointee.value, pointer_int_type);
+		IrValue zext =
+			build_type_instr(builder, OP_ZEXT, other.value, pointer_int_type);
+		IrValue ptr_to_int =
+			build_type_instr(builder, OP_CAST, pointee.value, pointer_int_type);
 		IrValue addend = build_binary_instr(
 				builder,
 				OP_MUL,
@@ -878,7 +880,7 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, ASTExpr *expr)
 					size_of_ir_type(c_type_to_ir_type(result_type))));
 
 		IrValue sum = build_binary_instr(builder, OP_ADD, ptr_to_int, addend);
-		IrValue int_to_ptr = build_cast(builder, sum,
+		IrValue int_to_ptr = build_type_instr(builder, OP_CAST, sum,
 				c_type_to_ir_type(result_type));
 
 		return (Term) {

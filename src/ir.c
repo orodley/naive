@@ -474,20 +474,10 @@ IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 a
 	return value_instr(instr);
 }
 
-IrValue build_cast(IrBuilder *builder, IrValue value, IrType result_type)
+IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType result_type)
 {
 	IrInstr *instr = append_instr(builder);
-	instr->op = OP_CAST;
-	instr->type = result_type;
-	instr->val.arg = value;
-
-	return value_instr(instr);
-}
-
-IrValue build_zext(IrBuilder *builder, IrValue value, IrType result_type)
-{
-	IrInstr *instr = append_instr(builder);
-	instr->op = OP_ZEXT;
+	instr->op = op;
 	instr->type = result_type;
 	instr->val.arg = value;
 

@@ -228,7 +228,6 @@ IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type);
 IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType type);
 IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 arity,
 		IrValue *arg_array);
-IrValue build_cast(IrBuilder *builder, IrValue value, IrType result_type);
-IrValue build_zext(IrBuilder *builder, IrValue value, IrType result_type);
+IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType result_type);
 
 #endif
