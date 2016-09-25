@@ -895,45 +895,25 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 		return (Term) { .ctype = selected_field->type, .value = value };
 }
 
-static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, ASTExpr *expr,
-		IrOp ir_op)
-{
-	// @TODO: Determine type correctly.
-	CType *result_type = look_up_type(env, "int");
-
-	IrValue value = build_binary_instr(
-			builder,
-			ir_op,
-			ir_gen_expression(builder, env, expr->val.binary_op.arg1, RVALUE_CONTEXT).value,
-			ir_gen_expression(builder, env, expr->val.binary_op.arg2, RVALUE_CONTEXT).value);
-
-	return (Term) { .ctype = result_type, .value = value };
-}
-
 static inline bool converts_to_pointer(CType *type)
 {
 	return type->type == POINTER_TYPE || type->type == ARRAY_TYPE;
 }
 
-static Term ir_gen_add(IrBuilder *builder, Env *env, ASTExpr *expr)
+static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 {
-	Term arg1 =
-		ir_gen_expression(builder, env, expr->val.binary_op.arg1, RVALUE_CONTEXT);
-	Term arg2 =
-		ir_gen_expression(builder, env, expr->val.binary_op.arg2, RVALUE_CONTEXT);
-
-	if (arg1.ctype->type == INTEGER_TYPE && arg2.ctype->type == INTEGER_TYPE) {
-		IrValue value = build_binary_instr(builder, OP_ADD, arg1.value, arg2.value);
+	if (left.ctype->type == INTEGER_TYPE && right.ctype->type == INTEGER_TYPE) {
+		IrValue value = build_binary_instr(builder, OP_ADD, left.value, right.value);
 
 		// @TODO: Determine type correctly
 		return (Term) {
-			.ctype = arg1.ctype,
+			.ctype = left.ctype,
 			.value = value,
 		};
-	} else if (converts_to_pointer(arg1.ctype)
-			^ converts_to_pointer(arg2.ctype)) {
-		Term pointee = converts_to_pointer(arg1.ctype) ? arg1 : arg2;
-		Term other = converts_to_pointer(arg1.ctype) ? arg2 : arg1;
+	} else if (converts_to_pointer(left.ctype)
+			^ converts_to_pointer(right.ctype)) {
+		Term pointee = converts_to_pointer(left.ctype) ? left : right;
+		Term other = converts_to_pointer(left.ctype) ? right : left;
 		assert(other.ctype->type == INTEGER_TYPE);
 
 		CType *result_type = pointee.ctype;
@@ -968,6 +948,53 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, ASTExpr *expr)
 	} else {
 		UNIMPLEMENTED;
 	}
+}
+
+static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
+		Term right, IrOp ir_op)
+{
+	if (ir_op == OP_ADD)
+		return ir_gen_add(builder, env, left, right);
+	// @TODO: Determine type correctly.
+	CType *result_type = look_up_type(env, "int");
+
+	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
+
+	return (Term) { .ctype = result_type, .value = value };
+}
+
+static Term ir_gen_binary_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
+		IrOp ir_op)
+{
+	return ir_gen_binary_operator(
+			builder,
+			env,
+			ir_gen_expression(builder, env, expr->val.binary_op.arg1, RVALUE_CONTEXT),
+			ir_gen_expression(builder, env, expr->val.binary_op.arg2, RVALUE_CONTEXT),
+			ir_op);
+}
+
+static Term ir_gen_assign_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
+		IrOp ir_op)
+{
+	Term left = ir_gen_expression(builder, env, expr->val.binary_op.arg1, LVALUE_CONTEXT);
+	Term right = ir_gen_expression(builder, env, expr->val.binary_op.arg2, RVALUE_CONTEXT);
+	Term result = ir_gen_binary_operator(
+			builder,
+			env,
+			(Term) {
+				.ctype = left.ctype,
+				.value = build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
+			},
+			right,
+			ir_op);
+	build_store(
+			builder,
+			left.value,
+			result.value,
+			c_type_to_ir_type(result.ctype));
+
+	return result;
 }
 
 static Term ir_gen_deref(IrBuilder *builder, Term pointer, ExprContext context)
@@ -1058,7 +1085,11 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return ir_gen_deref(builder, pointer, context);
 	}
 	case INDEX_EXPR: {
-		Term pointer = ir_gen_add(builder, env, expr);
+		Term pointer = ir_gen_add(
+				builder,
+				env,
+				ir_gen_expression(builder, env, expr->val.binary_op.arg1, RVALUE_CONTEXT),
+				ir_gen_expression(builder, env, expr->val.binary_op.arg2, RVALUE_CONTEXT));
 		assert(pointer.ctype->type == POINTER_TYPE);
 		return ir_gen_deref(builder, pointer, context);
 	}
@@ -1073,15 +1104,21 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return (Term) { .ctype = result_type, .value = value };
 	}
 	case ADD_EXPR:
-		return ir_gen_add(builder, env, expr);
+		return ir_gen_binary_expr(builder, env, expr, OP_ADD);
 	case BIT_XOR_EXPR:
-		return ir_gen_binary_operator(builder, env, expr, OP_BIT_XOR);
+		return ir_gen_binary_expr(builder, env, expr, OP_BIT_XOR);
 	case MULTIPLY_EXPR:
-		return ir_gen_binary_operator(builder, env, expr, OP_MUL);
+		return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case EQUAL_EXPR:
-		return ir_gen_binary_operator(builder, env, expr, OP_EQ);
+		return ir_gen_binary_expr(builder, env, expr, OP_EQ);
 	case NOT_EQUAL_EXPR:
-		return ir_gen_binary_operator(builder, env, expr, OP_NEQ);
+		return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
+	case ADD_ASSIGN_EXPR:
+		return ir_gen_assign_expr(builder, env, expr, OP_ADD);
+	case BIT_XOR_ASSIGN_EXPR:
+		return ir_gen_assign_expr(builder, env, expr, OP_BIT_XOR);
+	case MULTIPLY_ASSIGN_EXPR:
+		return ir_gen_assign_expr(builder, env, expr, OP_MUL);
 	case FUNCTION_CALL_EXPR: {
 		Term callee = ir_gen_expression(builder, env,
 				expr->val.function_call.callee, RVALUE_CONTEXT);

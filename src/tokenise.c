@@ -568,7 +568,7 @@ static bool tokenise_aux(Reader *reader)
 
 		case '*':
 			if (read_char(reader) == '=') {
-				append_token(reader, start_source_loc, TOK_MULT_ASSIGN);
+				append_token(reader, start_source_loc, TOK_MULTIPLY_ASSIGN);
 			} else {
 				back_up(reader);
 				append_token(reader, start_source_loc, TOK_ASTERISK);
