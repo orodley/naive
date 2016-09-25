@@ -778,7 +778,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 			env->scope = &init_scope;
 		} else {
 			assert(f->init_type == FOR_INIT_EXPR);
-			ir_gen_expression(builder, env, f->init.expr, RVALUE_CONTEXT);
+			if (f->init.expr != NULL)
+				ir_gen_expression(builder, env, f->init.expr, RVALUE_CONTEXT);
 		}
 
 		build_branch(builder, pre_header);
@@ -791,7 +792,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
 		builder->current_block = body;
 		ir_gen_statement(builder, env, f->body);
-		ir_gen_expression(builder, env, f->update_expr, RVALUE_CONTEXT);
+		if (f->update_expr != NULL)
+			ir_gen_expression(builder, env, f->update_expr, RVALUE_CONTEXT);
 		env->scope = prev_scope;
 		build_branch(builder, pre_header);
 
