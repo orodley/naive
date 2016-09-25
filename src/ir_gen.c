@@ -254,6 +254,7 @@ typedef struct Env
 	Scope *scope;
 	TypeEnv type_env;
 	IrBlock *break_target;
+	IrBlock *continue_target;
 } Env;
 
 static CType *look_up_type(Env *env, char *name)
@@ -520,6 +521,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	init_type_env(&env.type_env);
 	env.scope = &global_scope;
 	env.break_target = NULL;
+	env.continue_target = NULL;
 
 	while (toplevel != NULL) {
 		IrGlobal *global = NULL;
@@ -754,13 +756,16 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		build_cond(builder, condition_term.value, body, after);
 
 		IrBlock *prev_break_target = env->break_target;
+		IrBlock *prev_continue_target = env->continue_target;
 		env->break_target = after;
+		env->continue_target = pre_header;
 		builder->current_block = body;
 
 		ir_gen_statement(builder, env, body_statement);
 
 		build_branch(builder, pre_header);
 		env->break_target = prev_break_target;
+		env->continue_target = prev_continue_target;
 
 		builder->current_block = after;
 
@@ -769,6 +774,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 	case FOR_STATEMENT: {
 		IrBlock *pre_header = add_block(builder, "for.ph");
 		IrBlock *body = add_block(builder, "for.body");
+		IrBlock *update = add_block(builder, "for.update");
 		IrBlock *after = add_block(builder, "for.after");
 
 		Scope init_scope;
@@ -799,16 +805,23 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
 		builder->current_block = body;
 		IrBlock *prev_break_target = env->break_target;
+		IrBlock *prev_continue_target = env->continue_target;
 		env->break_target = after;
+		env->continue_target = update;
 
 		ir_gen_statement(builder, env, f->body);
+		build_branch(builder, update);
+		builder->current_block = update;
+
+		env->break_target = prev_break_target;
+		env->continue_target = prev_continue_target;
+
 		if (f->update_expr != NULL)
 			ir_gen_expression(builder, env, f->update_expr, RVALUE_CONTEXT);
 
-		env->scope = prev_scope;
-		env->break_target = prev_break_target;
 		build_branch(builder, pre_header);
 
+		env->scope = prev_scope;
 		builder->current_block = after;
 
 		break;
@@ -816,6 +829,10 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 	case BREAK_STATEMENT:
 		assert(env->break_target != NULL);
 		build_branch(builder, env->break_target);
+		break;
+	case CONTINUE_STATEMENT:
+		assert(env->continue_target != NULL);
+		build_branch(builder, env->continue_target);
 		break;
 	default:
 		UNIMPLEMENTED;
