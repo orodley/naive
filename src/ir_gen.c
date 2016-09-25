@@ -253,6 +253,7 @@ typedef struct Env
 {
 	Scope *scope;
 	TypeEnv type_env;
+	IrBlock *break_target;
 } Env;
 
 static CType *look_up_type(Env *env, char *name)
@@ -518,6 +519,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	Env env;
 	init_type_env(&env.type_env);
 	env.scope = &global_scope;
+	env.break_target = NULL;
 
 	while (toplevel != NULL) {
 		IrGlobal *global = NULL;
@@ -751,9 +753,14 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		assert(condition_term.ctype->type == INTEGER_TYPE);
 		build_cond(builder, condition_term.value, body, after);
 
+		IrBlock *prev_break_target = env->break_target;
+		env->break_target = after;
 		builder->current_block = body;
+
 		ir_gen_statement(builder, env, body_statement);
+
 		build_branch(builder, pre_header);
+		env->break_target = prev_break_target;
 
 		builder->current_block = after;
 
@@ -791,16 +798,25 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		build_cond(builder, condition_term.value, body, after);
 
 		builder->current_block = body;
+		IrBlock *prev_break_target = env->break_target;
+		env->break_target = after;
+
 		ir_gen_statement(builder, env, f->body);
 		if (f->update_expr != NULL)
 			ir_gen_expression(builder, env, f->update_expr, RVALUE_CONTEXT);
+
 		env->scope = prev_scope;
+		env->break_target = prev_break_target;
 		build_branch(builder, pre_header);
 
 		builder->current_block = after;
 
 		break;
 	}
+	case BREAK_STATEMENT:
+		assert(env->break_target != NULL);
+		build_branch(builder, env->break_target);
+		break;
 	default:
 		UNIMPLEMENTED;
 	}
