@@ -9,13 +9,22 @@ void _array_init(Array_ *array, u32 element_size, u32 initial_capacity)
 	array->capacity = initial_capacity;
 	array->size = 0;
 
-	array->elements = malloc(element_size * initial_capacity);
+	if (initial_capacity == 0) {
+		array->elements = NULL;
+	} else {
+		array->elements = malloc(element_size * initial_capacity);
+	}
 }
 
 void array_ensure_room(Array_ *array, u32 element_size)
 {
 	if (array->size >= array->capacity) {
-		array->capacity *= 2;
+		if (array->capacity == 0) {
+			array->capacity = 1;
+		} else {
+			array->capacity *= 2;
+		}
+
 		array->elements = realloc(array->elements, array->capacity * element_size);
 	}
 }
