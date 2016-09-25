@@ -65,11 +65,14 @@ typedef struct Macro
 {
 	char *name;
 	char *value;
+	Array(char *) arg_names;
 } Macro;
 
 static Macro *look_up_macro(Array(Macro) *macro_env, char *name)
 {
-	for (u32 i = 0; i < macro_env->size; i++) {
+	// Iterate in reverse order so that macro params have priority over a
+	// macro with the same name.
+	for (i32 i = macro_env->size - 1; i >= 0; i--) {
 		Macro *m = ARRAY_REF(macro_env, Macro, i);
 		if (streq(m->name, name)) {
 			return m;
@@ -77,16 +80,6 @@ static Macro *look_up_macro(Array(Macro) *macro_env, char *name)
 	}
 
 	return NULL;
-}
-
-static void define_macro(Array(Macro) *macro_env, char *name, char *value)
-{
-	Macro *pre_existing = look_up_macro(macro_env, name);
-	if (pre_existing != NULL) {
-		pre_existing->value = value;
-	} else {
-		*ARRAY_APPEND(macro_env, Macro) = (Macro) { .name = name, .value = value};
-	}
 }
 
 typedef struct Reader
@@ -266,8 +259,10 @@ bool tokenise(Array(SourceToken) *tokens, char *input_filename)
 	bool ret = tokenise_file(&reader, input_filename, reader.source_loc);
 
 	for (u32 i = 0; i < reader.macro_env.size; i++) {
-		free(ARRAY_REF(&reader.macro_env, Macro, i)->name);
-		free(ARRAY_REF(&reader.macro_env, Macro, i)->value);
+		Macro *macro = ARRAY_REF(&reader.macro_env, Macro, i);
+		free(macro->name);
+		free(macro->value);
+		array_free(&macro->arg_names);
 	}
 	array_free(&reader.macro_env);
 
@@ -370,6 +365,71 @@ static void read_int_literal_suffix(Reader *reader)
 			return;
 		}
 	}
+}
+
+static bool substitute_macro_params(Reader *reader, Macro *macro)
+{
+	bool ret;
+
+	Array(char) arg_chars;
+	ARRAY_INIT(&arg_chars, char, 20);
+	u32 args_processed = 0;
+	for (;;) {
+		char c = read_char(reader);
+		if (c == '(') {
+			u32 bracket_depth = 1;
+			*ARRAY_APPEND(&arg_chars, char) = c;
+
+			while (bracket_depth != 0) {
+				char c = read_char(reader);
+				switch (c) {
+				case '(': bracket_depth++; break;
+				case ')': bracket_depth--; break;
+				case '\n':
+					issue_error(&reader->source_loc,
+							"Unexpected newline in macro argument list");
+					ret = false;
+					goto cleanup;
+				}
+
+				*ARRAY_APPEND(&arg_chars, char) = c;
+			}
+		} else if (c == ')' || c == ',') {
+			if (args_processed == macro->arg_names.size) {
+				issue_error(&reader->source_loc,
+						"Too many parameters to function-like macro"
+						" (expected %u)",
+						macro->arg_names.size);
+				ret = false;
+				goto cleanup;
+			}
+			Macro *arg_macro = ARRAY_APPEND(&reader->macro_env, Macro);
+			arg_macro->name = *ARRAY_REF(&macro->arg_names, char *, args_processed);
+			arg_macro->value = strndup((char *)arg_chars.elements, arg_chars.size); 
+			array_clear(&arg_chars);
+			args_processed++;
+
+			if (c == ')') {
+				ret = true;
+				if (args_processed != macro->arg_names.size) {
+					issue_error(&reader->source_loc,
+							"Not enough parameters to function-like macro"
+							" (expected %u, got %u)",
+							macro->arg_names.size,
+							args_processed);
+					ret = false;
+				}
+
+				goto cleanup;
+			}
+		} else {
+			*ARRAY_APPEND(&arg_chars, char) = c;
+		}
+	}
+
+cleanup:
+	array_free(&arg_chars);
+	return ret;
 }
 
 static bool tokenise_aux(Reader *reader)
@@ -703,8 +763,30 @@ static bool tokenise_aux(Reader *reader)
 					Token *token =
 						append_token(reader, start_source_loc, TOK_SYMBOL);
 					token->val.symbol = symbol;
-				} else if (!tokenise_string(reader, macro->value)) {
-					return false;
+				} else {
+					if (macro->arg_names.size == 0) {
+						if (!tokenise_string(reader, macro->value))
+							return false;
+					} else {
+						skip_whitespace_and_comments(reader, true);
+						if (peek_char(reader) != '(') {
+							// This identifier names a function-like macro, but
+							// it appears here without arguments. Therefore, we
+							// leave it as is.
+							Token *token =
+								append_token(reader, start_source_loc, TOK_SYMBOL);
+							token->val.symbol = symbol;
+						} else {
+							read_char(reader);
+							substitute_macro_params(reader, macro);
+							if (!tokenise_string(reader, macro->value))
+								return false;
+
+							// Remove the temporary macro values inserted for
+							// the macro parameters.
+							reader->macro_env.size -= macro->arg_names.size;
+						}
+					}
 				}
 			}
 
@@ -717,7 +799,6 @@ static bool tokenise_aux(Reader *reader)
 
 	return true;
 }
-
 
 // @TODO: This is probably too conservative - fopen can fail for other reasons.
 static bool file_exists(char *path)
@@ -870,6 +951,36 @@ static bool handle_pp_directive(Reader *reader)
 
 		char *macro_name = read_symbol(reader);
 
+		Array(char *) arg_names;
+		ARRAY_INIT(&arg_names, char *, 0);
+		if (peek_char(reader) == '(') {
+			read_char(reader);
+			for (;;) {
+				skip_whitespace_and_comments(reader, false);
+				char c = read_char(reader);
+				if (c == '\n') {
+					issue_error(&reader->source_loc,
+							"Unexpected newline in macro argument list");
+					return false;
+				} else if (!initial_ident_char(c)) {
+					issue_error(&reader->source_loc,
+							"Unexpected charater while processing macro argument list");
+					return false;
+				} else {
+					*ARRAY_APPEND(&arg_names, char *) = read_symbol(reader);
+					skip_whitespace_and_comments(reader, false);
+					char next = read_char(reader);
+					if (next == ')') {
+						break;
+					} else if (next != ',') {
+						issue_error(&reader->source_loc,
+								"Expected comma after macro argument name");
+						return false;
+					}
+				}
+			}
+		}
+
 		skip_whitespace_and_comments(reader, false);
 		Array(char) macro_value_chars;
 		ARRAY_INIT(&macro_value_chars, char, 10);
@@ -879,7 +990,17 @@ static bool handle_pp_directive(Reader *reader)
 		char *macro_value = strndup((char *)macro_value_chars.elements, macro_value_chars.size);
 		array_free(&macro_value_chars);
 
-		define_macro(&reader->macro_env, macro_name, macro_value);
+		Macro *macro = look_up_macro(&reader->macro_env, macro_name);
+		if (macro != NULL) {
+			// @TODO: Proper checks as per C99 6.10.3.2
+			assert(macro->arg_names.size == arg_names.size);
+		} else {
+			macro = ARRAY_APPEND(&reader->macro_env, Macro);
+		}
+
+		macro->name = macro_name;
+		macro->value = macro_value;
+		macro->arg_names = arg_names;
 	} else if (streq(directive, "undef")) {
 		UNIMPLEMENTED;
 	} else if (streq(directive, "line")) {
