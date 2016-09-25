@@ -224,11 +224,20 @@ static void asm_gen_instr(
 	case OP_BRANCH:
 		emit_instr1(builder, JMP, asm_label(instr->val.target_block->label));
 		break;
-	case OP_COND:
-		emit_instr2(builder, CMP, asm_value(instr->val.cond.condition), asm_const(0));
-		emit_instr1(builder, JE, asm_label(instr->val.cond.else_block->label));
-		emit_instr1(builder, JMP, asm_label(instr->val.cond.then_block->label));
+	case OP_COND: {
+		IrValue condition = instr->val.cond.condition;
+		if (condition.kind == VALUE_CONST) {
+			IrBlock *block = condition.val.constant == 0 ?
+				instr->val.cond.else_block :
+				instr->val.cond.then_block;
+			emit_instr1(builder, JMP, asm_label(block->label));
+		} else {
+			emit_instr2(builder, CMP, asm_value(condition), asm_const(0));
+			emit_instr1(builder, JE, asm_label(instr->val.cond.else_block->label));
+			emit_instr1(builder, JMP, asm_label(instr->val.cond.then_block->label));
+		}
 		break;
+	}
 	case OP_STORE: {
 		IrValue pointer = instr->val.store.pointer;
 		IrValue value = instr->val.store.value;
