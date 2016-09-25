@@ -321,6 +321,20 @@ static u64 eval_constant_expr(ASTExpr *constant_expr)
 	}
 }
 
+static ASTParameterDecl *params_for_function_declarator(ASTDeclarator *declarator)
+{
+	while (declarator->type != DIRECT_DECLARATOR) {
+		assert(declarator->type == POINTER_DECLARATOR);
+		declarator = declarator->val.pointer_declarator.pointee;
+	}
+
+	assert(declarator->type == DIRECT_DECLARATOR);
+	ASTDirectDeclarator* direct_declarator = declarator->val.direct_declarator;
+	assert(direct_declarator->type == FUNCTION_DECLARATOR);
+
+	return direct_declarator->val.function_declarator.parameters;
+}
+
 static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		ASTDeclSpecifier *decl_specifier_list,
 		ASTDirectDeclarator *direct_declarator, CDecl *cdecl) {
@@ -409,7 +423,15 @@ static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		decl_to_cdecl(builder, type_env, decl_specifier_list,
 				declarator->val.pointer_declarator.pointee, &pointee_cdecl);
 		cdecl->name = pointee_cdecl.name;
-		cdecl->type = pointer_type(type_env, pointee_cdecl.type);
+
+		if (pointee_cdecl.type->type == FUNCTION_TYPE) {
+			CType **return_type_ptr = &pointee_cdecl.type->val.function.return_type;
+			CType *return_type = *return_type_ptr;
+			*return_type_ptr = pointer_type(type_env, return_type);
+			cdecl->type = pointee_cdecl.type;
+		} else {
+			cdecl->type = pointer_type(type_env, pointee_cdecl.type);
+		}
 	} else {
 		assert(declarator->type == DIRECT_DECLARATOR);
 		ASTDirectDeclarator *direct_declarator = declarator->val.direct_declarator;
@@ -548,12 +570,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ARRAY_INIT(param_bindings, Binding, 5);
 			env.scope = &scope;
 
-			ASTDirectDeclarator *direct_declarator =
-				declarator->val.direct_declarator;
-			assert(direct_declarator->type == FUNCTION_DECLARATOR);
-
-			ASTParameterDecl *param =
-				direct_declarator->val.function_declarator.parameters;
+			ASTParameterDecl *param = params_for_function_declarator(declarator);
 			for (u32 i = 0; param != NULL; i++, param = param->next) {
 				Binding *binding = ARRAY_APPEND(param_bindings, Binding);
 

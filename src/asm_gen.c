@@ -211,11 +211,12 @@ static void asm_gen_instr(
 	case OP_RET: {
 		IrValue arg = instr->val.arg;
 		assert(ir_type_eq(&ir_func->return_type, &arg.type));
-		assert(ir_func->return_type.kind == IR_INT);
+		assert(ir_func->return_type.kind == IR_INT
+				|| ir_func->return_type.kind == IR_POINTER);
 
 		emit_instr2(builder,
 				MOV,
-				asm_phys_reg(REG_CLASS_A, ir_func->return_type.val.bit_width),
+				asm_phys_reg(REG_CLASS_A, size_of_ir_type(ir_func->return_type) * 8),
 				asm_value(arg));
 		emit_instr1(builder, JMP, asm_label(builder->current_function->ret_label));
 
@@ -708,7 +709,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		array_free(&builder->virtual_registers);
 	ARRAY_INIT(&builder->virtual_registers, VRegInfo, 20);
 	IrType return_type = ir_func->return_type;
-	assert(return_type.kind == IR_INT && return_type.val.bit_width == 32);
+	assert(return_type.kind == IR_INT || return_type.kind == IR_POINTER);
 
 	assert(ir_func->arity <= STATIC_ARRAY_LENGTH(argument_registers));
 	for (u32 i = 0; i < ir_func->arity; i++) {

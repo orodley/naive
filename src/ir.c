@@ -510,7 +510,7 @@ IrValue value_global(IrGlobal *global)
 {
 	IrValue value = {
 		.kind = VALUE_GLOBAL,
-		.type = global->ir_type,
+		.type = (IrType) { .kind = IR_POINTER },
 		.val.global = global,
 	};
 
