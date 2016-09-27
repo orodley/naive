@@ -588,8 +588,27 @@ ASTDirectDeclarator *build_sub_declarator(Parser *parser,
 	return result;
 }
 
+static ParserResult identifier_not_sizeof(Parser *parser);
+
 #include "parse.inc"
 
+// In general we prefer not to reject identifiers that are keywords during
+// parsing, because it's easier to provide good error messages by doing so
+// during ir_gen instead. However we need to reject "sizeof" so that
+// "sizeof *foo" isn't interpreted as MULTIPLY_EXPR.
+static ParserResult identifier_not_sizeof(Parser *parser)
+{
+	u32 start = parser->position;
+	Token *token = read_token(parser);
+	if (token->type != TOK_SYMBOL) {
+		return revert(parser, start);
+	}
+	if (streq(token->val.symbol, "sizeof")) {
+		return revert(parser, start);
+	}
+
+	return success(build_identifier(parser, token));
+}
 
 
 // The input array consists of SourceTokens, but we treat them as Tokens most
@@ -692,7 +711,8 @@ static void dump_type_name(ASTTypeName *type_name)
 	pretty_printf("TYPE_NAME(");
 	dump_decl_specifier_list(type_name->decl_specifier_list);
 	pretty_printf(",");
-	dump_declarator(type_name->declarator);
+	if (type_name->declarator != NULL)
+		dump_declarator(type_name->declarator);
 	pretty_printf(")");
 }
 

@@ -351,11 +351,16 @@ build_return_statement =
 
 
 primary_expr =
-    or(identifier,
+    or(identifier_not_sizeof,
         constant,
         seq(middle, TOK_LROUND, expr, TOK_RROUND))
 
 identifier = seq(build_identifier, TOK_SYMBOL)
+
+build_identifier =
+	build(ASTExpr, 1,
+		type, IDENTIFIER_EXPR,
+		val.identifier, "((Token *)#0)->val.symbol")
 
 constant =
 	seq(build_constant,
@@ -375,11 +380,6 @@ postfix_expr =
             initializer_list, opt(TOK_COMMA),
             TOK_RCURLY))
 
-build_identifier =
-	build(ASTExpr, 1,
-		type, IDENTIFIER_EXPR,
-		val.identifier, "((Token *)#0)->val.symbol")
-
 argument_expr_list = list(ASTArgument, seq(build_argument, assignment_expr), TOK_COMMA)
 
 build_argument = build(ASTArgument, 1, expr, #0)
@@ -390,8 +390,8 @@ unary_expr =
         seq(build_unary_expr, TOK_INCREMENT, unary_expr),
         seq(build_unary_expr, TOK_DECREMENT, unary_expr),
         seq(build_unary_expr, unary_operator, cast_expr),
-        seq(build_sizeof_expr, keyword(sizeof), unary_expr),
-        seq(build_sizeof_type, keyword(sizeof), TOK_LROUND, type_name, TOK_RROUND))
+        seq(build_sizeof_type, keyword(sizeof), TOK_LROUND, type_name, TOK_RROUND),
+        seq(build_sizeof_expr, keyword(sizeof), unary_expr))
 
 unary_operator =
     or(TOK_AMPERSAND, TOK_ASTERISK, TOK_PLUS, TOK_MINUS, TOK_BIT_NOT, TOK_LOGICAL_NOT)
