@@ -63,11 +63,9 @@ static IrType c_type_to_ir_type(CType *ctype)
 	case INTEGER_TYPE: {
 		u32 bit_width;
 		switch (ctype->val.integer.type) {
-		case INT:
-			bit_width = 32;
-			break;
-		default:
-			UNIMPLEMENTED;
+		case CHAR: bit_width = 8; break;
+		case INT: bit_width = 32; break;
+		default: UNIMPLEMENTED;
 		}
 
 		return (IrType) {
@@ -149,6 +147,17 @@ static void init_type_env(TypeEnv *type_env)
 				.type = INTEGER_TYPE,
 				.cached_pointer_type = NULL,
 				.val.integer.type = INT,
+				.val.integer.is_signed = true,
+			},
+		};
+	*ARRAY_APPEND(&type_env->bare_types, TypeEnvEntry) =
+		(TypeEnvEntry) {
+			.name = "char",
+			.type = (CType) {
+				.type = INTEGER_TYPE,
+				.cached_pointer_type = NULL,
+				.val.integer.type = CHAR,
+				// System V x86-64 says "char" == "signed char"
 				.val.integer.is_signed = true,
 			},
 		};
@@ -417,7 +426,15 @@ static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
 		CDecl *cdecl)
 {
-	if (declarator->type == POINTER_DECLARATOR) {
+	if (declarator == NULL) {
+		// @TODO: Merge with the code in type_spec_to_ctype when we handle
+		// other decl specifiers.
+		assert(decl_specifier_list->next == NULL);
+		assert(decl_specifier_list->type == TYPE_SPECIFIER);
+
+		ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;
+		cdecl->type = type_spec_to_c_type(builder, type_env, type_spec);
+	} else if (declarator->type == POINTER_DECLARATOR) {
 		CDecl pointee_cdecl;
 		assert(declarator->val.pointer_declarator.decl_specifier_list == NULL);
 		decl_to_cdecl(builder, type_env, decl_specifier_list,
@@ -438,7 +455,6 @@ static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 
 		direct_declarator_to_cdecl(builder, type_env, decl_specifier_list,
 				direct_declarator, cdecl);
-
 	}
 }
 
@@ -1168,6 +1184,48 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case COMMA_EXPR:
 		ir_gen_expression(builder, env, expr->val.binary_op.arg1, RVALUE_CONTEXT);
 		return ir_gen_expression(builder, env, expr->val.binary_op.arg2, RVALUE_CONTEXT);
+	case SIZEOF_TYPE_EXPR: {
+		ASTDeclSpecifier *decl_specifier_list = expr->val.type->decl_specifier_list;
+		ASTDeclarator *declarator = expr->val.type->declarator;
+
+		CDecl cdecl;
+		decl_to_cdecl(builder, &env->type_env, decl_specifier_list, declarator, &cdecl);
+
+		// @TODO: This should be a size_t
+		CType *result_type = look_up_type(env, "int");
+
+		IrValue value = value_const(c_type_to_ir_type(result_type),
+				size_of_ir_type(c_type_to_ir_type(cdecl.type)));
+
+		return (Term) { .ctype = result_type, .value = value };
+	}
+	case SIZEOF_EXPR_EXPR: {
+		ASTExpr *sizeof_expr = expr->val.unary_arg;
+
+		u64 size;
+
+		// @TODO: Do this more generally. We probably want a third ExprContext,
+		// SIZEOF_CONTEXT. This would behave like RVALUE_CONTEXT, but not
+		// actually generate any IR, just determine types.
+		if (sizeof_expr->type == IDENTIFIER_EXPR) {
+			Term term = ir_gen_expression(builder, env, sizeof_expr, LVALUE_CONTEXT);
+			size = size_of_ir_type(c_type_to_ir_type(term.ctype));
+		} else if (sizeof_expr->type == DEREF_EXPR) {
+			ASTExpr *inner_expr = sizeof_expr->val.unary_arg;
+			if (inner_expr->type != IDENTIFIER_EXPR)
+				UNIMPLEMENTED;
+			Term term = ir_gen_expression(builder, env, inner_expr, LVALUE_CONTEXT);
+			assert(term.ctype->type == POINTER_TYPE);
+			size = size_of_ir_type(c_type_to_ir_type(term.ctype->val.pointee_type));
+		} else {
+			UNIMPLEMENTED;
+		}
+
+		// @TODO: This should be a size_t
+		CType *result_type = look_up_type(env, "int");
+		IrValue value = value_const(c_type_to_ir_type(result_type), size);
+		return (Term) { .ctype = result_type, .value = value };
+	}
 	default:
 		printf("%d\n", expr->type);
 		UNIMPLEMENTED;
