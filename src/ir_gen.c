@@ -990,27 +990,31 @@ static Term ir_gen_binary_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			ir_op);
 }
 
+static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
+		Term right, IrOp ir_op, Term *pre_assign_value)
+{
+	Term load = (Term) {
+		.ctype = left.ctype,
+		.value = build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
+	};
+	Term result = ir_gen_binary_operator(builder, env, load, right, ir_op);
+	build_store(builder,
+			left.value,
+			result.value,
+			c_type_to_ir_type(result.ctype));
+
+	if (pre_assign_value != NULL)
+		*pre_assign_value = load;
+
+	return result;
+}
+
 static Term ir_gen_assign_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrOp ir_op)
 {
 	Term left = ir_gen_expression(builder, env, expr->val.binary_op.arg1, LVALUE_CONTEXT);
 	Term right = ir_gen_expression(builder, env, expr->val.binary_op.arg2, RVALUE_CONTEXT);
-	Term result = ir_gen_binary_operator(
-			builder,
-			env,
-			(Term) {
-				.ctype = left.ctype,
-				.value = build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
-			},
-			right,
-			ir_op);
-	build_store(
-			builder,
-			left.value,
-			result.value,
-			c_type_to_ir_type(result.ctype));
-
-	return result;
+	return ir_gen_assign_op(builder, env, left, right, ir_op, NULL);
 }
 
 static Term ir_gen_deref(IrBuilder *builder, Term pointer, ExprContext context)
@@ -1131,6 +1135,24 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
 	case ADD_ASSIGN_EXPR:
 		return ir_gen_assign_expr(builder, env, expr, OP_ADD);
+	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {
+		Term ptr = ir_gen_expression(builder, env, expr->val.unary_arg, LVALUE_CONTEXT);
+		// @TODO: Correct type
+		CType *one_type = look_up_type(env, "int");
+		Term one = (Term) {
+			.value = value_const(c_type_to_ir_type(one_type), 1),
+			.ctype = one_type,
+		};
+		Term pre_assign_value;
+		Term incremented =
+			ir_gen_assign_op(builder, env, ptr, one, OP_ADD, &pre_assign_value);
+
+		if (expr->type == PRE_INCREMENT_EXPR) {
+			return incremented;
+		} else {
+			return pre_assign_value;
+		}
+	}
 	case BIT_XOR_ASSIGN_EXPR:
 		return ir_gen_assign_expr(builder, env, expr, OP_BIT_XOR);
 	case MULTIPLY_ASSIGN_EXPR:
