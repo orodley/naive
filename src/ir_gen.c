@@ -1126,6 +1126,8 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case ADD_EXPR:
 		return ir_gen_binary_expr(builder, env, expr, OP_ADD);
+	case MINUS_EXPR:
+		return ir_gen_binary_expr(builder, env, expr, OP_SUB);
 	case BIT_XOR_EXPR:
 		return ir_gen_binary_expr(builder, env, expr, OP_BIT_XOR);
 	case MULTIPLY_EXPR:

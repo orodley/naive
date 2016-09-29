@@ -122,6 +122,7 @@ typedef struct IrValue
 	X(OP_BIT_XOR), \
 	X(OP_MUL), \
 	X(OP_ADD), \
+	X(OP_SUB), \
 	X(OP_EQ), \
 	X(OP_NEQ), \
 	X(OP_CALL), \

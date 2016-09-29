@@ -40,6 +40,8 @@ SETE r/m8              =         [0F 94] /0
 
 SETNE r/m8             =         [0F 95] /0
 
+SUB r/m32, r32         =         29 /r
+SUB r/m32, imm8        =         83 /5 ib
 SUB r/m64, imm8        = REX.W + 83 /5 ib
 
 XOR r/m32, r32         =         31 /r

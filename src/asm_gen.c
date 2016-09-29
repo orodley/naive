@@ -356,6 +356,18 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
+	case OP_SUB: {
+		assert(instr->type.kind == IR_INT);
+		u8 width = instr->type.val.bit_width;
+
+		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
+		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
+		emit_instr2(builder, SUB, asm_vreg(next_vreg(builder), width), arg2);
+
+		assign_vreg(builder, instr);
+		break;
+	}
 	case OP_MUL: {
 		assert(instr->type.kind == IR_INT);
 		u8 width = instr->type.val.bit_width;
