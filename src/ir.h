@@ -31,9 +31,10 @@ typedef struct IrType
 		struct
 		{
 			char *name;
-			u32 num_fields;
 			struct IrStructField *fields;
+			u32 num_fields;
 			u32 total_size;
+			u8 alignment;
 		} strukt;
 		struct
 		{
@@ -204,6 +205,7 @@ IrBlock *add_block_to_function(
 
 bool ir_type_eq(IrType *a, IrType *b);
 u32 size_of_ir_type(IrType type);
+u32 align_of_ir_type(IrType type);
 void dump_ir_type(IrType type);
 
 void dump_trans_unit(TransUnit *trans_unit);

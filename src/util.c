@@ -2,6 +2,8 @@
 
 #include "util.h"
 
+extern inline u32 max(u32 a, u32 b);
+
 char *strndup(char *str, u32 length)
 {
 	char *result = malloc(length + 1);

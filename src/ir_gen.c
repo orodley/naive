@@ -232,22 +232,23 @@ static CType *type_spec_to_c_type(IrBuilder *builder, TypeEnv *type_env,
 		IrType *ir_struct =
 			trans_unit_add_struct(builder->trans_unit, name, fields->size);
 		u32 current_offset = 0;
+		u32 max_field_align = 0;
 		for (u32 i = 0; i < fields->size; i++) {
 			CDecl *field = ARRAY_REF(fields, CDecl, i);
 			IrType field_type = c_type_to_ir_type(field->type);
 			u32 field_size = size_of_ir_type(field_type);
+			u32 field_align = align_of_ir_type(field_type);
+			max_field_align = max(max_field_align, field_align);
 
-			// @TODO: This is stricter than necessary for structs. We should
-			// track not only the size of a type, but its alignment
-			// requirements.
-			current_offset = align_to(current_offset, field_size);
+			current_offset = align_to(current_offset, field_align);
 
 			ir_struct->val.strukt.fields[i].type = field_type;
 			ir_struct->val.strukt.fields[i].offset = current_offset;
 
 			current_offset += field_size;
 		}
-		ir_struct->val.strukt.total_size = current_offset;
+		ir_struct->val.strukt.total_size = align_to(current_offset, max_field_align);
+		ir_struct->val.strukt.alignment = max_field_align;
 		type->val.strukt.ir_type = ir_struct;
 
 		return &struct_type->type;

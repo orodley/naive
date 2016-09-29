@@ -136,8 +136,19 @@ u32 size_of_ir_type(IrType type)
 	case IR_STRUCT:
 		return type.val.strukt.total_size;
 	case IR_ARRAY:
-		// @TODO: Alignment.
 		return type.val.array.size * size_of_ir_type(*type.val.array.elem_type);
+	}
+}
+
+u32 align_of_ir_type(IrType type)
+{
+	switch (type.kind) {
+	case IR_STRUCT:
+		return type.val.strukt.alignment;
+	case IR_ARRAY:
+		return align_of_ir_type(*type.val.array.elem_type);
+	default:
+		return size_of_ir_type(type);
 	}
 }
 
