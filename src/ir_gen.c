@@ -1235,6 +1235,8 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
 	case ADD_ASSIGN_EXPR:
 		return ir_gen_assign_expr(builder, env, expr, OP_ADD);
+	case MINUS_ASSIGN_EXPR:
+		return ir_gen_assign_expr(builder, env, expr, OP_SUB);
 	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {
 		Term ptr = ir_gen_expression(builder, env, expr->val.unary_arg, LVALUE_CONTEXT);
 		// @TODO: Correct type

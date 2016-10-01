@@ -21,6 +21,9 @@ int main()
 	assert((x *= 2) == 12);
 	assert(x == 12);
 
+	assert((x -= 2) == 10);
+	assert(x == 10);
+
 	assert((*foo() += 5) == 5);
 	assert(quux == 5);
 
