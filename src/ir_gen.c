@@ -1247,22 +1247,26 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 		return (Term) { .ctype = result_type, .value = value };
 	}
-	case ADD_EXPR:
-		return ir_gen_binary_expr(builder, env, expr, OP_ADD);
-	case MINUS_EXPR:
-		return ir_gen_binary_expr(builder, env, expr, OP_SUB);
-	case BIT_XOR_EXPR:
-		return ir_gen_binary_expr(builder, env, expr, OP_BIT_XOR);
-	case MULTIPLY_EXPR:
-		return ir_gen_binary_expr(builder, env, expr, OP_MUL);
-	case EQUAL_EXPR:
-		return ir_gen_binary_expr(builder, env, expr, OP_EQ);
-	case NOT_EQUAL_EXPR:
-		return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
-	case ADD_ASSIGN_EXPR:
-		return ir_gen_assign_expr(builder, env, expr, OP_ADD);
-	case MINUS_ASSIGN_EXPR:
-		return ir_gen_assign_expr(builder, env, expr, OP_SUB);
+	case ADD_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_ADD);
+	case MINUS_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SUB);
+	case BIT_XOR_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_BIT_XOR);
+	case BIT_AND_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_BIT_AND);
+	case BIT_OR_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_BIT_OR);
+	case BIT_NOT_EXPR: {
+		// @TODO: Determine type correctly.
+		CType *result_type = &env->type_env.int_type;
+		Term term = ir_gen_expression(builder, env, expr->val.unary_arg, RVALUE_CONTEXT);
+
+		return (Term) {
+			.value = build_unary_instr(builder, OP_BIT_NOT, term.value),
+			.ctype = result_type,
+		};
+	}
+	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
+	case EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_EQ);
+	case NOT_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
+	case ADD_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_ADD);
+	case MINUS_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SUB);
 	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {
 		Term ptr = ir_gen_expression(builder, env, expr->val.unary_arg, LVALUE_CONTEXT);
 		// @TODO: Correct type
@@ -1281,10 +1285,10 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 			return pre_assign_value;
 		}
 	}
-	case BIT_XOR_ASSIGN_EXPR:
-		return ir_gen_assign_expr(builder, env, expr, OP_BIT_XOR);
-	case MULTIPLY_ASSIGN_EXPR:
-		return ir_gen_assign_expr(builder, env, expr, OP_MUL);
+	case BIT_XOR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_XOR);
+	case BIT_AND_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_AND);
+	case BIT_OR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_OR);
+	case MULTIPLY_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_MUL);
 	case FUNCTION_CALL_EXPR: {
 		Term callee = ir_gen_expression(builder, env,
 				expr->val.function_call.callee, RVALUE_CONTEXT);

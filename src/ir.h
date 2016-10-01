@@ -120,6 +120,9 @@ typedef struct IrValue
 
 #define IR_OPS \
 	X(OP_BIT_XOR), \
+	X(OP_BIT_OR), \
+	X(OP_BIT_AND), \
+	X(OP_BIT_NOT), \
 	X(OP_MUL), \
 	X(OP_DIV), \
 	X(OP_ADD), \

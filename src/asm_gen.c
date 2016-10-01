@@ -177,6 +177,19 @@ AsmLabel *append_label(AsmBuilder *builder, char *name)
 	return label;
 }
 
+static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
+{
+	assert(instr->type.kind == IR_INT);
+	u8 width = instr->type.val.bit_width;
+
+	AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
+	AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+	emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
+	emit_instr2(builder, op, asm_vreg(next_vreg(builder), width), arg2);
+
+	assign_vreg(builder, instr);
+}
+
 static void asm_gen_instr(
 		IrFunction *ir_func, AsmBuilder *builder, IrInstr *instr)
 {
@@ -341,42 +354,31 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
 		break;
 	}
-	case OP_BIT_XOR: {
+	case OP_BIT_XOR:
+		asm_gen_binary_instr(builder, instr, XOR);
+		break;
+	case OP_BIT_AND:
+		asm_gen_binary_instr(builder, instr, AND);
+		break;
+	case OP_BIT_OR:
+		asm_gen_binary_instr(builder, instr, OR);
+		break;
+	case OP_BIT_NOT:
 		assert(instr->type.kind == IR_INT);
 		u8 width = instr->type.val.bit_width;
 
-		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
-		emit_instr2(builder, XOR, asm_vreg(next_vreg(builder), width), arg2);
+		AsmArg arg = asm_value(instr->val.arg);
+		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg);
+		emit_instr1(builder, NOT, asm_vreg(next_vreg(builder), width));
 
 		assign_vreg(builder, instr);
 		break;
-	}
-	case OP_ADD: {
-		assert(instr->type.kind == IR_INT);
-		u8 width = instr->type.val.bit_width;
-
-		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
-		emit_instr2(builder, ADD, asm_vreg(next_vreg(builder), width), arg2);
-
-		assign_vreg(builder, instr);
+	case OP_ADD:
+		asm_gen_binary_instr(builder, instr, ADD);
 		break;
-	}
-	case OP_SUB: {
-		assert(instr->type.kind == IR_INT);
-		u8 width = instr->type.val.bit_width;
-
-		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
-		emit_instr2(builder, SUB, asm_vreg(next_vreg(builder), width), arg2);
-
-		assign_vreg(builder, instr);
+	case OP_SUB:
+		asm_gen_binary_instr(builder, instr, SUB);
 		break;
-	}
 	case OP_MUL: {
 		assert(instr->type.kind == IR_INT);
 		u8 width = instr->type.val.bit_width;

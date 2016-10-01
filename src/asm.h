@@ -105,6 +105,8 @@ typedef struct AsmArg
 	X(CALL), \
 	X(XOR), \
 	X(AND), \
+	X(OR), \
+	X(NOT), \
 	X(ADD), \
 	X(SUB), \
 	X(PUSH), \

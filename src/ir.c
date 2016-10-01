@@ -241,7 +241,7 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		printf("%s, %s", instr->val.cond.then_block->name, instr->val.cond.else_block->name);
 		break;
-	case OP_RET:
+	case OP_RET: case OP_BIT_NOT:
 		dump_value(instr->val.arg);
 		break;
 	case OP_CALL:
@@ -251,8 +251,8 @@ static void dump_instr(IrInstr *instr)
 			dump_value(instr->val.call.arg_array[i]);
 		}
 		break;
-	case OP_BIT_XOR: case OP_MUL: case OP_DIV: case OP_EQ: case OP_ADD:
-	case OP_SUB: case OP_NEQ:
+	case OP_BIT_XOR: case OP_BIT_AND: case OP_BIT_OR: case OP_MUL: case OP_DIV:
+	case OP_EQ: case OP_ADD: case OP_SUB: case OP_NEQ:
 		dump_value(instr->val.binary_op.arg1);
 		fputs(", ", stdout);
 		dump_value(instr->val.binary_op.arg2);
@@ -377,8 +377,11 @@ static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 	switch (op) {
 	case OP_LOCAL: case OP_FIELD: case OP_LOAD: case OP_STORE: case OP_CAST:
 	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL: case OP_ZEXT:
+	case OP_BIT_NOT:
 		UNREACHABLE;
 	case OP_BIT_XOR: return arg1 ^ arg2;
+	case OP_BIT_AND: return arg1 & arg2;
+	case OP_BIT_OR: return arg1 | arg2;
 	case OP_MUL: return arg1 * arg2;
 	case OP_DIV: return arg1 / arg2;
 	case OP_EQ: return arg1 == arg2;
