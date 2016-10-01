@@ -190,6 +190,18 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 	assign_vreg(builder, instr);
 }
 
+static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
+{
+	AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
+	AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+	u32 vreg = next_vreg(builder);
+	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
+	emit_instr2(builder, CMP, arg1, arg2);
+	emit_instr1(builder, op, asm_vreg(vreg, 8));
+
+	assign_vreg(builder, instr);
+}
+
 static void asm_gen_instr(
 		IrFunction *ir_func, AsmBuilder *builder, IrInstr *instr)
 {
@@ -354,15 +366,9 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
 		break;
 	}
-	case OP_BIT_XOR:
-		asm_gen_binary_instr(builder, instr, XOR);
-		break;
-	case OP_BIT_AND:
-		asm_gen_binary_instr(builder, instr, AND);
-		break;
-	case OP_BIT_OR:
-		asm_gen_binary_instr(builder, instr, OR);
-		break;
+	case OP_BIT_XOR: asm_gen_binary_instr(builder, instr, XOR); break;
+	case OP_BIT_AND: asm_gen_binary_instr(builder, instr, AND); break;
+	case OP_BIT_OR: asm_gen_binary_instr(builder, instr, OR); break;
 	case OP_BIT_NOT:
 		assert(instr->type.kind == IR_INT);
 		u8 width = instr->type.val.bit_width;
@@ -373,12 +379,8 @@ static void asm_gen_instr(
 
 		assign_vreg(builder, instr);
 		break;
-	case OP_ADD:
-		asm_gen_binary_instr(builder, instr, ADD);
-		break;
-	case OP_SUB:
-		asm_gen_binary_instr(builder, instr, SUB);
-		break;
+	case OP_ADD: asm_gen_binary_instr(builder, instr, ADD); break;
+	case OP_SUB: asm_gen_binary_instr(builder, instr, SUB); break;
 	case OP_MUL: {
 		assert(instr->type.kind == IR_INT);
 		u8 width = instr->type.val.bit_width;
@@ -444,28 +446,12 @@ static void asm_gen_instr(
 		add_dep(idiv, sign_extension);
 		break;
 	}
-	case OP_EQ: {
-		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		u32 vreg = next_vreg(builder);
-		emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
-		emit_instr2(builder, CMP, arg1, arg2);
-		emit_instr1(builder, SETE, asm_vreg(vreg, 8));
-
-		assign_vreg(builder, instr);
-		break;
-	}
-	case OP_NEQ: {
-		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
-		u32 vreg = next_vreg(builder);
-		emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
-		emit_instr2(builder, CMP, arg1, arg2);
-		emit_instr1(builder, SETNE, asm_vreg(vreg, 8));
-
-		assign_vreg(builder, instr);
-		break;
-	}
+	case OP_EQ: asm_gen_relational_instr(builder, instr, SETE); break;
+	case OP_NEQ: asm_gen_relational_instr(builder, instr, SETNE); break;
+	case OP_GT: asm_gen_relational_instr(builder, instr, SETG); break;
+	case OP_GTE: asm_gen_relational_instr(builder, instr, SETGE); break;
+	case OP_LT: asm_gen_relational_instr(builder, instr, SETL); break;
+	case OP_LTE: asm_gen_relational_instr(builder, instr, SETLE); break;
 	}
 }
 

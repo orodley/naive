@@ -1265,6 +1265,10 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_EQ);
 	case NOT_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
+	case GREATER_THAN_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_GT);
+	case GREATER_THAN_OR_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_GTE);
+	case LESS_THAN_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_LT);
+	case LESS_THAN_OR_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_LTE);
 	case ADD_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_ADD);
 	case MINUS_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SUB);
 	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {

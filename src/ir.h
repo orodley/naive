@@ -129,6 +129,10 @@ typedef struct IrValue
 	X(OP_SUB), \
 	X(OP_EQ), \
 	X(OP_NEQ), \
+	X(OP_GT), \
+	X(OP_GTE), \
+	X(OP_LT), \
+	X(OP_LTE), \
 	X(OP_CALL), \
 	X(OP_CAST), \
 	X(OP_ZEXT), \

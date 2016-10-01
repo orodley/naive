@@ -50,8 +50,11 @@ PUSH r64               =         50 +rd
 RET                    =         C3
 
 SETE r/m8              =         [0F 94] /0
-
 SETNE r/m8             =         [0F 95] /0
+SETG r/m8              =         [0F 9F] /0
+SETGE r/m8             =         [0F 9D] /0
+SETL r/m8              =         [0F 9C] /0
+SETLE r/m8             =         [0F 9E] /0
 
 SUB r/m32, r32         =         29 /r
 SUB r/m32, imm8        =         83 /5 ib

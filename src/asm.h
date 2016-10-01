@@ -117,6 +117,10 @@ typedef struct AsmArg
 	X(CMP), \
 	X(SETE), \
 	X(SETNE), \
+	X(SETG), \
+	X(SETGE), \
+	X(SETL), \
+	X(SETLE), \
 	X(JMP), \
 	X(JE)
 

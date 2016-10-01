@@ -252,7 +252,8 @@ static void dump_instr(IrInstr *instr)
 		}
 		break;
 	case OP_BIT_XOR: case OP_BIT_AND: case OP_BIT_OR: case OP_MUL: case OP_DIV:
-	case OP_EQ: case OP_ADD: case OP_SUB: case OP_NEQ:
+	case OP_EQ: case OP_ADD: case OP_SUB: case OP_NEQ: case OP_GT: case OP_GTE:
+	case OP_LT: case OP_LTE:
 		dump_value(instr->val.binary_op.arg1);
 		fputs(", ", stdout);
 		dump_value(instr->val.binary_op.arg2);
@@ -386,6 +387,10 @@ static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 	case OP_DIV: return arg1 / arg2;
 	case OP_EQ: return arg1 == arg2;
 	case OP_NEQ: return arg1 != arg2;
+	case OP_GT: return arg1 > arg2;
+	case OP_GTE: return arg1 >= arg2;
+	case OP_LT: return arg1 < arg2;
+	case OP_LTE: return arg1 <= arg2;
 	case OP_ADD: return arg1 + arg2;
 	case OP_SUB: return arg1 - arg2;
 	}
