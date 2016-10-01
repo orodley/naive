@@ -1272,6 +1272,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		};
 	}
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
+	case DIVIDE_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_DIV);
 	case EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_EQ);
 	case NOT_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
 	case GREATER_THAN_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_GT);
@@ -1302,6 +1303,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case BIT_AND_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_AND);
 	case BIT_OR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_OR);
 	case MULTIPLY_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_MUL);
+	case DIVIDE_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_DIV);
 	case FUNCTION_CALL_EXPR: {
 		Term callee = ir_gen_expression(builder, env,
 				expr->val.function_call.callee, RVALUE_CONTEXT);
