@@ -130,6 +130,9 @@ typedef struct TypeEnv
 	Array(TypeEnvEntry) union_types;
 	Array(TypeEnvEntry) enum_types;
 	Array(TypeEnvEntry) bare_types;
+
+	CType *char_type;
+	CType *int_type;
 } TypeEnv;
 
 static void init_type_env(TypeEnv *type_env)
@@ -140,7 +143,8 @@ static void init_type_env(TypeEnv *type_env)
 	ARRAY_INIT(&type_env->enum_types, TypeEnvEntry, 10);
 
 	ARRAY_INIT(&type_env->bare_types, TypeEnvEntry, 10);
-	*ARRAY_APPEND(&type_env->bare_types, TypeEnvEntry) =
+	TypeEnvEntry *int_entry = ARRAY_APPEND(&type_env->bare_types, TypeEnvEntry);
+	*int_entry =
 		(TypeEnvEntry) {
 			.name = "int",
 			.type = (CType) {
@@ -150,7 +154,9 @@ static void init_type_env(TypeEnv *type_env)
 				.val.integer.is_signed = true,
 			},
 		};
-	*ARRAY_APPEND(&type_env->bare_types, TypeEnvEntry) =
+	type_env->int_type = &int_entry->type;
+	TypeEnvEntry *char_entry = ARRAY_APPEND(&type_env->bare_types, TypeEnvEntry);
+	*char_entry =
 		(TypeEnvEntry) {
 			.name = "char",
 			.type = (CType) {
@@ -161,6 +167,7 @@ static void init_type_env(TypeEnv *type_env)
 				.val.integer.is_signed = true,
 			},
 		};
+	type_env->char_type = &char_entry->type;
 }
 
 static CType *search(Array(CDecl) *types, char *name)
@@ -266,11 +273,6 @@ typedef struct Env
 	IrBlock *break_target;
 	IrBlock *continue_target;
 } Env;
-
-static CType *look_up_type(Env *env, char *name)
-{
-	return search(&env->type_env.bare_types, name);
-}
 
 static CType *pointer_type(TypeEnv *type_env, CType *type)
 {
@@ -999,7 +1001,7 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 		IrType pointer_int_type = { .kind = IR_INT, .val.bit_width = 64 };
 
 		// @TODO: This should be ptrdiff_t
-		CType *result_c_type = look_up_type(env, "int");
+		CType *result_c_type = env->type_env.int_type;
 
 		IrValue left_int =
 			build_type_instr(builder, OP_CAST, left_ptr.value, pointer_int_type);
@@ -1065,7 +1067,7 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	if (ir_op == OP_SUB)
 		return ir_gen_sub(builder, env, left, right);
 	// @TODO: Determine type correctly.
-	CType *result_type = look_up_type(env, "int");
+	CType *result_type = env->type_env.int_type;
 
 	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
 
@@ -1211,7 +1213,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case INT_LITERAL_EXPR: {
 		// @TODO: Determine types of constants correctly.
-		CType *result_type = look_up_type(env, "int");
+		CType *result_type = env->type_env.int_type;
 
 		IrValue value = value_const(
 				(IrType) { .kind = IR_INT, .val.bit_width = 32 },
@@ -1236,7 +1238,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {
 		Term ptr = ir_gen_expression(builder, env, expr->val.unary_arg, LVALUE_CONTEXT);
 		// @TODO: Correct type
-		CType *one_type = look_up_type(env, "int");
+		CType *one_type = env->type_env.int_type;
 		Term one = (Term) {
 			.value = value_const(c_type_to_ir_type(one_type), 1),
 			.ctype = one_type,
@@ -1312,7 +1314,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		decl_to_cdecl(builder, &env->type_env, decl_specifier_list, declarator, &cdecl);
 
 		// @TODO: This should be a size_t
-		CType *result_type = look_up_type(env, "int");
+		CType *result_type = env->type_env.int_type;
 
 		IrValue value = value_const(c_type_to_ir_type(result_type),
 				size_of_ir_type(c_type_to_ir_type(cdecl.type)));
@@ -1342,7 +1344,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		}
 
 		// @TODO: This should be a size_t
-		CType *result_type = look_up_type(env, "int");
+		CType *result_type = env->type_env.int_type;
 		IrValue value = value_const(c_type_to_ir_type(result_type), size);
 		return (Term) { .ctype = result_type, .value = value };
 	}
