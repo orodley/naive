@@ -129,10 +129,11 @@ typedef struct TypeEnv
 	Array(TypeEnvEntry) struct_types;
 	Array(TypeEnvEntry) union_types;
 	Array(TypeEnvEntry) enum_types;
-	Array(TypeEnvEntry) bare_types;
+	Array(TypeEnvEntry) typedef_types;
 
-	CType *char_type;
-	CType *int_type;
+	CType char_type;
+	CType int_type;
+	CType unsigned_int_type;
 } TypeEnv;
 
 static void init_type_env(TypeEnv *type_env)
@@ -141,33 +142,27 @@ static void init_type_env(TypeEnv *type_env)
 	ARRAY_INIT(&type_env->struct_types, TypeEnvEntry, 10);
 	ARRAY_INIT(&type_env->union_types, TypeEnvEntry, 10);
 	ARRAY_INIT(&type_env->enum_types, TypeEnvEntry, 10);
+	ARRAY_INIT(&type_env->typedef_types, TypeEnvEntry, 10);
 
-	ARRAY_INIT(&type_env->bare_types, TypeEnvEntry, 10);
-	TypeEnvEntry *int_entry = ARRAY_APPEND(&type_env->bare_types, TypeEnvEntry);
-	*int_entry =
-		(TypeEnvEntry) {
-			.name = "int",
-			.type = (CType) {
-				.type = INTEGER_TYPE,
-				.cached_pointer_type = NULL,
-				.val.integer.type = INT,
-				.val.integer.is_signed = true,
-			},
-		};
-	type_env->int_type = &int_entry->type;
-	TypeEnvEntry *char_entry = ARRAY_APPEND(&type_env->bare_types, TypeEnvEntry);
-	*char_entry =
-		(TypeEnvEntry) {
-			.name = "char",
-			.type = (CType) {
-				.type = INTEGER_TYPE,
-				.cached_pointer_type = NULL,
-				.val.integer.type = CHAR,
-				// System V x86-64 says "char" == "signed char"
-				.val.integer.is_signed = true,
-			},
-		};
-	type_env->char_type = &char_entry->type;
+	type_env->int_type = (CType) {
+		.type = INTEGER_TYPE,
+		.cached_pointer_type = NULL,
+		.val.integer.type = INT,
+		.val.integer.is_signed = true,
+	};
+	type_env->unsigned_int_type = (CType) {
+		.type = INTEGER_TYPE,
+		.cached_pointer_type = NULL,
+		.val.integer.type = INT,
+		.val.integer.is_signed = false,
+	};
+	type_env->char_type = (CType) {
+		.type = INTEGER_TYPE,
+		.cached_pointer_type = NULL,
+		.val.integer.type = CHAR,
+		// System V x86-64 says "char" == "signed char"
+		.val.integer.is_signed = true,
+	};
 }
 
 static CType *search(Array(CDecl) *types, char *name)
@@ -192,12 +187,57 @@ static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
 		CDecl *cdecl);
 
-static CType *type_spec_to_c_type(IrBuilder *builder, TypeEnv *type_env,
-		ASTTypeSpecifier *type_spec)
+static bool matches_sequence(ASTDeclSpecifier *decl_specifier_list, int length, ...)
 {
+	va_list args;
+	va_start(args, length);
+
+	while (length != 0) {
+		if (decl_specifier_list == NULL) {
+			va_end(args);
+			return false;
+		}
+
+		char *str = va_arg(args, char *);
+		length--;
+
+		assert(decl_specifier_list->type == TYPE_SPECIFIER);
+		ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;
+		if (type_spec->type != NAMED_TYPE_SPECIFIER
+				|| !streq(type_spec->val.name, str)) {
+			va_end(args);
+			return false;
+		}
+
+		decl_specifier_list = decl_specifier_list->next;
+	}
+
+	va_end(args);
+	return true;
+}
+
+static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_env,
+		ASTDeclSpecifier *decl_specifier_list)
+{
+	assert(decl_specifier_list->type == TYPE_SPECIFIER);
+	ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;
+
 	switch (type_spec->type) {
 	case NAMED_TYPE_SPECIFIER: {
-		return search(&type_env->bare_types, type_spec->val.name);
+		if (matches_sequence(decl_specifier_list, 1, "unsigned")
+				|| matches_sequence(decl_specifier_list, 2, "unsigned", "int")) {
+			return &type_env->unsigned_int_type;
+		}
+		if (matches_sequence(decl_specifier_list, 1, "int")
+				|| matches_sequence(decl_specifier_list, 1, "signed")
+				|| matches_sequence(decl_specifier_list, 2, "signed", "int")) {
+			return &type_env->int_type;
+		}
+		if (matches_sequence(decl_specifier_list, 1, "char")) {
+			return &type_env->char_type;
+		}
+
+		return search(&type_env->typedef_types, type_spec->val.name);
 	}
 	case STRUCT_TYPE_SPECIFIER: {
 		ASTFieldDecl *field_list = type_spec->val.struct_or_union_specifier.field_list;
@@ -358,10 +398,8 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 
 		cdecl->name = function_declarator->val.name;
 
-		assert(decl_specifier_list->next == NULL);
-		assert(decl_specifier_list->type == TYPE_SPECIFIER);
 		CType *return_c_type =
-			type_spec_to_c_type(builder, type_env, decl_specifier_list->val.type_specifier);
+			decl_specifier_list_to_c_type(builder, type_env, decl_specifier_list);
 
 		ASTParameterDecl *first_param =
 			direct_declarator->val.function_declarator.parameters;
@@ -399,11 +437,7 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 	}
 	case IDENTIFIER_DECLARATOR: {
 		cdecl->name = direct_declarator->val.name;
-		assert(decl_specifier_list->next == NULL);
-		assert(decl_specifier_list->type == TYPE_SPECIFIER);
-
-		ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;
-		cdecl->type = type_spec_to_c_type(builder, type_env, type_spec);
+		cdecl->type = decl_specifier_list_to_c_type(builder, type_env, decl_specifier_list);
 		break;
 	}
 	case ARRAY_DECLARATOR: {
@@ -430,13 +464,8 @@ static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		CDecl *cdecl)
 {
 	if (declarator == NULL) {
-		// @TODO: Merge with the code in type_spec_to_ctype when we handle
-		// other decl specifiers.
-		assert(decl_specifier_list->next == NULL);
-		assert(decl_specifier_list->type == TYPE_SPECIFIER);
-
-		ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;
-		cdecl->type = type_spec_to_c_type(builder, type_env, type_spec);
+		cdecl->type =
+			decl_specifier_list_to_c_type(builder, type_env, decl_specifier_list);
 	} else if (declarator->type == POINTER_DECLARATOR) {
 		CDecl pointee_cdecl;
 		assert(declarator->val.pointer_declarator.decl_specifier_list == NULL);
@@ -618,7 +647,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ASTInitDeclarator *init_declarator = decl->init_declarators;
 			assert(decl_specifier_list != NULL);
 
-			Array(TypeEnvEntry) *bare_types = &env.type_env.bare_types;
+			Array(TypeEnvEntry) *typedef_types = &env.type_env.typedef_types;
 
 			if (decl_specifier_list->type == STORAGE_CLASS_SPECIFIER &&
 					decl_specifier_list->val.storage_class_specifier == TYPEDEF_SPECIFIER) {
@@ -631,17 +660,14 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 					decl_to_cdecl(builder, &env.type_env, decl_specifier_list,
 							init_declarator->declarator, &cdecl);
 
-					TypeEnvEntry *new_type_alias = ARRAY_APPEND(bare_types, TypeEnvEntry);
+					TypeEnvEntry *new_type_alias = ARRAY_APPEND(typedef_types, TypeEnvEntry);
 					new_type_alias->name = cdecl.name;
 					new_type_alias->type = *cdecl.type;
 
 					init_declarator = init_declarator->next;
 				}
 			} else if (init_declarator == NULL) {
-				assert(decl_specifier_list->next == NULL);
-				assert(decl_specifier_list->type == TYPE_SPECIFIER);
-				ASTTypeSpecifier *type_spec = decl_specifier_list->val.type_specifier;
-				type_spec_to_c_type(builder, &env.type_env, type_spec);
+				decl_specifier_list_to_c_type(builder, &env.type_env, decl_specifier_list);
 			} else {
 				assert(init_declarator->initializer == NULL);
 				assert(init_declarator->next == NULL);
@@ -671,7 +697,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	array_free(&env.type_env.struct_types);
 	array_free(&env.type_env.union_types);
 	array_free(&env.type_env.enum_types);
-	array_free(&env.type_env.bare_types);
+	array_free(&env.type_env.typedef_types);
 	array_free(global_bindings);
 }
 
@@ -1001,7 +1027,7 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 		IrType pointer_int_type = { .kind = IR_INT, .val.bit_width = 64 };
 
 		// @TODO: This should be ptrdiff_t
-		CType *result_c_type = env->type_env.int_type;
+		CType *result_c_type = &env->type_env.int_type;
 
 		IrValue left_int =
 			build_type_instr(builder, OP_CAST, left_ptr.value, pointer_int_type);
@@ -1067,7 +1093,7 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	if (ir_op == OP_SUB)
 		return ir_gen_sub(builder, env, left, right);
 	// @TODO: Determine type correctly.
-	CType *result_type = env->type_env.int_type;
+	CType *result_type = &env->type_env.int_type;
 
 	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
 
@@ -1213,7 +1239,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case INT_LITERAL_EXPR: {
 		// @TODO: Determine types of constants correctly.
-		CType *result_type = env->type_env.int_type;
+		CType *result_type = &env->type_env.int_type;
 
 		IrValue value = value_const(
 				(IrType) { .kind = IR_INT, .val.bit_width = 32 },
@@ -1240,7 +1266,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {
 		Term ptr = ir_gen_expression(builder, env, expr->val.unary_arg, LVALUE_CONTEXT);
 		// @TODO: Correct type
-		CType *one_type = env->type_env.int_type;
+		CType *one_type = &env->type_env.int_type;
 		Term one = (Term) {
 			.value = value_const(c_type_to_ir_type(one_type), 1),
 			.ctype = one_type,
@@ -1316,7 +1342,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		decl_to_cdecl(builder, &env->type_env, decl_specifier_list, declarator, &cdecl);
 
 		// @TODO: This should be a size_t
-		CType *result_type = env->type_env.int_type;
+		CType *result_type = &env->type_env.int_type;
 
 		IrValue value = value_const(c_type_to_ir_type(result_type),
 				size_of_ir_type(c_type_to_ir_type(cdecl.type)));
@@ -1346,7 +1372,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		}
 
 		// @TODO: This should be a size_t
-		CType *result_type = env->type_env.int_type;
+		CType *result_type = &env->type_env.int_type;
 		IrValue value = value_const(c_type_to_ir_type(result_type), size);
 		return (Term) { .ctype = result_type, .value = value };
 	}
