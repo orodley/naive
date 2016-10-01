@@ -490,6 +490,10 @@ IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 a
 
 IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType result_type)
 {
+	if (value.kind == VALUE_CONST) {
+		return value_const(result_type, value.val.constant);
+	}
+
 	IrInstr *instr = append_instr(builder);
 	instr->op = op;
 	instr->type = result_type;
