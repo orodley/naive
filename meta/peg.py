@@ -247,10 +247,9 @@ parser->position = start;
             return self.emit_function(prologue + main + epilogue, name)
         elif operator == 'seq':
             args = map(self.generate_parser, args)
-            prologue = "\nu32 start; (void)start;"
+            prologue = "\nu32 start = parser->position;"
             main = ''.join(
 """
-start = parser->position;
 ParserResult _{0}_result{1} = {0}(parser);
 if (!_{0}_result{1}.success)
 \treturn revert(parser, start);
