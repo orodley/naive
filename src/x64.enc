@@ -61,5 +61,7 @@ SUB r/m32, imm8        =         83 /5 ib
 SUB r/m64, r64         = REX.W + 29 /r
 SUB r/m64, imm8        = REX.W + 83 /5 ib
 
+TEST r/m32, r32        =         85 /r
+
 XOR r/m32, r32         =         31 /r
 XOR r/m64, r64         = REX.W + 31 /r

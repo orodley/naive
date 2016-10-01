@@ -121,6 +121,7 @@ typedef struct AsmArg
 	X(SETGE), \
 	X(SETL), \
 	X(SETLE), \
+	X(TEST), \
 	X(JMP), \
 	X(JE)
 

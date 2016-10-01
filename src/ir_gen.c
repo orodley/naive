@@ -1262,6 +1262,15 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 			.ctype = result_type,
 		};
 	}
+	case LOGICAL_NOT_EXPR: {
+		CType *result_type = &env->type_env.int_type;
+		Term term = ir_gen_expression(builder, env, expr->val.unary_arg, RVALUE_CONTEXT);
+
+		return (Term) {
+			.value = build_unary_instr(builder, OP_LOG_NOT, term.value),
+			.ctype = result_type,
+		};
+	}
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_EQ);
 	case NOT_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_NEQ);

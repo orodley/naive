@@ -369,7 +369,7 @@ static void asm_gen_instr(
 	case OP_BIT_XOR: asm_gen_binary_instr(builder, instr, XOR); break;
 	case OP_BIT_AND: asm_gen_binary_instr(builder, instr, AND); break;
 	case OP_BIT_OR: asm_gen_binary_instr(builder, instr, OR); break;
-	case OP_BIT_NOT:
+	case OP_BIT_NOT: {
 		assert(instr->type.kind == IR_INT);
 		u8 width = instr->type.val.bit_width;
 
@@ -379,6 +379,20 @@ static void asm_gen_instr(
 
 		assign_vreg(builder, instr);
 		break;
+	}
+	case OP_LOG_NOT: {
+		assert(instr->type.kind == IR_INT);
+		u8 width = instr->type.val.bit_width;
+
+		AsmArg arg = asm_value(instr->val.arg);
+		u32 vreg = next_vreg(builder);
+		emit_instr2(builder, XOR, asm_vreg(vreg, width), asm_vreg(vreg, width));
+		emit_instr2(builder, TEST, arg, arg);
+		emit_instr1(builder, SETE, asm_vreg(next_vreg(builder), 8));
+
+		assign_vreg(builder, instr);
+		break;
+	}
 	case OP_ADD: asm_gen_binary_instr(builder, instr, ADD); break;
 	case OP_SUB: asm_gen_binary_instr(builder, instr, SUB); break;
 	case OP_MUL: {
