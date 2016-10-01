@@ -917,6 +917,21 @@ static inline bool converts_to_pointer(CType *type)
 	return type->type == POINTER_TYPE || type->type == ARRAY_TYPE;
 }
 
+static Term to_pointer(TypeEnv *type_env, Term term)
+{
+	CType *result_type = term.ctype;
+	switch (result_type->type) {
+	case ARRAY_TYPE:
+		result_type =
+			pointer_type(type_env, result_type->val.array.elem_type);
+		break;
+	case POINTER_TYPE: break;
+	default: UNREACHABLE;
+	}
+
+	return (Term) { .ctype = result_type, .value = term.value };
+}
+
 static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 {
 	if (left.ctype->type == INTEGER_TYPE && right.ctype->type == INTEGER_TYPE) {
@@ -929,15 +944,12 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 		};
 	} else if (converts_to_pointer(left.ctype)
 			^ converts_to_pointer(right.ctype)) {
-		Term pointee = converts_to_pointer(left.ctype) ? left : right;
+		Term pointer = converts_to_pointer(left.ctype) ? left : right;
 		Term other = converts_to_pointer(left.ctype) ? right : left;
 		assert(other.ctype->type == INTEGER_TYPE);
 
-		CType *result_type = pointee.ctype;
-		if (result_type->type == ARRAY_TYPE) {
-			result_type =
-				pointer_type(&env->type_env, result_type->val.array.elem_type);
-		}
+		CType *result_type = to_pointer(&env->type_env, pointer).ctype;
+		CType *pointee_type = result_type->val.pointee_type;
 
 		// @TODO: Determine type correctly
 		// @TODO: Don't hardcode in the size of a pointer!
@@ -946,15 +958,93 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 		IrValue zext =
 			build_type_instr(builder, OP_ZEXT, other.value, pointer_int_type);
 		IrValue ptr_to_int =
-			build_type_instr(builder, OP_CAST, pointee.value, pointer_int_type);
+			build_type_instr(builder, OP_CAST, pointer.value, pointer_int_type);
 		IrValue addend = build_binary_instr(
 				builder,
 				OP_MUL,
 				zext,
 				value_const(pointer_int_type,
-					size_of_ir_type(c_type_to_ir_type(result_type))));
+					size_of_ir_type(c_type_to_ir_type(pointee_type))));
 
 		IrValue sum = build_binary_instr(builder, OP_ADD, ptr_to_int, addend);
+		IrValue int_to_ptr = build_type_instr(builder, OP_CAST, sum,
+				c_type_to_ir_type(result_type));
+
+		return (Term) {
+			.ctype = result_type,
+			.value = int_to_ptr,
+		};
+	} else {
+		UNIMPLEMENTED;
+	}
+}
+
+static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
+{
+	if (left.ctype->type == INTEGER_TYPE && right.ctype->type == INTEGER_TYPE) {
+		IrValue value = build_binary_instr(builder, OP_SUB, left.value, right.value);
+
+		// @TODO: Determine type correctly
+		return (Term) {
+			.ctype = left.ctype,
+			.value = value,
+		};
+	} else if (converts_to_pointer(left.ctype) && converts_to_pointer(right.ctype)) {
+		Term left_ptr = to_pointer(&env->type_env, left);
+		Term right_ptr = to_pointer(&env->type_env, right);
+		CType *pointee_type = left_ptr.ctype->val.pointee_type;
+
+		// @TODO: Determine type correctly
+		// @TODO: Don't hardcode in the size of a pointer!
+		IrType pointer_int_type = { .kind = IR_INT, .val.bit_width = 64 };
+
+		// @TODO: This should be ptrdiff_t
+		CType *result_c_type = look_up_type(env, "int");
+
+		IrValue left_int =
+			build_type_instr(builder, OP_CAST, left_ptr.value, pointer_int_type);
+		IrValue right_int =
+			build_type_instr(builder, OP_CAST, right_ptr.value, pointer_int_type);
+		IrValue diff = build_binary_instr(builder, OP_SUB, left_int, right_int);
+		IrValue cast = build_type_instr(
+				builder, OP_CAST, diff, c_type_to_ir_type(result_c_type));
+		IrValue scaled = build_binary_instr(
+				builder,
+				OP_DIV,
+				cast,
+				value_const(cast.type,
+					size_of_ir_type(c_type_to_ir_type(pointee_type))));
+
+		return (Term) {
+			.ctype = result_c_type,
+			.value = scaled,
+		};
+	} else if (converts_to_pointer(left.ctype) ^ converts_to_pointer(right.ctype)) {
+		// @TODO: This block is identical to the corresponding block in
+		// ir_gen_add, except for OP_SUB instead of OP_ADD. Factor out?
+		Term pointer = converts_to_pointer(left.ctype) ? left : right;
+		Term other = converts_to_pointer(left.ctype) ? right : left;
+		assert(other.ctype->type == INTEGER_TYPE);
+
+		CType *result_type = to_pointer(&env->type_env, pointer).ctype;
+		CType *pointee_type = result_type->val.pointee_type;
+
+		// @TODO: Determine type correctly
+		// @TODO: Don't hardcode in the size of a pointer!
+		IrType pointer_int_type = (IrType) { .kind = IR_INT, .val.bit_width = 64 };
+
+		IrValue zext =
+			build_type_instr(builder, OP_ZEXT, other.value, pointer_int_type);
+		IrValue ptr_to_int =
+			build_type_instr(builder, OP_CAST, pointer.value, pointer_int_type);
+		IrValue subtrahend = build_binary_instr(
+				builder,
+				OP_MUL,
+				zext,
+				value_const(pointer_int_type,
+					size_of_ir_type(c_type_to_ir_type(pointee_type))));
+
+		IrValue sum = build_binary_instr(builder, OP_SUB, ptr_to_int, subtrahend);
 		IrValue int_to_ptr = build_type_instr(builder, OP_CAST, sum,
 				c_type_to_ir_type(result_type));
 
@@ -972,6 +1062,8 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 {
 	if (ir_op == OP_ADD)
 		return ir_gen_add(builder, env, left, right);
+	if (ir_op == OP_SUB)
+		return ir_gen_sub(builder, env, left, right);
 	// @TODO: Determine type correctly.
 	CType *result_type = look_up_type(env, "int");
 
@@ -1098,7 +1190,10 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case ADDRESS_OF_EXPR: {
 		ASTExpr *inner_expr = expr->val.unary_arg;
-		return ir_gen_expression(builder, env, inner_expr, LVALUE_CONTEXT);
+		Term ptr = ir_gen_expression(builder, env, inner_expr, LVALUE_CONTEXT);
+		ptr.ctype = pointer_type(&env->type_env, ptr.ctype);
+
+		return ptr;
 	}
 	case DEREF_EXPR: {
 		ASTExpr *inner_expr = expr->val.unary_arg;

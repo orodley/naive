@@ -45,6 +45,7 @@ AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
 	instr->num_args = 0;
+	instr->num_deps = 0;
 	instr->label = NULL;
 
 	return instr;
@@ -56,6 +57,7 @@ AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmArg arg1)
 	instr->op = op;
 	instr->num_args = 1;
 	instr->args[0] = arg1;
+	instr->num_deps = 0;
 	instr->label = NULL;
 
 	return instr;
@@ -68,6 +70,7 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 	instr->num_args = 2;
 	instr->args[0] = arg1;
 	instr->args[1] = arg2;
+	instr->num_deps = 0;
 	instr->label = NULL;
 
 	return instr;
@@ -82,9 +85,19 @@ AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
 	instr->args[0] = arg1;
 	instr->args[1] = arg2;
 	instr->args[2] = arg3;
+	instr->num_deps = 0;
 	instr->label = NULL;
 
 	return instr;
+}
+
+static inline void add_dep(AsmInstr *instr, AsmArg dep)
+{
+	assert(instr->num_deps < STATIC_ARRAY_LENGTH(instr->vreg_deps));
+	assert(dep.type == ASM_ARG_REGISTER);
+	assert(dep.val.reg.type == V_REG);
+
+	instr->vreg_deps[instr->num_deps++] = dep.val.reg.val.vreg_number;;
 }
 
 // @TODO: Rethink name? "next" kinda suggests side effects, i.e. "move to the
@@ -129,10 +142,6 @@ static AsmArg asm_value(IrValue value)
 
 static VRegInfo *append_vreg(AsmBuilder *builder)
 {
-	if (next_vreg(builder) == 4) {
-		volatile int x = 3;
-		x = x;
-	}
 	VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
 	vreg_info->assigned_register = INVALID_REG_CLASS;
 	vreg_info->live_range_start = vreg_info->live_range_end = -1;
@@ -400,6 +409,39 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
+	case OP_DIV: {
+		assert(instr->type.kind == IR_INT);
+		u8 width = instr->type.val.bit_width;
+
+		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
+		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+
+		AsmArg reg_arg2 = arg2;
+		if (arg2.type == ASM_ARG_CONST) {
+			reg_arg2 = asm_vreg(next_vreg(builder), width);
+			emit_instr2(builder, MOV, reg_arg2, arg2);
+			append_vreg(builder);
+		}
+
+		AsmArg quotient = pre_alloced_vreg(builder, REG_CLASS_A, width);
+		instr->vreg_number = quotient.val.reg.val.vreg_number;
+		emit_instr2(builder, MOV, quotient, arg1);
+
+		AsmArg sign_extension = pre_alloced_vreg(builder, REG_CLASS_D, width);
+		switch (width) {
+		case 32: {
+			AsmInstr *cdq = emit_instr0(builder, CDQ);
+			add_dep(cdq, quotient);
+			add_dep(cdq, sign_extension);
+			break;
+		}
+		default: UNIMPLEMENTED;
+		}
+
+		AsmInstr *idiv = emit_instr1(builder, IDIV, reg_arg2);
+		add_dep(idiv, sign_extension);
+		break;
+	}
 	case OP_EQ: {
 		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
 		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
@@ -520,6 +562,17 @@ static void allocate_registers(AsmBuilder *builder)
 				} else {
 					vreg->live_range_end = i;
 				}
+			}
+		}
+
+		for (u32 j = 0; j < instr->num_deps; j++) {
+			u32 reg_num = instr->vreg_deps[j];
+			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
+					VRegInfo, reg_num);
+			if (vreg->live_range_start == -1) {
+				vreg->live_range_start = vreg->live_range_end = i;
+			} else {
+				vreg->live_range_end = i;
 			}
 		}
 	}

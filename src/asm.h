@@ -110,6 +110,8 @@ typedef struct AsmArg
 	X(PUSH), \
 	X(POP), \
 	X(IMUL), \
+	X(IDIV), \
+	X(CDQ), \
 	X(CMP), \
 	X(SETE), \
 	X(SETNE), \
@@ -126,8 +128,12 @@ typedef enum AsmOp
 typedef struct AsmInstr
 {
 	AsmOp op;
-	u32 num_args;
+	u8 num_args;
 	AsmArg args[3];
+
+	u8 num_deps;
+	u32 vreg_deps[2];
+
 	AsmLabel *label;
 } AsmInstr;
 
