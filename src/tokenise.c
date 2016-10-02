@@ -3,17 +3,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "array.h"
-#include "diagnostics.h"
-#include "misc.h"
-#include "tokenise.h"
-#include "util.h"
-
 // @PORT
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+
+#include "array.h"
+#include "diagnostics.h"
+#include "misc.h"
+#include "tokenise.h"
+#include "util.h"
 
 typedef struct InputBuffer
 {
@@ -814,8 +814,8 @@ static char *concat(char *str_a, u32 len_a, char *str_b, u32 len_b)
 {
 	u32 result_length = len_a + len_b;
 	char *result = malloc(result_length + 1);
-	strncpy(result, str_a, len_a);
-	strncpy(result + len_a, str_b, len_b);
+	memcpy(result, str_a, len_a);
+	memcpy(result + len_a, str_b, len_b);
 	result[result_length] = '\0';
 
 	return result;

@@ -1,8 +1,6 @@
 #ifndef NAIVE_ELF_H_
 #define NAIVE_ELF_H_
 
-#include <stdio.h>
-
 #include "array.h"
 #include "asm.h"
 

@@ -7,7 +7,7 @@ extern inline u32 max(u32 a, u32 b);
 char *strndup(char *str, u32 length)
 {
 	char *result = malloc(length + 1);
-	strncpy(result, str, length);
+	memcpy(result, str, length + 1);
 	result[length] = '\0';
 
 	return result;

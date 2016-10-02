@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
 			} else {
 				u32 input_filename_length = strlen(source_input_filename);
 				object_filename = malloc(input_filename_length + 1); // @LEAK
-				strncpy(object_filename, source_input_filename, input_filename_length);
+				memcpy(object_filename, source_input_filename, input_filename_length + 1);
 				object_filename[input_filename_length - 1] = 'o';
 				object_filename[input_filename_length] = '\0';
 
@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
 		}
 
 		int result = 0;
-		for (u32 i = 0; i < temp_filenames.size;i ++) {
+		for (u32 i = 0; i < temp_filenames.size; i++) {
 			char *temp_filename = *ARRAY_REF(&temp_filenames, char *, i);
 			int result = remove(temp_filename);
 			if (result != 0) {
