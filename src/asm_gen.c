@@ -24,22 +24,6 @@ void free_asm_builder(AsmBuilder *builder)
 		array_free(&builder->virtual_registers);
 }
 
-static AsmGlobal *append_function(AsmBuilder *builder, char *name)
-{
-	AsmGlobal *new_global = pool_alloc(&builder->asm_module.pool, sizeof *new_global);
-	*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = new_global;
-	AsmFunction *new_function = &new_global->val.function;
-
-	new_global->type = ASM_GLOBAL_FUNCTION;
-	init_asm_function(new_function, name);
-	builder->current_function = new_function;
-	builder->current_block = &new_function->body;
-
-	builder->local_stack_usage = 0;
-
-	return new_global;
-}
-
 AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 {
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
@@ -135,8 +119,11 @@ static AsmArg asm_value(IrValue value)
 		// index i = virtual register i.
 		return asm_vreg(value.val.arg_index, size_of_ir_type(value.type) * 8);
 	}
-	case VALUE_GLOBAL:
-		return asm_global(value.val.global->asm_global);
+	case VALUE_GLOBAL: {
+		AsmGlobal *global = value.val.global->asm_global;
+		assert(global != NULL);
+		return asm_global(global);
+	}
 	}
 }
 
@@ -274,27 +261,33 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_STORE: {
-		IrValue pointer = instr->val.store.pointer;
-		IrValue value = instr->val.store.value;
+		IrValue ir_pointer = instr->val.store.pointer;
+		IrValue ir_value = instr->val.store.value;
 		IrType type = instr->val.store.type;
-		assert(ir_type_eq(&value.type, &type));
+		assert(ir_type_eq(&ir_value.type, &type));
 
-		if (pointer.kind == VALUE_GLOBAL
-				&& pointer.val.global->kind == IR_GLOBAL_VAR) {
+		AsmArg pointer = asm_value(ir_pointer);
+		AsmArg value = asm_value(ir_value);
+
+		if (ir_pointer.kind == VALUE_GLOBAL
+				&& ir_pointer.val.global->kind == IR_GLOBAL_VAR) {
 			AsmArg rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
 						64,
 						(AsmConst) {
 							.type = ASM_CONST_GLOBAL,
-							.val.global = pointer.val.global->asm_global
+							.val.global = ir_pointer.val.global->asm_global
 						});
-			emit_instr2(builder,
-					MOV,
-					asm_deref(rip_relative_addr),
-					asm_value(value));
+			emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
+		} else if (size_of_ir_type(type) < 8 || value.type != ASM_ARG_CONST) {
+			emit_instr2(builder, MOV, asm_deref(pointer), value);
+		} else if (size_of_ir_type(type) == 8 && value.type == ASM_ARG_CONST) {
+			AsmArg temp_vreg = asm_vreg(next_vreg(builder), 64);
+			emit_instr2(builder, MOV, temp_vreg, value);
+			emit_instr2(builder, MOV, asm_deref(pointer), temp_vreg);
 		} else {
-			emit_instr2(builder, MOV, asm_deref(asm_value(pointer)), asm_value(value));
+			UNIMPLEMENTED;
 		}
 
 		break;
@@ -344,9 +337,24 @@ static void asm_gen_instr(
 					asm_value(instr->val.arg));
 			assign_vreg(builder, instr);
 		} else {
-			UNIMPLEMENTED;
+			emit_instr2(builder,
+					MOVZX,
+					asm_vreg(next_vreg(builder), instr->type.val.bit_width),
+					asm_value(instr->val.arg));
+			assign_vreg(builder, instr);
 		}
 
+		break;
+	}
+	case OP_SEXT: {
+		assert(instr->type.kind == IR_INT);
+		assert(instr->val.arg.type.kind == IR_INT);
+
+		emit_instr2(builder,
+				MOVSX,
+				asm_vreg(next_vreg(builder), instr->type.val.bit_width),
+				asm_value(instr->val.arg));
+		assign_vreg(builder, instr);
 		break;
 	}
 	case OP_CALL: {
@@ -755,21 +763,27 @@ static void allocate_registers(AsmBuilder *builder)
 	}
 }
 
-AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
+void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 {
 	assert(ir_global->kind == IR_GLOBAL_FUNCTION);
 	IrFunction *ir_func = &ir_global->val.function;
 
-	AsmGlobal *function = append_function(builder, ir_global->name);
-	ir_global->asm_global = function;
+	AsmGlobal *asm_func = ir_global->asm_global;
+	assert(asm_func != NULL);
+
+	builder->current_function = &asm_func->val.function;
+	builder->current_block = &asm_func->val.function.body;
+
+	builder->local_stack_usage = 0;
+
 	AsmLabel *ret_label = pool_alloc(&builder->asm_module.pool, sizeof *ret_label);
 	ret_label->name = "ret";
-	ret_label->file_location = 0;
-	function->val.function.ret_label = ret_label;
+	ret_label->offset = 0;
+	asm_func->val.function.ret_label = ret_label;
 
-	function->defined = ir_global->defined;
+	asm_func->defined = ir_global->defined;
 	if (!ir_global->defined) {
-		return function;
+		return;
 	}
 
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
@@ -826,7 +840,7 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	AsmLabel *entry_label = pool_alloc(&builder->asm_module.pool, sizeof *entry_label);
 	entry_label->name = ir_global->name;
-	entry_label->file_location = 0;
+	entry_label->offset = 0;
 	ir_func->label = entry_label;
 
 
@@ -872,35 +886,84 @@ AsmGlobal *asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	AsmInstr *epilogue_first_instr = ARRAY_REF(builder->current_block, AsmInstr, 0);
 	epilogue_first_instr->label = ret_label;
+}
 
-	return function;
+static void write_initializer(IrInit *init, u8 *value)
+{
+	switch (init->type.kind) {
+	case IR_INT: case IR_POINTER:
+		for (u32 n = 0; n < size_of_ir_type(init->type); n++) {
+			u8 byte = (init->val.integer >> (n * 8)) & 0xFF;
+			*value++ = byte;
+		}
+		break;
+	case IR_ARRAY:
+		for (u32 n = 0; n < init->type.val.array.size; n++) {
+			write_initializer(init->val.array_elems + n, value);
+			value += size_of_ir_type(*init->type.val.array.elem_type);
+		}
+		break;
+	case IR_STRUCT:
+		for (u32 n = 0; n < init->type.val.strukt.num_fields; n++) {
+			write_initializer(init->val.struct_fields + n, value);
+			value += size_of_ir_type(init->type.val.strukt.fields[n].type);
+		}
+		break;
+	case IR_FUNCTION:
+		UNREACHABLE;
+	}
 }
 
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 {
+	// First do a pass collecting declarations, to support forward references.
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
-		AsmGlobal *asm_global = NULL;
+		AsmGlobal *asm_global =
+			pool_alloc(&builder->asm_module.pool, sizeof *asm_global);
+		*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = asm_global;
 
 		switch (ir_global->kind) {
+		case IR_GLOBAL_VAR:
+			asm_global->type = ASM_GLOBAL_VAR;
+			asm_global->val.var.size_bytes = size_of_ir_type(ir_global->ir_type);
+			asm_global->val.var.value = NULL;
+
+			break;
+		case IR_GLOBAL_FUNCTION: {
+			AsmFunction *new_function = &asm_global->val.function;
+
+			asm_global->type = ASM_GLOBAL_FUNCTION;
+			init_asm_function(new_function, ir_global->name);
+
+			break;
+		}
+		}
+
+		ir_global->asm_global = asm_global;
+		asm_global->name = ir_global->name;
+		asm_global->defined = ir_global->defined;
+		asm_global->offset = 0;
+	}
+
+	for (u32 i = 0; i < trans_unit->globals.size; i++) {
+		IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
+		switch (ir_global->kind) {
 		case IR_GLOBAL_FUNCTION:
-			asm_global = asm_gen_function(builder, ir_global);
+			asm_gen_function(builder, ir_global);
 			break;
 		case IR_GLOBAL_VAR: {
-			asm_global = pool_alloc(&builder->asm_module.pool, sizeof *asm_global);
-			*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = asm_global;
-
-			asm_global->type = ASM_GLOBAL_VAR;
-			asm_global->defined = true;
-			asm_global->val.var_size_bytes = size_of_ir_type(ir_global->ir_type);
-
-			ir_global->asm_global = asm_global;
+			IrInit *init = ir_global->val.initializer;
+			if (init != NULL) {
+				AsmGlobal *asm_global = ir_global->asm_global;
+				u32 size = asm_global->val.var.size_bytes;
+				asm_global->val.var.value =
+					pool_alloc(&builder->asm_module.pool, size);
+				write_initializer(init, asm_global->val.var.value);
+			}
 
 			break;
 		}
 		}
-
-		asm_global->name = ir_global->name;
-		asm_global->offset = 0;
 	}
 }

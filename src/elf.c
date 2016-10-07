@@ -171,6 +171,7 @@ typedef enum ELF64RelocType
 //   * .text
 //   * .rela.text
 //   * .bss
+//   * .data
 //   * .shstrtab
 //   * .symtab
 //   * .strtab
@@ -182,27 +183,29 @@ typedef enum ELF64RelocType
 // case we set the size to zero in the header and don't write any data for it.
 // This is simpler than having to handle it not being present, and it costs 
 // only 64 bytes in object files without relocations. We do the same thing for
-// .bss, with the same tradeoff.
+// .bss and .data, with the same tradeoff.
 
-#define NUM_SECTIONS 7
+#define NUM_SECTIONS 8
 
-//                         0          1           2          3          4
-//                         0 123456 78901234567 89012 3456789012 34567890 1234567
-#define SHSTRTAB_CONTENTS "\0.text\0.rela.text\0.bss\0.shstrtab\0.symtab\0.strtab"
+//                         0           1          2           3          4
+//                         0 123456 78901234567 89012 345678 9012345678 90123456 7
+#define SHSTRTAB_CONTENTS "\0.text\0.rela.text\0.bss\0.data\0.shstrtab\0.symtab\0.strtab"
 #define TEXT_NAME 1
 #define RELA_TEXT_NAME 7
 #define BSS_NAME 18
-#define SHSTRTAB_NAME 23
-#define SYMTAB_NAME 33
-#define STRTAB_NAME 41
+#define DATA_NAME 23
+#define SHSTRTAB_NAME 29
+#define SYMTAB_NAME 39
+#define STRTAB_NAME 47
 
 // Starts from 1 because the NULL header is at 0.
 #define TEXT_INDEX 1
 #define RELA_TEXT_INDEX 2
 #define BSS_INDEX 3
-#define SHSTRTAB_INDEX 4
-#define SYMTAB_INDEX 5
-#define STRTAB_INDEX 6
+#define DATA_INDEX 4
+#define SHSTRTAB_INDEX 5
+#define SYMTAB_INDEX 6
+#define STRTAB_INDEX 7
 
 
 typedef struct SectionInfo
@@ -210,6 +213,7 @@ typedef struct SectionInfo
 	u32 size;
 	u32 offset;
 	u32 virtual_address;
+	u8 *contents;
 } SectionInfo;
 
 typedef struct ELFFile
@@ -218,7 +222,6 @@ typedef struct ELFFile
 	ELFFileType type;
 	i32 entry_point_virtual_address;
 	u32 next_string_index;
-	u32 bss_memory_size;
 
 	SectionInfo section_info[NUM_SECTIONS];
 } ELFFile;
@@ -226,16 +229,16 @@ typedef struct ELFFile
 static void init_elf_file(ELFFile *elf_file, FILE *output_file, ELFFileType type)
 {
 	ZERO_STRUCT(elf_file);
+	memset(elf_file->section_info, sizeof elf_file->section_info, 0);
 
 	elf_file->output_file = output_file;
 	elf_file->type = type;
 	elf_file->next_string_index = 1;
-	elf_file->bss_memory_size = 0;
 }
 
 static void start_text_section(ELFFile *elf_file)
 {
-	u32 pht_entries = elf_file->type == ET_EXEC ? 2 : 0;
+	u32 pht_entries = elf_file->type == ET_EXEC ? 3 : 0;
 	u32 first_section_offset = sizeof(ELFHeader) +
 		sizeof(ELFSectionHeader) * NUM_SECTIONS +
 		sizeof(ELFProgramHeader) * pht_entries;
@@ -247,23 +250,26 @@ static void start_text_section(ELFFile *elf_file)
 static void finish_text_section(ELFFile *elf_file, Array(Fixup) *fixups)
 {
 	SectionInfo *text_info = elf_file->section_info + TEXT_INDEX;
-	text_info->size = checked_ftell(elf_file->output_file) - text_info->offset;
 	// @NOTE: In System V, file offsets and base virtual addresses for segments
 	// must be congruent modulo the page size.
 	text_info->virtual_address = 0x8000000 + text_info->offset; 
+	assert(text_info->contents != NULL);
+	checked_fwrite(text_info->contents, 1, text_info->size, elf_file->output_file);
 
 	for (u32 i = 0; i < fixups->size; i++) {
-		Fixup *fixup = ARRAY_REF(fixups, Fixup, i);
+		Fixup *fixup = *ARRAY_REF(fixups, Fixup *, i);
 		if (fixup->source == FIXUP_LABEL)
 			continue;
 
 		u32 symbol = fixup->val.global->symbol->symtab_index;
+		assert(symbol != 0);
+
 		ELF64RelocType reloc_type;
 		u32 addend;
 		switch (fixup->type) {
 		case FIXUP_RELATIVE:
 			reloc_type = R_X86_64_PC32;
-			addend = (i64)fixup->file_location - (i64)fixup->next_instr_file_location;
+			addend = (i64)fixup->offset - (i64)fixup->next_instr_offset;
 			break;
 		case FIXUP_ABSOLUTE:
 			reloc_type = R_X86_64_64;
@@ -271,7 +277,7 @@ static void finish_text_section(ELFFile *elf_file, Array(Fixup) *fixups)
 			break;
 		}
 		ELF64Rela rela = {
-			.section_offset = fixup->file_location - text_info->offset,
+			.section_offset = fixup->offset,
 			.type_and_symbol = ELF64_RELA_TYPE_AND_SYMBOL(reloc_type, symbol),
 			.addend = addend,
 		};
@@ -286,12 +292,23 @@ static void finish_text_section(ELFFile *elf_file, Array(Fixup) *fixups)
 
 	SectionInfo *bss_info = elf_file->section_info + BSS_INDEX;
 	bss_info->offset = rela_text_info->offset + rela_text_info->size;
-	bss_info->size = 0;
 	bss_info->virtual_address =
 		align_to(text_info->virtual_address, 0x1000000) + bss_info->offset;
 
+	elf_file->section_info[DATA_INDEX].offset = bss_info->offset;
+}
+
+static void finish_data_section(ELFFile *elf_file)
+{
+	SectionInfo *data_info = elf_file->section_info + DATA_INDEX;
+	data_info->virtual_address =
+		align_to(elf_file->section_info[BSS_INDEX].virtual_address, 0x1000000)
+		+ data_info->offset;
+	assert(data_info->contents != NULL);
+	checked_fwrite(data_info->contents, 1, data_info->size, elf_file->output_file);
+
 	SectionInfo shstrtab_info = (SectionInfo) {
-		.offset = bss_info->offset + bss_info->size,
+		.offset = data_info->offset + data_info->size,
 		.size = sizeof SHSTRTAB_CONTENTS,
 	};
 	elf_file->section_info[SHSTRTAB_INDEX] = shstrtab_info;
@@ -310,10 +327,6 @@ static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
 {
 	if (elf_file->type == ET_EXEC && streq(name, "_start")) {
 		elf_file->entry_point_virtual_address = value;
-	}
-	if (section == BSS_INDEX) {
-		elf_file->bss_memory_size = value + size
-			- elf_file->section_info[BSS_INDEX].virtual_address;
 	}
 
 	ELF64Symbol symbol;
@@ -363,7 +376,7 @@ static void finish_strtab_section(ELFFile *elf_file)
 		assert(elf_file->entry_point_virtual_address != -1);
 
 		header.entry_point_virtual_address = elf_file->entry_point_virtual_address;
-		header.pht_entries = 2;
+		header.pht_entries = 3;
 		header.pht_location =
 			sizeof(ELFHeader) + sizeof(ELFSectionHeader) * NUM_SECTIONS;
 		checked_fseek(output_file, header.pht_location, SEEK_SET);
@@ -397,13 +410,32 @@ static void finish_strtab_section(ELFFile *elf_file)
 			bss_segment_header.type = PT_LOAD;
 			bss_segment_header.segment_location = section_info->offset;
 			bss_segment_header.segment_size_in_file = 0;
-			bss_segment_header.segment_size_in_process = elf_file->bss_memory_size;
+			bss_segment_header.segment_size_in_process = section_info->size;
 			bss_segment_header.base_virtual_address = section_info->virtual_address;
 			bss_segment_header.flags = PF_R | PF_W;
 			bss_segment_header.alignment = 0x1000;
 
 			checked_fwrite(&bss_segment_header,
 					sizeof bss_segment_header,
+					1,
+					output_file);
+		}
+
+		// Initialized data segment
+		{
+			SectionInfo *section_info = elf_file->section_info + DATA_INDEX;
+			ELFProgramHeader data_segment_header;
+			ZERO_STRUCT(&data_segment_header);
+			data_segment_header.type = PT_LOAD;
+			data_segment_header.segment_location = section_info->offset;
+			data_segment_header.segment_size_in_file = section_info->size;
+			data_segment_header.segment_size_in_process = section_info->size;
+			data_segment_header.base_virtual_address = section_info->virtual_address;
+			data_segment_header.flags = PF_R | PF_W;
+			data_segment_header.alignment = 0x1000;
+
+			checked_fwrite(&data_segment_header,
+					sizeof data_segment_header,
 					1,
 					output_file);
 		}
@@ -487,8 +519,22 @@ static void finish_strtab_section(ELFFile *elf_file)
 		bss_header.base_virtual_address =
 			elf_file->section_info[BSS_INDEX].virtual_address;
 		bss_header.section_location = elf_file->section_info[BSS_INDEX].offset;
-		bss_header.section_size = elf_file->bss_memory_size;
+		bss_header.section_size = elf_file->section_info[BSS_INDEX].size;
 		checked_fwrite(&bss_header, sizeof bss_header, 1, output_file);
+	}
+
+	// .data
+	{
+		ELFSectionHeader data_header;
+		ZERO_STRUCT(&data_header);
+		data_header.shstrtab_index_for_name = DATA_NAME;
+		data_header.type = SHT_PROGBITS;
+		data_header.flags = SHF_ALLOC | SHF_WRITE;
+		data_header.base_virtual_address =
+			elf_file->section_info[DATA_INDEX].virtual_address;
+		data_header.section_location = elf_file->section_info[DATA_INDEX].offset;
+		data_header.section_size = elf_file->section_info[DATA_INDEX].size;
+		checked_fwrite(&data_header, sizeof data_header, 1, output_file);
 	}
 
 	// .shstrtab
@@ -545,13 +591,24 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 	init_elf_file(elf_file, output_file, ET_REL);
 
 	start_text_section(elf_file);
-	Array(AsmSymbol) symbols;
-	ARRAY_INIT(&symbols, AsmSymbol, 10);
-	assemble(asm_module, output_file, &symbols);
+
+	Binary binary;
+	assemble(asm_module, &binary);
+	elf_file->section_info[TEXT_INDEX].size = binary.text.size;
+	elf_file->section_info[TEXT_INDEX].contents = binary.text.elements;
+
+	elf_file->section_info[BSS_INDEX].size = binary.bss_size;
+
 	finish_text_section(elf_file, &asm_module->fixups);
 
-	for (u32 i = 0; i < symbols.size; i++) {
-		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
+	elf_file->section_info[DATA_INDEX].size = binary.data.size;
+	elf_file->section_info[DATA_INDEX].contents = binary.data.elements;
+
+	finish_data_section(elf_file);
+
+	Array(AsmSymbol *) *symbols = &binary.symbols;
+	for (u32 i = 0; i < symbols->size; i++) {
+		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
 		u32 section;
 		if (!symbol->defined) {
 			section = SHN_UNDEF;
@@ -559,6 +616,7 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 			switch (symbol->section) {
 			case TEXT_SECTION: section = TEXT_INDEX; break;
 			case BSS_SECTION: section = BSS_INDEX; break;
+			case DATA_SECTION: section = DATA_INDEX; break;
 			}
 		}
 		add_symbol(elf_file, STT_FUNC, STB_GLOBAL, section,
@@ -567,14 +625,15 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, asm_module->input_file_name, 0, 0);
 	finish_symtab_section(elf_file);
 
-	for (u32 i = 0; i < symbols.size; i++) {
-		AsmSymbol *symbol = ARRAY_REF(&symbols, AsmSymbol, i);
+	for (u32 i = 0; i < symbols->size; i++) {
+		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
 		add_string(elf_file, symbol->name);
 	}
 	add_string(elf_file, asm_module->input_file_name);
 	finish_strtab_section(elf_file);
 
-	array_free(&symbols);
+	free_binary(&binary);
+
 	fclose(output_file);
 	return true;
 }
@@ -604,17 +663,16 @@ typedef struct Symbol
 	u32 section_index;
 	u32 section_offset;
 	u32 size;
+	u8 *contents;
 } Symbol;
 
 // @TODO: Handle archives correctly. Currently we just treat them as a series
 // of object files, but archives have different semantics.
 // See http://eli.thegreenplace.net/2013/07/09/library-order-in-static-linking
 // for details.
-static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
+static bool process_elf_file(FILE *input_file, Binary *binary,
 		Array(Symbol) *symbol_table)
 {
-	FILE *output_file = elf_file->output_file;
-
 	u32 initial_location = checked_ftell(input_file);
 
 	ELFHeader file_header;
@@ -659,12 +717,14 @@ static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
 	checked_fread(shstrtab, 1, shstrtab_header->section_size, input_file);
 
 	ELFSectionHeader *text_header = NULL;
-	u32 text_section_index;
+	u32 text_section_index = SHN_UNDEF;
 	ELFSectionHeader *symtab_header = NULL;
-	u32 symtab_section_index;
+	u32 symtab_section_index = SHN_UNDEF;
 	ELFSectionHeader *strtab_header = NULL;
 	ELFSectionHeader *rela_text_header = NULL;
-	u32 bss_section_index;
+	u32 data_section_index = SHN_UNDEF;
+	ELFSectionHeader *data_header = NULL;
+	u32 bss_section_index = SHN_UNDEF;
 	ELFSectionHeader *bss_header = NULL;
 	for (u32 i = 0; i < file_header.sht_entries; i++) {
 		ELFSectionHeader *curr_header = headers + i;
@@ -689,6 +749,9 @@ static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
 		} else if (streq(section_name, ".bss")) {
 			bss_header = curr_header;
 			bss_section_index = i;
+		} else if (streq(section_name, ".data")) {
+			data_header = curr_header;
+			data_section_index = i;
 		}
 	}
 
@@ -728,16 +791,34 @@ static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
 				SEEK_SET);
 	checked_fread(strtab, 1, strtab_header->section_size, input_file);
 
-	u32 new_text_section_data_offset = checked_ftell(output_file)
-		- elf_file->section_info[TEXT_INDEX].offset;
+	u32 existing_text_size = binary->text.size;
+	u32 existing_bss_size = binary->bss_size;
+	u32 existing_data_size = binary->data.size;
 
-	checked_fseek(input_file,
-			initial_location + text_header->section_location,
-			SEEK_SET);
-	u8 *temp_buffer = malloc(text_header->section_size);
-	checked_fread(temp_buffer, text_header->section_size, 1, input_file);
-	checked_fwrite(temp_buffer, text_header->section_size, 1, output_file);
+	u8 *temp_buffer = NULL;
+
+	if (text_header != NULL && text_header->section_size != 0) {
+		checked_fseek(input_file,
+				initial_location + text_header->section_location,
+				SEEK_SET);
+		temp_buffer = realloc(temp_buffer, text_header->section_size);
+		checked_fread(temp_buffer, text_header->section_size, 1, input_file);
+		ARRAY_APPEND_ELEMS(&binary->text, u8, text_header->section_size, temp_buffer);
+	}
+
+	if (data_header != NULL && data_header->section_size != 0) {
+		checked_fseek(input_file,
+				initial_location + data_header->section_location,
+				SEEK_SET);
+		temp_buffer = realloc(temp_buffer, data_header->section_size);
+		checked_fread(temp_buffer, data_header->section_size, 1, input_file);
+		ARRAY_APPEND_ELEMS(&binary->data, u8, data_header->section_size, temp_buffer);
+	}
+
 	free(temp_buffer);
+
+	if (bss_header != NULL)
+		binary->bss_size += bss_header->section_size;
 
 	u32 symbols_in_symtab = symtab_header->section_size / symtab_header->entry_size;
 	checked_fseek(input_file,
@@ -776,6 +857,7 @@ static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
 				symbol = ARRAY_APPEND(symbol_table, Symbol);
 				symbol->defined = false;
 				symbol->name = strdup(symbol_name);
+				symbol->contents = NULL;
 				ARRAY_INIT(&symbol->relocs, Relocation, 5);
 			} else {
 				symbol = ARRAY_REF(symbol_table, Symbol, found_symbol_index);
@@ -783,7 +865,8 @@ static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
 
 			file_symbols[symtab_index] = symbol;
 		} else if (symtab_symbol.section == text_section_index
-				|| symtab_symbol.section == bss_section_index) {
+				|| symtab_symbol.section == bss_section_index
+				|| symtab_symbol.section == data_section_index) {
 			Symbol *symbol;
 			if (found_symbol_index == -1) {
 				symbol = ARRAY_APPEND(symbol_table, Symbol);
@@ -799,17 +882,23 @@ static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
 				}
 			}
 
-			if (symtab_symbol.section == text_section_index)
+			if (symtab_symbol.section == text_section_index) {
 				symbol->section_index = TEXT_INDEX;
-			else if (symtab_symbol.section == bss_section_index)
+				symbol->section_offset = existing_text_size + symtab_symbol.value;
+			} else if (symtab_symbol.section == bss_section_index) {
 				symbol->section_index = BSS_INDEX;
-			else
+				symbol->section_offset = existing_bss_size + symtab_symbol.value;
+			} else if (symtab_symbol.section == data_section_index) {
+				symbol->section_index = DATA_INDEX;
+				symbol->section_offset = existing_data_size + symtab_symbol.value;
+			} else {
 				UNREACHABLE;
+			}
 
 			symbol->defined = true;
 			symbol->name = strdup(symbol_name);
-			symbol->section_offset = new_text_section_data_offset + symtab_symbol.value;
 			symbol->size = symtab_symbol.size;
+			symbol->contents = NULL;
 
 			file_symbols[symtab_index] = symbol;
 		} else {
@@ -835,7 +924,7 @@ static bool process_elf_file(FILE *input_file, ELFFile *elf_file,
 			reloc->type = type;
 			reloc->addend = rela.addend;
 			reloc->section_index = TEXT_INDEX;
-			reloc->section_offset = new_text_section_data_offset + rela.section_offset;
+			reloc->section_offset = existing_text_size + rela.section_offset;
 		}
 	}
 
@@ -871,11 +960,9 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 		return false;
 	}
 
-	ELFFile _elf_file;
-	ELFFile *elf_file = &_elf_file;
-	init_elf_file(elf_file, output_file, ET_EXEC);
-
-	start_text_section(elf_file);
+	Binary binary;
+	init_binary(&binary);
+	// @TODO: Merge with AsmSymbol so we can just use Binary?
 	Array(Symbol) symbol_table;
 	ARRAY_INIT(&symbol_table, Symbol, 100);
 
@@ -892,7 +979,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 		checked_fseek(input_file, 0, SEEK_SET);
 		switch (type) {
 		case ELF_FILE_TYPE:
-			if (!process_elf_file(input_file, elf_file, &symbol_table)) {
+			if (!process_elf_file(input_file, &binary, &symbol_table)) {
 				ret = false;
 				goto cleanup;
 			}
@@ -934,7 +1021,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 				// a symbol index in System V ar. We don't care about it for
 				// now.
 				if (!streq(header.name, "") &&
-						!process_elf_file(input_file, elf_file, &symbol_table)) {
+						!process_elf_file(input_file, &binary, &symbol_table)) {
 					ret = false;
 					goto cleanup;
 				}
@@ -952,12 +1039,28 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 
 		fclose(input_file);
 	}
+
+	ELFFile _elf_file;
+	ELFFile *elf_file = &_elf_file;
+	init_elf_file(elf_file, output_file, ET_EXEC);
+
+	start_text_section(elf_file);
+
+	elf_file->section_info[TEXT_INDEX].size = binary.text.size;
+	elf_file->section_info[TEXT_INDEX].contents = binary.text.elements;
 	Array(Fixup) empty_array = {
 		.size = 0,
 		.capacity = 0,
 		.elements = NULL,
 	};
+
+	elf_file->section_info[BSS_INDEX].size = binary.bss_size;
+
 	finish_text_section(elf_file, &empty_array);
+
+	elf_file->section_info[DATA_INDEX].size = binary.data.size;
+	elf_file->section_info[DATA_INDEX].contents = binary.data.elements;
+	finish_data_section(elf_file);
 
 	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, executable_file_name, 0, 0);
 	for (u32 i = 0; i < symbol_table.size; i++) {
@@ -981,7 +1084,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 		ELFSymbolType type;
 		switch (symbol->section_index) {
 		case TEXT_INDEX: type = STT_FUNC; break;
-		case BSS_INDEX: type = STT_OBJECT; break;
+		case BSS_INDEX: case DATA_INDEX: type = STT_OBJECT; break;
 		default: UNREACHABLE;
 		}
 
@@ -1023,11 +1126,11 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 					1,
 					sizeof final_value_bytes,
 					output_file);
-
 #if 0
 			printf("Relocation %u for '%s': wrote 0x%x at offset 0x%x\n",
 					i, symbol->name, final_value, file_offset);
-			printf("rml = 0x%x, va = 0x%x, o = 0x%x\n", reloc_mem_location,
+			printf("rml = 0x%x, sml = 0x%x, add = %d, va = 0x%x, o = 0x%x\n",
+					reloc_mem_location, symbol_mem_location, reloc->addend,
 					reloc_section_info->virtual_address, reloc_section_info->offset);
 #endif
 		}
@@ -1047,5 +1150,6 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 cleanup:
 	fclose(output_file);
 	array_free(&symbol_table);
+	free_binary(&binary);
 	return ret;
 }

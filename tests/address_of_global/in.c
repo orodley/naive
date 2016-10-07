@@ -10,8 +10,12 @@ int a;
 
 int main()
 {
-	foo(&a);
+	int *x = &a;
+	foo(x);
 	assert(a == 3);
+
+	foo(&a);
+	assert(a == 6);
 
 	return 0;
 }

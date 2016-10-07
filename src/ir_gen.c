@@ -84,6 +84,18 @@ static IrType c_type_to_ir_type(CType *ctype)
 	}
 }
 
+static u8 rank(CType *type)
+{
+	assert(type->type == INTEGER_TYPE);
+	switch (type->val.integer.type) {
+	case CHAR: return 1;
+	case SHORT: return 2;
+	case INT: return 3;
+	case LONG: return 4;
+	case LONGLONG: return 5;
+	}
+}
+
 typedef struct Term
 {
 	CType *ctype;
@@ -125,11 +137,11 @@ typedef struct TypeEnvEntry
 
 typedef struct TypeEnv
 {
-	Pool derived_types_pool;
-	Array(TypeEnvEntry) struct_types;
-	Array(TypeEnvEntry) union_types;
-	Array(TypeEnvEntry) enum_types;
-	Array(TypeEnvEntry) typedef_types;
+	Pool pool;
+	Array(TypeEnvEntry *) struct_types;
+	Array(TypeEnvEntry *) union_types;
+	Array(TypeEnvEntry *) enum_types;
+	Array(TypeEnvEntry *) typedef_types;
 
 	CType char_type;
 	CType int_type;
@@ -138,11 +150,11 @@ typedef struct TypeEnv
 
 static void init_type_env(TypeEnv *type_env)
 {
-	pool_init(&type_env->derived_types_pool, 512);
-	ARRAY_INIT(&type_env->struct_types, TypeEnvEntry, 10);
-	ARRAY_INIT(&type_env->union_types, TypeEnvEntry, 10);
-	ARRAY_INIT(&type_env->enum_types, TypeEnvEntry, 10);
-	ARRAY_INIT(&type_env->typedef_types, TypeEnvEntry, 10);
+	pool_init(&type_env->pool, 512);
+	ARRAY_INIT(&type_env->struct_types, TypeEnvEntry *, 10);
+	ARRAY_INIT(&type_env->union_types, TypeEnvEntry *, 10);
+	ARRAY_INIT(&type_env->enum_types, TypeEnvEntry *, 10);
+	ARRAY_INIT(&type_env->typedef_types, TypeEnvEntry *, 10);
 
 	type_env->int_type = (CType) {
 		.type = INTEGER_TYPE,
@@ -165,10 +177,10 @@ static void init_type_env(TypeEnv *type_env)
 	};
 }
 
-static CType *search(Array(CDecl) *types, char *name)
+static CType *search(Array(TypeEnvEntry *) *types, char *name)
 {
 	for (u32 i = 0; i < types->size; i++) {
-		TypeEnvEntry *entry = ARRAY_REF(types, TypeEnvEntry, i);
+		TypeEnvEntry *entry = *ARRAY_REF(types, TypeEnvEntry *, i);
 		if (streq(entry->name, name)) {
 			return &entry->type;
 		}
@@ -248,8 +260,8 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 			return search(&type_env->struct_types, name);
 		}
 
-		TypeEnvEntry *struct_type =
-			ARRAY_APPEND(&type_env->struct_types, TypeEnvEntry);
+		TypeEnvEntry *struct_type = pool_alloc(&type_env->pool, sizeof *struct_type);
+		*ARRAY_APPEND(&type_env->struct_types, TypeEnvEntry *) = struct_type;
 		if (name == NULL)
 			name = "<anonymous struct>";
 		struct_type->name = name;
@@ -319,8 +331,7 @@ static CType *pointer_type(TypeEnv *type_env, CType *type)
 	if (type->cached_pointer_type != NULL)
 		return type->cached_pointer_type;
 
-	CType *pointer_type =
-		pool_alloc(&type_env->derived_types_pool, sizeof *pointer_type);
+	CType *pointer_type = pool_alloc(&type_env->pool, sizeof *pointer_type);
 	pointer_type->type = POINTER_TYPE;
 	pointer_type->cached_pointer_type = NULL;
 	pointer_type->val.pointee_type = type;
@@ -333,8 +344,7 @@ static CType *pointer_type(TypeEnv *type_env, CType *type)
 static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type,
 		u64 size)
 {
-	CType *array_type =
-		pool_alloc(&type_env->derived_types_pool, sizeof *array_type);
+	CType *array_type = pool_alloc(&type_env->pool, sizeof *array_type);
 	array_type->type = ARRAY_TYPE;
 	array_type->cached_pointer_type = NULL;
 	array_type->val.array.elem_type = type;
@@ -647,7 +657,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ASTInitDeclarator *init_declarator = decl->init_declarators;
 			assert(decl_specifier_list != NULL);
 
-			Array(TypeEnvEntry) *typedef_types = &env.type_env.typedef_types;
+			Array(TypeEnvEntry *) *typedef_types = &env.type_env.typedef_types;
 
 			if (decl_specifier_list->type == STORAGE_CLASS_SPECIFIER &&
 					decl_specifier_list->val.storage_class_specifier == TYPEDEF_SPECIFIER) {
@@ -660,7 +670,9 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 					decl_to_cdecl(builder, &env.type_env, decl_specifier_list,
 							init_declarator->declarator, &cdecl);
 
-					TypeEnvEntry *new_type_alias = ARRAY_APPEND(typedef_types, TypeEnvEntry);
+					TypeEnvEntry *new_type_alias =
+						pool_alloc(&env.type_env.pool, sizeof *new_type_alias);
+					*ARRAY_APPEND(typedef_types, TypeEnvEntry *) = new_type_alias;
 					new_type_alias->name = cdecl.name;
 					new_type_alias->type = *cdecl.type;
 
@@ -693,7 +705,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 		toplevel = toplevel->next;
 	}
 
-	pool_free(&env.type_env.derived_types_pool);
+	pool_free(&env.type_env.pool);
 	array_free(&env.type_env.struct_types);
 	array_free(&env.type_env.union_types);
 	array_free(&env.type_env.enum_types);
@@ -940,28 +952,24 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 		return (Term) { .ctype = selected_field->type, .value = value };
 }
 
-static inline bool converts_to_pointer(CType *type)
+static CType *decay_to_pointer(TypeEnv *type_env, CType *type)
 {
-	return type->type == POINTER_TYPE || type->type == ARRAY_TYPE;
-}
-
-static Term to_pointer(TypeEnv *type_env, Term term)
-{
-	CType *result_type = term.ctype;
-	switch (result_type->type) {
-	case ARRAY_TYPE:
-		result_type =
-			pointer_type(type_env, result_type->val.array.elem_type);
-		break;
-	case POINTER_TYPE: break;
-	default: UNREACHABLE;
-	}
-
-	return (Term) { .ctype = result_type, .value = term.value };
+	assert(type->type == ARRAY_TYPE);
+	return pointer_type(type_env, type->val.array.elem_type);
 }
 
 static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 {
+	if (left.ctype->type == ARRAY_TYPE) {
+		left.ctype = decay_to_pointer(&env->type_env, left.ctype);
+	}
+	if (right.ctype->type == ARRAY_TYPE) {
+		right.ctype = decay_to_pointer(&env->type_env, right.ctype);
+	}
+
+	bool left_is_pointer = left.ctype->type == POINTER_TYPE;
+	bool right_is_pointer = right.ctype->type == POINTER_TYPE;
+
 	if (left.ctype->type == INTEGER_TYPE && right.ctype->type == INTEGER_TYPE) {
 		IrValue value = build_binary_instr(builder, OP_ADD, left.value, right.value);
 
@@ -970,13 +978,12 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 			.ctype = left.ctype,
 			.value = value,
 		};
-	} else if (converts_to_pointer(left.ctype)
-			^ converts_to_pointer(right.ctype)) {
-		Term pointer = converts_to_pointer(left.ctype) ? left : right;
-		Term other = converts_to_pointer(left.ctype) ? right : left;
+	} else if (left_is_pointer ^ right_is_pointer) {
+		Term pointer = left_is_pointer ? left : right;
+		Term other = left_is_pointer ? right : left;
 		assert(other.ctype->type == INTEGER_TYPE);
 
-		CType *result_type = to_pointer(&env->type_env, pointer).ctype;
+		CType *result_type = pointer.ctype;
 		CType *pointee_type = result_type->val.pointee_type;
 
 		// @TODO: Determine type correctly
@@ -1009,6 +1016,16 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 
 static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 {
+	if (left.ctype->type == ARRAY_TYPE) {
+		left.ctype = decay_to_pointer(&env->type_env, left.ctype);
+	}
+	if (right.ctype->type == ARRAY_TYPE) {
+		right.ctype = decay_to_pointer(&env->type_env, right.ctype);
+	}
+
+	bool left_is_pointer = left.ctype->type == POINTER_TYPE;
+	bool right_is_pointer = right.ctype->type == POINTER_TYPE;
+
 	if (left.ctype->type == INTEGER_TYPE && right.ctype->type == INTEGER_TYPE) {
 		IrValue value = build_binary_instr(builder, OP_SUB, left.value, right.value);
 
@@ -1017,10 +1034,8 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 			.ctype = left.ctype,
 			.value = value,
 		};
-	} else if (converts_to_pointer(left.ctype) && converts_to_pointer(right.ctype)) {
-		Term left_ptr = to_pointer(&env->type_env, left);
-		Term right_ptr = to_pointer(&env->type_env, right);
-		CType *pointee_type = left_ptr.ctype->val.pointee_type;
+	} else if (left_is_pointer && right_is_pointer) {
+		CType *pointee_type = left.ctype->val.pointee_type;
 
 		// @TODO: Determine type correctly
 		// @TODO: Don't hardcode in the size of a pointer!
@@ -1030,9 +1045,9 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 		CType *result_c_type = &env->type_env.int_type;
 
 		IrValue left_int =
-			build_type_instr(builder, OP_CAST, left_ptr.value, pointer_int_type);
+			build_type_instr(builder, OP_CAST, left.value, pointer_int_type);
 		IrValue right_int =
-			build_type_instr(builder, OP_CAST, right_ptr.value, pointer_int_type);
+			build_type_instr(builder, OP_CAST, right.value, pointer_int_type);
 		IrValue diff = build_binary_instr(builder, OP_SUB, left_int, right_int);
 		IrValue cast = build_type_instr(
 				builder, OP_CAST, diff, c_type_to_ir_type(result_c_type));
@@ -1047,14 +1062,12 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 			.ctype = result_c_type,
 			.value = scaled,
 		};
-	} else if (converts_to_pointer(left.ctype) ^ converts_to_pointer(right.ctype)) {
-		// @TODO: This block is identical to the corresponding block in
+	} else if (left_is_pointer && (right.ctype->type == INTEGER_TYPE)) {
+		// @TODO: This block is almost identical to the corresponding block in
 		// ir_gen_add, except for OP_SUB instead of OP_ADD. Factor out?
-		Term pointer = converts_to_pointer(left.ctype) ? left : right;
-		Term other = converts_to_pointer(left.ctype) ? right : left;
-		assert(other.ctype->type == INTEGER_TYPE);
+		assert(right.ctype->type == INTEGER_TYPE);
 
-		CType *result_type = to_pointer(&env->type_env, pointer).ctype;
+		CType *result_type = left.ctype;
 		CType *pointee_type = result_type->val.pointee_type;
 
 		// @TODO: Determine type correctly
@@ -1062,9 +1075,9 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 		IrType pointer_int_type = (IrType) { .kind = IR_INT, .val.bit_width = 64 };
 
 		IrValue zext =
-			build_type_instr(builder, OP_ZEXT, other.value, pointer_int_type);
+			build_type_instr(builder, OP_ZEXT, right.value, pointer_int_type);
 		IrValue ptr_to_int =
-			build_type_instr(builder, OP_CAST, pointer.value, pointer_int_type);
+			build_type_instr(builder, OP_CAST, left.value, pointer_int_type);
 		IrValue subtrahend = build_binary_instr(
 				builder,
 				OP_MUL,
@@ -1092,8 +1105,40 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 		return ir_gen_add(builder, env, left, right);
 	if (ir_op == OP_SUB)
 		return ir_gen_sub(builder, env, left, right);
+
+	if (left.ctype->type == ARRAY_TYPE) {
+		left.ctype = decay_to_pointer(&env->type_env, left.ctype);
+	}
+	if (right.ctype->type == ARRAY_TYPE) {
+		right.ctype = decay_to_pointer(&env->type_env, right.ctype);
+	}
+
 	// @TODO: Determine type correctly.
 	CType *result_type = &env->type_env.int_type;
+
+	if (!(ir_op == OP_EQ
+				&& left.ctype->type == POINTER_TYPE
+				&& right.ctype->type == POINTER_TYPE)) {
+		// @TODO: Proper arithmetic conversions
+		assert(left.ctype->type == INTEGER_TYPE && right.ctype->type == INTEGER_TYPE);
+		if (rank(left.ctype) != rank(right.ctype)) {
+			Term *to_convert = rank(left.ctype) < rank(right.ctype) ? &left : &right;
+			CType *conversion_type =
+				rank(left.ctype) < rank(right.ctype) ? right.ctype : left.ctype;
+			IrType ir_type = c_type_to_ir_type(conversion_type);
+			IrValue converted;
+			if (to_convert->ctype->val.integer.is_signed) {
+				converted =
+					build_type_instr(builder, OP_SEXT, to_convert->value, ir_type);
+			} else {
+				converted =
+					build_type_instr(builder, OP_ZEXT, to_convert->value, ir_type);
+			}
+
+			to_convert->value = converted;
+			to_convert->ctype = conversion_type;
+		}
+	}
 
 	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
 
@@ -1246,6 +1291,43 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 				expr->val.int_literal);
 
 		return (Term) { .ctype = result_type, .value = value };
+	}
+	// @TODO: Deduplicate identical string literals
+	case STRING_LITERAL_EXPR: {
+		char fmt[] = "__string_literal_%x";
+
+		// - 2 adjusts down for the "%x" which isn't present in the output
+		// sizeof(u32) * 2 is the max length of globals.size in hex
+		// + 1 for the null terminator
+		u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
+		char *name = pool_alloc(&builder->trans_unit->pool, name_max_length);
+		snprintf(name, name_max_length, fmt, builder->trans_unit->globals.size);
+
+		char *string = expr->val.string_literal;
+		u32 length = strlen(string) + 1;
+		CType *result_type =
+			array_type(builder, &env->type_env, &env->type_env.char_type, length);
+		IrType ir_type = c_type_to_ir_type(result_type);
+		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
+		global->defined = true;
+
+		IrInit *init = pool_alloc(&builder->trans_unit->pool, sizeof *init);
+		IrInit *elems =
+			pool_alloc(&builder->trans_unit->pool, length * sizeof *elems);
+		IrType ir_char_type = c_type_to_ir_type(&env->type_env.char_type);
+		for (u32 i = 0; i < length; i++) {
+			elems[i] = (IrInit) {
+				.type = ir_char_type,
+				.val.integer = string[i],
+			};
+		}
+
+		init->type = ir_type;
+		init->val.array_elems = elems;
+
+		global->val.initializer = init;
+
+		return (Term) { .ctype = result_type, .value = value_global(global) };
 	}
 	case ADD_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_ADD);
 	case MINUS_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SUB);

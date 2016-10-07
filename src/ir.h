@@ -68,6 +68,20 @@ typedef struct IrFunction
 	AsmLabel *label;
 } IrFunction;
 
+// @TODO: Pull IrFunction into here so we don't need "kind" on IrGlobal.
+typedef struct IrInit
+{
+	IrType type;
+
+	union
+	{
+		u64 integer;
+		struct IrGlobal *global_pointer;
+		struct IrInit *array_elems;
+		struct IrInit *struct_fields;
+	} val;
+} IrInit;
+
 typedef struct IrGlobal
 {
 	char *name;
@@ -84,6 +98,7 @@ typedef struct IrGlobal
 	union
 	{
 		IrFunction function;
+		IrInit *initializer;
 	} val;
 } IrGlobal;
 
@@ -137,6 +152,7 @@ typedef struct IrValue
 	X(OP_CALL), \
 	X(OP_CAST), \
 	X(OP_ZEXT), \
+	X(OP_SEXT), \
 	X(OP_FIELD), \
 	X(OP_LOAD), \
 	X(OP_STORE), \

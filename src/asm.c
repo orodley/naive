@@ -16,7 +16,7 @@ void init_asm_module(AsmModule *asm_module, char *input_file_name)
 	pool_init(&asm_module->pool, 1024);
 
 	ARRAY_INIT(&asm_module->globals, AsmGlobal *, 10);
-	ARRAY_INIT(&asm_module->fixups, Fixup, 10);
+	ARRAY_INIT(&asm_module->fixups, Fixup *, 10);
 }
 
 void free_asm_module(AsmModule *asm_module)
@@ -282,72 +282,51 @@ void dump_asm_module(AsmModule *asm_module)
 	for (u32 i = 0; i < asm_module->globals.size; i++) {
 		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
 
-		printf("global %s\n", global->name);
-		if (global->defined && global->type == ASM_GLOBAL_FUNCTION) {
-			AsmFunction *func = &global->val.function;
-			dump_asm_function(func);
+		printf("global %s", global->name);
+		if (global->defined) {
+			switch (global->type) {
+			case ASM_GLOBAL_FUNCTION:
+				putchar('\n');
+				dump_asm_function(&global->val.function);
+				break;
+			case ASM_GLOBAL_VAR: {
+				if (global->val.var.value != NULL) {
+					fputs(" = [", stdout);
+					u32 size = global->val.var.size_bytes;
+					for (u32 i = 0; i < size; i++) {
+						printf("%u", global->val.var.value[i]);
+						if (i != size - 1)
+							fputs(", ", stdout);
+					}
+					putchar(']');
+				}
+			}
+			}
 		}
 
-		putchar('\n');
+		puts("\n");
 	}
 }
 
-static inline void write_u8(FILE *file, u8 x)
+static inline void write_u8(Array(u8) *output, u8 x)
 {
-	size_t items_written = fwrite(&x, 1, 1, file);
-	assert(items_written == 1);
+	*ARRAY_APPEND(output, u8) = x;
 }
 
-#if 0
-static inline void write_u16(FILE *file, u16 x)
+static inline void write_int_at(Array(u8) *output, u32 offset, u64 x, u32 size)
 {
-	u8 out[] = {
-		(x >> 0) & 0xFF,
-		(x >> 8) & 0xFF,
-	};
-
-	size_t items_written = fwrite(out, 1, sizeof out, file);
-	assert(items_written == sizeof out);
-}
-
-static inline void write_u32(FILE *file, u32 x)
-{
-	u8 out[] = {
-		(x >>  0) & 0xFF,
-		(x >>  8) & 0xFF,
-		(x >> 16) & 0xFF,
-		(x >> 24) & 0xFF,
-	};
-
-	size_t items_written = fwrite(out, 1, sizeof out, file);
-	assert(items_written == sizeof out);
-}
-
-static inline void write_u64(FILE *file, u64 x)
-{
-	u8 out[] = {
-		(x >>  0) & 0xFF,
-		(x >>  8) & 0xFF,
-		(x >> 16) & 0xFF,
-		(x >> 24) & 0xFF,
-		(x >> 32) & 0xFF,
-		(x >> 40) & 0xFF,
-		(x >> 48) & 0xFF,
-		(x >> 56) & 0xFF,
-	};
-
-	size_t items_written = fwrite(out, 1, sizeof out, file);
-	assert(items_written == sizeof out);
-}
-#endif
-
-static inline void write_int(FILE *file, u64 x, u32 size)
-{
+	array_ensure_room(output, 1, offset + size);
 	for (u32 n = 0; n < size; n ++) {
 		u8 byte = (x >> (n * 8)) & 0xFF;
-		size_t items_written = fwrite(&byte, 1, 1, file);
-		assert(items_written == 1);
+		*ARRAY_REF(output, u8, offset + n) = byte;
 	}
+	if (output->size < offset + size)
+		output->size = offset + size;
+}
+
+static inline void write_int(Array(u8) *output, u64 x, u32 size)
+{
+	write_int_at(output, output->size, x, size);
 }
 
 static inline RegClass get_reg_class(AsmArg *arg)
@@ -470,11 +449,13 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 			if (reg == REG_CLASS_IP)
 				fixup_type = FIXUP_RELATIVE;
 
-			encoded_instr->disp_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
-			encoded_instr->disp_fixup->type = fixup_type;
-			encoded_instr->disp_fixup->size_bytes = 4;
-			encoded_instr->disp_fixup->source = FIXUP_GLOBAL;
-			encoded_instr->disp_fixup->val.global = asm_const.val.global;
+			Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
+			*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
+			encoded_instr->disp_fixup = fixup;
+			fixup->type = fixup_type;
+			fixup->size_bytes = 4;
+			fixup->source = FIXUP_GLOBAL;
+			fixup->val.global = asm_const.val.global;
 		} else {
 			assert(asm_const.type == ASM_CONST_IMMEDIATE);
 			offset = asm_const.val.immediate;
@@ -524,10 +505,9 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 
 typedef enum ArgOrder { INVALID, RM, MR } ArgOrder;
 
-static inline void write_bytes(FILE *file, u32 size, u8 *bytes)
+static inline void write_bytes(Array(u8) *output, u32 size, u8 *bytes)
 {
-	size_t items_written = fwrite(bytes, 1, size, file);
-	assert(items_written == size);
+	ARRAY_APPEND_ELEMS(output, u8, size, bytes);
 }
 
 typedef enum RexPrefix
@@ -540,9 +520,9 @@ typedef enum RexPrefix
 } RexPrefix;
 
 // Called by the generated function "assemble_instr".
-static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
-		ArgOrder arg_order, bool use_rex_w, u32 opcode_size, u8 opcode[],
-		bool reg_and_rm, i32 opcode_extension, i32 immediate_size,
+static void encode_instr(Array(u8) *output, AsmModule *asm_module,
+		AsmInstr *instr, ArgOrder arg_order, bool use_rex_w, u32 opcode_size,
+		u8 opcode[], bool reg_and_rm, i32 opcode_extension, i32 immediate_size,
 		bool reg_in_opcode, FixupType fixup_type)
 {
 	EncodedInstr encoded_instr;
@@ -612,26 +592,32 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 		assert(immediate_arg != NULL);
 
 		if (immediate_arg->type == ASM_ARG_LABEL) {
-			encoded_instr.imm_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
-			encoded_instr.imm_fixup->size_bytes = 4;
-			encoded_instr.imm_fixup->source = FIXUP_LABEL;
-			encoded_instr.imm_fixup->val.label = immediate_arg->val.label;
+			Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
+			*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
+			encoded_instr.imm_fixup = fixup;
+			fixup->type = fixup_type;
+			fixup->size_bytes = 4;
+			fixup->source = FIXUP_LABEL;
+			fixup->val.label = immediate_arg->val.label;
 
 			// Dummy value, gets patched later.
 			encoded_instr.immediate = 0;
 		} else if (immediate_arg->type == ASM_ARG_CONST) {
 			AsmConst constant = immediate_arg->val.constant;
 			switch (constant.type) {
-			case ASM_CONST_GLOBAL:
-				encoded_instr.imm_fixup = ARRAY_APPEND(&asm_module->fixups, Fixup);
-				encoded_instr.imm_fixup->type = fixup_type;
-				encoded_instr.imm_fixup->size_bytes = 4;
-				encoded_instr.imm_fixup->source = FIXUP_GLOBAL;
-				encoded_instr.imm_fixup->val.global = constant.val.global;
+			case ASM_CONST_GLOBAL: {
+				Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
+				*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
+				encoded_instr.imm_fixup = fixup;
+				fixup->type = fixup_type;
+				fixup->size_bytes = 4;
+				fixup->source = FIXUP_GLOBAL;
+				fixup->val.global = constant.val.global;
 
 				// Dummy value, gets patched later.
 				encoded_instr.immediate = 0;
 				break;
+			}
 			case ASM_CONST_IMMEDIATE:
 				encoded_instr.immediate = constant.val.immediate;
 				break;
@@ -665,52 +651,70 @@ static void encode_instr(FILE *file, AsmModule *asm_module, AsmInstr *instr,
 	}
 	if (encoded_instr.rex_prefix != 0) {
 		encoded_instr.rex_prefix |= REX_HIGH;
-		write_u8(file, encoded_instr.rex_prefix);
+		write_u8(output, encoded_instr.rex_prefix);
 	}
 	encoded_instr.opcode[0] |= encoded_instr.opcode_extension & 7;
-	write_bytes(file, encoded_instr.opcode_size, encoded_instr.opcode);
+	write_bytes(output, encoded_instr.opcode_size, encoded_instr.opcode);
 	if (encoded_instr.has_modrm) {
 		u8 mod = encoded_instr.mod;
 		u8 reg = encoded_instr.reg;
 		u8 rm = encoded_instr.rm;
 		u8 mod_rm_byte = ((mod & 3) << 6) | ((reg & 7) << 3) | (rm & 7);
 
-		write_u8(file, mod_rm_byte);
+		write_u8(output, mod_rm_byte);
 	}
 	if (encoded_instr.has_sib) {
 		u8 scale = encoded_instr.scale;
 		u8 index = encoded_instr.index;
 		u8 base = encoded_instr.base;
 		u8 sib_byte = ((scale  & 3) << 6) | ((index & 7) << 3) | (base & 7);
-		write_u8(file, sib_byte);
+		write_u8(output, sib_byte);
 	}
 	if (encoded_instr.disp_fixup != NULL)
-		encoded_instr.disp_fixup->file_location = (u32)checked_ftell(file);
+		encoded_instr.disp_fixup->offset = output->size;
 	if (encoded_instr.displacement_size != -1)
-		write_int(file, encoded_instr.displacement, encoded_instr.displacement_size);
+		write_int(output, encoded_instr.displacement, encoded_instr.displacement_size);
 	if (encoded_instr.imm_fixup != NULL)
-		encoded_instr.imm_fixup->file_location = (u32)checked_ftell(file);
+		encoded_instr.imm_fixup->offset = output->size;
 	if (encoded_instr.immediate_size != -1)
-		write_int(file, encoded_instr.immediate, encoded_instr.immediate_size);
+		write_int(output, encoded_instr.immediate, encoded_instr.immediate_size);
 
 	if (encoded_instr.disp_fixup != NULL)
-		encoded_instr.disp_fixup->next_instr_file_location = (u32)checked_ftell(file);
+		encoded_instr.disp_fixup->next_instr_offset = output->size;
 	if (encoded_instr.imm_fixup != NULL)
-		encoded_instr.imm_fixup->next_instr_file_location = (u32)checked_ftell(file);
+		encoded_instr.imm_fixup->next_instr_offset = output->size;
 }
 
 // This is generated from "x64.enc", and defines the function "assemble_instr".
 #include "x64.inc"
 
-void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbols)
+void init_binary(Binary *binary)
 {
-	u64 initial_file_location = checked_ftell(output_file);
-	u32 curr_bss_offset = 0;
+	Array(u8) *text = &binary->text;
+	ARRAY_INIT(text, u8, 1024);
+	Array(u8) *data = &binary->data;
+	ARRAY_INIT(data, u8, 1024);
+	binary->bss_size = 0;
+	Array(AsmSymbol) *symbols = &binary->symbols;
+	ARRAY_INIT(symbols, AsmSymbol, 10);
+}
+
+void free_binary(Binary *binary)
+{
+	array_free(&binary->text);
+	array_free(&binary->data);
+	array_free(&binary->symbols);
+}
+
+void assemble(AsmModule *asm_module, Binary *binary)
+{
+	init_binary(binary);
 
 	for (u32 i = 0; i < asm_module->globals.size; i++) {
 		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
+		AsmSymbol *symbol = pool_alloc(&asm_module->pool, sizeof *symbol);
+		*ARRAY_APPEND(&binary->symbols, AsmSymbol *) = symbol;
 
-		AsmSymbol *symbol = ARRAY_APPEND(symbols, AsmSymbol);
 		symbol->name = global->name;
 		symbol->defined = global->defined;
 		// Add one to account for 0 = undef symbol index
@@ -722,10 +726,10 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 		case ASM_GLOBAL_FUNCTION: {
 			AsmFunction *function = &global->val.function;
 
-			u32 function_start = initial_file_location;
-			u32 function_size = 0;
+			u32 function_start;
+			u32 function_size;
 			if (global->defined) {
-				function_start = checked_ftell(output_file);
+				function_start = binary->text.size;
 
 				Array(AsmInstr) *instr_blocks[] = {
 					&function->prologue,
@@ -738,57 +742,68 @@ void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbol
 					for (u32 j = 0; j < instr_block->size; j++) {
 						AsmInstr *instr = ARRAY_REF(instr_block, AsmInstr, j);
 						if (instr->label != NULL) {
-							instr->label->file_location = checked_ftell(output_file);
+							instr->label->offset = binary->text.size;
 						}
-						assemble_instr(output_file, asm_module, instr);
+						assemble_instr(&binary->text, asm_module, instr);
 					}
 				}
 
-				function_size = checked_ftell(output_file) - function_start;
+				function_size = binary->text.size - function_start;
+			} else {
+				function_start = function_size = 0;
 			}
 
 			symbol->section = TEXT_SECTION;
-			// Offset is relative to the start of the section.
-			symbol->offset = function_start - initial_file_location;
+			symbol->offset = function_start;
 			symbol->size = function_size;
 
 			break;
 		} 
-		case ASM_GLOBAL_VAR: {
-			symbol->section = BSS_SECTION;
-			symbol->size = global->val.var_size_bytes;
+		case ASM_GLOBAL_VAR:
+			symbol->size = global->val.var.size_bytes;
 
-			curr_bss_offset = align_to(curr_bss_offset, symbol->size);
-			symbol->offset = curr_bss_offset;
-			curr_bss_offset += symbol->size;
+			if (global->val.var.value == NULL) {
+				symbol->section = BSS_SECTION;
+
+				// @TODO: Alignment
+				symbol->offset = binary->bss_size;
+				binary->bss_size += symbol->size;
+			} else {
+				symbol->section = DATA_SECTION;
+
+				// @TODO: Alignment
+				symbol->offset = binary->data.size;
+
+				u8 *value = global->val.var.value;
+				assert(value != NULL);
+				ARRAY_APPEND_ELEMS(&binary->data, u8, global->val.var.size_bytes, value);
+			}
+
 			break;
 		}
-		}
 	}
-	u64 final_file_position = checked_ftell(output_file);
 
 	// @TODO: Emit relocations here instead?
 	for (u32 i = 0; i < asm_module->fixups.size; i++) {
-		Fixup *fixup = ARRAY_REF(&asm_module->fixups, Fixup, i);
-		u32 file_location;
+		Fixup *fixup = *ARRAY_REF(&asm_module->fixups, Fixup *, i);
+		if (fixup->type == FIXUP_ABSOLUTE)
+			continue;
+
+		u32 target_offset;
 		if (fixup->source == FIXUP_GLOBAL) {
 			AsmGlobal *global = fixup->val.global;
 			if (global->defined && global->type == ASM_GLOBAL_FUNCTION)
-				file_location = global->offset + initial_file_location;
+				target_offset = global->offset;
 			else
 				continue;
 		} else {
-			file_location = fixup->val.label->file_location;
+			target_offset = fixup->val.label->offset;
 		}
+
 
 		// Relative accesses are relative to the start of the next instruction,
 		// so we add on the size of the reference itself first.
-		i32 offset = (i32)file_location -
-			(i32)(fixup->file_location + fixup->size_bytes);
-		checked_fseek(output_file, fixup->file_location, SEEK_SET);
-		write_int(output_file, (u64)offset, fixup->size_bytes);
+		i32 value = (i32)target_offset - (i32)fixup->next_instr_offset;
+		write_int_at(&binary->text, fixup->offset, (u64)value, fixup->size_bytes);
 	}
-
-	int ret = fseek(output_file, final_file_position, SEEK_SET);
-	assert(ret == 0);
 }

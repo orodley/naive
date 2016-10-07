@@ -103,7 +103,7 @@ def generate_encoder(input_filename, output_filename):
 // @NOTE: This is an automatically generated file! Do not edit it!
 //        It was generated from '%s', edit that instead
 
-static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *instr)
+static void assemble_instr(Array(u8) *output, AsmModule *asm_module, AsmInstr *instr)
 {
 \tswitch (instr->op) {
 """ % input_filename)
@@ -121,7 +121,7 @@ static void assemble_instr(FILE *output_file, AsmModule *asm_module, AsmInstr *i
                             ' && '.join(arg_condition(arg, i)
                                 for i, arg in enumerate(encoding.args))))
                 indent = '\t\t\t'
-            output.append(("%sencode_instr(output_file, asm_module, instr, %s);\n" +
+            output.append(("%sencode_instr(output, asm_module, instr, %s);\n" +
                            "%sreturn;\n")
                     % (indent,
                         ', '.join(map(to_c_val,

@@ -53,7 +53,7 @@ typedef struct Register
 typedef struct AsmLabel
 {
 	char *name;
-	u32 file_location;
+	u32 offset;
 } AsmLabel;
 
 typedef struct AsmConst
@@ -101,6 +101,8 @@ typedef struct AsmArg
 #define ASM_OPS \
 	X(NOP), \
 	X(MOV), \
+	X(MOVSX), \
+	X(MOVZX), \
 	X(RET), \
 	X(CALL), \
 	X(XOR), \
@@ -172,7 +174,11 @@ typedef struct AsmGlobal
 	union
 	{
 		AsmFunction function;
-		u32 var_size_bytes;
+		struct
+		{
+			u32 size_bytes;
+			u8 *value;
+		} var;
 	} val;
 } AsmGlobal;
 
@@ -186,8 +192,8 @@ typedef struct Fixup
 {
 	FixupType type;
 
-	u32 file_location;
-	u32 next_instr_file_location;
+	u32 offset;
+	u32 next_instr_offset;
 	u32 size_bytes;
 
 	enum
@@ -220,6 +226,7 @@ typedef struct AsmSymbol
 	{
 		TEXT_SECTION,
 		BSS_SECTION,
+		DATA_SECTION,
 	} section;
 	u32 defined;
 	u32 symtab_index;
@@ -227,6 +234,14 @@ typedef struct AsmSymbol
 	u32 offset;
 	u32 size;
 } AsmSymbol;
+
+typedef struct Binary
+{
+	Array(u8) text;
+	Array(u8) data;
+	Array(AsmSymbol *) symbols;
+	u32 bss_size;
+} Binary;
 
 void init_asm_function(AsmFunction *func, char *name);
 void init_asm_module(AsmModule *asm_module, char *input_file_name);
@@ -244,6 +259,9 @@ AsmArg asm_label(AsmLabel *label);
 void dump_asm_function(AsmFunction *asm_function);
 void dump_asm_module(AsmModule *asm_module);
 
-void assemble(AsmModule *asm_module, FILE *output_file, Array(AsmSymbol) *symbols);
+void init_binary(Binary *binary);
+void free_binary(Binary *binary);
+
+void assemble(AsmModule *asm_module, Binary *binary);
 
 #endif

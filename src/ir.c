@@ -89,6 +89,7 @@ IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type)
 	new_global->kind = IR_GLOBAL_VAR;
 	new_global->name = name;
 	new_global->ir_type = type;
+	new_global->val.initializer = NULL;
 
 	return new_global;
 }
@@ -228,7 +229,7 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		dump_ir_type(instr->val.store.type);
 		break;
-	case OP_CAST: case OP_ZEXT:
+	case OP_CAST: case OP_ZEXT: case OP_SEXT:
 		dump_value(instr->val.arg);
 		fputs(", ", stdout);
 		dump_ir_type(instr->type);
@@ -261,6 +262,44 @@ static void dump_instr(IrInstr *instr)
 	}
 
 	puts(")");
+}
+
+static void dump_init(IrInit *init)
+{
+	switch (init->type.kind) {
+	case IR_INT:
+		printf("%lu", init->val.integer);
+		break;
+	case IR_POINTER:
+		printf("$%s", init->val.global_pointer->name);
+		break;
+	case IR_ARRAY: {
+		putchar('[');
+		u32 len = init->type.val.array.size;
+		for (u32 i = 0; i < len; i++) {
+			dump_init(init->val.array_elems + i);
+
+			if (i != len - 1)
+				fputs(", ", stdout);
+		}
+		putchar(']');
+		break;
+	}
+	case IR_STRUCT: {
+		putchar('{');
+		u32 len = init->type.val.strukt.num_fields;
+		for (u32 i = 0; i < len; i++) {
+			dump_init(init->val.struct_fields + i);
+
+			if (i != len - 1)
+				fputs(", ", stdout);
+		}
+		putchar('}');
+		break;
+	}
+	case IR_FUNCTION:
+		UNREACHABLE;
+	}
 }
 
 void dump_trans_unit(TransUnit *trans_unit)
@@ -323,10 +362,18 @@ void dump_trans_unit(TransUnit *trans_unit)
 			puts("}");
 			break;
 		}
-		case IR_GLOBAL_VAR:
+		case IR_GLOBAL_VAR: {
 			dump_ir_type(global->ir_type);
-			printf(" %s\n", global->name);
+			printf(" %s", global->name);
+			IrInit *init = global->val.initializer;
+			if (init != NULL) {
+				fputs(" = ", stdout);
+				dump_init(init);
+			}
+			putchar('\n');
+
 			break;
+		}
 		}
 
 		if (i != trans_unit->globals.size - 1)
@@ -378,7 +425,7 @@ static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 	switch (op) {
 	case OP_LOCAL: case OP_FIELD: case OP_LOAD: case OP_STORE: case OP_CAST:
 	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL: case OP_ZEXT:
-	case OP_BIT_NOT: case OP_LOG_NOT:
+	case OP_SEXT: case OP_BIT_NOT: case OP_LOG_NOT:
 		UNREACHABLE;
 	case OP_BIT_XOR: return arg1 ^ arg2;
 	case OP_BIT_AND: return arg1 & arg2;

@@ -151,8 +151,8 @@ int main(int argc, char *argv[])
 	array_free(&source_input_filenames);
 
 	if (do_link && !syntax_only) {
-		// Implicitly link in the standard library. We have to put this after the
-		// rest of the inputs because it's an archive.
+		// Implicitly link in the standard library. We have to put this after
+		// the rest of the inputs because it's an archive.
 		*ARRAY_APPEND(&linker_input_filenames, char *) = "libc.a";
 
 		char *executable_filename;

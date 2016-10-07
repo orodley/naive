@@ -16,9 +16,10 @@ typedef struct Array_
 #define Array(T) Array_
 
 void _array_init(Array_ *array, u32 element_size, u32 initial_capacity);
-void array_ensure_room(Array_ *array, u32 element_size);
+void array_ensure_room(Array_ *array, u32 element_size, u32 count);
 void array_delete_last(Array_ *array);
 void array_free(Array_ *array);
+void _array_append_elems(Array_ *array, u32 element_size, u32 size, void *elems);
 void *_array_insert(Array_ *array, u32 element_size, u32 insertion_point);
 void _array_remove(Array_ *array, u32 element_size, u32 removal_point);
 void array_clear(Array_ *array);
@@ -30,8 +31,10 @@ void array_clear(Array_ *array);
 #define ARRAY_REF(array, element_type, i) \
 	((element_type *)&(array)->elements[(i) * sizeof(element_type)])
 #define ARRAY_APPEND(array, element_type) \
-	(array_ensure_room(array, sizeof(element_type)), \
+	(array_ensure_room(array, sizeof(element_type), 1), \
 	 ARRAY_REF((array), element_type, (array)->size++))
+#define ARRAY_APPEND_ELEMS(array, element_type, size, elems) \
+	_array_append_elems(array, sizeof(element_type), size, elems)
 #define ARRAY_POP(array, element_type) \
 	ARRAY_REF((array), element_type, --(array)->size)
 #define ARRAY_INSERT(array, element_type, insertion_point) \
