@@ -236,20 +236,18 @@ static void init_elf_file(ELFFile *elf_file, FILE *output_file, ELFFileType type
 	elf_file->next_string_index = 1;
 }
 
-static void start_text_section(ELFFile *elf_file)
+static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 {
 	u32 pht_entries = elf_file->type == ET_EXEC ? 3 : 0;
 	u32 first_section_offset = sizeof(ELFHeader) +
 		sizeof(ELFSectionHeader) * NUM_SECTIONS +
 		sizeof(ELFProgramHeader) * pht_entries;
-	elf_file->section_info[TEXT_INDEX].offset = first_section_offset;
+
+	SectionInfo *text_info = elf_file->section_info + TEXT_INDEX;
+	text_info->offset = first_section_offset;
 
 	checked_fseek(elf_file->output_file, first_section_offset, SEEK_SET);
-}
 
-static void finish_text_section(ELFFile *elf_file, Array(Fixup) *fixups)
-{
-	SectionInfo *text_info = elf_file->section_info + TEXT_INDEX;
 	// @NOTE: In System V, file offsets and base virtual addresses for segments
 	// must be congruent modulo the page size.
 	text_info->virtual_address = 0x8000000 + text_info->offset; 
@@ -295,12 +293,8 @@ static void finish_text_section(ELFFile *elf_file, Array(Fixup) *fixups)
 	bss_info->virtual_address =
 		align_to(text_info->virtual_address, 0x1000000) + bss_info->offset;
 
-	elf_file->section_info[DATA_INDEX].offset = bss_info->offset;
-}
-
-static void finish_data_section(ELFFile *elf_file)
-{
 	SectionInfo *data_info = elf_file->section_info + DATA_INDEX;
+	data_info->offset = bss_info->offset;
 	data_info->virtual_address =
 		align_to(elf_file->section_info[BSS_INDEX].virtual_address, 0x1000000)
 		+ data_info->offset;
@@ -590,8 +584,6 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 	ELFFile *elf_file = &_elf_file;
 	init_elf_file(elf_file, output_file, ET_REL);
 
-	start_text_section(elf_file);
-
 	Binary binary;
 	assemble(asm_module, &binary);
 	elf_file->section_info[TEXT_INDEX].size = binary.text.size;
@@ -599,12 +591,10 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 
 	elf_file->section_info[BSS_INDEX].size = binary.bss_size;
 
-	finish_text_section(elf_file, &asm_module->fixups);
-
 	elf_file->section_info[DATA_INDEX].size = binary.data.size;
 	elf_file->section_info[DATA_INDEX].contents = binary.data.elements;
 
-	finish_data_section(elf_file);
+	write_contents(elf_file, &asm_module->fixups);
 
 	Array(AsmSymbol *) *symbols = &binary.symbols;
 	for (u32 i = 0; i < symbols->size; i++) {
@@ -1044,7 +1034,6 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 	ELFFile *elf_file = &_elf_file;
 	init_elf_file(elf_file, output_file, ET_EXEC);
 
-	start_text_section(elf_file);
 
 	elf_file->section_info[TEXT_INDEX].size = binary.text.size;
 	elf_file->section_info[TEXT_INDEX].contents = binary.text.elements;
@@ -1056,11 +1045,10 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 
 	elf_file->section_info[BSS_INDEX].size = binary.bss_size;
 
-	finish_text_section(elf_file, &empty_array);
-
 	elf_file->section_info[DATA_INDEX].size = binary.data.size;
 	elf_file->section_info[DATA_INDEX].contents = binary.data.elements;
-	finish_data_section(elf_file);
+
+	write_contents(elf_file, &empty_array);
 
 	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, executable_file_name, 0, 0);
 	for (u32 i = 0; i < symbol_table.size; i++) {
