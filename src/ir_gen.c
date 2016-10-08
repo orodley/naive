@@ -548,7 +548,7 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, TypeEnv *type_env,
 					arity, arg_ir_types);
 		}
 
-		assert(global->kind == IR_GLOBAL_FUNCTION);
+		assert(global->type.kind == IR_FUNCTION);
 		*result_c_type = ctype;
 
 		return global;
@@ -617,7 +617,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			global = ir_global_for_decl(builder, &env.type_env,
 					decl_specifier_list, declarator, &global_type);
 			assert(!global->defined);
-			IrFunction *function = &global->val.function;
+			IrFunction *function = &global->initializer->val.function;
 
 			builder->current_function = function;
 			builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
@@ -1325,7 +1325,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		init->type = ir_type;
 		init->val.array_elems = elems;
 
-		global->val.initializer = init;
+		global->initializer = init;
 
 		return (Term) { .ctype = result_type, .value = value_global(global) };
 	}

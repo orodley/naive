@@ -30,12 +30,19 @@ typedef struct IrType
 		u8 bit_width;
 		struct
 		{
+			// @TODO: This field probably shouldn't be here.
 			char *name;
 			struct IrStructField *fields;
 			u32 num_fields;
 			u32 total_size;
 			u8 alignment;
 		} strukt;
+		struct
+		{
+			struct IrType *return_type;
+			u32 arity;
+			struct IrType *arg_types;
+		} function;
 		struct
 		{
 			struct IrType *elem_type;
@@ -68,7 +75,6 @@ typedef struct IrFunction
 	AsmLabel *label;
 } IrFunction;
 
-// @TODO: Pull IrFunction into here so we don't need "kind" on IrGlobal.
 typedef struct IrInit
 {
 	IrType type;
@@ -79,27 +85,21 @@ typedef struct IrInit
 		struct IrGlobal *global_pointer;
 		struct IrInit *array_elems;
 		struct IrInit *struct_fields;
+		IrFunction function;
 	} val;
 } IrInit;
 
 typedef struct IrGlobal
 {
 	char *name;
-	IrType ir_type;
+	IrType type;
+	// @TODO: Remove "defined" field - make "has no initializer" mean "not
+	// defined". To do this we need to explicitly create zero initializers for
+	// vars without initializers in C, and detect that an initializer is all
+	// zero when deciding .bss vs .data.
 	bool defined;
 	AsmGlobal *asm_global;
-
-	enum
-	{
-		IR_GLOBAL_VAR,
-		IR_GLOBAL_FUNCTION,
-	} kind;
-
-	union
-	{
-		IrFunction function;
-		IrInit *initializer;
-	} val;
+	IrInit *initializer;
 } IrGlobal;
 
 typedef struct IrBuilder

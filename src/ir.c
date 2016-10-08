@@ -31,8 +31,8 @@ void trans_unit_free(TransUnit *trans_unit)
 {
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
-		if (global->kind == IR_GLOBAL_FUNCTION) {
-			IrFunction *func = &global->val.function;
+		if (global->type.kind == IR_FUNCTION) {
+			IrFunction *func = &global->initializer->val.function;
 			for (u32 j = 0; j < func->blocks.size; j++) {
 				IrBlock *block = *ARRAY_REF(&func->blocks, IrBlock *, j);
 				block_free(block);
@@ -64,18 +64,33 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	*ARRAY_APPEND(&trans_unit->globals, IrGlobal *) = new_global;
 	ZERO_STRUCT(new_global);
 
-	new_global->kind = IR_GLOBAL_FUNCTION;
 	new_global->name = name;
-	new_global->ir_type.kind = IR_FUNCTION;
 
-	IrFunction *new_function = &new_global->val.function;
-	new_function->return_type = return_type;
-	new_function->arity = arity;
-	new_function->arg_types = arg_types;
-	new_function->label = NULL;
+	IrType *return_type_ptr = pool_alloc(&trans_unit->pool, sizeof *return_type_ptr);
+	*return_type_ptr = return_type;
+	IrType *arg_types_ptr = pool_alloc(&trans_unit->pool, arity * sizeof *arg_types_ptr);
+	memcpy(arg_types_ptr, arg_types, arity * sizeof *arg_types_ptr);
 
-	ARRAY_INIT(&new_function->blocks, IrBlock *, 5);
-	add_block_to_function(trans_unit, new_function, "entry");
+	IrType function_type = {
+		.kind = IR_FUNCTION,
+		.val.function.arity = arity,
+		.val.function.return_type = return_type_ptr,
+		.val.function.arg_types = arg_types_ptr,
+	};
+	new_global->type = function_type;
+
+	IrInit *initializer = pool_alloc(&trans_unit->pool, sizeof *initializer);
+	initializer->type = function_type;
+	IrFunction *function = &initializer->val.function;
+	function->return_type = return_type;
+	function->arity = arity;
+	function->arg_types = arg_types;
+	function->label = NULL;
+
+	new_global->initializer = initializer;
+
+	ARRAY_INIT(&function->blocks, IrBlock *, 5);
+	add_block_to_function(trans_unit, function, "entry");
 
 	return new_global;
 }
@@ -86,10 +101,9 @@ IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type)
 	*ARRAY_APPEND(&trans_unit->globals, IrGlobal *) = new_global;
 	ZERO_STRUCT(new_global);
 
-	new_global->kind = IR_GLOBAL_VAR;
 	new_global->name = name;
-	new_global->ir_type = type;
-	new_global->val.initializer = NULL;
+	new_global->type = type;
+	new_global->initializer = NULL;
 
 	return new_global;
 }
@@ -163,7 +177,18 @@ void dump_ir_type(IrType type)
 		putchar('*');
 		break;
 	case IR_FUNCTION:
-		fputs("fn", stdout);
+		putchar('(');
+		u32 arity = type.val.function.arity;
+		for (u32 i = 0; i < arity; i++) {
+			IrType arg_type = type.val.function.arg_types[i];
+			dump_ir_type(arg_type);
+
+			if (i != arity - 1)
+				fputs(", ", stdout);
+		}
+		fputs(") -> ", stdout);
+		dump_ir_type(*type.val.function.return_type);
+
 		break;
 	case IR_STRUCT:
 		printf("$%s", type.val.strukt.name);
@@ -297,8 +322,30 @@ static void dump_init(IrInit *init)
 		putchar('}');
 		break;
 	}
-	case IR_FUNCTION:
-		UNREACHABLE;
+	case IR_FUNCTION: {
+		IrFunction *f = &init->val.function;
+
+		puts("{");
+
+		for (u32 i = 0; i < f->blocks.size; i++) {
+			IrBlock *block = *ARRAY_REF(&f->blocks, IrBlock *, i);
+			printf("%s:\n", block->name);
+
+			Array(IrInstr *) *instrs = &block->instrs;
+			for (u32 i = 0; i < instrs->size; i++) {
+				IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
+				putchar('\t');
+				if (instr->op != OP_STORE && instr->op != OP_BRANCH
+						&& instr->op != OP_COND && instr->op != OP_RET) {
+					printf("#%u = ", i);
+				}
+				dump_instr(instr);
+			}
+		}
+
+		putchar('}');
+		break;
+	}
 	}
 }
 
@@ -320,60 +367,14 @@ void dump_trans_unit(TransUnit *trans_unit)
 
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
+		fputs(global->name, stdout);
 
-		switch (global->kind) {
-		case IR_GLOBAL_FUNCTION: {
-			IrFunction *f = &global->val.function;
-
-			dump_ir_type(f->return_type);
-			printf(" %s(", global->name);
-			for (u32 i = 0; i < f->arity; i++) {
-				IrType arg_type = f->arg_types[i];
-				dump_ir_type(arg_type);
-
-				if (i != f->arity - 1)
-					fputs(", ", stdout);
-			}
-			puts(")");
-
-			if (!global->defined) {
-				putchar('\n');
-				continue;
-			}
-
-			puts("{");
-
-			for (u32 i = 0; i < f->blocks.size; i++) {
-				IrBlock *block = *ARRAY_REF(&f->blocks, IrBlock *, i);
-				printf("%s:\n", block->name);
-
-				Array(IrInstr *) *instrs = &block->instrs;
-				for (u32 i = 0; i < instrs->size; i++) {
-					IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
-					putchar('\t');
-					if (instr->op != OP_STORE && instr->op != OP_BRANCH
-							&& instr->op != OP_COND && instr->op != OP_RET) {
-						printf("#%u = ", i);
-					}
-					dump_instr(instr);
-				}
-			}
-
-			puts("}");
-			break;
-		}
-		case IR_GLOBAL_VAR: {
-			dump_ir_type(global->ir_type);
-			printf(" %s", global->name);
-			IrInit *init = global->val.initializer;
-			if (init != NULL) {
-				fputs(" = ", stdout);
-				dump_init(init);
-			}
+		if (global->initializer != NULL) {
+			putchar(' ');
+			dump_ir_type(global->type);
+			fputs(" = ", stdout);
+			dump_init(global->initializer);
 			putchar('\n');
-
-			break;
-		}
 		}
 
 		if (i != trans_unit->globals.size - 1)
@@ -592,10 +593,9 @@ IrValue value_global(IrGlobal *global)
 
 AsmLabel *global_label(IrGlobal *global)
 {
-	switch (global->kind) {
-	case IR_GLOBAL_FUNCTION:
-		return global->val.function.label;
-	case IR_GLOBAL_VAR:
+	if (global->type.kind == IR_FUNCTION) {
+		return global->initializer->val.function.label;
+	} else {
 		UNIMPLEMENTED;
 	}
 }
