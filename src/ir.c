@@ -367,16 +367,15 @@ void dump_trans_unit(TransUnit *trans_unit)
 
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
-		fputs(global->name, stdout);
+		printf("%s ", global->name);
+		dump_ir_type(global->type);
 
 		if (global->initializer != NULL) {
-			putchar(' ');
-			dump_ir_type(global->type);
 			fputs(" = ", stdout);
 			dump_init(global->initializer);
-			putchar('\n');
 		}
 
+		putchar('\n');
 		if (i != trans_unit->globals.size - 1)
 			putchar('\n');
 	}

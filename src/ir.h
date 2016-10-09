@@ -33,8 +33,8 @@ typedef struct IrType
 			// @TODO: This field probably shouldn't be here.
 			char *name;
 			struct IrStructField *fields;
-			u32 num_fields;
 			u32 total_size;
+			u16 num_fields;
 			u8 alignment;
 		} strukt;
 		struct
@@ -93,6 +93,11 @@ typedef struct IrGlobal
 {
 	char *name;
 	IrType type;
+	enum
+	{
+		IR_GLOBAL_LINKAGE,
+		IR_LOCAL_LINKAGE,
+	} linkage;
 	// @TODO: Remove "defined" field - make "has no initializer" mean "not
 	// defined". To do this we need to explicitly create zero initializers for
 	// vars without initializers in C, and detect that an initializer is all

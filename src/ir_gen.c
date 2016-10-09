@@ -678,17 +678,38 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 					init_declarator = init_declarator->next;
 				}
-			} else if (init_declarator == NULL) {
-				decl_specifier_list_to_c_type(builder, &env.type_env, decl_specifier_list);
 			} else {
-				assert(init_declarator->initializer == NULL);
-				assert(init_declarator->next == NULL);
-				ASTDeclarator *declarator = init_declarator->declarator;
+				ASTDeclSpecifier *type_specs = decl_specifier_list;
+				while (type_specs->type == STORAGE_CLASS_SPECIFIER) {
+					type_specs = type_specs->next;
+				}
 
-				// @TODO: Multiple declarators in one global decl.
-				global = ir_global_for_decl(builder, &env.type_env,
-						decl_specifier_list, declarator, &global_type);
-				global->defined = global_type->type != FUNCTION_TYPE;
+				if (init_declarator == NULL) {
+					decl_specifier_list_to_c_type(builder, &env.type_env, type_specs);
+				} else {
+					assert(init_declarator->initializer == NULL);
+					assert(init_declarator->next == NULL);
+					ASTDeclarator *declarator = init_declarator->declarator;
+
+					// @TODO: Multiple declarators in one global decl.
+					global = ir_global_for_decl(builder, &env.type_env,
+							type_specs, declarator, &global_type);
+					global->defined = global_type->type != FUNCTION_TYPE;
+
+					if (type_specs == decl_specifier_list) {
+						global->linkage = IR_GLOBAL_LINKAGE;
+					} else {
+						assert(decl_specifier_list->type == STORAGE_CLASS_SPECIFIER);
+						ASTStorageClassSpecifier storage_class =
+							decl_specifier_list->val.storage_class_specifier;
+						if (storage_class == STATIC_SPECIFIER)
+							global->linkage = IR_LOCAL_LINKAGE;
+						else if (storage_class == EXTERN_SPECIFIER)
+							global->defined = false;
+						else
+							UNIMPLEMENTED;
+					}
+				}
 			}
 
 			break;

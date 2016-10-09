@@ -135,6 +135,7 @@ typedef enum ELFSymbolType
 	STT_NOTYPE = 0,
 	STT_OBJECT = 1,
 	STT_FUNC = 2,
+	STT_SECTION = 3,
 	STT_FILE = 4,
 } ELFSymbolType;
 
@@ -599,7 +600,8 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 	Array(AsmSymbol *) *symbols = &binary.symbols;
 	for (u32 i = 0; i < symbols->size; i++) {
 		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
-		u32 section;
+		u32 section = SHN_UNDEF;
+		ELFSymbolBinding binding = STB_GLOBAL;
 		if (!symbol->defined) {
 			section = SHN_UNDEF;
 		} else {
@@ -608,9 +610,14 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 			case BSS_SECTION: section = BSS_INDEX; break;
 			case DATA_SECTION: section = DATA_INDEX; break;
 			}
+
+			switch (symbol->linkage) {
+			case ASM_GLOBAL_LINKAGE: binding = STB_GLOBAL; break;
+			case ASM_LOCAL_LINKAGE: binding = STB_LOCAL; break;
+			}
 		}
-		add_symbol(elf_file, STT_FUNC, STB_GLOBAL, section,
-				symbol->name, symbol->offset, symbol->size);
+		add_symbol(elf_file, STT_FUNC, binding, section, symbol->name,
+				symbol->offset, symbol->size);
 	}
 	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, asm_module->input_file_name, 0, 0);
 	finish_symtab_section(elf_file);
@@ -650,6 +657,7 @@ typedef struct Symbol
 	// file when processing relocation entries.
 	u32 symtab_index;
 
+	ELFSymbolBinding binding;
 	u32 section_index;
 	u32 section_offset;
 	u32 size;
@@ -825,19 +833,24 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 		checked_fread(&symtab_symbol, sizeof symtab_symbol, 1, input_file);
 
 		char *symbol_name = strtab + symtab_symbol.strtab_index_for_name;
-		u8 binding = ELF64_SYMBOL_BINDING(symtab_symbol.type_and_binding);
+		ELFSymbolType type = ELF64_SYMBOL_TYPE(symtab_symbol.type_and_binding);
+		ELFSymbolBinding binding = ELF64_SYMBOL_BINDING(symtab_symbol.type_and_binding);
 
-		if (binding != STB_GLOBAL)
+		if (symtab_index == 0 || type == STT_FILE || type == STT_SECTION) {
 			continue;
+		}
 
 		i32 found_symbol_index = -1;
-		for (u32 symbol_index = 0;
-				symbol_index < symbol_table->size;
-				symbol_index++) {
-			Symbol *symbol = ARRAY_REF(symbol_table, Symbol, symbol_index);
-			if (streq(symbol->name, symbol_name)) {
-				found_symbol_index = symbol_index;
-				break;
+		if (binding == STB_GLOBAL) {
+			for (u32 symbol_index = 0;
+					symbol_index < symbol_table->size;
+					symbol_index++) {
+				Symbol *symbol = ARRAY_REF(symbol_table, Symbol, symbol_index);
+				if (symbol->binding == STB_GLOBAL
+						&& streq(symbol->name, symbol_name)) {
+					found_symbol_index = symbol_index;
+					break;
+				}
 			}
 		}
 
@@ -847,6 +860,7 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 				symbol = ARRAY_APPEND(symbol_table, Symbol);
 				symbol->defined = false;
 				symbol->name = strdup(symbol_name);
+				symbol->binding = binding;
 				symbol->contents = NULL;
 				ARRAY_INIT(&symbol->relocs, Relocation, 5);
 			} else {
@@ -887,6 +901,7 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 
 			symbol->defined = true;
 			symbol->name = strdup(symbol_name);
+			symbol->binding = binding;
 			symbol->size = symtab_symbol.size;
 			symbol->contents = NULL;
 
@@ -1076,7 +1091,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 		default: UNREACHABLE;
 		}
 
-		add_symbol(elf_file, type, STB_GLOBAL, symbol->section_index,
+		add_symbol(elf_file, type, symbol->binding, symbol->section_index,
 				symbol->name, symbol_mem_location, symbol->size);
 
 		u32 prev_location = checked_ftell(output_file);

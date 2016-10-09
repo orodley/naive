@@ -921,6 +921,11 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 			pool_alloc(&builder->asm_module.pool, sizeof *asm_global);
 		*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = asm_global;
 
+		switch (ir_global->linkage) {
+		case IR_GLOBAL_LINKAGE: asm_global->linkage = ASM_GLOBAL_LINKAGE; break;
+		case IR_LOCAL_LINKAGE: asm_global->linkage = ASM_LOCAL_LINKAGE; break;
+		}
+
 		if (ir_global->type.kind == IR_FUNCTION) {
 			AsmFunction *new_function = &asm_global->val.function;
 

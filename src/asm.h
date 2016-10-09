@@ -158,6 +158,12 @@ typedef struct AsmFunction
 	AsmLabel *ret_label;
 } AsmFunction;
 
+typedef enum AsmLinkage
+{
+	ASM_GLOBAL_LINKAGE,
+	ASM_LOCAL_LINKAGE,
+} AsmLinkage;
+
 typedef struct AsmGlobal
 {
 	enum
@@ -167,6 +173,7 @@ typedef struct AsmGlobal
 	} type;
 
 	char *name;
+	AsmLinkage linkage;
 	bool defined;
 	i32 offset;
 	struct AsmSymbol *symbol;
@@ -229,6 +236,7 @@ typedef struct AsmSymbol
 		DATA_SECTION,
 	} section;
 	u32 defined;
+	AsmLinkage linkage;
 	u32 symtab_index;
 	u32 string_table_offset_for_name;
 	u32 offset;

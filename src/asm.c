@@ -719,6 +719,7 @@ void assemble(AsmModule *asm_module, Binary *binary)
 		symbol->defined = global->defined;
 		// Add one to account for 0 = undef symbol index
 		symbol->symtab_index = i + 1;
+		symbol->linkage = global->linkage;
 
 		global->symbol = symbol;
 

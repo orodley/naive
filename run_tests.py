@@ -91,8 +91,9 @@ def start_compiling(test_dir):
     testcase.name = test_dir
 
     sub_files = os.listdir(test_dir)
-    assert 'in.c' in sub_files
-    test_filename = os.path.join(test_dir, 'in.c')
+    test_filenames = [os.path.join(test_dir, filename)
+            for filename in sub_files if filename.endswith('.c')]
+    assert test_filenames != []
 
     testcase.expected_compile_stdout = ''
     testcase.expected_compile_stderr = ''
@@ -115,7 +116,7 @@ def start_compiling(test_dir):
             testcase.expected_run_stderr = contents
         elif filename == 'run_stdin':
             testcase.run_stdin = contents
-        elif filename == 'in.c':
+        elif filename.endswith('.c'):
             first_line = contents[:contents.index('\n')]
             flags_str = '// FLAGS:'
             if first_line.startswith(flags_str):
@@ -123,7 +124,7 @@ def start_compiling(test_dir):
 
     testcase.binary = os.path.join(test_dir, "a.out.tmp")
     testcase.cc_proc = subprocess.Popen(
-            ['./ncc', test_filename, '-o', testcase.binary] + extra_flags,
+            ['./ncc', '-o', testcase.binary] + extra_flags + test_filenames,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return testcase
 
