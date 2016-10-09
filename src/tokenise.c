@@ -367,6 +367,59 @@ static void read_int_literal_suffix(Reader *reader)
 	}
 }
 
+static bool read_octal_number(Reader *reader, u64 *value)
+{
+	u64 x = 0;
+	char c = peek_char(reader);
+	while (c >= '0' && c <= '9') {
+		if (c == '8' || c == '9') {
+			// @TODO: Skip past all numeric characters to resync?
+			issue_error(&reader->source_loc,
+					"Invalid digit '%c' in octal literal", c);
+			return false;
+		} else {
+			x *= 8;
+			x += c - '0';
+
+			advance(reader);
+			c = peek_char(reader);
+		}
+	}
+
+	*value = x;
+	return true;
+}
+
+static bool read_hex_number(Reader *reader, u64 *value)
+{
+	u64 x = 0;
+	bool at_least_one_digit = false;
+	for (;;) {
+		char c = peek_char(reader);
+		if (c >= 'a' && c <= 'f')
+			x = x * 16 + c - 'a' + 10;
+		else if (c >= 'A' && c <= 'F')
+			x = x * 16 + c - 'A' + 10;
+		else if (c >= '0' && c <= '9')
+			x = x * 16 + c - '0';
+		else
+			break;
+
+		at_least_one_digit = true;
+		advance(reader);
+	}
+
+	if (!at_least_one_digit) {
+		issue_error(&reader->source_loc,
+				"Hexadecimal literal must have at least one digit");
+		return false;
+	}
+
+	*value = x;
+
+	return true;
+}
+
 static bool substitute_macro_params(Reader *reader, Macro *macro)
 {
 	bool ret;
@@ -443,47 +496,15 @@ static bool tokenise_aux(Reader *reader)
 
 		switch (read_char(reader)) {
 		case '0': {
+			u64 value;
 			char c = peek_char(reader);
-			u64 value = 0;
 			if (c == 'x') {
-				bool at_least_one_digit = false;
-				for (;;) {
-					advance(reader);
-					char c = peek_char(reader);
-					if (!((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
-								|| (c >= '0' && c <= '9')))
-						break;
-
-					at_least_one_digit = true;
-					value *= 16;
-
-					if (c >= 'a' && c <= 'f')
-						value += c - 'a' + 10;
-					else if (c >= 'A' && c <= 'F')
-						value += c - 'A' + 10;
-					else
-						value += c - '0';
-				}
-
-				if (!at_least_one_digit) {
-					issue_error(&reader->source_loc,
-							"Hexadecimal literal must have at least one digit");
-				}
+				advance(reader);
+				if (!read_hex_number(reader, &value))
+					return false;
 			} else {
-				while (c >= '0' && c <= '9') {
-					if (c == '8' || c == '9') {
-						// @TODO: Skip past all numeric characters to resync?
-						issue_error(&reader->source_loc,
-								"Invalid digit '%c' in octal literal", c);
-						break;
-					} else {
-						value *= 8;
-						value += c - '0';
-
-						advance(reader);
-						c = peek_char(reader);
-					}
-				}
+				if (!read_octal_number(reader, &value))
+					return false;
 			}
 
 			read_int_literal_suffix(reader);
@@ -531,6 +552,49 @@ static bool tokenise_aux(Reader *reader)
 			token->val.string_literal = strndup(
 					reader->buffer.buffer + start_index, length);
 
+			break;
+		}
+		case '\'': {
+			u64 value;
+			char c = read_char(reader);
+			if (c == '\\') {
+				switch (read_char(reader)) {
+				case '\\': value = '\\'; break;
+				case '\'': value = '\''; break;
+				case '"': value = '"'; break; // no idea why this exists
+				case 'a': value = '\a'; break;
+				case 'b': value = '\b'; break;
+				case 'f': value = '\f'; break;
+				case 'n': value = '\n'; break;
+				case 'r': value = '\r'; break;
+				case 't': value = '\t'; break;
+				case 'v': value = '\v'; break;
+				case '0':
+					if (!read_octal_number(reader, &value))
+						return false;
+					break;
+				case 'x':
+					if (!read_hex_number(reader, &value))
+						return false;
+					break;
+				}
+			} else {
+				value = c;
+			}
+
+			if (value > 0xFF) {
+				issue_error(&start_source_loc,
+						"Character constant larger than a character");
+				return false;
+			}
+
+			if (read_char(reader) != '\'') {
+				issue_error(&start_source_loc, "Unterminated character literal");
+				return false;
+			}
+
+			Token *token = append_token(reader, start_source_loc, TOK_INT_LITERAL);
+			token->val.int_literal = value;
 			break;
 		}
 		case '+':
