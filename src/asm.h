@@ -174,6 +174,8 @@ typedef struct AsmGlobal
 
 	char *name;
 	AsmLinkage linkage;
+	// @TODO: Remove this too? Less easy than on IrGlobal, as the value isn't
+	// a pointer.
 	bool defined;
 	i32 offset;
 	struct AsmSymbol *symbol;

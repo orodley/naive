@@ -759,25 +759,35 @@ void assemble(AsmModule *asm_module, Binary *binary)
 			symbol->size = function_size;
 
 			break;
-		} 
+		}
 		case ASM_GLOBAL_VAR:
-			symbol->size = global->val.var.size_bytes;
+			if (global->defined) {
+				symbol->size = global->val.var.size_bytes;
+				assert(global->val.var.value != NULL);
+				bool all_zero = true;
+				for (u32 i = 0; i < global->val.var.size_bytes; i++) {
+					if (global->val.var.value[i] != 0) {
+						all_zero = false;
+						break;
+					}
+				}
 
-			if (global->val.var.value == NULL) {
-				symbol->section = BSS_SECTION;
+				if (all_zero) {
+					symbol->section = BSS_SECTION;
 
-				// @TODO: Alignment
-				symbol->offset = binary->bss_size;
-				binary->bss_size += symbol->size;
-			} else {
-				symbol->section = DATA_SECTION;
+					// @TODO: Alignment
+					symbol->offset = binary->bss_size;
+					binary->bss_size += symbol->size;
+				} else {
+					symbol->section = DATA_SECTION;
 
-				// @TODO: Alignment
-				symbol->offset = binary->data.size;
+					// @TODO: Alignment
+					symbol->offset = binary->data.size;
 
-				u8 *value = global->val.var.value;
-				assert(value != NULL);
-				ARRAY_APPEND_ELEMS(&binary->data, u8, global->val.var.size_bytes, value);
+					u8 *value = global->val.var.value;
+					assert(value != NULL);
+					ARRAY_APPEND_ELEMS(&binary->data, u8, global->val.var.size_bytes, value);
+				}
 			}
 
 			break;

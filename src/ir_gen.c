@@ -590,6 +590,26 @@ typedef enum ExprContext
 static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ExprContext context);
 
+static IrInit *zero_initializer(IrBuilder *builder, CType *ctype)
+{
+	switch (ctype->type) {
+	case INTEGER_TYPE:
+		return add_int_init(builder, c_type_to_ir_type(ctype), 0);
+	case ARRAY_TYPE: {
+		// @TODO: This allocates unnecessarily by calling zero_initializer
+		// recursively and then copying the result into array_elems.
+		IrInit *init = add_array_init(builder, c_type_to_ir_type(ctype));
+		for (u32 i = 0; i < ctype->val.array.size; i++) {
+			init->val.array_elems[i] =
+				*zero_initializer(builder, ctype->val.array.elem_type);
+		}
+		return init;
+	}
+	default:
+		UNIMPLEMENTED;
+	}
+}
+
 void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 {
 	Scope global_scope;
@@ -616,8 +636,8 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 			global = ir_global_for_decl(builder, &env.type_env,
 					decl_specifier_list, declarator, &global_type);
-			assert(!global->defined);
-			IrFunction *function = &global->initializer->val.function;
+			IrInit *init = add_init_to_function(builder->trans_unit, global);
+			IrFunction *function = &init->val.function;
 
 			builder->current_function = function;
 			builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
@@ -647,7 +667,6 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 			env.scope = env.scope->parent_scope;
 			array_free(param_bindings);
-			global->defined = true;
 
 			break;
 		}
@@ -657,7 +676,6 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ASTInitDeclarator *init_declarator = decl->init_declarators;
 			assert(decl_specifier_list != NULL);
 
-			Array(TypeEnvEntry *) *typedef_types = &env.type_env.typedef_types;
 
 			if (decl_specifier_list->type == STORAGE_CLASS_SPECIFIER &&
 					decl_specifier_list->val.storage_class_specifier == TYPEDEF_SPECIFIER) {
@@ -672,7 +690,8 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 					TypeEnvEntry *new_type_alias =
 						pool_alloc(&env.type_env.pool, sizeof *new_type_alias);
-					*ARRAY_APPEND(typedef_types, TypeEnvEntry *) = new_type_alias;
+					*ARRAY_APPEND(&env.type_env.typedef_types, TypeEnvEntry *)
+						= new_type_alias;
 					new_type_alias->name = cdecl.name;
 					new_type_alias->type = *cdecl.type;
 
@@ -694,21 +713,25 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 					// @TODO: Multiple declarators in one global decl.
 					global = ir_global_for_decl(builder, &env.type_env,
 							type_specs, declarator, &global_type);
-					global->defined = global_type->type != FUNCTION_TYPE;
+					bool is_extern = global_type->type == FUNCTION_TYPE;
 
-					if (type_specs == decl_specifier_list) {
-						global->linkage = IR_GLOBAL_LINKAGE;
-					} else {
+					global->linkage = IR_GLOBAL_LINKAGE;
+					while (decl_specifier_list != type_specs) {
 						assert(decl_specifier_list->type == STORAGE_CLASS_SPECIFIER);
 						ASTStorageClassSpecifier storage_class =
 							decl_specifier_list->val.storage_class_specifier;
 						if (storage_class == STATIC_SPECIFIER)
 							global->linkage = IR_LOCAL_LINKAGE;
 						else if (storage_class == EXTERN_SPECIFIER)
-							global->defined = false;
+							is_extern = true;
 						else
 							UNIMPLEMENTED;
+
+						decl_specifier_list = decl_specifier_list->next;
 					}
+
+					if (!is_extern)
+						global->initializer = zero_initializer(builder, global_type);
 				}
 			}
 
@@ -1330,22 +1353,18 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 			array_type(builder, &env->type_env, &env->type_env.char_type, length);
 		IrType ir_type = c_type_to_ir_type(result_type);
 		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
-		global->defined = true;
 		global->linkage = IR_LOCAL_LINKAGE;
 
-		IrInit *init = pool_alloc(&builder->trans_unit->pool, sizeof *init);
-		IrInit *elems =
-			pool_alloc(&builder->trans_unit->pool, length * sizeof *elems);
+		IrInit *init = add_array_init(builder, ir_type);
 		IrType ir_char_type = c_type_to_ir_type(&env->type_env.char_type);
 		for (u32 i = 0; i < length; i++) {
-			elems[i] = (IrInit) {
+			init->val.array_elems[i] = (IrInit) {
 				.type = ir_char_type,
 				.val.integer = string[i],
 			};
 		}
 
 		init->type = ir_type;
-		init->val.array_elems = elems;
 
 		global->initializer = init;
 

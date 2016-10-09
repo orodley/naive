@@ -68,6 +68,7 @@ typedef struct IrBlock
 
 typedef struct IrFunction
 {
+	// @TODO: Remove the following 3 fields, as they're in IrType anyway.
 	u32 arity;
 	IrType *arg_types;
 	IrType return_type;
@@ -98,11 +99,6 @@ typedef struct IrGlobal
 		IR_GLOBAL_LINKAGE,
 		IR_LOCAL_LINKAGE,
 	} linkage;
-	// @TODO: Remove "defined" field - make "has no initializer" mean "not
-	// defined". To do this we need to explicitly create zero initializers for
-	// vars without initializers in C, and detect that an initializer is all
-	// zero when deciding .bss vs .data.
-	bool defined;
 	AsmGlobal *asm_global;
 	IrInit *initializer;
 } IrGlobal;
@@ -231,6 +227,7 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type);
 IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields);
 
+IrInit *add_init_to_function(TransUnit *trans_unit, IrGlobal *global);
 IrBlock *add_block_to_function(
 		TransUnit *trans_unit, IrFunction *function, char *name);
 
@@ -251,6 +248,9 @@ IrValue value_arg(u32 arg_index, IrType type);
 IrValue value_global(IrGlobal *global);
 
 AsmLabel *global_label(IrGlobal *global);
+
+IrInit *add_int_init(IrBuilder *builder, IrType int_type, u64 value);
+IrInit *add_array_init(IrBuilder *builder, IrType type);
 
 IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg);
 IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2);

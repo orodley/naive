@@ -779,8 +779,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	ret_label->offset = 0;
 	asm_func->val.function.ret_label = ret_label;
 
-	asm_func->defined = ir_global->defined;
-	if (!ir_global->defined) {
+	asm_func->defined = ir_global->initializer != NULL;
+	if (!asm_func->defined) {
 		return;
 	}
 
@@ -939,7 +939,7 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 
 		ir_global->asm_global = asm_global;
 		asm_global->name = ir_global->name;
-		asm_global->defined = ir_global->defined;
+		asm_global->defined = ir_global->initializer != NULL;
 		asm_global->offset = 0;
 	}
 

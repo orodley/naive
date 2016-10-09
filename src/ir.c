@@ -32,13 +32,15 @@ void trans_unit_free(TransUnit *trans_unit)
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
 		if (global->type.kind == IR_FUNCTION) {
-			IrFunction *func = &global->initializer->val.function;
-			for (u32 j = 0; j < func->blocks.size; j++) {
-				IrBlock *block = *ARRAY_REF(&func->blocks, IrBlock *, j);
-				block_free(block);
+			if (global->initializer != NULL) {
+				IrFunction *func = &global->initializer->val.function;
+				for (u32 j = 0; j < func->blocks.size; j++) {
+					IrBlock *block = *ARRAY_REF(&func->blocks, IrBlock *, j);
+					block_free(block);
+				}
+				array_free(&func->blocks);
+				free(func->arg_types);
 			}
-			array_free(&func->blocks);
-			free(func->arg_types);
 		}
 	}
 
@@ -57,6 +59,8 @@ IrBlock *add_block_to_function(
 	return block;
 }
 
+// @TODO: Split this into two: first add the function with no initializer, then
+// add an initializer for the function.
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 		IrType return_type, u32 arity, IrType *arg_types)
 {
@@ -79,20 +83,25 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	};
 	new_global->type = function_type;
 
+	return new_global;
+}
+
+IrInit *add_init_to_function(TransUnit *trans_unit, IrGlobal *global)
+{
 	IrInit *initializer = pool_alloc(&trans_unit->pool, sizeof *initializer);
-	initializer->type = function_type;
+	initializer->type = global->type;
 	IrFunction *function = &initializer->val.function;
-	function->return_type = return_type;
-	function->arity = arity;
-	function->arg_types = arg_types;
+	function->return_type = *global->type.val.function.return_type;
+	function->arity = global->type.val.function.arity;
+	function->arg_types = global->type.val.function.arg_types;
 	function->label = NULL;
 
-	new_global->initializer = initializer;
+	global->initializer = initializer;
 
 	ARRAY_INIT(&function->blocks, IrBlock *, 5);
 	add_block_to_function(trans_unit, function, "entry");
 
-	return new_global;
+	return initializer;
 }
 
 IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type)
@@ -597,4 +606,23 @@ AsmLabel *global_label(IrGlobal *global)
 	} else {
 		UNIMPLEMENTED;
 	}
+}
+
+IrInit *add_int_init(IrBuilder *builder, IrType int_type, u64 value)
+{
+	IrInit *init = pool_alloc(&builder->trans_unit->pool, sizeof *init);
+	init->type = int_type;
+	init->val.integer = value;
+
+	return init;
+}
+
+IrInit *add_array_init(IrBuilder *builder, IrType type)
+{
+	IrInit *init = pool_alloc(&builder->trans_unit->pool, sizeof *init);
+	init->type = type;
+	init->val.array_elems = pool_alloc(&builder->trans_unit->pool,
+			type.val.array.size * sizeof *init->val.array_elems);
+
+	return init;
 }
