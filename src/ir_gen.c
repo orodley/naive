@@ -1331,6 +1331,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrType ir_type = c_type_to_ir_type(result_type);
 		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
 		global->defined = true;
+		global->linkage = IR_LOCAL_LINKAGE;
 
 		IrInit *init = pool_alloc(&builder->trans_unit->pool, sizeof *init);
 		IrInit *elems =

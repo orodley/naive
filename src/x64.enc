@@ -1,3 +1,4 @@
+ADD r/m8, r8           =         00 /r
 ADD r/m32, imm32       =         81 /0 id
 ADD r/m32, r32         =         01 /r
 ADD r/m64, imm8        = REX.W + 83 /0 ib
