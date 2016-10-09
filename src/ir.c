@@ -39,7 +39,6 @@ void trans_unit_free(TransUnit *trans_unit)
 					block_free(block);
 				}
 				array_free(&func->blocks);
-				free(func->arg_types);
 			}
 		}
 	}
@@ -91,9 +90,6 @@ IrInit *add_init_to_function(TransUnit *trans_unit, IrGlobal *global)
 	IrInit *initializer = pool_alloc(&trans_unit->pool, sizeof *initializer);
 	initializer->type = global->type;
 	IrFunction *function = &initializer->val.function;
-	function->return_type = *global->type.val.function.return_type;
-	function->arity = global->type.val.function.arity;
-	function->arg_types = global->type.val.function.arg_types;
 	function->label = NULL;
 
 	global->initializer = initializer;

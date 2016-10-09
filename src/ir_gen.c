@@ -659,7 +659,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 				build_store(builder,
 						binding->term.value,
-						value_arg(i, function->arg_types[i]),
+						value_arg(i, global->type.val.function.arg_types[i]),
 						c_type_to_ir_type(binding->term.ctype));
 			}
 

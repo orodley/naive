@@ -68,10 +68,6 @@ typedef struct IrBlock
 
 typedef struct IrFunction
 {
-	// @TODO: Remove the following 3 fields, as they're in IrType anyway.
-	u32 arity;
-	IrType *arg_types;
-	IrType return_type;
 	Array(IrBlock *) blocks;
 	AsmLabel *label;
 } IrFunction;

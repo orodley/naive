@@ -190,7 +190,7 @@ static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp 
 }
 
 static void asm_gen_instr(
-		IrFunction *ir_func, AsmBuilder *builder, IrInstr *instr)
+		AsmBuilder *builder, IrGlobal *ir_global, IrInstr *instr)
 {
 	switch (instr->op) {
 	case OP_LOCAL: {
@@ -231,13 +231,14 @@ static void asm_gen_instr(
 	}
 	case OP_RET: {
 		IrValue arg = instr->val.arg;
-		assert(ir_type_eq(&ir_func->return_type, &arg.type));
-		assert(ir_func->return_type.kind == IR_INT
-				|| ir_func->return_type.kind == IR_POINTER);
+		assert(ir_global->type.kind == IR_FUNCTION);
+		assert(ir_type_eq(ir_global->type.val.function.return_type, &arg.type));
+		IrType *return_type = ir_global->type.val.function.return_type;
+		assert(return_type->kind == IR_INT || return_type->kind == IR_POINTER);
 
 		emit_instr2(builder,
 				MOV,
-				asm_phys_reg(REG_CLASS_A, size_of_ir_type(ir_func->return_type) * 8),
+				asm_phys_reg(REG_CLASS_A, size_of_ir_type(*return_type) * 8),
 				asm_value(arg));
 		emit_instr1(builder, JMP, asm_label(builder->current_function->ret_label));
 
@@ -787,11 +788,12 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
 	ARRAY_INIT(&builder->virtual_registers, VRegInfo, 20);
-	IrType return_type = ir_func->return_type;
+	IrType return_type = *ir_global->type.val.function.return_type;
 	assert(return_type.kind == IR_INT || return_type.kind == IR_POINTER);
 
-	assert(ir_func->arity <= STATIC_ARRAY_LENGTH(argument_registers));
-	for (u32 i = 0; i < ir_func->arity; i++) {
+	u32 arity = ir_global->type.val.function.arity;
+	assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
+	for (u32 i = 0; i < arity; i++) {
 		VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
 		vreg_info->assigned_register = argument_registers[i];
 		vreg_info->live_range_start = vreg_info->live_range_end = -1;
@@ -809,7 +811,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		u32 first_instr_of_block_index = builder->current_function->body.size;
 		Array(IrInstr *) *instrs = &block->instrs;
 		for (u32 i = 0; i < instrs->size; i++) {
-			asm_gen_instr(ir_func, builder, *ARRAY_REF(instrs, IrInstr *, i));
+			asm_gen_instr(builder, ir_global, *ARRAY_REF(instrs, IrInstr *, i));
 		}
 
 		AsmInstr *first_instr_of_block = ARRAY_REF(
