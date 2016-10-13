@@ -19,7 +19,6 @@ void pool_init(Pool *pool, size_t block_size)
 
 void *pool_alloc(Pool *pool, size_t size)
 {
-	return malloc(size);
 	PoolBlock *block = pool->first_block_with_space;
 	if (block->used + size > pool->block_size) {
 		PoolBlock *new_block = malloc(sizeof *new_block);
