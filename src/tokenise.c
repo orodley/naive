@@ -921,10 +921,9 @@ static char *look_up_include_path(char *including_file, char *include_path)
 
 	// Try system headers
 
-	// @TODO: Here we assume that libc inclues live in "./libc". This obviously
-	// doesn't work in general. We need to install our libc somewhere.
-	base_path = "./libc/";
-	base_length = 7;
+	char system_path[] = "/opt/naive/include/";
+	base_path = system_path;
+	base_length = (sizeof system_path) - 1;
 
 	include_path_length = strlen(include_path);
 	potential_path = concat(

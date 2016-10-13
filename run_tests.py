@@ -91,9 +91,6 @@ def start_compiling(test_dir):
     testcase.name = test_dir
 
     sub_files = os.listdir(test_dir)
-    test_filenames = [os.path.join(test_dir, filename)
-            for filename in sub_files if filename.endswith('.c')]
-    assert test_filenames != []
 
     testcase.expected_compile_stdout = ''
     testcase.expected_compile_stderr = ''
@@ -101,6 +98,7 @@ def start_compiling(test_dir):
     testcase.expected_run_stderr = ''
     testcase.stdin = ''
 
+    test_filenames = []
     extra_flags = []
     for filename in sub_files:
         with open(os.path.join(test_dir, filename), 'r') as f:
@@ -117,15 +115,18 @@ def start_compiling(test_dir):
         elif filename == 'run_stdin':
             testcase.run_stdin = contents
         elif filename.endswith('.c'):
+            test_filenames.append(filename)
             first_line = contents[:contents.index('\n')]
             flags_str = '// FLAGS:'
             if first_line.startswith(flags_str):
                 extra_flags = first_line[len(flags_str):].strip().split(' ')
 
-    testcase.binary = os.path.join(test_dir, "a.out.tmp")
+    assert test_filenames != []
+
+    testcase.binary = os.path.abspath(os.path.join(test_dir, "a.out.tmp"))
     testcase.cc_proc = subprocess.Popen(
-            ['./ncc', '-o', testcase.binary] + extra_flags + test_filenames,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            [os.path.abspath('./ncc'), '-o', testcase.binary] + extra_flags + test_filenames,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=test_dir)
     return testcase
 
 def create_test_files(test_dir):
@@ -183,7 +184,7 @@ def run_testcase(testcase):
             return test_result
     if compile_stdout != testcase.expected_compile_stdout:
         test_result.error = "expected compile stdout:\n%s\ngot:\n%s" \
-                % (indent(testcase.expected_run_stdout), indent(compile_stdout))
+                % (indent(testcase.expected_compile_stdout), indent(compile_stdout))
 
     if not compiled_successfully:
         test_result.error = "compilation failed with stderr:\n" \

@@ -57,12 +57,18 @@ ncc: $(call objs_for_dir,src)
 libc.a: $(call objs_for_dir,libc)
 	@echo 'AR $@'
 	@$(AR) -cr $@ $^
+	@[ -w /opt/naive ] \
+		|| (echo 'Please create /opt/naive and give yourself write permissions' \
+			&& exit 1)
+	@cp $@ /opt/naive
+	@mkdir -p /opt/naive/include
+	@cp libc/include/* /opt/naive/include
 
 
 libc/%.o: libc/%.c
 	@echo 'CC $@'
 	@$(CC) -c $(CFLAGS) -fno-asynchronous-unwind-tables -ffreestanding \
-		-nostdinc -I libc $< -o $@
+		-nostdinc -I libc -I libc/include $< -o $@
 
 %.o: %.c $(HEADERS) $(GEN_FILES)
 	@echo 'CC $<'

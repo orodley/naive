@@ -153,7 +153,7 @@ int main(int argc, char *argv[])
 	if (do_link && !syntax_only) {
 		// Implicitly link in the standard library. We have to put this after
 		// the rest of the inputs because it's an archive.
-		*ARRAY_APPEND(&linker_input_filenames, char *) = "libc.a";
+		*ARRAY_APPEND(&linker_input_filenames, char *) = "/opt/naive/libc.a";
 
 		char *executable_filename;
 		if (output_filename == NULL)
