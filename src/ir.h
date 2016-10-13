@@ -18,6 +18,7 @@ typedef struct IrType
 {
 	enum
 	{
+		IR_VOID,
 		IR_INT,
 		IR_POINTER,
 		IR_ARRAY,
@@ -155,6 +156,7 @@ typedef struct IrValue
 	X(OP_STORE), \
 	X(OP_LOCAL), \
 	X(OP_RET), \
+	X(OP_RET_VOID), \
 	X(OP_BRANCH), \
 	X(OP_COND),
 
@@ -248,6 +250,8 @@ AsmLabel *global_label(IrGlobal *global);
 IrInit *add_int_init(IrBuilder *builder, IrType int_type, u64 value);
 IrInit *add_array_init(IrBuilder *builder, IrType type);
 
+
+IrValue build_nullary_instr(IrBuilder *builder, IrOp op, IrType type);
 IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg);
 IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2);
 IrValue build_local(IrBuilder *builder, IrType type);

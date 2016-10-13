@@ -229,6 +229,11 @@ static void asm_gen_instr(
 
 		break;
 	}
+	case OP_RET_VOID:
+		assert(ir_global->type.val.function.return_type->kind == IR_VOID);
+		emit_instr1(builder, JMP, asm_label(builder->current_function->ret_label));
+
+		break;
 	case OP_RET: {
 		IrValue arg = instr->val.arg;
 		assert(ir_global->type.kind == IR_FUNCTION);
@@ -789,7 +794,9 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		array_free(&builder->virtual_registers);
 	ARRAY_INIT(&builder->virtual_registers, VRegInfo, 20);
 	IrType return_type = *ir_global->type.val.function.return_type;
-	assert(return_type.kind == IR_INT || return_type.kind == IR_POINTER);
+	assert(return_type.kind == IR_INT
+			|| return_type.kind == IR_POINTER
+			|| return_type.kind == IR_VOID);
 
 	u32 arity = ir_global->type.val.function.arity;
 	assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
@@ -909,7 +916,7 @@ static void write_initializer(IrInit *init, u8 *value)
 			value += size_of_ir_type(init->type.val.strukt.fields[n].type);
 		}
 		break;
-	case IR_FUNCTION:
+	case IR_FUNCTION: case IR_VOID:
 		UNREACHABLE;
 	}
 }

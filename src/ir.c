@@ -136,7 +136,7 @@ bool ir_type_eq(IrType *a, IrType *b)
 	switch (a->kind) {
 	case IR_INT:
 		return a->val.bit_width == b->val.bit_width;
-	case IR_POINTER: case IR_FUNCTION:
+	case IR_VOID: case IR_POINTER: case IR_FUNCTION:
 		return true;
 	case IR_STRUCT:
 		return streq(a->val.strukt.name, b->val.strukt.name);
@@ -157,6 +157,8 @@ u32 size_of_ir_type(IrType type)
 		return type.val.strukt.total_size;
 	case IR_ARRAY:
 		return type.val.array.size * size_of_ir_type(*type.val.array.elem_type);
+	case IR_VOID:
+		UNREACHABLE;
 	}
 }
 
@@ -175,6 +177,9 @@ u32 align_of_ir_type(IrType type)
 void dump_ir_type(IrType type)
 {
 	switch (type.kind) {
+	case IR_VOID:
+		fputs("void", stdout);
+		break;
 	case IR_INT:
 		printf("i%d", type.val.bit_width);
 		break;
@@ -272,6 +277,8 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		printf("%s, %s", instr->val.cond.then_block->name, instr->val.cond.else_block->name);
 		break;
+	case OP_RET_VOID:
+		break;
 	case OP_RET: case OP_BIT_NOT: case OP_LOG_NOT:
 		dump_value(instr->val.arg);
 		break;
@@ -340,8 +347,7 @@ static void dump_init(IrInit *init)
 			for (u32 i = 0; i < instrs->size; i++) {
 				IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
 				putchar('\t');
-				if (instr->op != OP_STORE && instr->op != OP_BRANCH
-						&& instr->op != OP_COND && instr->op != OP_RET) {
+				if (instr->type.kind != IR_VOID) {
 					printf("#%u = ", i);
 				}
 				dump_instr(instr);
@@ -351,6 +357,8 @@ static void dump_init(IrInit *init)
 		putchar('}');
 		break;
 	}
+	case IR_VOID:
+		UNREACHABLE;
 	}
 }
 
@@ -408,6 +416,7 @@ IrInstr *build_branch(IrBuilder *builder, IrBlock *block)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_BRANCH;
+	instr->type = (IrType) { .kind = IR_VOID };
 	instr->val.target_block = block;
 
 	return instr;
@@ -418,6 +427,7 @@ IrInstr *build_cond(IrBuilder *builder,
 {
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_COND;
+	instr->type = (IrType) { .kind = IR_VOID };
 	instr->val.cond.condition = condition;
 	instr->val.cond.then_block = then_block;
 	instr->val.cond.else_block = else_block;
@@ -430,7 +440,7 @@ static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 	switch (op) {
 	case OP_LOCAL: case OP_FIELD: case OP_LOAD: case OP_STORE: case OP_CAST:
 	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL: case OP_ZEXT:
-	case OP_SEXT: case OP_BIT_NOT: case OP_LOG_NOT:
+	case OP_SEXT: case OP_BIT_NOT: case OP_LOG_NOT: case OP_RET_VOID:
 		UNREACHABLE;
 	case OP_BIT_XOR: return arg1 ^ arg2;
 	case OP_BIT_AND: return arg1 & arg2;
@@ -460,8 +470,8 @@ static IrValue value_instr(IrInstr *instr)
 IrValue build_local(IrBuilder *builder, IrType type)
 {
 	IrInstr *instr = append_instr(builder);
-	instr->type = (IrType) { .kind = IR_POINTER };
 	instr->op = OP_LOCAL;
+	instr->type = (IrType) { .kind = IR_POINTER };
 	instr->val.type = type;
 
 	return value_instr(instr);
@@ -471,8 +481,8 @@ IrValue build_field(IrBuilder *builder, IrValue struct_ptr, IrType struct_type,
 		u32 field_number)
 {
 	IrInstr *instr = append_instr(builder);
-	instr->type = (IrType) { .kind = IR_POINTER };
 	instr->op = OP_FIELD;
+	instr->type = (IrType) { .kind = IR_POINTER };
 	instr->val.field.struct_ptr = struct_ptr;
 	instr->val.field.struct_type = struct_type;
 	instr->val.field.field_number = field_number;
@@ -483,8 +493,8 @@ IrValue build_field(IrBuilder *builder, IrValue struct_ptr, IrType struct_type,
 IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type)
 {
 	IrInstr *instr = append_instr(builder);
-	instr->type = type;
 	instr->op = OP_LOAD;
+	instr->type = type;
 	instr->val.load.pointer = pointer;
 	instr->val.load.type = type;
 
@@ -495,9 +505,19 @@ IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType t
 {
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_STORE;
+	instr->type = (IrType) { .kind = IR_VOID };
 	instr->val.store.pointer = pointer;
 	instr->val.store.type = type;
 	instr->val.store.value = value;
+
+	return value_instr(instr);
+}
+
+IrValue build_nullary_instr(IrBuilder *builder, IrOp op, IrType type)
+{
+	IrInstr *instr = append_instr(builder);
+	instr->op = op;
+	instr->type = type;
 
 	return value_instr(instr);
 }
@@ -509,7 +529,11 @@ IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg)
 
 	IrInstr *instr = append_instr(builder);
 	instr->op = op;
-	instr->type = arg.type;
+	if (op == OP_RET) {
+		instr->type = (IrType) { .kind = IR_VOID };
+	} else {
+		instr->type = arg.type;
+	}
 	instr->val.arg = arg;
 
 	return value_instr(instr);

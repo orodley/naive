@@ -9,6 +9,7 @@
 
 typedef enum CTypeType
 {
+	VOID_TYPE,
 	INTEGER_TYPE,
 	FUNCTION_TYPE,
 	STRUCT_TYPE,
@@ -60,6 +61,8 @@ typedef struct CType
 static IrType c_type_to_ir_type(CType *ctype)
 {
 	switch (ctype->type) {
+	case VOID_TYPE:
+		return (IrType) { .kind = IR_VOID };
 	case INTEGER_TYPE: {
 		u32 bit_width;
 		switch (ctype->val.integer.type) {
@@ -143,6 +146,7 @@ typedef struct TypeEnv
 	Array(TypeEnvEntry *) enum_types;
 	Array(TypeEnvEntry *) typedef_types;
 
+	CType void_type;
 	CType char_type;
 	CType int_type;
 	CType unsigned_int_type;
@@ -156,6 +160,10 @@ static void init_type_env(TypeEnv *type_env)
 	ARRAY_INIT(&type_env->enum_types, TypeEnvEntry *, 10);
 	ARRAY_INIT(&type_env->typedef_types, TypeEnvEntry *, 10);
 
+	type_env->void_type = (CType) {
+		.type = VOID_TYPE,
+		.cached_pointer_type = NULL,
+	};
 	type_env->int_type = (CType) {
 		.type = INTEGER_TYPE,
 		.cached_pointer_type = NULL,
@@ -236,6 +244,9 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 
 	switch (type_spec->type) {
 	case NAMED_TYPE_SPECIFIER: {
+		if (matches_sequence(decl_specifier_list, 1, "void")) {
+			return &type_env->void_type;
+		}
 		if (matches_sequence(decl_specifier_list, 1, "unsigned")
 				|| matches_sequence(decl_specifier_list, 2, "unsigned", "int")) {
 			return &type_env->unsigned_int_type;
@@ -818,9 +829,13 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		break;
 	}
 	case RETURN_STATEMENT: {
-		Term term = ir_gen_expression(builder, env,
-				statement->val.expr, RVALUE_CONTEXT);
-		build_unary_instr(builder, OP_RET, term.value);
+		if (statement->val.expr == NULL) {
+			build_nullary_instr(builder, OP_RET_VOID, (IrType) { .kind = IR_VOID });
+		} else {
+			Term term = ir_gen_expression(builder, env,
+					statement->val.expr, RVALUE_CONTEXT);
+			build_unary_instr(builder, OP_RET, term.value);
+		}
 		break;
 	}
 	case IF_STATEMENT: {
