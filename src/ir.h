@@ -24,7 +24,7 @@ typedef struct IrType
 		IR_ARRAY,
 		IR_FUNCTION,
 		IR_STRUCT,
-	} kind;
+	} t;
 
 	union
 	{
@@ -49,7 +49,7 @@ typedef struct IrType
 			struct IrType *elem_type;
 			u64 size;
 		} array;
-	} val;
+	} u;
 } IrType;
 
 typedef struct IrStructField
@@ -84,7 +84,7 @@ typedef struct IrInit
 		struct IrInit *array_elems;
 		struct IrInit *struct_fields;
 		IrFunction function;
-	} val;
+	} u;
 } IrInit;
 
 typedef struct IrGlobal
@@ -116,7 +116,7 @@ typedef struct IrValue
 		VALUE_ARG,
 		VALUE_INSTR,
 		VALUE_GLOBAL,
-	} kind;
+	} t;
 	// @TODO: Should this be removed? It's contained in most (all?) of the
 	// union members below; we could just write a function which extracts it
 	// instead of duplicating it.
@@ -128,7 +128,7 @@ typedef struct IrValue
 		struct IrInstr *instr;
 		u32 arg_index;
 		IrGlobal *global;
-	} val;
+	} u;
 } IrValue;
 
 #define IR_OPS \
@@ -215,7 +215,7 @@ typedef struct IrInstr
 		} cond;
 		IrBlock *target_block;
 		IrType type;
-	} val;
+	} u;
 } IrInstr;
 
 void trans_unit_init(TransUnit *trans_unit);

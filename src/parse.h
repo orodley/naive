@@ -87,7 +87,7 @@ typedef enum ASTExprType
 
 typedef struct ASTExpr
 {
-	ASTExprType type;
+	ASTExprType t;
 
 	union
 	{
@@ -122,7 +122,7 @@ typedef struct ASTExpr
 			struct ASTTypeName *cast_type;
 			struct ASTExpr *arg;
 		} cast;
-	} val;
+	} u;
 } ASTExpr;
 
 typedef struct ASTArgument
@@ -173,7 +173,7 @@ typedef struct
 
 typedef struct ASTStatement
 {
-	ASTStatementType type;
+	ASTStatementType t;
 
 	union
 	{
@@ -197,7 +197,7 @@ typedef struct ASTStatement
 		ASTForStatement for_statement;
 		char *goto_label;
 		ASTExpr *expr;
-	} val;
+	} u;
 } ASTStatement;
 
 typedef struct ASTBlockItem
@@ -208,13 +208,13 @@ typedef struct ASTBlockItem
 	{
 		BLOCK_ITEM_DECL,
 		BLOCK_ITEM_STATEMENT,
-	} type;
+	} t;
 
 	union 
 	{
 		struct ASTDecl *decl;
 		ASTStatement *statement;
-	} val;
+	} u;
 } ASTBlockItem;
 
 
@@ -226,13 +226,13 @@ typedef struct ASTDesignator
 	{
 		INDEX_DESIGNATOR,
 		FIELD_DESIGNATOR,
-	} type;
+	} t;
 
 	union
 	{
 		ASTExpr *index_expr;
 		char *field_name;
-	} val;
+	} u;
 } ASTDesignator;
 
 typedef struct ASTInitializerElement
@@ -249,13 +249,13 @@ typedef struct ASTInitializer
 	{
 		EXPR_INITIALIZER,
 		BRACE_INITIALIZER,
-	} type;
+	} t;
 
 	union
 	{
 		ASTExpr *expr;
 		ASTInitializerElement *initializer_element_list;
-	} val;
+	} u;
 } ASTInitializer;
 
 typedef struct ASTInitDeclarator
@@ -296,7 +296,7 @@ typedef struct ASTDirectDeclarator
 		IDENTIFIER_DECLARATOR,
 		ARRAY_DECLARATOR,
 		FUNCTION_DECLARATOR,
-	} type;
+	} t;
 
 	union
 	{
@@ -312,7 +312,7 @@ typedef struct ASTDirectDeclarator
 			struct ASTDirectDeclarator *declarator;
 			ASTParameterDecl *parameters;
 		} function_declarator;
-	} val;
+	} u;
 } ASTDirectDeclarator;
 
 typedef struct ASTDeclarator
@@ -321,7 +321,7 @@ typedef struct ASTDeclarator
 	{
 		POINTER_DECLARATOR,
 		DIRECT_DECLARATOR,
-	} type;
+	} t;
 
 	union
 	{
@@ -331,7 +331,7 @@ typedef struct ASTDeclarator
 			struct ASTDeclarator *pointee;
 		} pointer_declarator;
 		ASTDirectDeclarator *direct_declarator;
-	} val;
+	} u;
 } ASTDeclarator;
 
 typedef enum ASTStorageClassSpecifier
@@ -370,7 +370,7 @@ typedef struct ASTFieldDeclarator
 	{
 		BITFIELD_FIELD_DECLARATOR,
 		NORMAL_FIELD_DECLARATOR,
-	} type;
+	} t;
 
 	union
 	{
@@ -380,7 +380,7 @@ typedef struct ASTFieldDeclarator
 			ASTExpr *width;
 		} bitfield;
 		ASTDeclarator *declarator;
-	} val;
+	} u;
 } ASTFieldDeclarator;
 
 typedef struct ASTFieldDecl
@@ -399,7 +399,7 @@ typedef struct ASTTypeSpecifier
 		STRUCT_TYPE_SPECIFIER,
 		UNION_TYPE_SPECIFIER,
 		ENUM_TYPE_SPECIFIER,
-	} type;
+	} t;
 
 	union
 	{
@@ -414,7 +414,7 @@ typedef struct ASTTypeSpecifier
 			char *name;
 			ASTEnumerator *enumerator_list;
 		} enum_specifier;
-	} val;
+	} u;
 } ASTTypeSpecifier;
 
 typedef struct ASTDeclSpecifier
@@ -426,7 +426,7 @@ typedef struct ASTDeclSpecifier
 		TYPE_SPECIFIER,
 		TYPE_QUALIFIER,
 		FUNCTION_SPECIFIER,
-	} type;
+	} t;
 
 	union
 	{
@@ -434,7 +434,7 @@ typedef struct ASTDeclSpecifier
 		ASTTypeSpecifier *type_specifier;
 		ASTTypeQualifier type_qualifier;
 		ASTFunctionSpecifier function_specifier;
-	} val;
+	} u;
 } ASTDeclSpecifier;
 
 typedef struct ASTFunctionDef
@@ -452,13 +452,13 @@ typedef struct ASTToplevel
 	{
 		FUNCTION_DEF,
 		DECL,
-	} type;
+	} t;
 
 	union
 	{
 		ASTFunctionDef *function_def;
 		ASTDecl *decl;
-	} val;
+	} u;
 } ASTToplevel;
 
 void dump_toplevel(ASTToplevel *ast);

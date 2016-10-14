@@ -156,7 +156,7 @@ if (parser->position >= parser->tokens->size)
 \treturn failure;
 
 Token *result = read_token(parser);
-if (result->type != %s) {
+if (result->t != %s) {
 \tback_up(parser);
 \t
 \tif (parser->position > _longest_parse_length) {
@@ -185,7 +185,7 @@ if (parser->position >= parser->tokens->size)
 \treturn failure;
 
 Token *token = read_token(parser);
-if (token->type == TOK_SYMBOL && streq(token->val.symbol, "%s")) {
+if (token->t == TOK_SYMBOL && streq(token->u.symbol, "%s")) {
 \treturn success((void *)1);
 } else {
 \tback_up(parser);

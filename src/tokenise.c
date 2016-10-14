@@ -238,7 +238,7 @@ static inline bool ident_char(char c)
 static Token *append_token(Reader *reader, SourceLoc source_loc, TokenType type)
 {
 	SourceToken *source_token = ARRAY_APPEND(reader->tokens, SourceToken);
-	source_token->token.type = type;
+	source_token->token.t = type;
 	source_token->source_loc = source_loc;
 
 	return (Token *)source_token;
@@ -545,7 +545,7 @@ static bool tokenise_aux(Reader *reader)
 			read_int_literal_suffix(reader);
 
 			Token *token = append_token(reader, start_source_loc, TOK_INT_LITERAL);
-			token->val.int_literal = value;
+			token->u.int_literal = value;
 			break;
 		}
 		case '1': case '2': case '3': case '4': case '5': case '6':
@@ -566,7 +566,7 @@ static bool tokenise_aux(Reader *reader)
 			read_int_literal_suffix(reader);
 
 			Token *token = append_token(reader, start_source_loc, TOK_INT_LITERAL);
-			token->val.int_literal = value;
+			token->u.int_literal = value;
 
 			break;
 		}
@@ -584,7 +584,7 @@ static bool tokenise_aux(Reader *reader)
 			u32 length = ((reader->position - 1) - start_index);
 
 			Token *token = append_token(reader, start_source_loc, TOK_STRING_LITERAL);
-			token->val.string_literal = strndup(
+			token->u.string_literal = strndup(
 					reader->buffer.buffer + start_index, length);
 
 			break;
@@ -629,7 +629,7 @@ static bool tokenise_aux(Reader *reader)
 			}
 
 			Token *token = append_token(reader, start_source_loc, TOK_INT_LITERAL);
-			token->val.int_literal = value;
+			token->u.int_literal = value;
 			break;
 		}
 		case '+':
@@ -851,18 +851,18 @@ static bool tokenise_aux(Reader *reader)
 			if (streq(symbol, "__LINE__")) {
 				Token *line_number =
 					append_token(reader, start_source_loc, TOK_INT_LITERAL);
-				line_number->val.int_literal = reader->source_loc.line;
+				line_number->u.int_literal = reader->source_loc.line;
 			} else if (streq(symbol, "__FILE__")) {
 				Token *file_name =
 					append_token(reader, start_source_loc, TOK_STRING_LITERAL);
-				file_name->val.string_literal = reader->source_loc.filename;
+				file_name->u.string_literal = reader->source_loc.filename;
 			} else {
 				Macro *macro = look_up_macro(&reader->macro_env, symbol);
 
 				if (macro == NULL) {
 					Token *token =
 						append_token(reader, start_source_loc, TOK_SYMBOL);
-					token->val.symbol = symbol;
+					token->u.symbol = symbol;
 				} else {
 					if (macro->arg_names.size == 0) {
 						if (!tokenise_string(reader, macro->value))
@@ -875,7 +875,7 @@ static bool tokenise_aux(Reader *reader)
 							// leave it as is.
 							Token *token =
 								append_token(reader, start_source_loc, TOK_SYMBOL);
-							token->val.symbol = symbol;
+							token->u.symbol = symbol;
 						} else {
 							read_char(reader);
 							substitute_macro_params(reader, macro);
@@ -1226,20 +1226,20 @@ char *token_type_names[] = {
 
 void dump_token(Token *token)
 {
-	fputs(token_type_names[token->type], stdout);
-	switch (token->type) {
+	fputs(token_type_names[token->t], stdout);
+	switch (token->t) {
 	case TOK_INT_LITERAL:
-		printf("(%" PRIu64 ")", token->val.int_literal);
+		printf("(%" PRIu64 ")", token->u.int_literal);
 		break;
 	case TOK_FLOAT_LITERAL:
-		printf("(%lf)", token->val.float_literal);
+		printf("(%lf)", token->u.float_literal);
 		break;
 	case TOK_STRING_LITERAL:
 		// @TODO: Escape the resulting string
-		printf("(\"%s\")", token->val.string_literal);
+		printf("(\"%s\")", token->u.string_literal);
 		break;
 	case TOK_SYMBOL:
-		printf("(%s)", token->val.symbol);
+		printf("(%s)", token->u.symbol);
 		break;
 	default:
 		break;

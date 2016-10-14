@@ -158,25 +158,25 @@ static char *direct_declarator_name(ASTDirectDeclarator *declarator);
 
 static char *declarator_name(ASTDeclarator *declarator)
 {
-	switch (declarator->type) {
+	switch (declarator->t) {
 	case POINTER_DECLARATOR:
-		return declarator_name(declarator->val.pointer_declarator.pointee);
+		return declarator_name(declarator->u.pointer_declarator.pointee);
 	case DIRECT_DECLARATOR:
-		return direct_declarator_name(declarator->val.direct_declarator);
+		return direct_declarator_name(declarator->u.direct_declarator);
 	}
 }
 
 static char *direct_declarator_name(ASTDirectDeclarator *declarator)
 {
-	switch (declarator->type) {
+	switch (declarator->t) {
 	case IDENTIFIER_DECLARATOR:
-		return declarator->val.name;
+		return declarator->u.name;
 	case ARRAY_DECLARATOR:
-		return direct_declarator_name(declarator->val.array_declarator.element_declarator);
+		return direct_declarator_name(declarator->u.array_declarator.element_declarator);
 	case FUNCTION_DECLARATOR:
-		return direct_declarator_name(declarator->val.function_declarator.declarator);
+		return direct_declarator_name(declarator->u.function_declarator.declarator);
 	case DECLARATOR:
-		return declarator_name(declarator->val.declarator);
+		return declarator_name(declarator->u.declarator);
 	}
 }
 
@@ -191,8 +191,8 @@ ASTDecl *build_decl(Parser *parser, ASTDeclSpecifier *decl_specifier_list,
 	decl->next = NULL;
 
 	while (decl_specifier_list != NULL) {
-		if (decl_specifier_list->type == STORAGE_CLASS_SPECIFIER
-				&& decl_specifier_list->val.storage_class_specifier == TYPEDEF_SPECIFIER) {
+		if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
+				&& decl_specifier_list->u.storage_class_specifier == TYPEDEF_SPECIFIER) {
 			while (init_declarator_list != NULL) {
 				TypeTableEntry entry = {
 					.type_name = declarator_name(init_declarator_list->declarator)
@@ -214,14 +214,14 @@ ASTDecl *build_decl(Parser *parser, ASTDeclSpecifier *decl_specifier_list,
 static ASTExpr *build_constant(Parser *parser, Token *token)
 {
 	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
-	switch (token->type) {
+	switch (token->t) {
 	case TOK_INT_LITERAL:
-		expr->type = INT_LITERAL_EXPR;
-		expr->val.int_literal = token->val.int_literal;
+		expr->t = INT_LITERAL_EXPR;
+		expr->u.int_literal = token->u.int_literal;
 		break;
 	case TOK_STRING_LITERAL:
-		expr->type = STRING_LITERAL_EXPR;
-		expr->val.string_literal = token->val.string_literal;
+		expr->t = STRING_LITERAL_EXPR;
+		expr->u.string_literal = token->u.string_literal;
 		break;
 	default:
 		UNREACHABLE;
@@ -236,32 +236,32 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 	ASTExpr *next = pool_alloc(parser->pool, sizeof *next);
 	switch (which->which) {
 	case 0:
-		next->type = INDEX_EXPR;
-		next->val.binary_op.arg1 = curr;
-		next->val.binary_op.arg2 = which->result;
+		next->t = INDEX_EXPR;
+		next->u.binary_op.arg1 = curr;
+		next->u.binary_op.arg2 = which->result;
 		return next;
 	case 1:
-		next->type = FUNCTION_CALL_EXPR;
-		next->val.function_call.callee = curr;
-		next->val.function_call.arg_list = which->result;
+		next->t = FUNCTION_CALL_EXPR;
+		next->u.function_call.callee = curr;
+		next->u.function_call.arg_list = which->result;
 		return next;
 	case 2:
-		next->type = STRUCT_DOT_FIELD_EXPR;
-		next->val.struct_field.struct_expr = curr;
-		next->val.struct_field.field_name = ((Token *)which->result)->val.symbol;
+		next->t = STRUCT_DOT_FIELD_EXPR;
+		next->u.struct_field.struct_expr = curr;
+		next->u.struct_field.field_name = ((Token *)which->result)->u.symbol;
 		return next;
 	case 3:
-		next->type = STRUCT_ARROW_FIELD_EXPR;
-		next->val.struct_field.struct_expr = curr;
-		next->val.struct_field.field_name = ((Token *)which->result)->val.symbol;
+		next->t = STRUCT_ARROW_FIELD_EXPR;
+		next->u.struct_field.struct_expr = curr;
+		next->u.struct_field.field_name = ((Token *)which->result)->u.symbol;
 		return next;
 	case 4:
-		next->type = POST_INCREMENT_EXPR;
-		next->val.unary_arg = curr;
+		next->t = POST_INCREMENT_EXPR;
+		next->u.unary_arg = curr;
 		return next;
 	case 5:
-		next->type = POST_DECREMENT_EXPR;
-		next->val.unary_arg = curr;
+		next->t = POST_DECREMENT_EXPR;
+		next->u.unary_arg = curr;
 		return next;
 	default:
 		UNREACHABLE;
@@ -284,16 +284,16 @@ static ASTExpr *build_unary_expr(Parser *parser, Token *token,
 		ASTExpr *arg)
 {
 	ASTExpr *next = pool_alloc(parser->pool, sizeof *next);
-	next->val.unary_arg = arg;
-	switch (token->type) {
-	case TOK_INCREMENT: next->type = PRE_INCREMENT_EXPR; break;
-	case TOK_DECREMENT: next->type = PRE_DECREMENT_EXPR; break;
-	case TOK_AMPERSAND: next->type = ADDRESS_OF_EXPR; break;
-	case TOK_ASTERISK: next->type = DEREF_EXPR; break;
-	case TOK_PLUS: next->type = UNARY_PLUS_EXPR; break;
-	case TOK_MINUS: next->type = UNARY_MINUS_EXPR; break;
-	case TOK_BIT_NOT: next->type = BIT_NOT_EXPR; break;
-	case TOK_LOGICAL_NOT: next->type = LOGICAL_NOT_EXPR; break;
+	next->u.unary_arg = arg;
+	switch (token->t) {
+	case TOK_INCREMENT: next->t = PRE_INCREMENT_EXPR; break;
+	case TOK_DECREMENT: next->t = PRE_DECREMENT_EXPR; break;
+	case TOK_AMPERSAND: next->t = ADDRESS_OF_EXPR; break;
+	case TOK_ASTERISK: next->t = DEREF_EXPR; break;
+	case TOK_PLUS: next->t = UNARY_PLUS_EXPR; break;
+	case TOK_MINUS: next->t = UNARY_MINUS_EXPR; break;
+	case TOK_BIT_NOT: next->t = BIT_NOT_EXPR; break;
+	case TOK_LOGICAL_NOT: next->t = LOGICAL_NOT_EXPR; break;
 	default: UNREACHABLE;
 	}
 
@@ -307,17 +307,17 @@ typedef struct BinaryTail
 } BinaryTail;
 
 #define CASE2(token, ast_type) \
-	case TOK_##token: expr->type = ast_type##_EXPR; break;
+	case TOK_##token: expr->t = ast_type##_EXPR; break;
 #define CASE1(operator) CASE2(operator, operator)
 
 static ASTExpr *build_binary_head(Parser *parser, ASTExpr *curr,
 		BinaryTail *tail)
 {
 	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
-	expr->val.binary_op.arg1 = curr;
-	expr->val.binary_op.arg2 = tail->tail_expr;
+	expr->u.binary_op.arg1 = curr;
+	expr->u.binary_op.arg2 = tail->tail_expr;
 
-	switch (tail->operator->type) {
+	switch (tail->operator->t) {
 	CASE2(ASTERISK, MULTIPLY)
 	CASE2(PLUS_ASSIGN, ADD_ASSIGN)
 	CASE1(DIVIDE)
@@ -368,10 +368,10 @@ static ASTExpr *build_conditional_expr(Parser *parser,
 	IGNORE(colon);
 
 	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
-	expr->type = CONDITIONAL_EXPR;
-	expr->val.ternary_op.arg1 = condition;
-	expr->val.ternary_op.arg2 = then_expr;
-	expr->val.ternary_op.arg3 = else_expr;
+	expr->t = CONDITIONAL_EXPR;
+	expr->u.ternary_op.arg1 = condition;
+	expr->u.ternary_op.arg2 = then_expr;
+	expr->u.ternary_op.arg3 = else_expr;
 
 	return expr;
 	
@@ -383,12 +383,12 @@ ASTBlockItem *build_block_item(Parser *parser, WhichResult *decl_or_statement)
 	ASTBlockItem *result = pool_alloc(parser->pool, sizeof *result);
 	switch (decl_or_statement->which) {
 	case 0:
-		result->type = BLOCK_ITEM_DECL;
-		result->val.decl = decl_or_statement->result;
+		result->t = BLOCK_ITEM_DECL;
+		result->u.decl = decl_or_statement->result;
 		break;
 	case 1:
-		result->type = BLOCK_ITEM_STATEMENT;
-		result->val.statement = decl_or_statement->result;
+		result->t = BLOCK_ITEM_STATEMENT;
+		result->u.statement = decl_or_statement->result;
 		break;
 	default:
 		UNREACHABLE;
@@ -404,12 +404,12 @@ ASTStatement *build_expr_statement(
 
 	ASTStatement *statement = pool_alloc(parser->pool, sizeof *statement);
 	if (opt_expr == NULL) {
-		statement->type = EMPTY_STATEMENT;
+		statement->t = EMPTY_STATEMENT;
 		return statement;
 	}
 
-	statement->type = EXPR_STATEMENT;
-	statement->val.expr = opt_expr;
+	statement->t = EXPR_STATEMENT;
+	statement->u.expr = opt_expr;
 	return statement;
 }
 
@@ -419,12 +419,12 @@ static ASTToplevel *build_toplevel(Parser *parser, WhichResult *function_def_or_
 	ASTToplevel *toplevel = pool_alloc(parser->pool, sizeof *toplevel);
 	switch (function_def_or_decl->which) {
 	case 0:
-		toplevel->type = FUNCTION_DEF;
-		toplevel->val.function_def = function_def_or_decl->result;
+		toplevel->t = FUNCTION_DEF;
+		toplevel->u.function_def = function_def_or_decl->result;
 		break;
 	case 1:
-		toplevel->type = DECL;
-		toplevel->val.decl = function_def_or_decl->result;
+		toplevel->t = DECL;
+		toplevel->u.decl = function_def_or_decl->result;
 		break;
 	default:
 		UNREACHABLE;
@@ -436,7 +436,7 @@ static ASTToplevel *build_toplevel(Parser *parser, WhichResult *function_def_or_
 static ASTDeclSpecifier *build_storage_class_specifier(Parser *parser, WhichResult *keyword)
 {
 	ASTDeclSpecifier *result = pool_alloc(parser->pool, sizeof *result);
-	result->type = STORAGE_CLASS_SPECIFIER;
+	result->t = STORAGE_CLASS_SPECIFIER;
 
 	ASTStorageClassSpecifier specifier;
 	switch (keyword->which) {
@@ -447,7 +447,7 @@ static ASTDeclSpecifier *build_storage_class_specifier(Parser *parser, WhichResu
 	case 4: specifier = REGISTER_SPECIFIER; break;
 	default: UNREACHABLE;
 	}
-	result->val.storage_class_specifier = specifier;
+	result->u.storage_class_specifier = specifier;
 
 	return result;
 }
@@ -455,7 +455,7 @@ static ASTDeclSpecifier *build_storage_class_specifier(Parser *parser, WhichResu
 static ASTDeclSpecifier *build_type_qualifier(Parser *parser, WhichResult *keyword)
 {
 	ASTDeclSpecifier *result = pool_alloc(parser->pool, sizeof *result);
-	result->type = TYPE_QUALIFIER;
+	result->t = TYPE_QUALIFIER;
 
 	ASTTypeQualifier qualifier;
 	switch (keyword->which) {
@@ -464,7 +464,7 @@ static ASTDeclSpecifier *build_type_qualifier(Parser *parser, WhichResult *keywo
 	case 2: qualifier = VOLATILE_QUALIFIER; break;
 	default: UNREACHABLE;
 	}
-	result->val.type_qualifier = qualifier;
+	result->u.type_qualifier = qualifier;
 
 	return result;
 }
@@ -475,12 +475,12 @@ static ParserResult named_type(Parser *parser)
 		return failure;
 
 	Token *token = read_token(parser);
-	if (token->type != TOK_SYMBOL) {
+	if (token->t != TOK_SYMBOL) {
 		back_up(parser);
 		return failure;
 	}
 
-	char *name = token->val.symbol;
+	char *name = token->u.symbol;
 	TypeTableEntry entry;
 	if (!type_table_look_up_name(&parser->defined_types, name, &entry)) {
 		back_up(parser);
@@ -494,11 +494,11 @@ ASTTypeSpecifier *build_struct_or_union_tagged_named_type(
 		Parser *parser, WhichResult *keyword, Token *name)
 {
 	ASTTypeSpecifier *tagged_type = pool_alloc(parser->pool, sizeof *tagged_type);
-	tagged_type->type = keyword->which == 0 ?
+	tagged_type->t = keyword->which == 0 ?
 		STRUCT_TYPE_SPECIFIER :
 		UNION_TYPE_SPECIFIER;
-	tagged_type->val.struct_or_union_specifier.name = name->val.symbol;
-	tagged_type->val.struct_or_union_specifier.field_list = NULL;
+	tagged_type->u.struct_or_union_specifier.name = name->u.symbol;
+	tagged_type->u.struct_or_union_specifier.field_list = NULL;
 
 	return tagged_type;
 }
@@ -510,15 +510,15 @@ ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
 	IGNORE(rcurly);
 
 	ASTTypeSpecifier *result = pool_alloc(parser->pool, sizeof *result);
-	result->type = keyword->which == 0 ?
+	result->t = keyword->which == 0 ?
 		STRUCT_TYPE_SPECIFIER :
 		UNION_TYPE_SPECIFIER;
 	if (opt_name == NULL) {
-		result->val.struct_or_union_specifier.name = NULL;
+		result->u.struct_or_union_specifier.name = NULL;
 	} else {
-		result->val.struct_or_union_specifier.name = opt_name->val.symbol;
+		result->u.struct_or_union_specifier.name = opt_name->u.symbol;
 	}
-	result->val.struct_or_union_specifier.field_list = field_list;
+	result->u.struct_or_union_specifier.field_list = field_list;
 
 	return result;
 }
@@ -537,7 +537,7 @@ PointerResult *build_next_pointer(Parser *parser, PointerResult *pointers,
 {
 	IGNORE(parser);
 
-	pointers->last->val.pointer_declarator.pointee = pointer;
+	pointers->last->u.pointer_declarator.pointee = pointer;
 	pointers->last = pointer;
 
 	return pointers;
@@ -547,13 +547,13 @@ ASTDeclarator *build_pointee_declarator(Parser *parser, PointerResult *opt_point
 		ASTDirectDeclarator *declarator)
 {
 	ASTDeclarator *result = pool_alloc(parser->pool, sizeof *result);
-	result->type = DIRECT_DECLARATOR;
-	result->val.direct_declarator = declarator;
+	result->t = DIRECT_DECLARATOR;
+	result->u.direct_declarator = declarator;
 
 	if (opt_pointer == NULL)
 		return result;
 
-	opt_pointer->last->val.pointer_declarator.pointee = result;
+	opt_pointer->last->u.pointer_declarator.pointee = result;
 
 	return opt_pointer->first;
 }
@@ -562,7 +562,7 @@ ASTDeclarator *build_terminal_pointer(Parser *parser, PointerResult *pointer_res
 {
 	IGNORE(parser);
 
-	pointer_result->last->val.pointer_declarator.pointee = NULL;
+	pointer_result->last->u.pointer_declarator.pointee = NULL;
 	return pointer_result->first;
 }
 
@@ -573,14 +573,14 @@ ASTDirectDeclarator *build_sub_declarator(Parser *parser,
 	ASTDirectDeclarator *result = pool_alloc(parser->pool, sizeof *result);
 	switch (function_or_array_declarator->which) {
 	case 0:
-		result->type = ARRAY_DECLARATOR;
-		result->val.array_declarator.element_declarator = declarator;
-		result->val.array_declarator.array_length = function_or_array_declarator->result;
+		result->t = ARRAY_DECLARATOR;
+		result->u.array_declarator.element_declarator = declarator;
+		result->u.array_declarator.array_length = function_or_array_declarator->result;
 		break;
 	case 1:
-		result->type = FUNCTION_DECLARATOR;
-		result->val.function_declarator.declarator = declarator;
-		result->val.function_declarator.parameters = function_or_array_declarator->result;
+		result->t = FUNCTION_DECLARATOR;
+		result->u.function_declarator.declarator = declarator;
+		result->u.function_declarator.parameters = function_or_array_declarator->result;
 		break;
 	default: UNREACHABLE;
 	}
@@ -600,10 +600,10 @@ static ParserResult identifier_not_sizeof(Parser *parser)
 {
 	u32 start = parser->position;
 	Token *token = read_token(parser);
-	if (token->type != TOK_SYMBOL) {
+	if (token->t != TOK_SYMBOL) {
 		return revert(parser, start);
 	}
-	if (streq(token->val.symbol, "sizeof")) {
+	if (streq(token->u.symbol, "sizeof")) {
 		return revert(parser, start);
 	}
 
@@ -621,9 +621,9 @@ bool parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool,
 
 	ParserResult result = translation_unit(&parser);
 	if (parser.position != tokens->size) {
-		if (_unexpected_token.type != TOK_INVALID) {
+		if (_unexpected_token.t != TOK_INVALID) {
 			issue_error(&_longest_parse_pos, "Unexpected token %s",
-					token_type_names[_unexpected_token.type]);
+					token_type_names[_unexpected_token.t]);
 		} else {
 			SourceLoc s = { "<unknown>", 0, 0 };
 			issue_error(&s, "Unknown error while parsing");
@@ -736,40 +736,40 @@ static char *expr_type_names[] = {
 
 static void dump_expr(ASTExpr *expr)
 {
-	pretty_printf("%s(", expr_type_names[expr->type]);
-	switch (expr->type) {
+	pretty_printf("%s(", expr_type_names[expr->t]);
+	switch (expr->t) {
 	case INT_LITERAL_EXPR:
-		pretty_printf("%8", expr->val.int_literal);
+		pretty_printf("%8", expr->u.int_literal);
 		break;
 	case STRING_LITERAL_EXPR:
-		pretty_printf("%s", expr->val.string_literal);
+		pretty_printf("%s", expr->u.string_literal);
 		break;
 	case IDENTIFIER_EXPR:
-		pretty_printf("%s", expr->val.identifier);
+		pretty_printf("%s", expr->u.identifier);
 		break;
 	case STRUCT_DOT_FIELD_EXPR: case STRUCT_ARROW_FIELD_EXPR:
-		dump_expr(expr->val.struct_field.struct_expr);
-		pretty_printf(",%s", expr->val.struct_field.field_name);
+		dump_expr(expr->u.struct_field.struct_expr);
+		pretty_printf(",%s", expr->u.struct_field.field_name);
 		break;
 	case POST_INCREMENT_EXPR: case POST_DECREMENT_EXPR:
 	case PRE_INCREMENT_EXPR: case PRE_DECREMENT_EXPR: case ADDRESS_OF_EXPR:
 	case DEREF_EXPR: case UNARY_PLUS_EXPR: case UNARY_MINUS_EXPR:
 	case BIT_NOT_EXPR: case LOGICAL_NOT_EXPR: case SIZEOF_EXPR_EXPR:
-		dump_expr(expr->val.unary_arg);
+		dump_expr(expr->u.unary_arg);
 		break;
 	case FUNCTION_CALL_EXPR:
-		dump_expr(expr->val.function_call.callee);
+		dump_expr(expr->u.function_call.callee);
 		pretty_printf(",ARGS(");
-		dump_args(expr->val.function_call.arg_list);
+		dump_args(expr->u.function_call.arg_list);
 		pretty_printf(")");
 		break;
 	case CAST_EXPR:
-		dump_type_name(expr->val.cast.cast_type);
+		dump_type_name(expr->u.cast.cast_type);
 		pretty_printf(",");
-		dump_expr(expr->val.cast.arg);
+		dump_expr(expr->u.cast.arg);
 		break;
 	case SIZEOF_TYPE_EXPR:
-		dump_type_name(expr->val.type);
+		dump_type_name(expr->u.type);
 		break;
 	case INDEX_EXPR: case MULTIPLY_EXPR: case DIVIDE_EXPR: case MODULO_EXPR:
 	case ADD_EXPR: case MINUS_EXPR: case LEFT_SHIFT_EXPR: case RIGHT_SHIFT_EXPR:
@@ -781,19 +781,19 @@ static void dump_expr(ASTExpr *expr)
 	case MINUS_ASSIGN_EXPR: case LEFT_SHIFT_ASSIGN_EXPR:
 	case RIGHT_SHIFT_ASSIGN_EXPR: case BIT_AND_ASSIGN_EXPR:
 	case BIT_XOR_ASSIGN_EXPR: case BIT_OR_ASSIGN_EXPR: case COMMA_EXPR:
-		dump_expr(expr->val.binary_op.arg1);
+		dump_expr(expr->u.binary_op.arg1);
 		pretty_printf(",");
-		dump_expr(expr->val.binary_op.arg2);
+		dump_expr(expr->u.binary_op.arg2);
 		break;
 	case CONDITIONAL_EXPR:
-		dump_expr(expr->val.ternary_op.arg1);
+		dump_expr(expr->u.ternary_op.arg1);
 		pretty_printf(",");
-		dump_expr(expr->val.ternary_op.arg2);
+		dump_expr(expr->u.ternary_op.arg2);
 		pretty_printf(",");
-		dump_expr(expr->val.ternary_op.arg3);
+		dump_expr(expr->u.ternary_op.arg3);
 		break;
 	default:
-		printf("\n\nGot unknown expr type %d\n", expr->type);
+		printf("\n\nGot unknown expr type %d\n", expr->t);
 		UNREACHABLE;
 	}
 
@@ -810,26 +810,26 @@ static void dump_decls(ASTDecl *decls);
 
 static void dump_statement(ASTStatement *statement)
 {
-	pretty_printf("%s(", statement_type_names[statement->type]);
-	switch (statement->type) {
+	pretty_printf("%s(", statement_type_names[statement->t]);
+	switch (statement->t) {
 	case EMPTY_STATEMENT:
 	case CONTINUE_STATEMENT:
 	case BREAK_STATEMENT:
 		break;
 	case LABELED_STATEMENT:
-		pretty_printf("%s,", statement->val.labeled_statement.label_name);
+		pretty_printf("%s,", statement->u.labeled_statement.label_name);
 		break;
 	case COMPOUND_STATEMENT: {
-		ASTBlockItem *block_item = statement->val.block_item_list;
+		ASTBlockItem *block_item = statement->u.block_item_list;
 		while (block_item != NULL) {
-			switch (block_item->type) {
+			switch (block_item->t) {
 			case BLOCK_ITEM_STATEMENT:
 				pretty_printf("BLOCK_ITEM_STATEMENT(");
-				dump_statement(block_item->val.statement);
+				dump_statement(block_item->u.statement);
 				break;
 			case BLOCK_ITEM_DECL:
 				pretty_printf("BLOCK_ITEM_DECL(");
-				dump_decls(block_item->val.decl);
+				dump_decls(block_item->u.decl);
 				break;
 			}
 			pretty_printf(")");
@@ -842,44 +842,44 @@ static void dump_statement(ASTStatement *statement)
 	}
 	case EXPR_STATEMENT:
 	case RETURN_STATEMENT:
-		dump_expr(statement->val.expr);
+		dump_expr(statement->u.expr);
 		break;
 	case IF_STATEMENT:
-		dump_expr(statement->val.if_statement.condition);
+		dump_expr(statement->u.if_statement.condition);
 		pretty_printf(",");
-		dump_statement(statement->val.if_statement.then_statement);
-		if (statement->val.if_statement.else_statement != NULL) {
+		dump_statement(statement->u.if_statement.then_statement);
+		if (statement->u.if_statement.else_statement != NULL) {
 			pretty_printf(",");
-			dump_statement(statement->val.if_statement.else_statement);
+			dump_statement(statement->u.if_statement.else_statement);
 		}
 		break;
 	case CASE_STATEMENT:
 	case SWITCH_STATEMENT:
 	case WHILE_STATEMENT:
 	case DO_WHILE_STATEMENT:
-		dump_expr(statement->val.expr_and_statement.expr);
+		dump_expr(statement->u.expr_and_statement.expr);
 		pretty_printf(",");
-		dump_statement(statement->val.expr_and_statement.statement);
+		dump_statement(statement->u.expr_and_statement.statement);
 		break;
 	case FOR_STATEMENT:
-		switch (statement->val.for_statement.init_type) {
+		switch (statement->u.for_statement.init_type) {
 		case FOR_INIT_EXPR:
-			if (statement->val.for_statement.init.expr != NULL)
-				dump_expr(statement->val.for_statement.init.expr);
+			if (statement->u.for_statement.init.expr != NULL)
+				dump_expr(statement->u.for_statement.init.expr);
 			break;
 		case FOR_INIT_DECL:
-			dump_decls(statement->val.for_statement.init.decl);
+			dump_decls(statement->u.for_statement.init.decl);
 			break;
 		}
 		pretty_printf(",");
-		if (statement->val.for_statement.condition)
-			dump_expr(statement->val.for_statement.condition);
+		if (statement->u.for_statement.condition)
+			dump_expr(statement->u.for_statement.condition);
 		pretty_printf(",");
-		if (statement->val.for_statement.update_expr != NULL)
-			dump_expr(statement->val.for_statement.update_expr);
+		if (statement->u.for_statement.update_expr != NULL)
+			dump_expr(statement->u.for_statement.update_expr);
 		break;
 	case GOTO_STATEMENT:
-		pretty_printf(statement->val.goto_label);
+		pretty_printf(statement->u.goto_label);
 		break;
 	default:
 		UNIMPLEMENTED;
@@ -891,17 +891,17 @@ static void dump_statement(ASTStatement *statement)
 static void dump_field_declarator_list(ASTFieldDeclarator *field_declarator_list)
 {
 	while (field_declarator_list != NULL) {
-		switch (field_declarator_list->type) {
+		switch (field_declarator_list->t) {
 		case NORMAL_FIELD_DECLARATOR:
 			pretty_printf("NORMAL_FIELD_DECLARATOR(");
-			dump_declarator(field_declarator_list->val.declarator);
+			dump_declarator(field_declarator_list->u.declarator);
 			pretty_printf(")");
 			break;
 		case BITFIELD_FIELD_DECLARATOR:
 			pretty_printf("BITFIELD_DECLARATOR(");
-			dump_declarator(field_declarator_list->val.bitfield.declarator);
+			dump_declarator(field_declarator_list->u.bitfield.declarator);
 			pretty_printf(",");
-			dump_expr(field_declarator_list->val.bitfield.width);
+			dump_expr(field_declarator_list->u.bitfield.width);
 			pretty_printf(")");
 			break;
 		}
@@ -933,20 +933,20 @@ static void dump_struct_or_union_field_list(ASTFieldDecl *field_list)
 
 static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 {
-	switch (type_specifier->type) {
+	switch (type_specifier->t) {
 	case NAMED_TYPE_SPECIFIER:
-		pretty_printf("NAMED_TYPE_SPECIFIER(%s", type_specifier->val.name);
+		pretty_printf("NAMED_TYPE_SPECIFIER(%s", type_specifier->u.name);
 		break;
 	case STRUCT_TYPE_SPECIFIER:
 		pretty_printf("STRUCT_TYPE_SPECIFIER(");
 
-		char *name = type_specifier->val.struct_or_union_specifier.name;
+		char *name = type_specifier->u.struct_or_union_specifier.name;
 		if (name != NULL)
 			pretty_printf("%s,", name);
 
 		pretty_printf("STRUCT_FIELD_LIST(");
 		dump_struct_or_union_field_list(
-				type_specifier->val.struct_or_union_specifier.field_list);
+				type_specifier->u.struct_or_union_specifier.field_list);
 		pretty_printf(")");
 		break;
 	default:
@@ -962,25 +962,25 @@ static void dump_decl_specifier_list(ASTDeclSpecifier *decl_specifier_list)
 
 #define CASE(x) case x: pretty_printf(#x); break;
 	while (decl_specifier_list != NULL) {
-		switch (decl_specifier_list->type) {
+		switch (decl_specifier_list->t) {
 		case STORAGE_CLASS_SPECIFIER:
-			switch (decl_specifier_list->val.storage_class_specifier) {
+			switch (decl_specifier_list->u.storage_class_specifier) {
 			CASE(TYPEDEF_SPECIFIER) CASE(EXTERN_SPECIFIER)
 			CASE(STATIC_SPECIFIER) CASE(AUTO_SPECIFIER) CASE(REGISTER_SPECIFIER)
 			}
 			break;
 		case TYPE_QUALIFIER:
-			switch (decl_specifier_list->val.type_qualifier) {
+			switch (decl_specifier_list->u.type_qualifier) {
 			CASE(CONST_QUALIFIER) CASE(RESTRICT_QUALIFIER) CASE(VOLATILE_QUALIFIER)
 			}
 			break;
 #undef CASE
 		case FUNCTION_SPECIFIER:
-			assert(decl_specifier_list->val.function_specifier == INLINE_SPECIFIER);
+			assert(decl_specifier_list->u.function_specifier == INLINE_SPECIFIER);
 			pretty_printf("INLINE_SPECIFIER");
 			break;
 		case TYPE_SPECIFIER:
-			dump_type_specifier(decl_specifier_list->val.type_specifier);
+			dump_type_specifier(decl_specifier_list->u.type_specifier);
 			break;
 		}
 
@@ -1013,27 +1013,27 @@ static void dump_parameter_decls(ASTParameterDecl *param_decls)
 
 static void dump_direct_declarator(ASTDirectDeclarator *declarator)
 {
-	switch (declarator->type) {
+	switch (declarator->t) {
 	case DECLARATOR:
 		pretty_printf("DECLARATOR(");
-		dump_declarator(declarator->val.declarator);
+		dump_declarator(declarator->u.declarator);
 		break;
 	case IDENTIFIER_DECLARATOR:
-		pretty_printf("IDENTIFIER_DECLARATOR(%s", declarator->val.name);
+		pretty_printf("IDENTIFIER_DECLARATOR(%s", declarator->u.name);
 		break;
 	case FUNCTION_DECLARATOR:
 		pretty_printf("FUNCTION_DECLARATOR(");
-		dump_direct_declarator(declarator->val.function_declarator.declarator);
+		dump_direct_declarator(declarator->u.function_declarator.declarator);
 		pretty_printf(",");
-		dump_parameter_decls(declarator->val.function_declarator.parameters);
+		dump_parameter_decls(declarator->u.function_declarator.parameters);
 		break;
 	case ARRAY_DECLARATOR:
 		pretty_printf("ARRAY_DECLARATOR(");
-		dump_direct_declarator(declarator->val.array_declarator.element_declarator);
+		dump_direct_declarator(declarator->u.array_declarator.element_declarator);
 		
-		if (declarator->val.array_declarator.array_length != NULL) {
+		if (declarator->u.array_declarator.array_length != NULL) {
 			pretty_printf(",");
-			dump_expr(declarator->val.array_declarator.array_length);
+			dump_expr(declarator->u.array_declarator.array_length);
 		}
 		break;
 	}
@@ -1043,17 +1043,17 @@ static void dump_direct_declarator(ASTDirectDeclarator *declarator)
 
 static void dump_declarator(ASTDeclarator *declarator)
 {
-	switch (declarator->type) {
+	switch (declarator->t) {
 	case POINTER_DECLARATOR:
 		pretty_printf("POINTER_DECLARATOR(");
-		dump_decl_specifier_list(declarator->val.pointer_declarator.decl_specifier_list);
+		dump_decl_specifier_list(declarator->u.pointer_declarator.decl_specifier_list);
 		pretty_printf(",");
-		if (declarator->val.pointer_declarator.pointee != NULL)
-			dump_declarator(declarator->val.pointer_declarator.pointee);
+		if (declarator->u.pointer_declarator.pointee != NULL)
+			dump_declarator(declarator->u.pointer_declarator.pointee);
 		break;
 	case DIRECT_DECLARATOR:
 		pretty_printf("DIRECT_DECLARATOR(");
-		dump_direct_declarator(declarator->val.direct_declarator);
+		dump_direct_declarator(declarator->u.direct_declarator);
 		break;
 	}
 
@@ -1063,13 +1063,13 @@ static void dump_declarator(ASTDeclarator *declarator)
 static void dump_designator_list(ASTDesignator *designator_list)
 {
 	while (designator_list != NULL) {
-		switch (designator_list->type) {
+		switch (designator_list->t) {
 		case INDEX_DESIGNATOR:
 			pretty_printf("INDEX_DESIGNATOR(");
-			dump_expr(designator_list->val.index_expr);
+			dump_expr(designator_list->u.index_expr);
 			break;
 		case FIELD_DESIGNATOR:
-			pretty_printf("FIELD_DESIGNATOR(%s", designator_list->val.field_name);
+			pretty_printf("FIELD_DESIGNATOR(%s", designator_list->u.field_name);
 			break;
 		}
 		pretty_printf(")");
@@ -1103,14 +1103,14 @@ static void dump_initializer_element_list(ASTInitializerElement *element_list)
 
 static void dump_initializer(ASTInitializer *initializer)
 {
-	switch (initializer->type) {
+	switch (initializer->t) {
 	case EXPR_INITIALIZER:
 		pretty_printf("EXPR_INITIALIZER(");
-		dump_expr(initializer->val.expr);
+		dump_expr(initializer->u.expr);
 		break;
 	case BRACE_INITIALIZER:
 		pretty_printf("BRACE_INITIALIZER(");
-		dump_initializer_element_list(initializer->val.initializer_element_list);
+		dump_initializer_element_list(initializer->u.initializer_element_list);
 		break;
 	}
 
@@ -1157,21 +1157,21 @@ void dump_toplevel(ASTToplevel *ast)
 	assert(indent_level == 0);
 
 	while (ast != NULL) {
-		switch (ast->type) {
+		switch (ast->t) {
 		case FUNCTION_DEF:
 			pretty_printf("FUNCTION_DEF(");
-			dump_decl_specifier_list(ast->val.function_def->decl_specifier_list);
+			dump_decl_specifier_list(ast->u.function_def->decl_specifier_list);
 			pretty_printf(",");
-			dump_declarator(ast->val.function_def->declarator);
+			dump_declarator(ast->u.function_def->declarator);
 			pretty_printf(",");
 			pretty_printf("OLD_STYLE_PARAM_DECL_LIST(");
-			dump_decls(ast->val.function_def->old_style_param_decl_list);
+			dump_decls(ast->u.function_def->old_style_param_decl_list);
 			pretty_printf("),");
-			dump_statement(ast->val.function_def->body);
+			dump_statement(ast->u.function_def->body);
 			break;
 		case DECL:
 			pretty_printf("DECLS(");
-			dump_decls(ast->val.decl);
+			dump_decls(ast->u.decl);
 			break;
 
 		default:

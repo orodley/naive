@@ -84,7 +84,7 @@ typedef enum TokenType
 
 typedef struct Token
 {
-	TokenType type;
+	TokenType t;
 
 	union
 	{
@@ -92,7 +92,7 @@ typedef struct Token
 		double float_literal;
 		char *symbol;
 		char *string_literal;
-	} val;
+	} u;
 } Token;
 
 typedef struct SourceLoc

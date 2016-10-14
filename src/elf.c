@@ -257,10 +257,10 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 
 	for (u32 i = 0; i < fixups->size; i++) {
 		Fixup *fixup = *ARRAY_REF(fixups, Fixup *, i);
-		if (fixup->source == FIXUP_LABEL)
+		if (fixup->t == FIXUP_LABEL)
 			continue;
 
-		u32 symbol = fixup->val.global->symbol->symtab_index;
+		u32 symbol = fixup->u.global->symbol->symtab_index;
 		assert(symbol != 0);
 
 		ELF64RelocType reloc_type;

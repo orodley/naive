@@ -78,10 +78,10 @@ AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
 static inline void add_dep(AsmInstr *instr, AsmArg dep)
 {
 	assert(instr->num_deps < STATIC_ARRAY_LENGTH(instr->vreg_deps));
-	assert(dep.type == ASM_ARG_REGISTER);
-	assert(dep.val.reg.type == V_REG);
+	assert(dep.t == ASM_ARG_REGISTER);
+	assert(dep.u.reg.t == V_REG);
 
-	instr->vreg_deps[instr->num_deps++] = dep.val.reg.val.vreg_number;;
+	instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg_number;;
 }
 
 // @TODO: Rethink name? "next" kinda suggests side effects, i.e. "move to the
@@ -98,29 +98,29 @@ static RegClass argument_registers[] = {
 
 static AsmArg asm_value(IrValue value)
 {
-	switch (value.kind) {
+	switch (value.t) {
 	case VALUE_CONST:
-		assert((value.val.constant & 0xFFFFFFFF) == value.val.constant);
-		return asm_const(value.val.constant & 0xFFFFFFFF);
+		assert((value.u.constant & 0xFFFFFFFF) == value.u.constant);
+		return asm_const(value.u.constant & 0xFFFFFFFF);
 	case VALUE_INSTR: {
-		IrInstr *instr = value.val.instr;
+		IrInstr *instr = value.u.instr;
 
 		i32 vreg_number = instr->vreg_number;
 		assert(vreg_number != -1);
 
-		assert(value.type.kind == IR_INT || value.type.kind == IR_POINTER);
+		assert(value.type.t == IR_INT || value.type.t == IR_POINTER);
 		return asm_vreg(vreg_number, size_of_ir_type(instr->type) * 8);
 	}
 	case VALUE_ARG: {
-		assert(value.type.kind == IR_INT || value.type.kind == IR_POINTER);
-		assert(value.val.arg_index < STATIC_ARRAY_LENGTH(argument_registers));
+		assert(value.type.t == IR_INT || value.type.t == IR_POINTER);
+		assert(value.u.arg_index < STATIC_ARRAY_LENGTH(argument_registers));
 
 		// We always allocate virtual registers to arguments first, so arg at
 		// index i = virtual register i.
-		return asm_vreg(value.val.arg_index, size_of_ir_type(value.type) * 8);
+		return asm_vreg(value.u.arg_index, size_of_ir_type(value.type) * 8);
 	}
 	case VALUE_GLOBAL: {
-		AsmGlobal *global = value.val.global->asm_global;
+		AsmGlobal *global = value.u.global->asm_global;
 		assert(global != NULL);
 		return asm_global(global);
 	}
@@ -166,11 +166,11 @@ AsmLabel *append_label(AsmBuilder *builder, char *name)
 
 static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 {
-	assert(instr->type.kind == IR_INT);
-	u8 width = instr->type.val.bit_width;
+	assert(instr->type.t == IR_INT);
+	u8 width = instr->type.u.bit_width;
 
-	AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-	AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+	AsmArg arg1 = asm_value(instr->u.binary_op.arg1);
+	AsmArg arg2 = asm_value(instr->u.binary_op.arg2);
 	emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
 	emit_instr2(builder, op, asm_vreg(next_vreg(builder), width), arg2);
 
@@ -179,8 +179,8 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 
 static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 {
-	AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-	AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+	AsmArg arg1 = asm_value(instr->u.binary_op.arg1);
+	AsmArg arg2 = asm_value(instr->u.binary_op.arg2);
 	u32 vreg = next_vreg(builder);
 	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
 	emit_instr2(builder, CMP, arg1, arg2);
@@ -211,12 +211,12 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_FIELD: {
-		IrValue struct_ptr = instr->val.field.struct_ptr;
-		IrType struct_type = instr->val.field.struct_type;
-		assert(struct_ptr.type.kind == IR_POINTER);
-		assert(struct_type.kind == IR_STRUCT);
+		IrValue struct_ptr = instr->u.field.struct_ptr;
+		IrType struct_type = instr->u.field.struct_type;
+		assert(struct_ptr.type.t == IR_POINTER);
+		assert(struct_type.t == IR_STRUCT);
 		IrStructField *field =
-			struct_type.val.strukt.fields + instr->val.field.field_number;
+			struct_type.u.strukt.fields + instr->u.field.field_number;
 		emit_instr2(builder,
 				MOV,
 				asm_vreg(next_vreg(builder), 64),
@@ -230,16 +230,16 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_RET_VOID:
-		assert(ir_global->type.val.function.return_type->kind == IR_VOID);
+		assert(ir_global->type.u.function.return_type->t == IR_VOID);
 		emit_instr1(builder, JMP, asm_label(builder->current_function->ret_label));
 
 		break;
 	case OP_RET: {
-		IrValue arg = instr->val.arg;
-		assert(ir_global->type.kind == IR_FUNCTION);
-		assert(ir_type_eq(ir_global->type.val.function.return_type, &arg.type));
-		IrType *return_type = ir_global->type.val.function.return_type;
-		assert(return_type->kind == IR_INT || return_type->kind == IR_POINTER);
+		IrValue arg = instr->u.arg;
+		assert(ir_global->type.t == IR_FUNCTION);
+		assert(ir_type_eq(ir_global->type.u.function.return_type, &arg.type));
+		IrType *return_type = ir_global->type.u.function.return_type;
+		assert(return_type->t == IR_INT || return_type->t == IR_POINTER);
 
 		emit_instr2(builder,
 				MOV,
@@ -250,44 +250,44 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_BRANCH:
-		emit_instr1(builder, JMP, asm_label(instr->val.target_block->label));
+		emit_instr1(builder, JMP, asm_label(instr->u.target_block->label));
 		break;
 	case OP_COND: {
-		IrValue condition = instr->val.cond.condition;
-		if (condition.kind == VALUE_CONST) {
-			IrBlock *block = condition.val.constant == 0 ?
-				instr->val.cond.else_block :
-				instr->val.cond.then_block;
+		IrValue condition = instr->u.cond.condition;
+		if (condition.t == VALUE_CONST) {
+			IrBlock *block = condition.u.constant == 0 ?
+				instr->u.cond.else_block :
+				instr->u.cond.then_block;
 			emit_instr1(builder, JMP, asm_label(block->label));
 		} else {
 			emit_instr2(builder, CMP, asm_value(condition), asm_const(0));
-			emit_instr1(builder, JE, asm_label(instr->val.cond.else_block->label));
-			emit_instr1(builder, JMP, asm_label(instr->val.cond.then_block->label));
+			emit_instr1(builder, JE, asm_label(instr->u.cond.else_block->label));
+			emit_instr1(builder, JMP, asm_label(instr->u.cond.then_block->label));
 		}
 		break;
 	}
 	case OP_STORE: {
-		IrValue ir_pointer = instr->val.store.pointer;
-		IrValue ir_value = instr->val.store.value;
-		IrType type = instr->val.store.type;
+		IrValue ir_pointer = instr->u.store.pointer;
+		IrValue ir_value = instr->u.store.value;
+		IrType type = instr->u.store.type;
 		assert(ir_type_eq(&ir_value.type, &type));
 
 		AsmArg pointer = asm_value(ir_pointer);
 		AsmArg value = asm_value(ir_value);
 
-		if (ir_pointer.kind == VALUE_GLOBAL) {
+		if (ir_pointer.t == VALUE_GLOBAL) {
 			AsmArg rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
 						64,
 						(AsmConst) {
-							.type = ASM_CONST_GLOBAL,
-							.val.global = ir_pointer.val.global->asm_global
+							.t = ASM_CONST_GLOBAL,
+							.u.global = ir_pointer.u.global->asm_global
 						});
 			emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
-		} else if (size_of_ir_type(type) < 8 || value.type != ASM_ARG_CONST) {
+		} else if (size_of_ir_type(type) < 8 || value.t != ASM_ARG_CONST) {
 			emit_instr2(builder, MOV, asm_deref(pointer), value);
-		} else if (size_of_ir_type(type) == 8 && value.type == ASM_ARG_CONST) {
+		} else if (size_of_ir_type(type) == 8 && value.t == ASM_ARG_CONST) {
 			AsmArg temp_vreg = asm_vreg(next_vreg(builder), 64);
 			emit_instr2(builder, MOV, temp_vreg, value);
 			emit_instr2(builder, MOV, asm_deref(pointer), temp_vreg);
@@ -298,19 +298,19 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_LOAD: {
-		IrValue pointer = instr->val.load.pointer;
-		IrType type = instr->val.load.type;
+		IrValue pointer = instr->u.load.pointer;
+		IrType type = instr->u.load.type;
 		AsmArg target = asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8);
 		assign_vreg(builder, instr);
 
-		if (pointer.kind == VALUE_GLOBAL) {
+		if (pointer.t == VALUE_GLOBAL) {
 			AsmArg rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
 						64,
 						(AsmConst) {
-							.type = ASM_CONST_GLOBAL,
-							.val.global = pointer.val.global->asm_global
+							.t = ASM_CONST_GLOBAL,
+							.u.global = pointer.u.global->asm_global
 						});
 			emit_instr2(builder,
 					MOV,
@@ -323,58 +323,58 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_CAST: {
-		assert(instr->val.arg.kind == VALUE_INSTR);
-		instr->vreg_number = instr->val.arg.val.instr->vreg_number;
+		assert(instr->u.arg.t == VALUE_INSTR);
+		instr->vreg_number = instr->u.arg.u.instr->vreg_number;
 
 		break;
 	}
 	case OP_ZEXT: {
-		assert(instr->type.kind == IR_INT);
-		assert(instr->val.arg.type.kind == IR_INT);
+		assert(instr->type.t == IR_INT);
+		assert(instr->u.arg.type.t == IR_INT);
 
-		if (instr->type.val.bit_width == 64
-				&& instr->val.arg.type.val.bit_width == 32) {
+		if (instr->type.u.bit_width == 64
+				&& instr->u.arg.type.u.bit_width == 32) {
 			// Implicit zero-extending of MOV 32 - 64
 			emit_instr2(builder,
 					MOV,
 					asm_vreg(next_vreg(builder), 64),
-					asm_value(instr->val.arg));
+					asm_value(instr->u.arg));
 			assign_vreg(builder, instr);
 		} else {
 			emit_instr2(builder,
 					MOVZX,
-					asm_vreg(next_vreg(builder), instr->type.val.bit_width),
-					asm_value(instr->val.arg));
+					asm_vreg(next_vreg(builder), instr->type.u.bit_width),
+					asm_value(instr->u.arg));
 			assign_vreg(builder, instr);
 		}
 
 		break;
 	}
 	case OP_SEXT: {
-		assert(instr->type.kind == IR_INT);
-		assert(instr->val.arg.type.kind == IR_INT);
+		assert(instr->type.t == IR_INT);
+		assert(instr->u.arg.type.t == IR_INT);
 
 		emit_instr2(builder,
 				MOVSX,
-				asm_vreg(next_vreg(builder), instr->type.val.bit_width),
-				asm_value(instr->val.arg));
+				asm_vreg(next_vreg(builder), instr->type.u.bit_width),
+				asm_value(instr->u.arg));
 		assign_vreg(builder, instr);
 		break;
 	}
 	case OP_CALL: {
-		u32 arity = instr->val.call.arity;
+		u32 arity = instr->u.call.arity;
 		assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
 		for (u32 i = 0; i < arity; i++) {
-			AsmArg arg = asm_value(instr->val.call.arg_array[i]);
+			AsmArg arg = asm_value(instr->u.call.arg_array[i]);
 			// Use the 64-bit version of the register, as all argument
 			// registers are 64-bit.
-			if (arg.type == ASM_ARG_REGISTER)
-				arg.val.reg.width = 64;
+			if (arg.t == ASM_ARG_REGISTER)
+				arg.u.reg.width = 64;
 			AsmArg arg_target_reg = pre_alloced_vreg(builder, argument_registers[i], 64);
 			emit_instr2(builder, MOV, arg_target_reg, arg);
 		}
 
-		emit_instr1(builder, CALL, asm_value(instr->val.call.callee));
+		emit_instr1(builder, CALL, asm_value(instr->u.call.callee));
 		assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
 		break;
 	}
@@ -382,10 +382,10 @@ static void asm_gen_instr(
 	case OP_BIT_AND: asm_gen_binary_instr(builder, instr, AND); break;
 	case OP_BIT_OR: asm_gen_binary_instr(builder, instr, OR); break;
 	case OP_BIT_NOT: {
-		assert(instr->type.kind == IR_INT);
-		u8 width = instr->type.val.bit_width;
+		assert(instr->type.t == IR_INT);
+		u8 width = instr->type.u.bit_width;
 
-		AsmArg arg = asm_value(instr->val.arg);
+		AsmArg arg = asm_value(instr->u.arg);
 		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg);
 		emit_instr1(builder, NOT, asm_vreg(next_vreg(builder), width));
 
@@ -393,10 +393,10 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_LOG_NOT: {
-		assert(instr->type.kind == IR_INT);
-		u8 width = instr->type.val.bit_width;
+		assert(instr->type.t == IR_INT);
+		u8 width = instr->type.u.bit_width;
 
-		AsmArg arg = asm_value(instr->val.arg);
+		AsmArg arg = asm_value(instr->u.arg);
 		u32 vreg = next_vreg(builder);
 		emit_instr2(builder, XOR, asm_vreg(vreg, width), asm_vreg(vreg, width));
 		emit_instr2(builder, TEST, arg, arg);
@@ -408,19 +408,19 @@ static void asm_gen_instr(
 	case OP_ADD: asm_gen_binary_instr(builder, instr, ADD); break;
 	case OP_SUB: asm_gen_binary_instr(builder, instr, SUB); break;
 	case OP_MUL: {
-		assert(instr->type.kind == IR_INT);
-		u8 width = instr->type.val.bit_width;
+		assert(instr->type.t == IR_INT);
+		u8 width = instr->type.u.bit_width;
 
-		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+		AsmArg arg1 = asm_value(instr->u.binary_op.arg1);
+		AsmArg arg2 = asm_value(instr->u.binary_op.arg2);
 
-		if (arg1.type != ASM_ARG_CONST && arg2.type != ASM_ARG_CONST) {
+		if (arg1.t != ASM_ARG_CONST && arg2.t != ASM_ARG_CONST) {
 			emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
 			emit_instr2(builder, IMUL, asm_vreg(next_vreg(builder), width), arg2);
 		} else {
 			AsmArg const_arg;
 			AsmArg non_const_arg;
-			if (arg1.type == ASM_ARG_CONST) {
+			if (arg1.t == ASM_ARG_CONST) {
 				const_arg = arg1;
 				non_const_arg = arg2;
 			} else {
@@ -428,7 +428,7 @@ static void asm_gen_instr(
 				non_const_arg = arg1;
 			}
 
-			assert(non_const_arg.type != ASM_ARG_CONST);
+			assert(non_const_arg.t != ASM_ARG_CONST);
 
 			emit_instr3(builder, IMUL,
 					asm_vreg(next_vreg(builder), width),
@@ -440,21 +440,21 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_DIV: {
-		assert(instr->type.kind == IR_INT);
-		u8 width = instr->type.val.bit_width;
+		assert(instr->type.t == IR_INT);
+		u8 width = instr->type.u.bit_width;
 
-		AsmArg arg1 = asm_value(instr->val.binary_op.arg1);
-		AsmArg arg2 = asm_value(instr->val.binary_op.arg2);
+		AsmArg arg1 = asm_value(instr->u.binary_op.arg1);
+		AsmArg arg2 = asm_value(instr->u.binary_op.arg2);
 
 		AsmArg reg_arg2 = arg2;
-		if (arg2.type == ASM_ARG_CONST) {
+		if (arg2.t == ASM_ARG_CONST) {
 			reg_arg2 = asm_vreg(next_vreg(builder), width);
 			emit_instr2(builder, MOV, reg_arg2, arg2);
 			append_vreg(builder);
 		}
 
 		AsmArg quotient = pre_alloced_vreg(builder, REG_CLASS_A, width);
-		instr->vreg_number = quotient.val.reg.val.vreg_number;
+		instr->vreg_number = quotient.u.reg.u.vreg_number;
 		emit_instr2(builder, MOV, quotient, arg1);
 
 		AsmArg sign_extension = pre_alloced_vreg(builder, REG_CLASS_D, width);
@@ -483,10 +483,10 @@ static void asm_gen_instr(
 
 static Register *arg_reg(AsmArg *arg)
 {
-	if (arg->type == ASM_ARG_REGISTER)
-		return &arg->val.reg;
-	if (arg->type == ASM_ARG_OFFSET_REGISTER)
-		return &arg->val.offset_register.reg;
+	if (arg->t == ASM_ARG_REGISTER)
+		return &arg->u.reg;
+	if (arg->t == ASM_ARG_OFFSET_REGISTER)
+		return &arg->u.offset_register.reg;
 	return NULL;
 }
 
@@ -567,8 +567,8 @@ static void allocate_registers(AsmBuilder *builder)
 		for (u32 j = 0; j < instr->num_args; j++) {
 			AsmArg *arg = instr->args + j;
 			Register *reg = arg_reg(arg);
-			if (reg != NULL && reg->type == V_REG) {
-				u32 reg_num = reg->val.vreg_number;
+			if (reg != NULL && reg->t == V_REG) {
+				u32 reg_num = reg->u.vreg_number;
 				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
 						VRegInfo, reg_num);
 				if (vreg->live_range_start == -1) {
@@ -754,14 +754,14 @@ static void allocate_registers(AsmBuilder *builder)
 			if (reg == NULL)
 				continue;
 
-			if (reg->type == V_REG) {
-				u32 vreg_number = reg->val.vreg_number;
+			if (reg->t == V_REG) {
+				u32 vreg_number = reg->u.vreg_number;
 				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
 						VRegInfo, vreg_number);
 				RegClass class = vreg->assigned_register;
 
-				reg->type = PHYS_REG;
-				reg->val.class = class;
+				reg->t = PHYS_REG;
+				reg->u.class = class;
 			}
 		}
 	}
@@ -769,21 +769,21 @@ static void allocate_registers(AsmBuilder *builder)
 
 void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 {
-	assert(ir_global->type.kind == IR_FUNCTION);
-	IrFunction *ir_func = &ir_global->initializer->val.function;
+	assert(ir_global->type.t == IR_FUNCTION);
+	IrFunction *ir_func = &ir_global->initializer->u.function;
 
 	AsmGlobal *asm_func = ir_global->asm_global;
 	assert(asm_func != NULL);
 
-	builder->current_function = &asm_func->val.function;
-	builder->current_block = &asm_func->val.function.body;
+	builder->current_function = &asm_func->u.function;
+	builder->current_block = &asm_func->u.function.body;
 
 	builder->local_stack_usage = 0;
 
 	AsmLabel *ret_label = pool_alloc(&builder->asm_module.pool, sizeof *ret_label);
 	ret_label->name = "ret";
 	ret_label->offset = 0;
-	asm_func->val.function.ret_label = ret_label;
+	asm_func->u.function.ret_label = ret_label;
 
 	asm_func->defined = ir_global->initializer != NULL;
 	if (!asm_func->defined) {
@@ -793,12 +793,12 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
 	ARRAY_INIT(&builder->virtual_registers, VRegInfo, 20);
-	IrType return_type = *ir_global->type.val.function.return_type;
-	assert(return_type.kind == IR_INT
-			|| return_type.kind == IR_POINTER
-			|| return_type.kind == IR_VOID);
+	IrType return_type = *ir_global->type.u.function.return_type;
+	assert(return_type.t == IR_INT
+			|| return_type.t == IR_POINTER
+			|| return_type.t == IR_VOID);
 
-	u32 arity = ir_global->type.val.function.arity;
+	u32 arity = ir_global->type.u.function.arity;
 	assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
 	for (u32 i = 0; i < arity; i++) {
 		VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
@@ -836,9 +836,9 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		for (u32 j = 0; j < instr->num_args; j++) {
 			Register *reg = arg_reg(instr->args + j);
 			if (reg != NULL &&
-					reg->type == PHYS_REG &&
-					is_callee_save(reg->val.class)) {
-				used_callee_save_regs_bitset |= 1 << reg->val.class;
+					reg->t == PHYS_REG &&
+					is_callee_save(reg->u.class)) {
+				used_callee_save_regs_bitset |= 1 << reg->u.class;
 			}
 		}
 	}
@@ -897,23 +897,23 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 static void write_initializer(IrInit *init, u8 *value)
 {
-	switch (init->type.kind) {
+	switch (init->type.t) {
 	case IR_INT: case IR_POINTER:
 		for (u32 n = 0; n < size_of_ir_type(init->type); n++) {
-			u8 byte = (init->val.integer >> (n * 8)) & 0xFF;
+			u8 byte = (init->u.integer >> (n * 8)) & 0xFF;
 			*value++ = byte;
 		}
 		break;
 	case IR_ARRAY:
-		for (u32 n = 0; n < init->type.val.array.size; n++) {
-			write_initializer(init->val.array_elems + n, value);
-			value += size_of_ir_type(*init->type.val.array.elem_type);
+		for (u32 n = 0; n < init->type.u.array.size; n++) {
+			write_initializer(init->u.array_elems + n, value);
+			value += size_of_ir_type(*init->type.u.array.elem_type);
 		}
 		break;
 	case IR_STRUCT:
-		for (u32 n = 0; n < init->type.val.strukt.num_fields; n++) {
-			write_initializer(init->val.struct_fields + n, value);
-			value += size_of_ir_type(init->type.val.strukt.fields[n].type);
+		for (u32 n = 0; n < init->type.u.strukt.num_fields; n++) {
+			write_initializer(init->u.struct_fields + n, value);
+			value += size_of_ir_type(init->type.u.strukt.fields[n].type);
 		}
 		break;
 	case IR_FUNCTION: case IR_VOID:
@@ -935,15 +935,15 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 		case IR_LOCAL_LINKAGE: asm_global->linkage = ASM_LOCAL_LINKAGE; break;
 		}
 
-		if (ir_global->type.kind == IR_FUNCTION) {
-			AsmFunction *new_function = &asm_global->val.function;
+		if (ir_global->type.t == IR_FUNCTION) {
+			AsmFunction *new_function = &asm_global->u.function;
 
-			asm_global->type = ASM_GLOBAL_FUNCTION;
+			asm_global->t = ASM_GLOBAL_FUNCTION;
 			init_asm_function(new_function, ir_global->name);
 		} else {
-			asm_global->type = ASM_GLOBAL_VAR;
-			asm_global->val.var.size_bytes = size_of_ir_type(ir_global->type);
-			asm_global->val.var.value = NULL;
+			asm_global->t = ASM_GLOBAL_VAR;
+			asm_global->u.var.size_bytes = size_of_ir_type(ir_global->type);
+			asm_global->u.var.value = NULL;
 		}
 
 		ir_global->asm_global = asm_global;
@@ -954,16 +954,16 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
-		if (ir_global->type.kind == IR_FUNCTION) {
+		if (ir_global->type.t == IR_FUNCTION) {
 			asm_gen_function(builder, ir_global);
 		} else {
 			IrInit *init = ir_global->initializer;
 			if (init != NULL) {
 				AsmGlobal *asm_global = ir_global->asm_global;
-				u32 size = asm_global->val.var.size_bytes;
-				asm_global->val.var.value =
+				u32 size = asm_global->u.var.size_bytes;
+				asm_global->u.var.value =
 					pool_alloc(&builder->asm_module.pool, size);
-				write_initializer(init, asm_global->val.var.value);
+				write_initializer(init, asm_global->u.var.value);
 			}
 		}
 	}

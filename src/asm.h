@@ -41,13 +41,13 @@ typedef struct Register
 	{
 		PHYS_REG,
 		V_REG,
-	} type;
+	} t;
 
 	union
 	{
 		u32 vreg_number;
 		RegClass class;
-	} val;
+	} u;
 } Register;
 
 typedef struct AsmLabel
@@ -62,13 +62,13 @@ typedef struct AsmConst
 	{
 		ASM_CONST_IMMEDIATE,
 		ASM_CONST_GLOBAL,
-	} type;
+	} t;
 
 	union
 	{
 		u64 immediate;
 		struct AsmGlobal *global;
-	} val;
+	} u;
 } AsmConst;
 
 typedef struct AsmArg
@@ -83,7 +83,7 @@ typedef struct AsmArg
 		ASM_ARG_OFFSET_REGISTER,
 		ASM_ARG_LABEL,
 		ASM_ARG_CONST,
-	} type;
+	} t;
 
 	union
 	{
@@ -95,7 +95,7 @@ typedef struct AsmArg
 		} offset_register;
 		AsmConst constant;
 		AsmLabel *label;
-	} val;
+	} u;
 } AsmArg;
 
 #define ASM_OPS \
@@ -170,7 +170,7 @@ typedef struct AsmGlobal
 	{
 		ASM_GLOBAL_FUNCTION,
 		ASM_GLOBAL_VAR,
-	} type;
+	} t;
 
 	char *name;
 	AsmLinkage linkage;
@@ -188,7 +188,7 @@ typedef struct AsmGlobal
 			u32 size_bytes;
 			u8 *value;
 		} var;
-	} val;
+	} u;
 } AsmGlobal;
 
 typedef enum FixupType
@@ -199,23 +199,23 @@ typedef enum FixupType
 
 typedef struct Fixup
 {
+	enum
+	{
+		FIXUP_LABEL,
+		FIXUP_GLOBAL,
+	} t;
+
 	FixupType type;
 
 	u32 offset;
 	u32 next_instr_offset;
 	u32 size_bytes;
 
-	enum
-	{
-		FIXUP_LABEL,
-		FIXUP_GLOBAL,
-	} source;
-
 	union
 	{
 		AsmLabel *label;
 		AsmGlobal *global;
-	} val;
+	} u;
 } Fixup;
 
 typedef struct AsmModule

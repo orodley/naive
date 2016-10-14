@@ -157,15 +157,15 @@ def arg_condition(arg, i):
     if arg.startswith('r/m'):
         width = arg[3:]
         check_width(width)
-        return ('((instr->args[%d].type == ASM_ARG_REGISTER'
-                + ' && instr->args[%d].val.reg.width == %s)'
+        return ('((instr->args[%d].t == ASM_ARG_REGISTER'
+                + ' && instr->args[%d].u.reg.width == %s)'
                 + ' || (instr->args[%d].is_deref'
-                + ' && instr->args[%d].val.reg.width == 64))') % (i, i, width, i, i)
+                + ' && instr->args[%d].u.reg.width == 64))') % (i, i, width, i, i)
     if arg[0] == 'r' and all(c.isdigit() for c in arg[1:]):
         width = arg[1:]
         check_width(width)
-        return ('(instr->args[%d].type == ASM_ARG_REGISTER)'
-                + ' && instr->args[%d].val.reg.width == %s'
+        return ('(instr->args[%d].t == ASM_ARG_REGISTER)'
+                + ' && instr->args[%d].u.reg.width == %s'
                 + ' && !instr->args[%d].is_deref') % (i, i, width, i)
     if arg == 'imm8':
         return '(is_const_and_fits(instr->args[%d], 8))' % i
@@ -174,8 +174,8 @@ def arg_condition(arg, i):
     if arg == 'imm64':
         return '(is_const_and_fits(instr->args[%d], 64))' % i
     if arg == 'rel':
-        return ('(instr->args[%d].type == ASM_ARG_LABEL'
-                + ' || instr->args[%d].type == ASM_ARG_CONST)') % (i, i)
+        return ('(instr->args[%d].t == ASM_ARG_LABEL'
+                + ' || instr->args[%d].t == ASM_ARG_CONST)') % (i, i)
 
     print "Unknown arg type: '%s'" % arg
     assert False
