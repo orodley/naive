@@ -1162,7 +1162,16 @@ static bool handle_pp_directive(Reader *reader)
 		} else if (streq(directive, "line")) {
 			UNIMPLEMENTED;
 		} else if (streq(directive, "error")) {
-			UNIMPLEMENTED;
+			advance(reader);
+
+			u32 start = reader->position;
+			while (read_char(reader) != '\n')
+				;
+
+			u32 length = reader->position - start - 1;
+			char *error = strndup(reader->buffer.buffer + start, length);
+			issue_error(&directive_start, error);
+			return false;
 		} else if (streq(directive, "pragma")) {
 			UNIMPLEMENTED;
 		} else {
