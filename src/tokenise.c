@@ -237,18 +237,11 @@ static inline bool ident_char(char c)
 
 static Token *append_token(Reader *reader, SourceLoc source_loc, TokenType type)
 {
-	if (ignoring_tokens(reader)) {
-		// We don't want to keep the token, since we're ignoring tokens, but
-		// the caller needs a valid pointer. So we give them this one.
-		static SourceToken dummy_token;
-		return (Token *)&dummy_token;
-	} else {
-		SourceToken *source_token = ARRAY_APPEND(reader->tokens, SourceToken);
-		source_token->token.type = type;
-		source_token->source_loc = source_loc;
+	SourceToken *source_token = ARRAY_APPEND(reader->tokens, SourceToken);
+	source_token->token.type = type;
+	source_token->source_loc = source_loc;
 
-		return (Token *)source_token;
-	} 
+	return (Token *)source_token;
 }
 
 // @TODO: Handle backslash newline in the middle of a symbol.
@@ -517,6 +510,19 @@ cleanup:
 static bool tokenise_aux(Reader *reader)
 {
 	while (!at_end(reader)) {
+		while (ignoring_tokens(reader)) {
+			if (at_end(reader)) {
+				issue_error(&reader->source_loc,
+						"Unterminated preprocessor conditional");
+			}
+
+			if (read_char(reader) == '\n' && peek_char(reader) == '#') {
+				advance(reader);
+				if (!handle_pp_directive(reader))
+					return false;
+			}
+		}
+
 		skip_whitespace_and_comments(reader, true);
 		if (at_end(reader))
 			break;
@@ -796,7 +802,7 @@ static bool tokenise_aux(Reader *reader)
 				back_up(reader);
 
 				if (!reader->first_token_of_line) {
-					issue_error(&reader->source_loc,
+					issue_error(&start_source_loc,
 							"Unexpected preprocessor directive");
 					return false;
 				} else if (!handle_pp_directive(reader)) {
@@ -1048,6 +1054,10 @@ static bool handle_pp_directive(Reader *reader)
 				scope->condition = false;
 		}
 	} else if (streq(directive, "endif")) {
+		if (reader->pp_scope_stack.size == 0) {
+			issue_error(&directive_start, "Unmatched #endif");
+			return false;
+		}
 		ARRAY_POP(&reader->pp_scope_stack, PPCondScope);
 	} else if (!ignoring_tokens(reader)) {
 		if (streq(directive, "include")) {
@@ -1139,8 +1149,8 @@ static bool handle_pp_directive(Reader *reader)
 			skip_whitespace_and_comments(reader, false);
 			Array(char) macro_value_chars;
 			ARRAY_INIT(&macro_value_chars, char, 10);
-			while ((c = read_char(reader)) != '\n')
-				*ARRAY_APPEND(&macro_value_chars, char) = c;
+			while (peek_char(reader) != '\n')
+				*ARRAY_APPEND(&macro_value_chars, char) = read_char(reader);
 
 			char *macro_value = strndup((char *)macro_value_chars.elements,
 					macro_value_chars.size);
@@ -1158,17 +1168,40 @@ static bool handle_pp_directive(Reader *reader)
 			macro->value = macro_value;
 			macro->arg_names = arg_names;
 		} else if (streq(directive, "undef")) {
-			UNIMPLEMENTED;
+			skip_whitespace_and_comments(reader, false);
+
+			char *macro_name = read_symbol(reader);
+			if (macro_name == NULL) {
+				issue_error(&reader->source_loc,
+						"Expected identifier after #undef");
+				return false;
+			}
+
+			// @NOTE: #undef on an undefined macro is allowed (6.10.3.5.2)
+			for (u32 i = 0; i < reader->macro_env.size; i++) {
+				Macro *m = ARRAY_REF(&reader->macro_env, Macro, i);
+				if (streq(m->name, macro_name)) {
+					ARRAY_REMOVE(&reader->macro_env, Macro, i);
+					break;
+				}
+			}
+
+			skip_whitespace_and_comments(reader, false);
+			if (peek_char(reader) != '\n') {
+				issue_error(&reader->source_loc,
+						"Unexpected token after macro name");
+				return false;
+			}
 		} else if (streq(directive, "line")) {
 			UNIMPLEMENTED;
 		} else if (streq(directive, "error")) {
 			advance(reader);
 
 			u32 start = reader->position;
-			while (read_char(reader) != '\n')
-				;
+			while (peek_char(reader) != '\n')
+				advance(reader);
 
-			u32 length = reader->position - start - 1;
+			u32 length = reader->position - start;
 			char *error = strndup(reader->buffer.buffer + start, length);
 			issue_error(&directive_start, error);
 			return false;

@@ -210,8 +210,8 @@ static int compile_file(char *input_filename, char *output_filename, bool syntax
 
 	Pool ast_pool;
 	pool_init(&ast_pool, 1024);
-	ASTToplevel *ast = parse_toplevel(&tokens, &ast_pool);
-	if (ast == NULL)
+	ASTToplevel *ast;
+	if (!parse_toplevel(&tokens, &ast_pool, &ast))
 		return 3;
 
 	if (flag_dump_ast) {

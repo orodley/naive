@@ -5,7 +5,7 @@
 #ifdef FOO
 int foo
 # ifndef FOO
-XXX
+ @@@ awefawef ' " garbage that doesn't even tokenise
 # else
 = 3;
 # endif

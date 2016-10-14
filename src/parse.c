@@ -613,7 +613,8 @@ static ParserResult identifier_not_sizeof(Parser *parser)
 
 // The input array consists of SourceTokens, but we treat them as Tokens most
 // of the time.
-ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
+bool parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool,
+		ASTToplevel **toplevel)
 {
 	Parser parser = { ast_pool, tokens, 0, { ARRAY_ZEROED } };
 	type_table_init(&parser.defined_types);
@@ -628,12 +629,13 @@ ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool)
 			issue_error(&s, "Unknown error while parsing");
 		}
 
-		return NULL;
+		return false;
 	}
 
 	type_table_free(&parser.defined_types);
 
-	return result.result;
+	*toplevel = result.result;
+	return true;
 }
 
 

@@ -462,6 +462,7 @@ typedef struct ASTToplevel
 } ASTToplevel;
 
 void dump_toplevel(ASTToplevel *ast);
-ASTToplevel *parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool);
+bool parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool,
+		ASTToplevel **toplevel);
 
 #endif
