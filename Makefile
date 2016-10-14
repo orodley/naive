@@ -54,15 +54,15 @@ ncc: $(call objs_for_dir,src)
 	@echo 'CC $@'
 	@$(CC) $(CFLAGS) $^ -o $@
 
-libc.a: $(call objs_for_dir,libc)
+libc.a: $(call objs_for_dir,libc) | $(HEADERS)
 	@echo 'AR $@'
 	@$(AR) -cr $@ $^
 	@[ -w /opt/naive ] \
 		|| (echo 'Please create /opt/naive and give yourself write permissions' \
 			&& exit 1)
 	@cp $@ /opt/naive
-	@mkdir -p /opt/naive/include
-	@cp libc/include/* /opt/naive/include
+	@rm -rf /opt/naive/include
+	@cp -r libc/include /opt/naive
 
 
 libc/%.o: libc/%.c
