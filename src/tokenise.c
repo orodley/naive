@@ -82,6 +82,12 @@ static Macro *look_up_macro(Array(Macro) *macro_env, char *name)
 	return NULL;
 }
 
+typedef struct PPCondScope
+{
+	bool condition;
+	enum { THEN, ELSE } position;
+} PPCondScope;
+
 typedef struct Reader
 {
 	Array(SourceToken) *tokens;
@@ -92,9 +98,20 @@ typedef struct Reader
 	SourceLoc source_loc;
 	u32 last_line_length;
 	bool first_token_of_line;
+	Array(PPCondScope) pp_scope_stack;
 
 	Array(Macro) macro_env;
 } Reader;
+
+static inline bool ignoring_tokens(Reader *reader)
+{
+	Array(PPCondScope) *pp_scope_stack = &reader->pp_scope_stack;
+	if (pp_scope_stack->size == 0)
+		return false;
+
+	return !ARRAY_REF(pp_scope_stack, PPCondScope, pp_scope_stack->size - 1)
+		->condition;
+}
 
 static inline bool at_end(Reader *reader) {
 	return reader->position >= reader->buffer.length;
@@ -162,6 +179,7 @@ static void skip_whitespace_and_comments(Reader *reader, bool skip_newline)
 {
 	while (!at_end(reader)) {
 		switch (peek_char(reader)) {
+		// @TODO: Backslash before newline.
 		case '\n':
 			reader->first_token_of_line = true;
 			if (skip_newline)
@@ -219,16 +237,27 @@ static inline bool ident_char(char c)
 
 static Token *append_token(Reader *reader, SourceLoc source_loc, TokenType type)
 {
-	SourceToken *source_token = ARRAY_APPEND(reader->tokens, SourceToken);
-	source_token->token.type = type;
-	source_token->source_loc = source_loc;
+	if (ignoring_tokens(reader)) {
+		// We don't want to keep the token, since we're ignoring tokens, but
+		// the caller needs a valid pointer. So we give them this one.
+		static SourceToken dummy_token;
+		return (Token *)&dummy_token;
+	} else {
+		SourceToken *source_token = ARRAY_APPEND(reader->tokens, SourceToken);
+		source_token->token.type = type;
+		source_token->source_loc = source_loc;
 
-	return (Token *)source_token;
+		return (Token *)source_token;
+	} 
 }
 
+// @TODO: Handle backslash newline in the middle of a symbol.
 static char *read_symbol(Reader *reader)
 {
-	u32 start_index = reader->position - 1;
+	u32 start_index = reader->position;
+	if (!initial_ident_char(peek_char(reader)))
+		return NULL;
+
 	for (;;) {
 		char c = peek_char(reader);
 		if (!ident_char(c))
@@ -246,7 +275,6 @@ static bool tokenise_file(Reader *reader, char *input_filename,
 		SourceLoc blame_source_loc);
 static bool tokenise_aux(Reader *reader);
 
-// @IMPROVE: Replace with a finite state machine
 bool tokenise(Array(SourceToken) *tokens, char *input_filename)
 {
 	ARRAY_INIT(tokens, SourceToken, 500);
@@ -255,6 +283,7 @@ bool tokenise(Array(SourceToken) *tokens, char *input_filename)
 	reader.tokens = tokens;
 	reader.source_loc = (SourceLoc) { NULL, 0, 0 };
 	ARRAY_INIT(&reader.macro_env, Macro, 10);
+	ARRAY_INIT(&reader.pp_scope_stack, PPCondScope, 5);
 
 	bool ret = tokenise_file(&reader, input_filename, reader.source_loc);
 
@@ -811,6 +840,7 @@ static bool tokenise_aux(Reader *reader)
 			UNREACHABLE;
 
 		default: {
+			back_up(reader);
 			char *symbol = read_symbol(reader);
 			if (streq(symbol, "__LINE__")) {
 				Token *line_number =
@@ -937,144 +967,209 @@ static char *look_up_include_path(char *including_file, char *include_path)
 	return NULL;
 }
 
+static void start_pp_if(Reader *reader, bool condition)
+{
+	Array(PPCondScope) *stack = &reader->pp_scope_stack;
+	if (stack->size >= 1
+			&& !ARRAY_REF(stack, PPCondScope, stack->size - 1)->condition) {
+		condition = false;
+	}
+
+	*ARRAY_APPEND(stack, PPCondScope) = (PPCondScope) {
+		.condition = condition,
+		.position = THEN,
+	};
+}
+
 static bool handle_pp_directive(Reader *reader)
 {
 	IGNORE(reader);
 	skip_whitespace_and_comments(reader, false);
-	char c = read_char(reader);
+	char c = peek_char(reader);
 	// Empty directive
-	if (c == '\n')
+	if (c == '\n') {
+		advance(reader);
 		return true;
+	}
 
-	if (!initial_ident_char(c)) {
+	SourceLoc directive_start = reader->source_loc;
+
+	char *directive = read_symbol(reader);
+	if (directive == NULL) {
 		// @TODO: Sync to the next newline?
 		issue_error(&reader->source_loc, "Expected preprocessor directive");
 		return false;
 	}
 
-	char *directive = read_symbol(reader);
+	// Process #if and friends even if we're currently ignoring tokens.
 	if (streq(directive, "if")) {
 		UNIMPLEMENTED;
 	} else if (streq(directive, "ifdef")) {
-		UNIMPLEMENTED;
+		skip_whitespace_and_comments(reader, false);
+		char *macro_name = read_symbol(reader);
+		if (macro_name == NULL) {
+			issue_error(&reader->source_loc, "Expected identifier after #ifdef");
+			return false;
+		}
+
+		bool condition = look_up_macro(&reader->macro_env, macro_name) != NULL;
+		start_pp_if(reader, condition);
 	} else if (streq(directive, "ifndef")) {
-		UNIMPLEMENTED;
+		skip_whitespace_and_comments(reader, false);
+		char *macro_name = read_symbol(reader);
+		if (macro_name == NULL) {
+			issue_error(&reader->source_loc, "Expected identifier after #ifndef");
+			return false;
+		}
+
+		bool condition = look_up_macro(&reader->macro_env, macro_name) == NULL;
+		start_pp_if(reader, condition);
 	} else if (streq(directive, "elif")) {
 		UNIMPLEMENTED;
 	} else if (streq(directive, "else")) {
-		UNIMPLEMENTED;
+		PPCondScope *scope = ARRAY_REF(
+				&reader->pp_scope_stack,
+				PPCondScope,
+				reader->pp_scope_stack.size - 1);
+		if (scope->position == ELSE) {
+			issue_error(&directive_start,
+					"Duplicate #else clause for preprocessor conditional");
+			return false;
+		}
+
+		scope->position = ELSE;
+		scope->condition = !scope->condition;
+		if (reader->pp_scope_stack.size >= 2) {
+			PPCondScope *parent_scope = ARRAY_REF(
+					&reader->pp_scope_stack,
+					PPCondScope,
+					reader->pp_scope_stack.size - 2);
+			if (!parent_scope->condition)
+				scope->condition = false;
+		}
 	} else if (streq(directive, "endif")) {
-		UNIMPLEMENTED;
-	} else if (streq(directive, "include")) {
-		skip_whitespace_and_comments(reader, false);
-		SourceLoc include_path_source_loc = reader->source_loc;
+		ARRAY_POP(&reader->pp_scope_stack, PPCondScope);
+	} else if (!ignoring_tokens(reader)) {
+		if (streq(directive, "include")) {
+			skip_whitespace_and_comments(reader, false);
+			SourceLoc include_path_source_loc = reader->source_loc;
 
-		char c = read_char(reader);
-		if (c != '<' && c != '"') {
-			// @TODO: Resync to newline?
-			issue_error(&reader->source_loc, "Expected filename after #include");
-			return false;
-		}
+			char c = read_char(reader);
+			if (c != '<' && c != '"') {
+				// @TODO: Resync to newline?
+				issue_error(&reader->source_loc,
+						"Expected filename after #include");
+				return false;
+			}
 
-		char terminator = c == '<' ? '>' : '"';
-		u32 start_index = reader->position;
-		while (read_char(reader) != terminator)
-			;
-		u32 end_index = reader->position - 1;
-		u32 length = end_index - start_index;
+			char terminator = c == '<' ? '>' : '"';
+			u32 start_index = reader->position;
+			while (read_char(reader) != terminator)
+				;
+			u32 end_index = reader->position - 1;
+			u32 length = end_index - start_index;
 
-		char *include_path = strndup(reader->buffer.buffer + start_index, length);
-		char *includee_path = look_up_include_path(reader->source_loc.filename, include_path);
+			char *include_path =
+				strndup(reader->buffer.buffer + start_index, length);
+			char *includee_path =
+				look_up_include_path(reader->source_loc.filename, include_path);
 
-		if (includee_path == NULL) {
-			issue_error(&include_path_source_loc,
-					"File not found: '%s'", include_path);
-			return false;
-		}
+			if (includee_path == NULL) {
+				issue_error(&include_path_source_loc,
+						"File not found: '%s'", include_path);
+				return false;
+			}
 
-		if (!tokenise_file(reader, includee_path, include_path_source_loc))
-			return false;
-		
-		free(include_path);
-		free(includee_path);
+			if (!tokenise_file(reader, includee_path, include_path_source_loc))
+				return false;
+			
+			free(include_path);
+			free(includee_path);
 
-		skip_whitespace_and_comments(reader, false);
-		if (read_char(reader) != '\n') {
-			// @TODO: Resync to newline?
-			issue_error(&reader->source_loc, "Extraneous text after include path");
-		}
-	} else if (streq(directive, "define")) {
-		skip_whitespace_and_comments(reader, false);
+			skip_whitespace_and_comments(reader, false);
+			if (read_char(reader) != '\n') {
+				// @TODO: Resync to newline?
+				issue_error(&reader->source_loc,
+						"Extraneous text after include path");
+			}
+		} else if (streq(directive, "define")) {
+			skip_whitespace_and_comments(reader, false);
 
-		char c = read_char(reader);
-		if (!initial_ident_char(c)) {
-			issue_error(&reader->source_loc, "Expected identifier after #define");
-			return false;
-		}
+			char *macro_name = read_symbol(reader);
+			if (macro_name == NULL) {
+				issue_error(&reader->source_loc,
+						"Expected identifier after #define");
+				return false;
+			}
 
-		char *macro_name = read_symbol(reader);
-
-		Array(char *) arg_names;
-		ARRAY_INIT(&arg_names, char *, 0);
-		if (peek_char(reader) == '(') {
-			read_char(reader);
-			for (;;) {
-				skip_whitespace_and_comments(reader, false);
-				char c = read_char(reader);
-				if (c == '\n') {
-					issue_error(&reader->source_loc,
-							"Unexpected newline in macro argument list");
-					return false;
-				} else if (!initial_ident_char(c)) {
-					issue_error(&reader->source_loc,
-							"Unexpected charater while processing macro argument list");
-					return false;
-				} else {
-					*ARRAY_APPEND(&arg_names, char *) = read_symbol(reader);
+			Array(char *) arg_names;
+			ARRAY_INIT(&arg_names, char *, 0);
+			if (peek_char(reader) == '(') {
+				read_char(reader);
+				for (;;) {
 					skip_whitespace_and_comments(reader, false);
-					char next = read_char(reader);
-					if (next == ')') {
-						break;
-					} else if (next != ',') {
+					char c = peek_char(reader);
+					if (c == '\n') {
 						issue_error(&reader->source_loc,
-								"Expected comma after macro argument name");
+								"Unexpected newline in macro argument list");
 						return false;
+					} else {
+						char *arg_name = read_symbol(reader);
+						if (arg_name == NULL) {
+							issue_error(&reader->source_loc,
+									"Unexpected charater while processing "
+									"macro argument list");
+							return false;
+						}
+
+						*ARRAY_APPEND(&arg_names, char *) = arg_name;
+						skip_whitespace_and_comments(reader, false);
+						char next = read_char(reader);
+						if (next == ')') {
+							break;
+						} else if (next != ',') {
+							issue_error(&reader->source_loc,
+									"Expected comma after macro argument name");
+							return false;
+						}
 					}
 				}
 			}
-		}
 
-		skip_whitespace_and_comments(reader, false);
-		Array(char) macro_value_chars;
-		ARRAY_INIT(&macro_value_chars, char, 10);
-		while ((c = read_char(reader)) != '\n')
-			*ARRAY_APPEND(&macro_value_chars, char) = c;
+			skip_whitespace_and_comments(reader, false);
+			Array(char) macro_value_chars;
+			ARRAY_INIT(&macro_value_chars, char, 10);
+			while ((c = read_char(reader)) != '\n')
+				*ARRAY_APPEND(&macro_value_chars, char) = c;
 
-		char *macro_value = strndup((char *)macro_value_chars.elements, macro_value_chars.size);
-		array_free(&macro_value_chars);
+			char *macro_value = strndup((char *)macro_value_chars.elements,
+					macro_value_chars.size);
+			array_free(&macro_value_chars);
 
-		Macro *macro = look_up_macro(&reader->macro_env, macro_name);
-		if (macro != NULL) {
-			// @TODO: Proper checks as per C99 6.10.3.2
-			assert(macro->arg_names.size == arg_names.size);
+			Macro *macro = look_up_macro(&reader->macro_env, macro_name);
+			if (macro != NULL) {
+				// @TODO: Proper checks as per C99 6.10.3.2
+				assert(macro->arg_names.size == arg_names.size);
+			} else {
+				macro = ARRAY_APPEND(&reader->macro_env, Macro);
+			}
+
+			macro->name = macro_name;
+			macro->value = macro_value;
+			macro->arg_names = arg_names;
+		} else if (streq(directive, "undef")) {
+			UNIMPLEMENTED;
+		} else if (streq(directive, "line")) {
+			UNIMPLEMENTED;
+		} else if (streq(directive, "error")) {
+			UNIMPLEMENTED;
+		} else if (streq(directive, "pragma")) {
+			UNIMPLEMENTED;
 		} else {
-			macro = ARRAY_APPEND(&reader->macro_env, Macro);
+			issue_error(&reader->source_loc,
+					"Invalid preprocessor directive: %s", directive);
+			return false;
 		}
-
-		macro->name = macro_name;
-		macro->value = macro_value;
-		macro->arg_names = arg_names;
-	} else if (streq(directive, "undef")) {
-		UNIMPLEMENTED;
-	} else if (streq(directive, "line")) {
-		UNIMPLEMENTED;
-	} else if (streq(directive, "error")) {
-		UNIMPLEMENTED;
-	} else if (streq(directive, "pragma")) {
-		UNIMPLEMENTED;
-	} else {
-		issue_error(&reader->source_loc, "Invalid preprocessor directive: %s", directive);
-		return false;
 	}
 
 	return true;
