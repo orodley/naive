@@ -904,6 +904,38 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
 		break;
 	}
+	case DO_WHILE_STATEMENT: {
+		IrBlock *pre_header = add_block(builder, "do_while.ph");
+		IrBlock *body = add_block(builder, "do_while.body");
+		IrBlock *after = add_block(builder, "do_while.after");
+
+		ASTExpr *condition_expr = statement->u.expr_and_statement.expr;
+		ASTStatement *body_statement = statement->u.expr_and_statement.statement;
+
+		build_branch(builder, body);
+		builder->current_block = pre_header;
+		Term condition_term =
+			ir_gen_expression(builder, env, condition_expr, RVALUE_CONTEXT);
+
+		assert(condition_term.ctype->t == INTEGER_TYPE);
+		build_cond(builder, condition_term.value, body, after);
+
+		IrBlock *prev_break_target = env->break_target;
+		IrBlock *prev_continue_target = env->continue_target;
+		env->break_target = after;
+		env->continue_target = pre_header;
+		builder->current_block = body;
+
+		ir_gen_statement(builder, env, body_statement);
+
+		build_branch(builder, pre_header);
+		env->break_target = prev_break_target;
+		env->continue_target = prev_continue_target;
+
+		builder->current_block = after;
+
+		break;
+	}
 	case FOR_STATEMENT: {
 		IrBlock *pre_header = add_block(builder, "for.ph");
 		IrBlock *body = add_block(builder, "for.body");
