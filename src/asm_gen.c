@@ -375,7 +375,9 @@ static void asm_gen_instr(
 		}
 
 		emit_instr1(builder, CALL, asm_value(instr->u.call.callee));
-		assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
+
+		if (instr->u.call.return_type.t != IR_VOID)
+			assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
 		break;
 	}
 	case OP_BIT_XOR: asm_gen_binary_instr(builder, instr, XOR); break;
