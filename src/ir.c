@@ -435,12 +435,39 @@ IrInstr *build_cond(IrBuilder *builder,
 	return instr;
 }
 
-static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
+static bool constant_foldable(IrOp op)
 {
 	switch (op) {
 	case OP_LOCAL: case OP_FIELD: case OP_LOAD: case OP_STORE: case OP_CAST:
 	case OP_RET: case OP_BRANCH: case OP_COND: case OP_CALL: case OP_ZEXT:
-	case OP_SEXT: case OP_BIT_NOT: case OP_LOG_NOT: case OP_RET_VOID:
+	case OP_SEXT: case OP_RET_VOID:
+		return false;
+	default:
+		return true;
+	}
+}
+
+static u64 constant_fold_unary_op(IrOp op, u64 arg)
+{
+	switch (op) {
+	case OP_BIT_XOR: case OP_BIT_AND: case OP_BIT_OR: case OP_MUL: case OP_DIV:
+	case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE:
+	case OP_ADD: case OP_SUB:
+		UNREACHABLE;
+	case OP_BIT_NOT:
+		return ~arg;
+	case OP_LOG_NOT: 
+		return !arg;
+	default:
+		assert(constant_foldable(op));
+		UNIMPLEMENTED;
+	}
+}
+
+static u64 constant_fold_binary_op(IrOp op, u64 arg1, u64 arg2)
+{
+	switch (op) {
+	case OP_BIT_NOT: case OP_LOG_NOT:
 		UNREACHABLE;
 	case OP_BIT_XOR: return arg1 ^ arg2;
 	case OP_BIT_AND: return arg1 & arg2;
@@ -455,6 +482,9 @@ static u64 constant_fold_op(IrOp op, u64 arg1, u64 arg2)
 	case OP_LTE: return arg1 <= arg2;
 	case OP_ADD: return arg1 + arg2;
 	case OP_SUB: return arg1 - arg2;
+	default:
+		assert(constant_foldable(op));
+		UNIMPLEMENTED;
 	}
 }
 
@@ -524,8 +554,11 @@ IrValue build_nullary_instr(IrBuilder *builder, IrOp op, IrType type)
 
 IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg)
 {
-	// @TODO: Constant folding for unary ops once we have unary operations that
-	// can be constant folded.
+	IrType type = arg.type;
+
+	if (arg.t == VALUE_CONST && constant_foldable(op)) {
+		return value_const(type, constant_fold_unary_op(op, arg.u.constant));
+	}
 
 	IrInstr *instr = append_instr(builder);
 	instr->op = op;
@@ -545,8 +578,9 @@ IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue ar
 
 	IrType type = arg1.type;
 
-	if (arg1.t == VALUE_CONST && arg2.t == VALUE_CONST) {
-		return value_const(type, constant_fold_op(op, arg1.u.constant, arg2.u.constant));
+	if (arg1.t == VALUE_CONST && arg2.t == VALUE_CONST && constant_foldable(op)) {
+		return value_const(type,
+				constant_fold_binary_op(op, arg1.u.constant, arg2.u.constant));
 	}
 
 	IrInstr *instr = append_instr(builder);
