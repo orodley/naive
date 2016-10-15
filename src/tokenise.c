@@ -1097,7 +1097,7 @@ static bool handle_pp_directive(Reader *reader)
 			free(includee_path);
 
 			skip_whitespace_and_comments(reader, false);
-			if (read_char(reader) != '\n') {
+			if (peek_char(reader) != '\n') {
 				// @TODO: Resync to newline?
 				issue_error(&reader->source_loc,
 						"Extraneous text after include path");
