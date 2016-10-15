@@ -29,6 +29,7 @@ typedef struct CType
 		{
 			enum
 			{
+				BOOL,
 				CHAR,
 				SHORT,
 				INT,
@@ -58,6 +59,38 @@ typedef struct CType
 	} u;
 } CType;
 
+static bool c_type_eq(CType *a, CType *b)
+{
+	if (a->t != b->t)
+		return false;
+
+	switch (a->t) {
+	case VOID_TYPE: return true;
+	case INTEGER_TYPE:
+		return a->u.integer.type == b->u.integer.type
+			&& a->u.integer.is_signed == b->u.integer.is_signed;
+	case FUNCTION_TYPE:
+		if (a->u.function.arity != b->u.function.arity)
+			return false;
+		if (!c_type_eq(a->u.function.return_type, b->u.function.return_type))
+			return false;
+		for (u32 i = 0; i < a->u.function.arity; i++) {
+			if (!c_type_eq(a->u.function.arg_type_array[i],
+						b->u.function.arg_type_array[i]))
+				return false;
+		}
+
+		return true;
+	case STRUCT_TYPE:
+		return a->u.strukt.ir_type == b->u.strukt.ir_type;
+	case POINTER_TYPE:
+		return c_type_eq(a->u.pointee_type, b->u.pointee_type);
+	case ARRAY_TYPE:
+		return a->u.array.size == b->u.array.size
+			&& c_type_eq(a->u.array.elem_type, b->u.array.elem_type);
+	}
+}
+
 static IrType c_type_to_ir_type(CType *ctype)
 {
 	switch (ctype->t) {
@@ -66,7 +99,7 @@ static IrType c_type_to_ir_type(CType *ctype)
 	case INTEGER_TYPE: {
 		u32 bit_width;
 		switch (ctype->u.integer.type) {
-		case CHAR: bit_width = 8; break;
+		case BOOL: case CHAR: bit_width = 8; break;
 		case INT: bit_width = 32; break;
 		default: UNIMPLEMENTED;
 		}
@@ -91,6 +124,7 @@ static u8 rank(CType *type)
 {
 	assert(type->t == INTEGER_TYPE);
 	switch (type->u.integer.type) {
+	case BOOL: return 0;
 	case CHAR: return 1;
 	case SHORT: return 2;
 	case INT: return 3;
@@ -148,6 +182,7 @@ typedef struct TypeEnv
 
 	CType void_type;
 	CType char_type;
+	CType bool_type;
 	CType int_type;
 	CType unsigned_int_type;
 } TypeEnv;
@@ -164,6 +199,19 @@ static void init_type_env(TypeEnv *type_env)
 		.t = VOID_TYPE,
 		.cached_pointer_type = NULL,
 	};
+	type_env->bool_type = (CType) {
+		.t = INTEGER_TYPE,
+		.cached_pointer_type = NULL,
+		.u.integer.type = BOOL,
+		.u.integer.is_signed = false,
+	};
+	type_env->char_type = (CType) {
+		.t = INTEGER_TYPE,
+		.cached_pointer_type = NULL,
+		.u.integer.type = CHAR,
+		// System V x86-64 says "char" == "signed char"
+		.u.integer.is_signed = true,
+	};
 	type_env->int_type = (CType) {
 		.t = INTEGER_TYPE,
 		.cached_pointer_type = NULL,
@@ -175,13 +223,6 @@ static void init_type_env(TypeEnv *type_env)
 		.cached_pointer_type = NULL,
 		.u.integer.type = INT,
 		.u.integer.is_signed = false,
-	};
-	type_env->char_type = (CType) {
-		.t = INTEGER_TYPE,
-		.cached_pointer_type = NULL,
-		.u.integer.type = CHAR,
-		// System V x86-64 says "char" == "signed char"
-		.u.integer.is_signed = true,
 	};
 }
 
@@ -247,6 +288,12 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 		if (matches_sequence(decl_specifier_list, 1, "void")) {
 			return &type_env->void_type;
 		}
+		if (matches_sequence(decl_specifier_list, 1, "char")) {
+			return &type_env->char_type;
+		}
+		if (matches_sequence(decl_specifier_list, 1, "_Bool")) {
+			return &type_env->bool_type;
+		}
 		if (matches_sequence(decl_specifier_list, 1, "unsigned")
 				|| matches_sequence(decl_specifier_list, 2, "unsigned", "int")) {
 			return &type_env->unsigned_int_type;
@@ -255,9 +302,6 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 				|| matches_sequence(decl_specifier_list, 1, "signed")
 				|| matches_sequence(decl_specifier_list, 2, "signed", "int")) {
 			return &type_env->int_type;
-		}
-		if (matches_sequence(decl_specifier_list, 1, "char")) {
-			return &type_env->char_type;
 		}
 
 		return search(&type_env->typedef_types, type_spec->u.name);
@@ -768,6 +812,37 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	array_free(global_bindings);
 }
 
+static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
+{
+	if (c_type_eq(term.ctype, target_type))
+		return term;
+
+	IrType ir_type = c_type_to_ir_type(target_type);
+	IrValue converted;
+
+	if (term.ctype->t == INTEGER_TYPE && target_type->t == INTEGER_TYPE) {
+		if (term.ctype->u.integer.is_signed) {
+			converted =
+				build_type_instr(builder, OP_SEXT, term.value, ir_type);
+		} else {
+			converted =
+				build_type_instr(builder, OP_ZEXT, term.value, ir_type);
+		}
+	} else if (term.ctype->t == ARRAY_TYPE && target_type->t == POINTER_TYPE) {
+		// Array values are only ever passed around as pointers to the first
+		// element anyway, so this conversion is a no-op that just changes type.
+		assert(term.value.type.t == IR_POINTER);
+		converted = term.value;
+	} else {
+		UNIMPLEMENTED;
+	}
+
+	return (Term) {
+		.ctype = target_type,
+		.value = converted,
+	};
+}
+
 static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 {
 	ASTInitDeclarator *init_declarator = decl->init_declarators;
@@ -788,7 +863,7 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 			build_store(
 				builder,
 				binding->term.value,
-				init_term.value,
+				convert_type(builder, init_term, binding->term.ctype).value,
 				c_type_to_ir_type(binding->term.ctype));
 		}
 
@@ -1216,17 +1291,9 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 			Term *to_convert = rank(left.ctype) < rank(right.ctype) ? &left : &right;
 			CType *conversion_type =
 				rank(left.ctype) < rank(right.ctype) ? right.ctype : left.ctype;
-			IrType ir_type = c_type_to_ir_type(conversion_type);
-			IrValue converted;
-			if (to_convert->ctype->u.integer.is_signed) {
-				converted =
-					build_type_instr(builder, OP_SEXT, to_convert->value, ir_type);
-			} else {
-				converted =
-					build_type_instr(builder, OP_ZEXT, to_convert->value, ir_type);
-			}
+			Term converted = convert_type(builder, *to_convert, conversion_type);
 
-			to_convert->value = converted;
+			to_convert->value = converted.value;
 			to_convert->ctype = conversion_type;
 		}
 	}
@@ -1494,7 +1561,8 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		arg = expr->u.function_call.arg_list;
 		for (u32 i = 0; arg != NULL; i++, arg = arg->next) {
 			Term arg_term = ir_gen_expression(builder, env, arg->expr, RVALUE_CONTEXT);
-			arg_array[i] = arg_term.value;
+			CType *arg_type = callee.ctype->u.function.arg_type_array[i];
+			arg_array[i] = convert_type(builder, arg_term, arg_type).value;
 		}
 
 		IrValue value = build_call(
@@ -1516,7 +1584,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		build_store(
 				builder,
 				lhs_ptr.value,
-				rhs_term.value,
+				convert_type(builder, rhs_term, lhs_ptr.ctype).value,
 				c_type_to_ir_type(lhs_ptr.ctype));
 		return rhs_term;
 	}

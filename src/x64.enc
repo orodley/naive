@@ -39,6 +39,8 @@ MOV r64,   imm64       = REX.W + B8 +rd io
 
 MOVSX r32, r/m8        =         [0F BE] /r
 
+MOVZX r32, r/m8        =         [0F B6] /r
+
 NOP                    =         90
 
 NOT r/m32              =         F7 /2
