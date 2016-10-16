@@ -428,11 +428,14 @@ static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type,
 	return array_type;
 }
 
-static u64 eval_constant_expr(ASTExpr *constant_expr)
+static IrInit *eval_constant_expr(IrBuilder *builder, TypeEnv *type_env,
+		ASTExpr *constant_expr)
 {
 	switch (constant_expr->t) {
 	case INT_LITERAL_EXPR:
-		return constant_expr->u.int_literal;
+		// @TODO: Determine type properly.
+		return add_int_init(builder, c_type_to_ir_type(&type_env->int_type),
+				constant_expr->u.int_literal);
 	default:
 		UNIMPLEMENTED;
 	}
@@ -515,8 +518,11 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		direct_declarator_to_cdecl(builder, type_env, decl_specifier_list,
 				elem_declarator, &elem_cdecl);
 		cdecl->name = elem_cdecl.name;
-		cdecl->type = array_type(builder, type_env, elem_cdecl.type,
-				eval_constant_expr(array_length_expr));
+		IrInit *length_init =
+			eval_constant_expr(builder, type_env, array_length_expr);
+		assert(length_init->type.t == IR_INT);
+		cdecl->type = array_type(
+				builder, type_env, elem_cdecl.type, length_init->u.integer);
 		break;
 	} 
 	default:
@@ -761,7 +767,6 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 				if (init_declarator == NULL) {
 					decl_specifier_list_to_c_type(builder, &env.type_env, type_specs);
 				} else {
-					assert(init_declarator->initializer == NULL);
 					assert(init_declarator->next == NULL);
 					ASTDeclarator *declarator = init_declarator->declarator;
 
@@ -785,8 +790,18 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 						decl_specifier_list = decl_specifier_list->next;
 					}
 
-					if (!is_extern)
-						global->initializer = zero_initializer(builder, global_type);
+					ASTInitializer *init = init_declarator->initializer;
+					if (init == NULL) {
+						if (!is_extern) {
+							global->initializer =
+								zero_initializer(builder, global_type);
+						}
+					} else {
+						assert(!is_extern);
+						assert(init->t == EXPR_INITIALIZER);
+						global->initializer = eval_constant_expr(
+								builder, &env.type_env, init->u.expr);
+					}
 				}
 			}
 
