@@ -428,13 +428,13 @@ static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type,
 	return array_type;
 }
 
-static IrInit *eval_constant_expr(IrBuilder *builder, TypeEnv *type_env,
+static IrConst *eval_constant_expr(IrBuilder *builder, TypeEnv *type_env,
 		ASTExpr *constant_expr)
 {
 	switch (constant_expr->t) {
 	case INT_LITERAL_EXPR:
 		// @TODO: Determine type properly.
-		return add_int_init(builder, c_type_to_ir_type(&type_env->int_type),
+		return add_int_const(builder, c_type_to_ir_type(&type_env->int_type),
 				constant_expr->u.int_literal);
 	default:
 		UNIMPLEMENTED;
@@ -518,11 +518,11 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		direct_declarator_to_cdecl(builder, type_env, decl_specifier_list,
 				elem_declarator, &elem_cdecl);
 		cdecl->name = elem_cdecl.name;
-		IrInit *length_init =
+		IrConst *length_const =
 			eval_constant_expr(builder, type_env, array_length_expr);
-		assert(length_init->type.t == IR_INT);
+		assert(length_const->type.t == IR_INT);
 		cdecl->type = array_type(
-				builder, type_env, elem_cdecl.type, length_init->u.integer);
+				builder, type_env, elem_cdecl.type, length_const->u.integer);
 		break;
 	} 
 	default:
@@ -651,20 +651,20 @@ typedef enum ExprContext
 static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ExprContext context);
 
-static IrInit *zero_initializer(IrBuilder *builder, CType *ctype)
+static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 {
 	switch (ctype->t) {
 	case INTEGER_TYPE:
-		return add_int_init(builder, c_type_to_ir_type(ctype), 0);
+		return add_int_const(builder, c_type_to_ir_type(ctype), 0);
 	case ARRAY_TYPE: {
 		// @TODO: This allocates unnecessarily by calling zero_initializer
 		// recursively and then copying the result into array_elems.
-		IrInit *init = add_array_init(builder, c_type_to_ir_type(ctype));
+		IrConst *konst = add_array_const(builder, c_type_to_ir_type(ctype));
 		for (u32 i = 0; i < ctype->u.array.size; i++) {
-			init->u.array_elems[i] =
+			konst->u.array_elems[i] =
 				*zero_initializer(builder, ctype->u.array.elem_type);
 		}
-		return init;
+		return konst;
 	}
 	default:
 		UNIMPLEMENTED;
@@ -697,8 +697,8 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 			global = ir_global_for_decl(builder, &env.type_env,
 					decl_specifier_list, declarator, &global_type);
-			IrInit *init = add_init_to_function(builder->trans_unit, global);
-			IrFunction *function = &init->u.function;
+			IrConst *konst = add_init_to_function(builder->trans_unit, global);
+			IrFunction *function = &konst->u.function;
 
 			builder->current_function = function;
 			builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
@@ -1484,18 +1484,18 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
 		global->linkage = IR_LOCAL_LINKAGE;
 
-		IrInit *init = add_array_init(builder, ir_type);
+		IrConst *konst = add_array_const(builder, ir_type);
 		IrType ir_char_type = c_type_to_ir_type(&env->type_env.char_type);
 		for (u32 i = 0; i < length; i++) {
-			init->u.array_elems[i] = (IrInit) {
+			konst->u.array_elems[i] = (IrConst) {
 				.type = ir_char_type,
 				.u.integer = string[i],
 			};
 		}
 
-		init->type = ir_type;
+		konst->type = ir_type;
 
-		global->initializer = init;
+		global->initializer = konst;
 
 		return (Term) { .ctype = result_type, .value = value_global(global) };
 	}

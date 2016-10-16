@@ -85,9 +85,9 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	return new_global;
 }
 
-IrInit *add_init_to_function(TransUnit *trans_unit, IrGlobal *global)
+IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global)
 {
-	IrInit *initializer = pool_alloc(&trans_unit->pool, sizeof *initializer);
+	IrConst *initializer = pool_alloc(&trans_unit->pool, sizeof *initializer);
 	initializer->type = global->type;
 	IrFunction *function = &initializer->u.function;
 	function->label = NULL;
@@ -301,20 +301,20 @@ static void dump_instr(IrInstr *instr)
 	puts(")");
 }
 
-static void dump_init(IrInit *init)
+static void dump_const(IrConst *konst)
 {
-	switch (init->type.t) {
+	switch (konst->type.t) {
 	case IR_INT:
-		printf("%lu", init->u.integer);
+		printf("%lu", konst->u.integer);
 		break;
 	case IR_POINTER:
-		printf("$%s", init->u.global_pointer->name);
+		printf("$%s", konst->u.global_pointer->name);
 		break;
 	case IR_ARRAY: {
 		putchar('[');
-		u32 len = init->type.u.array.size;
+		u32 len = konst->type.u.array.size;
 		for (u32 i = 0; i < len; i++) {
-			dump_init(init->u.array_elems + i);
+			dump_const(konst->u.array_elems + i);
 
 			if (i != len - 1)
 				fputs(", ", stdout);
@@ -324,9 +324,9 @@ static void dump_init(IrInit *init)
 	}
 	case IR_STRUCT: {
 		putchar('{');
-		u32 len = init->type.u.strukt.num_fields;
+		u32 len = konst->type.u.strukt.num_fields;
 		for (u32 i = 0; i < len; i++) {
-			dump_init(init->u.struct_fields + i);
+			dump_const(konst->u.struct_fields + i);
 
 			if (i != len - 1)
 				fputs(", ", stdout);
@@ -335,7 +335,7 @@ static void dump_init(IrInit *init)
 		break;
 	}
 	case IR_FUNCTION: {
-		IrFunction *f = &init->u.function;
+		IrFunction *f = &konst->u.function;
 
 		puts("{");
 
@@ -385,7 +385,7 @@ void dump_trans_unit(TransUnit *trans_unit)
 
 		if (global->initializer != NULL) {
 			fputs(" = ", stdout);
-			dump_init(global->initializer);
+			dump_const(global->initializer);
 		}
 
 		putchar('\n');
@@ -662,21 +662,21 @@ AsmLabel *global_label(IrGlobal *global)
 	}
 }
 
-IrInit *add_int_init(IrBuilder *builder, IrType int_type, u64 value)
+IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value)
 {
-	IrInit *init = pool_alloc(&builder->trans_unit->pool, sizeof *init);
-	init->type = int_type;
-	init->u.integer = value;
+	IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);
+	konst->type = int_type;
+	konst->u.integer = value;
 
-	return init;
+	return konst;
 }
 
-IrInit *add_array_init(IrBuilder *builder, IrType type)
+IrConst *add_array_const(IrBuilder *builder, IrType type)
 {
-	IrInit *init = pool_alloc(&builder->trans_unit->pool, sizeof *init);
-	init->type = type;
-	init->u.array_elems = pool_alloc(&builder->trans_unit->pool,
-			type.u.array.size * sizeof *init->u.array_elems);
+	IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);
+	konst->type = type;
+	konst->u.array_elems = pool_alloc(&builder->trans_unit->pool,
+			type.u.array.size * sizeof *konst->u.array_elems);
 
-	return init;
+	return konst;
 }

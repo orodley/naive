@@ -897,25 +897,25 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	epilogue_first_instr->label = ret_label;
 }
 
-static void write_initializer(IrInit *init, u8 *value)
+static void write_const(IrConst *konst, u8 *value)
 {
-	switch (init->type.t) {
+	switch (konst->type.t) {
 	case IR_INT: case IR_POINTER:
-		for (u32 n = 0; n < size_of_ir_type(init->type); n++) {
-			u8 byte = (init->u.integer >> (n * 8)) & 0xFF;
+		for (u32 n = 0; n < size_of_ir_type(konst->type); n++) {
+			u8 byte = (konst->u.integer >> (n * 8)) & 0xFF;
 			*value++ = byte;
 		}
 		break;
 	case IR_ARRAY:
-		for (u32 n = 0; n < init->type.u.array.size; n++) {
-			write_initializer(init->u.array_elems + n, value);
-			value += size_of_ir_type(*init->type.u.array.elem_type);
+		for (u32 n = 0; n < konst->type.u.array.size; n++) {
+			write_const(konst->u.array_elems + n, value);
+			value += size_of_ir_type(*konst->type.u.array.elem_type);
 		}
 		break;
 	case IR_STRUCT:
-		for (u32 n = 0; n < init->type.u.strukt.num_fields; n++) {
-			write_initializer(init->u.struct_fields + n, value);
-			value += size_of_ir_type(init->type.u.strukt.fields[n].type);
+		for (u32 n = 0; n < konst->type.u.strukt.num_fields; n++) {
+			write_const(konst->u.struct_fields + n, value);
+			value += size_of_ir_type(konst->type.u.strukt.fields[n].type);
 		}
 		break;
 	case IR_FUNCTION: case IR_VOID:
@@ -959,13 +959,13 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 		if (ir_global->type.t == IR_FUNCTION) {
 			asm_gen_function(builder, ir_global);
 		} else {
-			IrInit *init = ir_global->initializer;
-			if (init != NULL) {
+			IrConst *konst = ir_global->initializer;
+			if (konst != NULL) {
 				AsmGlobal *asm_global = ir_global->asm_global;
 				u32 size = asm_global->u.var.size_bytes;
 				asm_global->u.var.value =
 					pool_alloc(&builder->asm_module.pool, size);
-				write_initializer(init, asm_global->u.var.value);
+				write_const(konst, asm_global->u.var.value);
 			}
 		}
 	}

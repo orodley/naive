@@ -73,7 +73,7 @@ typedef struct IrFunction
 	AsmLabel *label;
 } IrFunction;
 
-typedef struct IrInit
+typedef struct IrConst
 {
 	IrType type;
 
@@ -81,11 +81,11 @@ typedef struct IrInit
 	{
 		u64 integer;
 		struct IrGlobal *global_pointer;
-		struct IrInit *array_elems;
-		struct IrInit *struct_fields;
+		struct IrConst *array_elems;
+		struct IrConst *struct_fields;
 		IrFunction function;
 	} u;
-} IrInit;
+} IrConst;
 
 typedef struct IrGlobal
 {
@@ -97,7 +97,7 @@ typedef struct IrGlobal
 		IR_LOCAL_LINKAGE,
 	} linkage;
 	AsmGlobal *asm_global;
-	IrInit *initializer;
+	IrConst *initializer;
 } IrGlobal;
 
 typedef struct IrBuilder
@@ -124,6 +124,7 @@ typedef struct IrValue
 
 	union
 	{
+		// @TODO: Replace with an IrConst?
 		u64 constant;
 		struct IrInstr *instr;
 		u32 arg_index;
@@ -225,7 +226,7 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type);
 IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields);
 
-IrInit *add_init_to_function(TransUnit *trans_unit, IrGlobal *global);
+IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global);
 IrBlock *add_block_to_function(
 		TransUnit *trans_unit, IrFunction *function, char *name);
 
@@ -247,8 +248,8 @@ IrValue value_global(IrGlobal *global);
 
 AsmLabel *global_label(IrGlobal *global);
 
-IrInit *add_int_init(IrBuilder *builder, IrType int_type, u64 value);
-IrInit *add_array_init(IrBuilder *builder, IrType type);
+IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value);
+IrConst *add_array_const(IrBuilder *builder, IrType type);
 
 
 IrValue build_nullary_instr(IrBuilder *builder, IrOp op, IrType type);
