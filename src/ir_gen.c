@@ -1135,18 +1135,17 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 
 static CType *decay_to_pointer(TypeEnv *type_env, CType *type)
 {
-	assert(type->t == ARRAY_TYPE);
-	return pointer_type(type_env, type->u.array.elem_type);
+	if (type->t == ARRAY_TYPE) {
+		return pointer_type(type_env, type->u.array.elem_type);
+	} else  {
+		return type;
+	}
 }
 
 static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 {
-	if (left.ctype->t == ARRAY_TYPE) {
-		left.ctype = decay_to_pointer(&env->type_env, left.ctype);
-	}
-	if (right.ctype->t == ARRAY_TYPE) {
-		right.ctype = decay_to_pointer(&env->type_env, right.ctype);
-	}
+	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
+	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
 
 	bool left_is_pointer = left.ctype->t == POINTER_TYPE;
 	bool right_is_pointer = right.ctype->t == POINTER_TYPE;
@@ -1197,12 +1196,8 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 
 static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 {
-	if (left.ctype->t == ARRAY_TYPE) {
-		left.ctype = decay_to_pointer(&env->type_env, left.ctype);
-	}
-	if (right.ctype->t == ARRAY_TYPE) {
-		right.ctype = decay_to_pointer(&env->type_env, right.ctype);
-	}
+	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
+	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
 
 	bool left_is_pointer = left.ctype->t == POINTER_TYPE;
 	bool right_is_pointer = right.ctype->t == POINTER_TYPE;
@@ -1287,12 +1282,8 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	if (ir_op == OP_SUB)
 		return ir_gen_sub(builder, env, left, right);
 
-	if (left.ctype->t == ARRAY_TYPE) {
-		left.ctype = decay_to_pointer(&env->type_env, left.ctype);
-	}
-	if (right.ctype->t == ARRAY_TYPE) {
-		right.ctype = decay_to_pointer(&env->type_env, right.ctype);
-	}
+	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
+	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
 
 	// @TODO: Determine type correctly.
 	CType *result_type = &env->type_env.int_type;
@@ -1356,12 +1347,12 @@ static Term ir_gen_assign_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	return ir_gen_assign_op(builder, env, left, right, ir_op, NULL);
 }
 
-static Term ir_gen_deref(IrBuilder *builder, Term pointer, ExprContext context)
+static Term ir_gen_deref(IrBuilder *builder, TypeEnv *type_env,
+		Term pointer, ExprContext context)
 {
-	// @TODO: Function which does this. Use for IDENTIFIER_EXPR as well.
-	assert(pointer.ctype->t == POINTER_TYPE
-			|| pointer.ctype->t == ARRAY_TYPE);
-	CType *pointee_type = pointer.ctype->u.pointee_type;
+	CType *pointer_type = decay_to_pointer(type_env, pointer.ctype);
+	assert(pointer_type->t == POINTER_TYPE);
+	CType *pointee_type = pointer_type->u.pointee_type;
 
 	IrValue value;
 	if (context == LVALUE_CONTEXT) {
@@ -1397,7 +1388,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		Binding *binding = binding_for_name(env->scope, expr->u.identifier);
 		assert(binding != NULL);
 		IrValue value;
-		IrType ir_type = c_type_to_ir_type(binding->term.ctype);
+		assert(binding->term.value.type.t == IR_POINTER);
 
 		// Functions, arrays, and structs implicitly have their address taken.
 		if (context == LVALUE_CONTEXT
@@ -1410,7 +1401,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 			value = build_load(
 					builder,
 					binding->term.value,
-					ir_type);
+					c_type_to_ir_type(binding->term.ctype));
 		}
 
 		return (Term) { .ctype = binding->term.ctype, .value = value };
@@ -1444,7 +1435,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case DEREF_EXPR: {
 		ASTExpr *inner_expr = expr->u.unary_arg;
 		Term pointer = ir_gen_expression(builder, env, inner_expr, RVALUE_CONTEXT);
-		return ir_gen_deref(builder, pointer, context);
+		return ir_gen_deref(builder, &env->type_env, pointer, context);
 	}
 	case INDEX_EXPR: {
 		Term pointer = ir_gen_add(
@@ -1453,7 +1444,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 				ir_gen_expression(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
 				ir_gen_expression(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT));
 		assert(pointer.ctype->t == POINTER_TYPE);
-		return ir_gen_deref(builder, pointer, context);
+		return ir_gen_deref(builder, &env->type_env, pointer, context);
 	}
 	case INT_LITERAL_EXPR: {
 		// @TODO: Determine types of constants correctly.
