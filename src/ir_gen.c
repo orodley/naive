@@ -53,6 +53,7 @@ typedef struct CType
 		struct
 		{
 			struct CType *elem_type;
+			bool incomplete;
 			u64 size;
 			IrType *ir_type;
 		} array;
@@ -112,6 +113,7 @@ static IrType c_type_to_ir_type(CType *ctype)
 	case POINTER_TYPE:
 		return (IrType) { .t = IR_POINTER };
 	case ARRAY_TYPE:
+		assert(!ctype->u.array.incomplete);
 		return *ctype->u.array.ir_type;
 	case FUNCTION_TYPE:
 		return (IrType) { .t = FUNCTION_TYPE };
@@ -396,14 +398,36 @@ static CType *pointer_type(TypeEnv *type_env, CType *type)
 	return pointer_type;
 }
 
-static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type,
-		u64 size)
+static CType *decay_to_pointer(TypeEnv *type_env, CType *type)
+{
+	if (type->t == ARRAY_TYPE) {
+		return pointer_type(type_env, type->u.array.elem_type);
+	} else  {
+		return type;
+	}
+}
+
+static void set_array_type_length(CType *array_type, u64 size)
+{
+	assert(array_type->t == ARRAY_TYPE);
+
+	array_type->u.array.size = size;
+	if (array_type->u.array.elem_type->t == IR_ARRAY) {
+		size *= array_type->u.array.elem_type->u.array.size;
+	}
+
+	array_type->u.array.size = size;
+	array_type->u.array.ir_type->u.array.size = size;
+	array_type->u.array.incomplete = false;
+}
+
+static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
 {
 	CType *array_type = pool_alloc(&type_env->pool, sizeof *array_type);
 	array_type->t = ARRAY_TYPE;
 	array_type->cached_pointer_type = NULL;
 	array_type->u.array.elem_type = type;
-	array_type->u.array.size = size;
+	array_type->u.array.incomplete = true;
 
 	IrType *ir_array_type =
 		pool_alloc(&builder->trans_unit->pool, sizeof *ir_array_type);
@@ -413,7 +437,6 @@ static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type,
 	IrType *ir_elem_type;
 
 	if (elem_type.t == IR_ARRAY) {
-		size *= elem_type.u.array.size;
 		ir_elem_type = elem_type.u.array.elem_type;
 	} else {
 		ir_elem_type =
@@ -421,8 +444,6 @@ static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type,
 		*ir_elem_type = c_type_to_ir_type(type);
 	}
 	ir_array_type->u.array.elem_type = ir_elem_type;
-	ir_array_type->u.array.size = size;
-
 	array_type->u.array.ir_type = ir_array_type;
 
 	return array_type;
@@ -455,20 +476,18 @@ static ASTParameterDecl *params_for_function_declarator(ASTDeclarator *declarato
 	return direct_declarator->u.function_declarator.parameters;
 }
 
+typedef struct CDeclAux
+{
+	CType *type;
+	CType **ident_type;
+	char *name;
+} CDeclAux;
+
 static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		ASTDeclSpecifier *decl_specifier_list,
-		ASTDirectDeclarator *direct_declarator, CDecl *cdecl) {
+		ASTDirectDeclarator *direct_declarator, CDeclAux *cdecl) {
 	switch (direct_declarator->t) {
 	case FUNCTION_DECLARATOR: {
-		ASTDirectDeclarator *function_declarator =
-			direct_declarator->u.function_declarator.declarator;
-		assert(function_declarator->t == IDENTIFIER_DECLARATOR);
-
-		cdecl->name = function_declarator->u.name;
-
-		CType *return_c_type =
-			decl_specifier_list_to_c_type(builder, type_env, decl_specifier_list);
-
 		ASTParameterDecl *first_param =
 			direct_declarator->u.function_declarator.parameters;
 		ASTParameterDecl *params = first_param;
@@ -489,40 +508,65 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 			CDecl cdecl;
 			decl_to_cdecl(builder, type_env, params->decl_specifier_list,
 					params->declarator, &cdecl);
+
+			// As per 6.7.5.3.7, parameters of array type are adjusted to
+			// pointers to the element type.
+			cdecl.type = decay_to_pointer(type_env, cdecl.type);
+
 			arg_c_types[i] = cdecl.type;
 
 			params = params->next;
 		}
 
+		ASTDirectDeclarator *function_declarator =
+			direct_declarator->u.function_declarator.declarator;
+		CDeclAux func_name_cdecl;
+		direct_declarator_to_cdecl(builder, type_env, decl_specifier_list,
+				function_declarator, &func_name_cdecl);
+
 		CType *ctype = pool_alloc(&builder->trans_unit->pool, sizeof *ctype);
 		ctype->t = FUNCTION_TYPE;
 		ctype->u.function.arity = arity;
 		ctype->u.function.arg_type_array = arg_c_types;
-		ctype->u.function.return_type = return_c_type;
+		ctype->u.function.return_type = func_name_cdecl.type;;
 
+		*func_name_cdecl.ident_type = ctype;
+		cdecl->name = func_name_cdecl.name;
 		cdecl->type = ctype;
+		cdecl->ident_type = &ctype->u.function.return_type;
 		break;
 	}
 	case IDENTIFIER_DECLARATOR: {
 		cdecl->name = direct_declarator->u.name;
 		cdecl->type = decl_specifier_list_to_c_type(builder, type_env, decl_specifier_list);
+		cdecl->ident_type = &cdecl->type;
 		break;
 	}
 	case ARRAY_DECLARATOR: {
 		ASTDirectDeclarator *elem_declarator =
 			direct_declarator->u.array_declarator.element_declarator;
-		ASTExpr *array_length_expr =
-			direct_declarator->u.array_declarator.array_length;
 
-		CDecl elem_cdecl;
+		CDeclAux elem_cdecl;
 		direct_declarator_to_cdecl(builder, type_env, decl_specifier_list,
 				elem_declarator, &elem_cdecl);
+
+		CType *array = array_type(builder, type_env, *elem_cdecl.ident_type);
+		*elem_cdecl.ident_type = array;
 		cdecl->name = elem_cdecl.name;
-		IrConst *length_const =
-			eval_constant_expr(builder, type_env, array_length_expr);
-		assert(length_const->type.t == IR_INT);
-		cdecl->type = array_type(
-				builder, type_env, elem_cdecl.type, length_const->u.integer);
+		cdecl->type = elem_cdecl.type;
+		cdecl->ident_type = &array->u.array.elem_type;
+
+		ASTExpr *array_length_expr =
+			direct_declarator->u.array_declarator.array_length;
+		if (array_length_expr != NULL) {
+			IrConst *length_const =
+				eval_constant_expr(builder, type_env, array_length_expr);
+			assert(length_const->type.t == IR_INT);
+			u64 length = length_const->u.integer;
+
+			set_array_type_length(array, length);
+		}
+
 		break;
 	} 
 	default:
@@ -530,28 +574,25 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 	}
 }
 
-static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
+static void decl_to_cdecl_aux(IrBuilder *builder, TypeEnv *type_env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
-		CDecl *cdecl)
+		CDeclAux *cdecl)
 {
 	if (declarator == NULL) {
+		cdecl->name = NULL;
 		cdecl->type =
 			decl_specifier_list_to_c_type(builder, type_env, decl_specifier_list);
+		cdecl->ident_type = &cdecl->type;
 	} else if (declarator->t == POINTER_DECLARATOR) {
-		CDecl pointee_cdecl;
+		CDeclAux pointee_cdecl;
 		assert(declarator->u.pointer_declarator.decl_specifier_list == NULL);
-		decl_to_cdecl(builder, type_env, decl_specifier_list,
+		decl_to_cdecl_aux(builder, type_env, decl_specifier_list,
 				declarator->u.pointer_declarator.pointee, &pointee_cdecl);
 		cdecl->name = pointee_cdecl.name;
-
-		if (pointee_cdecl.type->t == FUNCTION_TYPE) {
-			CType **return_type_ptr = &pointee_cdecl.type->u.function.return_type;
-			CType *return_type = *return_type_ptr;
-			*return_type_ptr = pointer_type(type_env, return_type);
-			cdecl->type = pointee_cdecl.type;
-		} else {
-			cdecl->type = pointer_type(type_env, pointee_cdecl.type);
-		}
+		CType *ptr = pointer_type(type_env, *pointee_cdecl.ident_type);
+		*pointee_cdecl.ident_type = ptr;
+		cdecl->ident_type = &ptr->u.pointee_type;
+		cdecl->type = pointee_cdecl.type;
 	} else {
 		assert(declarator->t == DIRECT_DECLARATOR);
 		ASTDirectDeclarator *direct_declarator = declarator->u.direct_declarator;
@@ -559,6 +600,17 @@ static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		direct_declarator_to_cdecl(builder, type_env, decl_specifier_list,
 				direct_declarator, cdecl);
 	}
+}
+
+static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
+		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
+		CDecl *cdecl)
+{
+	CDeclAux cdecl_aux;
+	decl_to_cdecl_aux(
+			builder, type_env, decl_specifier_list, declarator, &cdecl_aux);
+	cdecl->name = cdecl_aux.name;
+	cdecl->type = cdecl_aux.type;
 }
 
 static void cdecl_to_binding(IrBuilder *builder, CDecl *cdecl, Binding *binding)
@@ -657,6 +709,7 @@ static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 	case INTEGER_TYPE:
 		return add_int_const(builder, c_type_to_ir_type(ctype), 0);
 	case ARRAY_TYPE: {
+		assert(!ctype->u.array.incomplete);
 		// @TODO: This allocates unnecessarily by calling zero_initializer
 		// recursively and then copying the result into array_elems.
 		IrConst *konst = add_array_const(builder, c_type_to_ir_type(ctype));
@@ -709,6 +762,10 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ARRAY_INIT(param_bindings, Binding, 5);
 			env.scope = &scope;
 
+			// @TODO: We shouldn't have to re-parse all of the parameter decls.
+			// At the moment we have to because we throw away the name of the
+			// parameter when parsing function parameter declarators, since
+			// this has nothing to do with the type.
 			ASTParameterDecl *param = params_for_function_declarator(declarator);
 			for (u32 i = 0; param != NULL; i++, param = param->next) {
 				Binding *binding = ARRAY_APPEND(param_bindings, Binding);
@@ -716,8 +773,12 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 				CDecl cdecl;
 				decl_to_cdecl(builder, &env.type_env, param->decl_specifier_list,
 						param->declarator, &cdecl);
+				// @HACK: We have to do this because decl_to_cdecl does extra
+				// stuff to adjust parameter types when it knows that the
+				// declarator is for a parameter. The proper fix is just to not
+				// re-parse at all.
+				cdecl.type = global_type->u.function.arg_type_array[i];
 				cdecl_to_binding(builder, &cdecl, binding);
-
 				build_store(builder,
 						binding->term.value,
 						value_arg(i, global->type.u.function.arg_types[i]),
@@ -1133,15 +1194,6 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 		return (Term) { .ctype = selected_field->type, .value = value };
 }
 
-static CType *decay_to_pointer(TypeEnv *type_env, CType *type)
-{
-	if (type->t == ARRAY_TYPE) {
-		return pointer_type(type_env, type->u.array.elem_type);
-	} else  {
-		return type;
-	}
-}
-
 static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 {
 	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
@@ -1470,7 +1522,8 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		char *string = expr->u.string_literal;
 		u32 length = strlen(string) + 1;
 		CType *result_type =
-			array_type(builder, &env->type_env, &env->type_env.char_type, length);
+			array_type(builder, &env->type_env, &env->type_env.char_type);
+		set_array_type_length(result_type, length);
 		IrType ir_type = c_type_to_ir_type(result_type);
 		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
 		global->linkage = IR_LOCAL_LINKAGE;
