@@ -23,4 +23,12 @@ typedef  int64_t i64;
 #define UNREACHABLE assert(!"This should never be reached")
 #define UNIMPLEMENTED assert(!"Not implemented")
 
+#define RUNNING_UNDER_SANITIZER 0
+#ifdef __has_feature
+#if __has_feature(memory_sanitizer) || __has_feature(address_sanitizer)
+#undef RUNNING_UNDER_SANITIZER
+#define RUNNING_UNDER_SANITIZER 1
+#endif
+#endif
+
 #endif

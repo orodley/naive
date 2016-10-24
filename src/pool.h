@@ -3,6 +3,17 @@
 
 #include "misc.h"
 
+#if RUNNING_UNDER_SANITIZER
+
+#include "array.h"
+
+typedef struct Pool
+{
+	Array(void *) allocated_pointers;
+} Pool;
+
+#else
+
 typedef struct PoolBlock
 {
 	size_t used;
@@ -18,6 +29,8 @@ typedef struct Pool
 	PoolBlock *first_block;
 	PoolBlock *first_block_with_space;
 } Pool;
+
+#endif
 
 void pool_init(Pool *pool, size_t block_size);
 void *pool_alloc(Pool *pool, size_t size);

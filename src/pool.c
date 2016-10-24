@@ -2,6 +2,32 @@
 
 #include "pool.h"
 
+#if RUNNING_UNDER_SANITIZER
+
+void pool_init(Pool *pool, size_t block_size)
+{
+	IGNORE(block_size);
+	ARRAY_INIT(&pool->allocated_pointers, void *, 25);
+}
+
+void *pool_alloc(Pool *pool, size_t size)
+{
+	void *new_ptr = malloc(size);
+	*ARRAY_APPEND(&pool->allocated_pointers, void *) = new_ptr;
+	return new_ptr;
+}
+
+void pool_free(Pool *pool)
+{
+	for (u32 i = 0; i < pool->allocated_pointers.size; i++) {
+		free(*ARRAY_REF(&pool->allocated_pointers, void *, i));
+	}
+
+	array_free(&pool->allocated_pointers);
+}
+
+#else
+
 static inline void block_init(PoolBlock *block, size_t size)
 {
 	block->used = 0;
@@ -48,3 +74,5 @@ void pool_free(Pool *pool)
 		block = next_block;
 	}
 }
+
+#endif
