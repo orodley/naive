@@ -381,8 +381,10 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 		assert(type != NULL);
 		return type;
 	}
-	case STRUCT_TYPE_SPECIFIER: {
-		ASTFieldDecl *field_list = type_spec->u.struct_or_union_specifier.field_list;
+	case STRUCT_TYPE_SPECIFIER:
+	case UNION_TYPE_SPECIFIER: {
+		ASTFieldDecl *field_list =
+			type_spec->u.struct_or_union_specifier.field_list;
 		char *name = type_spec->u.struct_or_union_specifier.name;
 
 		CType *existing_type = NULL;
@@ -392,7 +394,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 
 		if (field_list == NULL) {
 			if (name == NULL) {
-				assert(!"Error, no name or fields for struct type");
+				assert(!"Error, no name or fields for struct or union type");
 			} else if (existing_type == NULL) {
 				// Incomplete type
 				return struct_type(type_env, name);
@@ -404,7 +406,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 		if (existing_type != NULL) {
 			assert(existing_type->t == STRUCT_TYPE);
 			if (!existing_type->u.strukt.incomplete)
-				assert(!"Error, redefinition of type");
+				assert(!"Error, redefinition of struct or union type");
 
 			type = existing_type;
 		} else {
@@ -431,25 +433,37 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 		IrType *ir_struct =
 			trans_unit_add_struct(builder->trans_unit, name, fields->size);
 		u32 current_offset = 0;
+		u32 max_field_size = 0;
 		u32 max_field_align = 0;
 		for (u32 i = 0; i < fields->size; i++) {
 			CDecl *field = ARRAY_REF(fields, CDecl, i);
 			IrType field_type = c_type_to_ir_type(field->type);
-			u32 field_size = size_of_ir_type(field_type);
-			u32 field_align = align_of_ir_type(field_type);
-			max_field_align = max(max_field_align, field_align);
-
-			current_offset = align_to(current_offset, field_align);
 
 			ir_struct->u.strukt.fields[i].type = field_type;
-			ir_struct->u.strukt.fields[i].offset = current_offset;
 
-			current_offset += field_size;
+			u32 field_size = size_of_ir_type(field_type);
+			u32 field_align = align_of_ir_type(field_type);
+			max_field_size = max(max_field_size, field_size);
+			max_field_align = max(max_field_align, field_align);
+
+			if (type_spec->t == STRUCT_TYPE_SPECIFIER) {
+				current_offset = align_to(current_offset, field_align);
+				ir_struct->u.strukt.fields[i].offset = current_offset;
+
+				current_offset += field_size;
+			} else {
+				ir_struct->u.strukt.fields[i].offset = 0;
+			}
 		}
-		ir_struct->u.strukt.total_size = align_to(current_offset, max_field_align);
+		ir_struct->u.strukt.total_size = align_to(
+				type_spec->t == STRUCT_TYPE_SPECIFIER
+					? current_offset
+					: max_field_size,
+				max_field_align);
 		ir_struct->u.strukt.alignment = max_field_align;
-		type->u.strukt.incomplete = false;
+
 		type->u.strukt.ir_type = ir_struct;
+		type->u.strukt.incomplete = false;
 
 		return type;
 	}

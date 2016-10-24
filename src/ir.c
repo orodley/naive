@@ -370,7 +370,7 @@ void dump_trans_unit(TransUnit *trans_unit)
 
 		printf("struct $%s\n{\n", type->u.strukt.name);
 		for (u32 i = 0; i < type->u.strukt.num_fields; i++) {
-			putchar('\t');
+			printf("\t[%u] ", type->u.strukt.fields[i].offset);
 			dump_ir_type(type->u.strukt.fields[i].type);
 			putchar('\n');
 		}
