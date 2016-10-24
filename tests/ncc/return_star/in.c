@@ -1,4 +1,4 @@
-// FLAGS: -fsyntax-only -fdump-ast
+// FLAGS: -fsyntax-only -dump-ast
 
 int foo(int *x)
 {

@@ -1,3 +1,3 @@
-// FLAGS: -fsyntax-only -fdump-tokens
+// FLAGS: -fsyntax-only -dump-tokens
 
 int x = __LINE__;

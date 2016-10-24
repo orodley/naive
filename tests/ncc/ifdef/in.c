@@ -1,4 +1,4 @@
-// FLAGS: -fsyntax-only -fdump-tokens
+// FLAGS: -fsyntax-only -dump-tokens
 
 #define FOO
 

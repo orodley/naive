@@ -53,9 +53,9 @@ int main(int argc, char *argv[])
 	for (i32 i = 1; i < argc; i++) {
 		char *arg = argv[i];
 		if (arg[0] == '-') {
-			if (streq(arg, "-fdump-tokens")) {
+			if (streq(arg, "-dump-tokens")) {
 				flag_dump_tokens = true;
-			} else if (streq(arg, "-fdump-ast")) {
+			} else if (streq(arg, "-dump-ast")) {
 				flag_dump_ast = true;
 			} else if (streq(arg, "-dump-ir")) {
 				flag_dump_ir = true;

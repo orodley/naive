@@ -1,3 +1,3 @@
-// FLAGS: -fsyntax-only -fdump-tokens
+// FLAGS: -fsyntax-only -dump-tokens
 
 char *x = __FILE__;

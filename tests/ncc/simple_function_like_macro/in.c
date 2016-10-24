@@ -1,4 +1,4 @@
-// FLAGS: -fsyntax-only -fdump-tokens
+// FLAGS: -fsyntax-only -dump-tokens
 
 #define FOO(x) int x = 3;
 FOO(foo)
