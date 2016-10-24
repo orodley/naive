@@ -21,8 +21,6 @@ typedef struct CType
 {
 	CTypeType t;
 
-	struct CType *cached_pointer_type;
-
 	union
 	{
 		struct
@@ -46,6 +44,7 @@ typedef struct CType
 		} function;
 		struct
 		{
+			bool incomplete;
 			Array(CDecl) fields;
 			IrType *ir_type;
 		} strukt;
@@ -59,6 +58,12 @@ typedef struct CType
 		} array;
 	} u;
 } CType;
+
+typedef struct CDecl
+{
+	char *name;
+	CType *type;
+} CDecl;
 
 static bool c_type_eq(CType *a, CType *b)
 {
@@ -85,6 +90,8 @@ static bool c_type_eq(CType *a, CType *b)
 	case STRUCT_TYPE:
 		return a->u.strukt.ir_type == b->u.strukt.ir_type;
 	case POINTER_TYPE:
+		assert(a != a->u.pointee_type);
+		assert(b != b->u.pointee_type);
 		return c_type_eq(a->u.pointee_type, b->u.pointee_type);
 	case ARRAY_TYPE:
 		return a->u.array.size == b->u.array.size
@@ -199,30 +206,25 @@ static void init_type_env(TypeEnv *type_env)
 
 	type_env->void_type = (CType) {
 		.t = VOID_TYPE,
-		.cached_pointer_type = NULL,
 	};
 	type_env->bool_type = (CType) {
 		.t = INTEGER_TYPE,
-		.cached_pointer_type = NULL,
 		.u.integer.type = BOOL,
 		.u.integer.is_signed = false,
 	};
 	type_env->char_type = (CType) {
 		.t = INTEGER_TYPE,
-		.cached_pointer_type = NULL,
 		.u.integer.type = CHAR,
 		// System V x86-64 says "char" == "signed char"
 		.u.integer.is_signed = true,
 	};
 	type_env->int_type = (CType) {
 		.t = INTEGER_TYPE,
-		.cached_pointer_type = NULL,
 		.u.integer.type = INT,
 		.u.integer.is_signed = true,
 	};
 	type_env->unsigned_int_type = (CType) {
 		.t = INTEGER_TYPE,
-		.cached_pointer_type = NULL,
 		.u.integer.type = INT,
 		.u.integer.is_signed = false,
 	};
@@ -236,15 +238,84 @@ static CType *search(Array(TypeEnvEntry *) *types, char *name)
 			return &entry->type;
 		}
 	}
-
-	assert(false);
+	return NULL;
 }
 
-typedef struct CDecl
+static CType *pointer_type(TypeEnv *type_env, CType *type)
 {
-	char *name;
-	CType *type;
-} CDecl;
+	CType *pointer_type = pool_alloc(&type_env->pool, sizeof *pointer_type);
+	pointer_type->t = POINTER_TYPE;
+	pointer_type->u.pointee_type = type;
+
+	return pointer_type;
+}
+
+static CType *decay_to_pointer(TypeEnv *type_env, CType *type)
+{
+	if (type->t == ARRAY_TYPE) {
+		return pointer_type(type_env, type->u.array.elem_type);
+	} else  {
+		return type;
+	}
+}
+
+static void set_array_type_length(CType *array_type, u64 size)
+{
+	assert(array_type->t == ARRAY_TYPE);
+
+	array_type->u.array.size = size;
+	if (array_type->u.array.elem_type->t == IR_ARRAY) {
+		size *= array_type->u.array.elem_type->u.array.size;
+	}
+
+	array_type->u.array.size = size;
+	array_type->u.array.ir_type->u.array.size = size;
+	array_type->u.array.incomplete = false;
+}
+
+static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
+{
+	CType *array_type = pool_alloc(&type_env->pool, sizeof *array_type);
+	array_type->t = ARRAY_TYPE;
+	array_type->u.array.elem_type = type;
+	array_type->u.array.incomplete = true;
+
+	IrType *ir_array_type =
+		pool_alloc(&builder->trans_unit->pool, sizeof *ir_array_type);
+	ir_array_type->t = IR_ARRAY;
+
+	IrType elem_type = c_type_to_ir_type(type);
+	IrType *ir_elem_type;
+
+	if (elem_type.t == IR_ARRAY) {
+		ir_elem_type = elem_type.u.array.elem_type;
+	} else {
+		ir_elem_type =
+			pool_alloc(&builder->trans_unit->pool, sizeof *ir_elem_type);
+		*ir_elem_type = c_type_to_ir_type(type);
+	}
+	ir_array_type->u.array.elem_type = ir_elem_type;
+	array_type->u.array.ir_type = ir_array_type;
+
+	return array_type;
+}
+
+static CType *struct_type(TypeEnv *type_env, char *name)
+{
+	TypeEnvEntry *entry = pool_alloc(&type_env->pool, sizeof *entry);
+	*ARRAY_APPEND(&type_env->struct_types, TypeEnvEntry *) = entry;
+	if (name == NULL)
+		name = "<anonymous struct>";
+	entry->name = name;
+
+	CType *type = &entry->type;
+	type->t = STRUCT_TYPE;
+	// Every struct starts out incomplete, until we add the fields.
+	type->u.strukt.incomplete = true;
+	ARRAY_INIT(&type->u.strukt.fields, CDecl, 5);
+
+	return type;
+}
 
 static void decl_to_cdecl(IrBuilder *builder, TypeEnv *type_env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
@@ -306,29 +377,41 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 			return &type_env->int_type;
 		}
 
-		return search(&type_env->typedef_types, type_spec->u.name);
+		CType *type = search(&type_env->typedef_types, type_spec->u.name);
+		assert(type != NULL);
+		return type;
 	}
 	case STRUCT_TYPE_SPECIFIER: {
 		ASTFieldDecl *field_list = type_spec->u.struct_or_union_specifier.field_list;
 		char *name = type_spec->u.struct_or_union_specifier.name;
 
-		if (field_list == NULL) {
-			assert(name != NULL);
-			return search(&type_env->struct_types, name);
+		CType *existing_type = NULL;
+		if (name != NULL) {
+			existing_type = search(&type_env->struct_types, name);
 		}
 
-		TypeEnvEntry *struct_type = pool_alloc(&type_env->pool, sizeof *struct_type);
-		*ARRAY_APPEND(&type_env->struct_types, TypeEnvEntry *) = struct_type;
-		if (name == NULL)
-			name = "<anonymous struct>";
-		struct_type->name = name;
+		if (field_list == NULL) {
+			if (name == NULL) {
+				assert(!"Error, no name or fields for struct type");
+			} else if (existing_type == NULL) {
+				// Incomplete type
+				return struct_type(type_env, name);
+			} else {
+				return existing_type;
+			}
+		}
+		CType *type;
+		if (existing_type != NULL) {
+			assert(existing_type->t == STRUCT_TYPE);
+			if (!existing_type->u.strukt.incomplete)
+				assert(!"Error, redefinition of type");
 
-		CType *type = &struct_type->type;
-		type->t = STRUCT_TYPE;
-		type->cached_pointer_type = NULL;
-
+			type = existing_type;
+		} else {
+			type = struct_type(type_env, name);
+		}
 		Array(CDecl) *fields = &type->u.strukt.fields;
-		ARRAY_INIT(fields, CDecl, 5);
+
 		while (field_list != NULL) {
 			ASTDeclSpecifier *decl_specs = field_list->decl_specifier_list;
 			ASTFieldDeclarator *field_declarator = field_list->field_declarator_list;
@@ -365,11 +448,10 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, TypeEnv *type_en
 		}
 		ir_struct->u.strukt.total_size = align_to(current_offset, max_field_align);
 		ir_struct->u.strukt.alignment = max_field_align;
+		type->u.strukt.incomplete = false;
 		type->u.strukt.ir_type = ir_struct;
 
-		return &struct_type->type;
-
-		break;
+		return type;
 	}
 	default: UNIMPLEMENTED;
 	}
@@ -382,72 +464,6 @@ typedef struct Env
 	IrBlock *break_target;
 	IrBlock *continue_target;
 } Env;
-
-static CType *pointer_type(TypeEnv *type_env, CType *type)
-{
-	if (type->cached_pointer_type != NULL)
-		return type->cached_pointer_type;
-
-	CType *pointer_type = pool_alloc(&type_env->pool, sizeof *pointer_type);
-	pointer_type->t = POINTER_TYPE;
-	pointer_type->cached_pointer_type = NULL;
-	pointer_type->u.pointee_type = type;
-
-	type->cached_pointer_type = pointer_type;
-
-	return pointer_type;
-}
-
-static CType *decay_to_pointer(TypeEnv *type_env, CType *type)
-{
-	if (type->t == ARRAY_TYPE) {
-		return pointer_type(type_env, type->u.array.elem_type);
-	} else  {
-		return type;
-	}
-}
-
-static void set_array_type_length(CType *array_type, u64 size)
-{
-	assert(array_type->t == ARRAY_TYPE);
-
-	array_type->u.array.size = size;
-	if (array_type->u.array.elem_type->t == IR_ARRAY) {
-		size *= array_type->u.array.elem_type->u.array.size;
-	}
-
-	array_type->u.array.size = size;
-	array_type->u.array.ir_type->u.array.size = size;
-	array_type->u.array.incomplete = false;
-}
-
-static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
-{
-	CType *array_type = pool_alloc(&type_env->pool, sizeof *array_type);
-	array_type->t = ARRAY_TYPE;
-	array_type->cached_pointer_type = NULL;
-	array_type->u.array.elem_type = type;
-	array_type->u.array.incomplete = true;
-
-	IrType *ir_array_type =
-		pool_alloc(&builder->trans_unit->pool, sizeof *ir_array_type);
-	ir_array_type->t = IR_ARRAY;
-
-	IrType elem_type = c_type_to_ir_type(type);
-	IrType *ir_elem_type;
-
-	if (elem_type.t == IR_ARRAY) {
-		ir_elem_type = elem_type.u.array.elem_type;
-	} else {
-		ir_elem_type =
-			pool_alloc(&builder->trans_unit->pool, sizeof *ir_elem_type);
-		*ir_elem_type = c_type_to_ir_type(type);
-	}
-	ir_array_type->u.array.elem_type = ir_elem_type;
-	array_type->u.array.ir_type = ir_array_type;
-
-	return array_type;
-}
 
 static IrConst *eval_constant_expr(IrBuilder *builder, TypeEnv *type_env,
 		ASTExpr *constant_expr)
@@ -716,6 +732,17 @@ static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 		for (u32 i = 0; i < ctype->u.array.size; i++) {
 			konst->u.array_elems[i] =
 				*zero_initializer(builder, ctype->u.array.elem_type);
+		}
+		return konst;
+	}
+	case STRUCT_TYPE: {
+		assert(!ctype->u.strukt.incomplete);
+		// @TODO: This allocates unnecessarily by calling zero_initializer
+		// recursively and then copying the result into array_elems.
+		IrConst *konst = add_struct_const(builder, c_type_to_ir_type(ctype));
+		for (u32 i = 0; i < ctype->u.strukt.fields.size; i++) {
+			CType *field_type = ARRAY_REF(&ctype->u.strukt.fields, CDecl, i)->type;
+			konst->u.struct_fields[i] = *zero_initializer(builder, field_type);
 		}
 		return konst;
 	}

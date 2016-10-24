@@ -680,3 +680,13 @@ IrConst *add_array_const(IrBuilder *builder, IrType type)
 
 	return konst;
 }
+
+IrConst *add_struct_const(IrBuilder *builder, IrType type)
+{
+	IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);
+	konst->type = type;
+	konst->u.struct_fields = pool_alloc(&builder->trans_unit->pool,
+			type.u.strukt.num_fields * sizeof *konst->u.struct_fields);
+
+	return konst;
+}

@@ -250,7 +250,7 @@ AsmLabel *global_label(IrGlobal *global);
 
 IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value);
 IrConst *add_array_const(IrBuilder *builder, IrType type);
-
+IrConst *add_struct_const(IrBuilder *builder, IrType type);
 
 IrValue build_nullary_instr(IrBuilder *builder, IrOp op, IrType type);
 IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg);

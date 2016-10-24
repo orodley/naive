@@ -29,9 +29,10 @@ void *pool_alloc(Pool *pool, size_t size)
 		block = new_block;
 	}
 
+	void *ptr = block->memory + block->used;
 	block->used += size;
 
-	return block->memory + block->used - size;
+	return ptr;
 }
 
 void pool_free(Pool *pool)
