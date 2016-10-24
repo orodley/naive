@@ -682,9 +682,6 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, TypeEnv *type_env,
 
 		return global;
 	} else {
-		CDecl cdecl;
-		decl_to_cdecl(builder, type_env, decl_specifier_list, declarator, &cdecl);
-
 		IrGlobal *global = NULL;
 		Array(IrGlobal *) *globals = &builder->trans_unit->globals;
 		for (u32 i = 0; i < globals->size; i++) {
