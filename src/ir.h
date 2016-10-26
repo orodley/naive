@@ -159,7 +159,8 @@ typedef struct IrValue
 	X(OP_RET), \
 	X(OP_RET_VOID), \
 	X(OP_BRANCH), \
-	X(OP_COND),
+	X(OP_COND), \
+	X(OP_PHI)
 
 #define X(x) x
 typedef enum IrOp
@@ -167,6 +168,12 @@ typedef enum IrOp
 	IR_OPS
 } IrOp;
 #undef X
+
+typedef struct IrPhiParam
+{
+	IrBlock *block;
+	IrValue value;
+} IrPhiParam;
 
 typedef struct IrInstr
 {
@@ -216,6 +223,11 @@ typedef struct IrInstr
 		} cond;
 		IrBlock *target_block;
 		IrType type;
+		struct
+		{
+			u32 arity;
+			IrPhiParam *params;
+		} phi;
 	} u;
 } IrInstr;
 
@@ -263,5 +275,8 @@ IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType t
 IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 arity,
 		IrValue *arg_array);
 IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType result_type);
+IrValue build_phi(IrBuilder *builder, IrType type, u32 arity);
+
+void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value);
 
 #endif

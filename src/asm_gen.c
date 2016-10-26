@@ -189,8 +189,41 @@ static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp 
 	assign_vreg(builder, instr);
 }
 
+static void handle_phi_nodes(AsmBuilder *builder, IrBlock *src_block,
+		IrBlock *dest_block)
+{
+	Array(IrInstr *) *dest_instrs = &dest_block->instrs;
+	for (u32 ir_instr_index = 0;
+			ir_instr_index < dest_instrs->size;
+			ir_instr_index++) {
+		IrInstr *instr = *ARRAY_REF(dest_instrs, IrInstr *, ir_instr_index);
+		if (instr->op != OP_PHI)
+			break;
+
+		if (instr->vreg_number == -1) {
+			assign_vreg(builder, instr);
+		}
+
+		bool encountered_src_block = false;
+		for (u32 phi_param_index = 0;
+				phi_param_index < instr->u.phi.arity;
+				phi_param_index++) {
+			IrPhiParam *param = instr->u.phi.params + phi_param_index;
+			if (param->block == src_block) {
+				emit_instr2(builder, MOV,
+						asm_vreg(instr->vreg_number, size_of_ir_type(instr->type) * 8),
+						asm_value(param->value));
+
+				encountered_src_block = true;
+				break;
+			}
+		}
+		assert(encountered_src_block);
+	}
+}
+
 static void asm_gen_instr(
-		AsmBuilder *builder, IrGlobal *ir_global, IrInstr *instr)
+		AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block, IrInstr *instr)
 {
 	switch (instr->op) {
 	case OP_LOCAL: {
@@ -250,20 +283,46 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_BRANCH:
+		handle_phi_nodes(builder, curr_block, instr->u.target_block);
 		emit_instr1(builder, JMP, asm_label(instr->u.target_block->label));
 		break;
 	case OP_COND: {
 		IrValue condition = instr->u.cond.condition;
 		if (condition.t == VALUE_CONST) {
-			IrBlock *block = condition.u.constant == 0 ?
+			IrBlock *block = condition.u.constant ?
+				instr->u.cond.then_block :
+				instr->u.cond.else_block;
+			IrBlock *other_block = condition.u.constant ?
 				instr->u.cond.else_block :
 				instr->u.cond.then_block;
+
+			handle_phi_nodes(builder, curr_block, block);
 			emit_instr1(builder, JMP, asm_label(block->label));
+
+			// In this case we are deliberately emitting dead code (after the
+			// unconditional jump just above). This is because handle_phi_nodes
+			// assigns a virtual register for any unassigned phi nodes at the
+			// start of the target block. If all entries into a block are
+			// constant-folded away like this we still want to assign a vreg to
+			// the phi node so it can be compiled correctly.
+			//
+			// If we don't want to emit this dead code then the dead block
+			// should be removed entirely by IR-level DCE. If not, we should
+			// still compile the resulting IR correctly even if it's suboptimal.
+			handle_phi_nodes(builder, curr_block, other_block);
 		} else {
+			handle_phi_nodes(builder, curr_block, instr->u.cond.else_block);
 			emit_instr2(builder, CMP, asm_value(condition), asm_const(0));
 			emit_instr1(builder, JE, asm_label(instr->u.cond.else_block->label));
+			handle_phi_nodes(builder, curr_block, instr->u.cond.then_block);
 			emit_instr1(builder, JMP, asm_label(instr->u.cond.then_block->label));
 		}
+		break;
+	}
+	case OP_PHI: {
+		// Phi nodes are handled by asm_gen for the incoming branches, and
+		// require no codegen in their containing block.
+		assert(instr->vreg_number != -1);
 		break;
 	}
 	case OP_STORE: {
@@ -820,7 +879,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		u32 first_instr_of_block_index = builder->current_function->body.size;
 		Array(IrInstr *) *instrs = &block->instrs;
 		for (u32 i = 0; i < instrs->size; i++) {
-			asm_gen_instr(builder, ir_global, *ARRAY_REF(instrs, IrInstr *, i));
+			IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
+			asm_gen_instr(builder, ir_global, block, instr);
 		}
 
 		AsmInstr *first_instr_of_block = ARRAY_REF(

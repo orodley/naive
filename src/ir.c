@@ -277,6 +277,15 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		printf("%s, %s", instr->u.cond.then_block->name, instr->u.cond.else_block->name);
 		break;
+	case OP_PHI:
+		for (u32 i = 0; i < instr->u.phi.arity; i++) {
+			IrPhiParam *param = instr->u.phi.params + i;
+			printf("(%s, ", param->block->name);
+			dump_value(param->value);
+			putchar(')');
+			if (i != instr->u.phi.arity - 1)
+				fputs(", ", stdout);
+		}
 	case OP_RET_VOID:
 		break;
 	case OP_RET: case OP_BIT_NOT: case OP_LOG_NOT:
@@ -618,6 +627,27 @@ IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType resu
 	instr->u.arg = value;
 
 	return value_instr(instr);
+}
+
+IrValue build_phi(IrBuilder *builder, IrType type, u32 arity)
+{
+	IrInstr *instr = append_instr(builder);
+	instr->op = OP_PHI;
+	instr->type = type;
+	instr->u.phi.arity = arity;
+	instr->u.phi.params = pool_alloc(&builder->trans_unit->pool,
+			arity * sizeof *instr->u.phi.params);
+
+	return value_instr(instr);
+}
+
+void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value)
+{
+	assert(ir_type_eq(&value.type, &phi.type));
+	assert(phi.t == VALUE_INSTR);
+	IrPhiParam *param = phi.u.instr->u.phi.params + index;
+	param->block = source_block;
+	param->value = value;
 }
 
 IrValue value_const(IrType type, u64 constant)
