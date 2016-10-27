@@ -358,25 +358,6 @@ static ASTExpr *build_binary_head(Parser *parser, ASTExpr *curr,
 #undef CASE1
 #undef CASE2
 
-// @TODO: We actually want to use a fold for this, so we need
-// build_ternary_head and build_ternary_tail.
-static ASTExpr *build_conditional_expr(Parser *parser,
-		ASTExpr *condition, Token *q, ASTExpr *then_expr,
-		Token *colon, ASTExpr *else_expr)
-{
-	IGNORE(q);
-	IGNORE(colon);
-
-	ASTExpr *expr = pool_alloc(parser->pool, sizeof *expr);
-	expr->t = CONDITIONAL_EXPR;
-	expr->u.ternary_op.arg1 = condition;
-	expr->u.ternary_op.arg2 = then_expr;
-	expr->u.ternary_op.arg3 = else_expr;
-
-	return expr;
-	
-}
-
 
 ASTBlockItem *build_block_item(Parser *parser, WhichResult *decl_or_statement)
 {

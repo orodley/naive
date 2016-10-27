@@ -481,11 +481,16 @@ logical_or_expr =
 
 
 conditional_expr =
-    or(logical_or_expr,
-        seq(build_conditional_expr,
-			logical_or_expr, TOK_QUESTION_MARK,
-            expr, TOK_COLON,
-            conditional_expr))
+	or(seq(build_conditional_expr, logical_or_expr, TOK_QUESTION_MARK, expr,
+			TOK_COLON, conditional_expr),
+		logical_or_expr)
+
+build_conditional_expr =
+	build(ASTExpr, 5,
+		t, CONDITIONAL_EXPR,
+		u.ternary_op.arg1, #0,
+		u.ternary_op.arg2, #2,
+		u.ternary_op.arg3, #4)
 
 assignment_expr =
     fold(build_binary_head,

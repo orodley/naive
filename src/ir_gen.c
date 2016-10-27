@@ -1738,6 +1738,37 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 		return (Term) { .ctype = &env->type_env.int_type, .value = phi };
 	}
+	case CONDITIONAL_EXPR: {
+		IrBlock *then_block = add_block(builder, "ternary.then");
+		IrBlock *else_block = add_block(builder, "ternary.else");
+		IrBlock *after_block = add_block(builder, "ternary.after");
+
+		ASTExpr *condition_expr = expr->u.ternary_op.arg1;
+		Term condition_term =
+			ir_gen_expression(builder, env, condition_expr, RVALUE_CONTEXT);
+		assert(condition_term.ctype->t == INTEGER_TYPE);
+		build_cond(builder, condition_term.value, then_block, else_block);
+
+		ASTExpr *then_expr = expr->u.ternary_op.arg2;
+		builder->current_block = then_block;
+		Term then_term =
+			ir_gen_expression(builder, env, then_expr, RVALUE_CONTEXT);
+		build_branch(builder, after_block);
+
+		ASTExpr *else_expr = expr->u.ternary_op.arg3;
+		builder->current_block = else_block;
+		Term else_term =
+			ir_gen_expression(builder, env, else_expr, RVALUE_CONTEXT);
+		build_branch(builder, after_block);
+
+		assert(c_type_eq(then_term.ctype, else_term.ctype));
+
+		builder->current_block = after_block;
+		IrValue phi = build_phi(builder, c_type_to_ir_type(then_term.ctype), 2);
+		phi_set_param(phi, 0, then_block, then_term.value);
+		phi_set_param(phi, 1, else_block, else_term.value);
+		return (Term) { .ctype = then_term.ctype, .value = phi };
+	}
 	case SIZEOF_EXPR_EXPR: {
 		ASTExpr *sizeof_expr = expr->u.unary_arg;
 
