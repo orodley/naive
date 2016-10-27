@@ -727,7 +727,7 @@ typedef enum ExprContext
 	LVALUE_CONTEXT,
 	RVALUE_CONTEXT,
 } ExprContext;
-static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
+static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ExprContext context);
 
 static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
@@ -972,7 +972,7 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 		ASTInitializer *initializer = init_declarator->initializer;
 		if (initializer != NULL) {
 			assert(initializer->t == EXPR_INITIALIZER);
-			Term init_term = ir_gen_expression(builder, env,
+			Term init_term = ir_gen_expr(builder, env,
 					initializer->u.expr, RVALUE_CONTEXT);
 			build_store(
 				builder,
@@ -1014,15 +1014,15 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		break;
 	}
 	case EXPR_STATEMENT: {
-		ir_gen_expression(builder, env, statement->u.expr, RVALUE_CONTEXT);
+		ir_gen_expr(builder, env, statement->u.expr, RVALUE_CONTEXT);
 		break;
 	}
 	case RETURN_STATEMENT: {
 		if (statement->u.expr == NULL) {
 			build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
 		} else {
-			Term term = ir_gen_expression(builder, env,
-					statement->u.expr, RVALUE_CONTEXT);
+			Term term =
+				ir_gen_expr(builder, env, statement->u.expr, RVALUE_CONTEXT);
 			build_unary_instr(builder, OP_RET, term.value);
 		}
 		break;
@@ -1049,7 +1049,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		builder->current_block = initial_block;
 		ASTExpr *condition_expr = statement->u.if_statement.condition;
 		Term condition_term =
-			ir_gen_expression(builder, env, condition_expr, RVALUE_CONTEXT);
+			ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 
 		if (else_statement == NULL) {
@@ -1072,7 +1072,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		build_branch(builder, pre_header);
 		builder->current_block = pre_header;
 		Term condition_term =
-			ir_gen_expression(builder, env, condition_expr, RVALUE_CONTEXT);
+			ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
 
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 		build_cond(builder, condition_term.value, body, after);
@@ -1104,7 +1104,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		build_branch(builder, body);
 		builder->current_block = pre_header;
 		Term condition_term =
-			ir_gen_expression(builder, env, condition_expr, RVALUE_CONTEXT);
+			ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
 
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 		build_cond(builder, condition_term.value, body, after);
@@ -1146,13 +1146,13 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		} else {
 			assert(f->init_type == FOR_INIT_EXPR);
 			if (f->init.expr != NULL)
-				ir_gen_expression(builder, env, f->init.expr, RVALUE_CONTEXT);
+				ir_gen_expr(builder, env, f->init.expr, RVALUE_CONTEXT);
 		}
 
 		build_branch(builder, pre_header);
 		builder->current_block = pre_header;
 		Term condition_term =
-			ir_gen_expression(builder, env, f->condition, RVALUE_CONTEXT);
+			ir_gen_expr(builder, env, f->condition, RVALUE_CONTEXT);
 
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 		build_cond(builder, condition_term.value, body, after);
@@ -1171,7 +1171,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		env->continue_target = prev_continue_target;
 
 		if (f->update_expr != NULL)
-			ir_gen_expression(builder, env, f->update_expr, RVALUE_CONTEXT);
+			ir_gen_expr(builder, env, f->update_expr, RVALUE_CONTEXT);
 
 		build_branch(builder, pre_header);
 
@@ -1405,8 +1405,8 @@ static Term ir_gen_binary_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	return ir_gen_binary_operator(
 			builder,
 			env,
-			ir_gen_expression(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
-			ir_gen_expression(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT),
+			ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
+			ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT),
 			ir_op);
 }
 
@@ -1432,8 +1432,8 @@ static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
 static Term ir_gen_assign_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrOp ir_op)
 {
-	Term left = ir_gen_expression(builder, env, expr->u.binary_op.arg1, LVALUE_CONTEXT);
-	Term right = ir_gen_expression(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT);
+	Term left = ir_gen_expr(builder, env, expr->u.binary_op.arg1, LVALUE_CONTEXT);
+	Term right = ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT);
 	return ir_gen_assign_op(builder, env, left, right, ir_op, NULL);
 }
 
@@ -1459,7 +1459,7 @@ static Term ir_gen_deref(IrBuilder *builder, TypeEnv *type_env,
 	return (Term) { .ctype = pointee_type, .value = value };
 }
 
-static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
+static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ExprContext context)
 {
 	IGNORE(builder);
@@ -1498,8 +1498,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case STRUCT_ARROW_FIELD_EXPR: {
 		ASTExpr *struct_expr = expr->u.struct_field.struct_expr;
-		Term struct_term =
-			ir_gen_expression(builder, env, struct_expr, RVALUE_CONTEXT);
+		Term struct_term = ir_gen_expr(builder, env, struct_expr, RVALUE_CONTEXT);
 		assert(struct_term.ctype->t == POINTER_TYPE);
 		assert(struct_term.ctype->u.pointee_type->t == STRUCT_TYPE);
 
@@ -1508,8 +1507,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case STRUCT_DOT_FIELD_EXPR: {
 		ASTExpr *struct_expr = expr->u.struct_field.struct_expr;
-		Term struct_term =
-			ir_gen_expression(builder, env, struct_expr, RVALUE_CONTEXT);
+		Term struct_term = ir_gen_expr(builder, env, struct_expr, RVALUE_CONTEXT);
 		assert(struct_term.ctype->t == STRUCT_TYPE);
 
 		return ir_gen_struct_field(builder, struct_term,
@@ -1517,22 +1515,22 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case ADDRESS_OF_EXPR: {
 		ASTExpr *inner_expr = expr->u.unary_arg;
-		Term ptr = ir_gen_expression(builder, env, inner_expr, LVALUE_CONTEXT);
+		Term ptr = ir_gen_expr(builder, env, inner_expr, LVALUE_CONTEXT);
 		ptr.ctype = pointer_type(&env->type_env, ptr.ctype);
 
 		return ptr;
 	}
 	case DEREF_EXPR: {
 		ASTExpr *inner_expr = expr->u.unary_arg;
-		Term pointer = ir_gen_expression(builder, env, inner_expr, RVALUE_CONTEXT);
+		Term pointer = ir_gen_expr(builder, env, inner_expr, RVALUE_CONTEXT);
 		return ir_gen_deref(builder, &env->type_env, pointer, context);
 	}
 	case INDEX_EXPR: {
 		Term pointer = ir_gen_add(
 				builder,
 				env,
-				ir_gen_expression(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
-				ir_gen_expression(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT));
+				ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
+				ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT));
 		assert(pointer.ctype->t == POINTER_TYPE);
 		return ir_gen_deref(builder, &env->type_env, pointer, context);
 	}
@@ -1589,7 +1587,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case BIT_NOT_EXPR: {
 		// @TODO: Determine type correctly.
 		CType *result_type = &env->type_env.int_type;
-		Term term = ir_gen_expression(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
+		Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
 
 		return (Term) {
 			.value = build_unary_instr(builder, OP_BIT_NOT, term.value),
@@ -1598,7 +1596,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case LOGICAL_NOT_EXPR: {
 		CType *result_type = &env->type_env.int_type;
-		Term term = ir_gen_expression(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
+		Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
 
 		return (Term) {
 			.value = build_unary_instr(builder, OP_LOG_NOT, term.value),
@@ -1616,7 +1614,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case ADD_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_ADD);
 	case MINUS_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SUB);
 	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {
-		Term ptr = ir_gen_expression(builder, env, expr->u.unary_arg, LVALUE_CONTEXT);
+		Term ptr = ir_gen_expr(builder, env, expr->u.unary_arg, LVALUE_CONTEXT);
 		// @TODO: Correct type
 		CType *one_type = &env->type_env.int_type;
 		Term one = (Term) {
@@ -1639,7 +1637,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case MULTIPLY_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_DIV);
 	case FUNCTION_CALL_EXPR: {
-		Term callee = ir_gen_expression(builder, env,
+		Term callee = ir_gen_expr(builder, env,
 				expr->u.function_call.callee, RVALUE_CONTEXT);
 
 		u32 arity = 0;
@@ -1657,7 +1655,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 		arg = expr->u.function_call.arg_list;
 		for (u32 i = 0; arg != NULL; i++, arg = arg->next) {
-			Term arg_term = ir_gen_expression(builder, env, arg->expr, RVALUE_CONTEXT);
+			Term arg_term = ir_gen_expr(builder, env, arg->expr, RVALUE_CONTEXT);
 			CType *arg_type = callee.ctype->u.function.arg_type_array[i];
 			arg_array[i] = convert_type(builder, arg_term, arg_type).value;
 		}
@@ -1675,8 +1673,8 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ASTExpr *lhs = expr->u.binary_op.arg1;
 		ASTExpr *rhs = expr->u.binary_op.arg2;
 
-		Term lhs_ptr = ir_gen_expression(builder, env, lhs, LVALUE_CONTEXT);
-		Term rhs_term = ir_gen_expression(builder, env, rhs, RVALUE_CONTEXT);
+		Term lhs_ptr = ir_gen_expr(builder, env, lhs, LVALUE_CONTEXT);
+		Term rhs_term = ir_gen_expr(builder, env, rhs, RVALUE_CONTEXT);
 
 		build_store(
 				builder,
@@ -1686,8 +1684,8 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return rhs_term;
 	}
 	case COMMA_EXPR:
-		ir_gen_expression(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT);
-		return ir_gen_expression(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT);
+		ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT);
+		return ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT);
 	case SIZEOF_TYPE_EXPR: {
 		ASTDeclSpecifier *decl_specifier_list = expr->u.type->decl_specifier_list;
 		ASTDeclarator *declarator = expr->u.type->declarator;
@@ -1713,7 +1711,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ASTExpr *lhs_expr = expr->u.binary_op.arg1;
 		ASTExpr *rhs_expr = expr->u.binary_op.arg2;
 
-		Term lhs = ir_gen_expression(builder, env, lhs_expr, RVALUE_CONTEXT);
+		Term lhs = ir_gen_expr(builder, env, lhs_expr, RVALUE_CONTEXT);
 		assert(lhs.ctype->t == INTEGER_TYPE);
 		if (is_or) {
 			build_cond(builder, lhs.value, after_block, rhs_block);
@@ -1722,7 +1720,7 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		}
 
 		builder->current_block = rhs_block;
-		Term rhs = ir_gen_expression(builder, env, rhs_expr, RVALUE_CONTEXT);
+		Term rhs = ir_gen_expr(builder, env, rhs_expr, RVALUE_CONTEXT);
 		assert(rhs.ctype->t == INTEGER_TYPE);
 		IrValue rhs_as_bool = build_binary_instr(builder, OP_NEQ, rhs.value,
 				value_const(c_type_to_ir_type(&env->type_env.int_type), 0));
@@ -1745,20 +1743,18 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 		ASTExpr *condition_expr = expr->u.ternary_op.arg1;
 		Term condition_term =
-			ir_gen_expression(builder, env, condition_expr, RVALUE_CONTEXT);
+			ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 		build_cond(builder, condition_term.value, then_block, else_block);
 
 		ASTExpr *then_expr = expr->u.ternary_op.arg2;
 		builder->current_block = then_block;
-		Term then_term =
-			ir_gen_expression(builder, env, then_expr, RVALUE_CONTEXT);
+		Term then_term = ir_gen_expr(builder, env, then_expr, RVALUE_CONTEXT);
 		build_branch(builder, after_block);
 
 		ASTExpr *else_expr = expr->u.ternary_op.arg3;
 		builder->current_block = else_block;
-		Term else_term =
-			ir_gen_expression(builder, env, else_expr, RVALUE_CONTEXT);
+		Term else_term = ir_gen_expr(builder, env, else_expr, RVALUE_CONTEXT);
 		build_branch(builder, after_block);
 
 		assert(c_type_eq(then_term.ctype, else_term.ctype));
@@ -1778,13 +1774,13 @@ static Term ir_gen_expression(IrBuilder *builder, Env *env, ASTExpr *expr,
 		// SIZEOF_CONTEXT. This would behave like RVALUE_CONTEXT, but not
 		// actually generate any IR, just determine types.
 		if (sizeof_expr->t == IDENTIFIER_EXPR) {
-			Term term = ir_gen_expression(builder, env, sizeof_expr, LVALUE_CONTEXT);
+			Term term = ir_gen_expr(builder, env, sizeof_expr, LVALUE_CONTEXT);
 			size = size_of_ir_type(c_type_to_ir_type(term.ctype));
 		} else if (sizeof_expr->t == DEREF_EXPR) {
 			ASTExpr *inner_expr = sizeof_expr->u.unary_arg;
 			if (inner_expr->t != IDENTIFIER_EXPR)
 				UNIMPLEMENTED;
-			Term term = ir_gen_expression(builder, env, inner_expr, LVALUE_CONTEXT);
+			Term term = ir_gen_expr(builder, env, inner_expr, LVALUE_CONTEXT);
 			assert(term.ctype->t == POINTER_TYPE);
 			size = size_of_ir_type(c_type_to_ir_type(term.ctype->u.pointee_type));
 		} else {
