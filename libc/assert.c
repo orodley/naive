@@ -1,8 +1,7 @@
-// @TODO: Make this into a macro once we can support that in the compiler.
 // @TODO: Call abort instead of just crashing.
+// @TODO: Print filename, line number, and function.
 
-void assert(int condition)
+void __assert_fail()
 {
-	if (!condition)
-		*(volatile char *)0;
+	*(volatile char *)0;
 }

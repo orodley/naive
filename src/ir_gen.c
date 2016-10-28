@@ -1028,34 +1028,33 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		break;
 	}
 	case IF_STATEMENT: {
-		IrBlock *initial_block = builder->current_block;
-		IrBlock *then_block = add_block(builder, "if.then");
-		IrBlock *after_block = add_block(builder, "if.after");
-
 		ASTStatement *then_statement = statement->u.if_statement.then_statement;
-		builder->current_block = then_block;
-		ir_gen_statement(builder, env, then_statement);
-		build_branch(builder, after_block);
-
 		ASTStatement *else_statement = statement->u.if_statement.else_statement;
-		IrBlock *else_block = NULL;
-		if (else_statement != NULL) {
-			else_block = add_block(builder, "if.else");
-			builder->current_block = else_block;
-			ir_gen_statement(builder, env, else_statement);
-			build_branch(builder, after_block);
-		}
 
-		builder->current_block = initial_block;
 		ASTExpr *condition_expr = statement->u.if_statement.condition;
 		Term condition_term =
 			ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 
+		IrBlock *then_block = add_block(builder, "if.then");
+		IrBlock *after_block = add_block(builder, "if.after");
+		IrBlock *else_block =
+			else_statement == NULL ? NULL : add_block(builder, "if.else");
+
 		if (else_statement == NULL) {
 			build_cond(builder, condition_term.value, then_block, after_block);
 		} else {
 			build_cond(builder, condition_term.value, then_block, else_block);
+		}
+
+		builder->current_block = then_block;
+		ir_gen_statement(builder, env, then_statement);
+		build_branch(builder, after_block);
+
+		if (else_statement != NULL) {
+			builder->current_block = else_block;
+			ir_gen_statement(builder, env, else_statement);
+			build_branch(builder, after_block);
 		}
 
 		builder->current_block = after_block;

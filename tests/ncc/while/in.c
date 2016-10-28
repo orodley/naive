@@ -9,4 +9,6 @@ int main()
 	}
 
 	assert(y == 10);
+
+	return 0;
 }

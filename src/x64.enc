@@ -12,6 +12,7 @@ CALL rel               =         E8 cd
 
 CDQ                    =         99
 
+CMP r/m8, imm8         =         80 /7 ib
 CMP r/m32, imm32       =         81 /7 id
 CMP r/m32, r32         =         39 /r
 CMP r/m64, imm32       = REX.W + 81 /7 id
@@ -67,7 +68,9 @@ SUB r/m32, imm8        =         83 /5 ib
 SUB r/m64, r64         = REX.W + 29 /r
 SUB r/m64, imm8        = REX.W + 83 /5 ib
 
+TEST r/m8, r8          =         84 /r
 TEST r/m32, r32        =         85 /r
 
+XOR r/m8, r8           =         30 /r
 XOR r/m32, r32         =         31 /r
 XOR r/m64, r64         = REX.W + 31 /r

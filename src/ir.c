@@ -586,6 +586,17 @@ IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue ar
 	assert(ir_type_eq(&arg1.type, &arg2.type));
 
 	IrType type = arg1.type;
+	switch (op) {
+	case OP_LOG_NOT: case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE:
+	case OP_LT: case OP_LTE:
+		// @TODO: This shouldn't be hardcoded here. We should define some fixed
+		// type for IR comparisons and the caller should explicitly cast to
+		// whatever type they want (int in C).
+		type = (IrType) { .t = IR_INT, .u.bit_width = 32 };
+		break;
+	default:
+		break;
+	}
 
 	if (arg1.t == VALUE_CONST && arg2.t == VALUE_CONST && constant_foldable(op)) {
 		return value_const(type,

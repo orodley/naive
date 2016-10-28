@@ -1052,11 +1052,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 
 	elf_file->section_info[TEXT_INDEX].size = binary.text.size;
 	elf_file->section_info[TEXT_INDEX].contents = binary.text.elements;
-	Array(Fixup) empty_array = {
-		.size = 0,
-		.capacity = 0,
-		.elements = NULL,
-	};
+	Array(Fixup) empty_array = EMPTY_ARRAY;
 
 	elf_file->section_info[BSS_INDEX].size = binary.bss_size;
 

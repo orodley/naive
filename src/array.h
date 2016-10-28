@@ -25,7 +25,7 @@ void _array_remove(Array_ *array, u32 element_size, u32 removal_point);
 void array_clear(Array_ *array);
 
 #define ARRAY_IS_VALID(array) ((array)->elements != NULL)
-#define ARRAY_ZEROED ((Array_){ 0, 0, 0 })
+#define EMPTY_ARRAY ((Array_){ NULL, 0, 0 })
 #define ARRAY_INIT(array, element_type, initial_capacity) \
 	_array_init((array), sizeof(element_type), (initial_capacity))
 #define ARRAY_REF(array, element_type, i) \

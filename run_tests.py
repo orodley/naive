@@ -74,6 +74,7 @@ def main():
     print "%d / %d tests passed" % (passes, num_tests)
 
     if print_details:
+        results.sort(key=lambda r: r.name)
         for result in results:
             if be_positive:
                 if result.passed():

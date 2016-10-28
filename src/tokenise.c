@@ -101,6 +101,7 @@ typedef struct Reader
 	Array(PPCondScope) pp_scope_stack;
 
 	Array(Macro) macro_env;
+	Array(Macro) curr_macro_params;
 } Reader;
 
 static inline bool ignoring_tokens(Reader *reader)
@@ -275,6 +276,7 @@ bool tokenise(Array(SourceToken) *tokens, char *input_filename)
 	Reader reader;
 	reader.tokens = tokens;
 	reader.source_loc = (SourceLoc) { NULL, 0, 0 };
+	reader.curr_macro_params = EMPTY_ARRAY;
 	ARRAY_INIT(&reader.macro_env, Macro, 10);
 	ARRAY_INIT(&reader.pp_scope_stack, PPCondScope, 5);
 
@@ -478,9 +480,11 @@ static bool substitute_macro_params(Reader *reader, Macro *macro)
 				ret = false;
 				goto cleanup;
 			}
-			Macro *arg_macro = ARRAY_APPEND(&reader->macro_env, Macro);
+			ARRAY_INIT(&reader->curr_macro_params, Macro, 5);
+			Macro *arg_macro = ARRAY_APPEND(&reader->curr_macro_params, Macro);
 			arg_macro->name = *ARRAY_REF(&macro->arg_names, char *, args_processed);
 			arg_macro->value = strndup((char *)arg_chars.elements, arg_chars.size); 
+			arg_macro->arg_names = EMPTY_ARRAY;
 			array_clear(&arg_chars);
 			args_processed++;
 
@@ -857,7 +861,9 @@ static bool tokenise_aux(Reader *reader)
 					append_token(reader, start_source_loc, TOK_STRING_LITERAL);
 				file_name->u.string_literal = reader->source_loc.filename;
 			} else {
-				Macro *macro = look_up_macro(&reader->macro_env, symbol);
+				Macro *macro = look_up_macro(&reader->curr_macro_params, symbol);
+				if (macro == NULL)
+					macro = look_up_macro(&reader->macro_env, symbol);
 
 				if (macro == NULL) {
 					Token *token =
@@ -865,8 +871,11 @@ static bool tokenise_aux(Reader *reader)
 					token->u.symbol = symbol;
 				} else {
 					if (macro->arg_names.size == 0) {
+						Array(Macro) old_params = reader->curr_macro_params;
+						reader->curr_macro_params = EMPTY_ARRAY;
 						if (!tokenise_string(reader, macro->value))
 							return false;
+						reader->curr_macro_params = old_params;
 					} else {
 						skip_whitespace_and_comments(reader, true);
 						if (peek_char(reader) != '(') {
@@ -878,13 +887,13 @@ static bool tokenise_aux(Reader *reader)
 							token->u.symbol = symbol;
 						} else {
 							read_char(reader);
+							Array(Macro) old_params = reader->curr_macro_params;
 							substitute_macro_params(reader, macro);
 							if (!tokenise_string(reader, macro->value))
 								return false;
 
-							// Remove the temporary macro values inserted for
-							// the macro parameters.
-							reader->macro_env.size -= macro->arg_names.size;
+							array_free(&reader->curr_macro_params);
+							reader->curr_macro_params = old_params;
 						}
 					}
 				}

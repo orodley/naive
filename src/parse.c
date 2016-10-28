@@ -597,7 +597,7 @@ static ParserResult identifier_not_sizeof(Parser *parser)
 bool parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool,
 		ASTToplevel **toplevel)
 {
-	Parser parser = { ast_pool, tokens, 0, { ARRAY_ZEROED } };
+	Parser parser = { ast_pool, tokens, 0, { EMPTY_ARRAY } };
 	type_table_init(&parser.defined_types);
 
 	ParserResult result = translation_unit(&parser);
