@@ -22,7 +22,7 @@ __syscall:
 	mov rsi, rdx
 	mov rdx, rcx
 
-	int 0x80
+	syscall
 
 	pop r15
 	pop r14
