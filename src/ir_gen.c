@@ -1791,6 +1791,22 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrValue value = value_const(c_type_to_ir_type(result_type), size);
 		return (Term) { .ctype = result_type, .value = value };
 	}
+	case CAST_EXPR: {
+		CDecl cdecl;
+		ASTTypeName *type_name = expr->u.cast.cast_type;
+		decl_to_cdecl(builder, &env->type_env, type_name->decl_specifier_list,
+				type_name->declarator, &cdecl);
+		assert(cdecl.name == NULL);
+		CType *cast_type = cdecl.type;
+
+		Term castee =
+			ir_gen_expr(builder, env, expr->u.cast.arg, RVALUE_CONTEXT);
+		if (cast_type->t == POINTER_TYPE && castee.ctype->t == POINTER_TYPE) {
+			return (Term) { .ctype = cast_type, .value = castee.value };
+		} else {
+			UNIMPLEMENTED;
+		}
+	}
 	default:
 		printf("%d\n", expr->t);
 		UNIMPLEMENTED;
