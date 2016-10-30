@@ -36,7 +36,7 @@ static int make_file_executable(char *filename);
 
 int main(int argc, char *argv[])
 {
-	// @NOTE: We only use this for generating temp file names. We go to extra
+	// @NOTE: We only use this for generating temp file names. We take extra
 	// precautions to make sure the names don't conflict, so it doesn't really
 	// matter how we seed this.
 	srand(time(NULL));
