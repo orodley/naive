@@ -71,7 +71,8 @@ static bool c_type_eq(CType *a, CType *b)
 		return false;
 
 	switch (a->t) {
-	case VOID_TYPE: return true;
+	case VOID_TYPE:
+		return true;
 	case INTEGER_TYPE:
 		return a->u.integer.type == b->u.integer.type
 			&& a->u.integer.is_signed == b->u.integer.is_signed;
@@ -97,6 +98,20 @@ static bool c_type_eq(CType *a, CType *b)
 		return a->u.array.size == b->u.array.size
 			&& c_type_eq(a->u.array.elem_type, b->u.array.elem_type);
 	}
+}
+
+static bool c_type_compatible(CType *a, CType *b)
+{
+	if (c_type_eq(a, b))
+		return true;
+
+	if (a->t == POINTER_TYPE && b->t == POINTER_TYPE
+			&& (a->u.pointee_type->t == VOID_TYPE
+				|| b->u.pointee_type->t == VOID_TYPE)) {
+		return true;
+	}
+
+	return false;
 }
 
 static IrType c_type_to_ir_type(CType *ctype)
@@ -931,10 +946,9 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 	if (c_type_eq(term.ctype, target_type))
 		return term;
 
-	IrType ir_type = c_type_to_ir_type(target_type);
 	IrValue converted;
-
 	if (term.ctype->t == INTEGER_TYPE && target_type->t == INTEGER_TYPE) {
+		IrType ir_type = c_type_to_ir_type(target_type);
 		if (term.ctype->u.integer.is_signed) {
 			converted =
 				build_type_instr(builder, OP_SEXT, term.value, ir_type);
@@ -942,6 +956,8 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 			converted =
 				build_type_instr(builder, OP_ZEXT, term.value, ir_type);
 		}
+	} else if (term.ctype->t == POINTER_TYPE && target_type->t == POINTER_TYPE) {
+		converted = term.value;
 	} else if (term.ctype->t == ARRAY_TYPE && target_type->t == POINTER_TYPE) {
 		// Array values are only ever passed around as pointers to the first
 		// element anyway, so this conversion is a no-op that just changes type.
@@ -1417,9 +1433,13 @@ static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
 		.value = build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
 	};
 	Term result = ir_gen_binary_operator(builder, env, load, right, ir_op);
+
+	assert(c_type_compatible(left.ctype, result.ctype));
+	Term converted = convert_type(builder, result, left.ctype);
+
 	build_store(builder,
 			left.value,
-			result.value,
+			converted.value,
 			c_type_to_ir_type(result.ctype));
 
 	if (pre_assign_value != NULL)
@@ -1656,6 +1676,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		for (u32 i = 0; arg != NULL; i++, arg = arg->next) {
 			Term arg_term = ir_gen_expr(builder, env, arg->expr, RVALUE_CONTEXT);
 			CType *arg_type = callee.ctype->u.function.arg_type_array[i];
+			assert(c_type_compatible(arg_term.ctype, arg_type));
 			arg_array[i] = convert_type(builder, arg_term, arg_type).value;
 		}
 
@@ -1801,11 +1822,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 		Term castee =
 			ir_gen_expr(builder, env, expr->u.cast.arg, RVALUE_CONTEXT);
-		if (cast_type->t == POINTER_TYPE && castee.ctype->t == POINTER_TYPE) {
-			return (Term) { .ctype = cast_type, .value = castee.value };
-		} else {
-			UNIMPLEMENTED;
-		}
+		return convert_type(builder, castee, cast_type);
 	}
 	default:
 		printf("%d\n", expr->t);
