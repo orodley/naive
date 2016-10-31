@@ -918,20 +918,47 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 	case NAMED_TYPE_SPECIFIER:
 		pretty_printf("NAMED_TYPE_SPECIFIER(%s", type_specifier->u.name);
 		break;
-	case STRUCT_TYPE_SPECIFIER:
-		pretty_printf("STRUCT_TYPE_SPECIFIER(");
+	case UNION_TYPE_SPECIFIER: case STRUCT_TYPE_SPECIFIER: {
+		pretty_printf(type_specifier->t == STRUCT_TYPE_SPECIFIER
+				? "STRUCT_TYPE_SPECIFIER("
+				: "UNION_TYPE_SPECIFIER(");
 
 		char *name = type_specifier->u.struct_or_union_specifier.name;
 		if (name != NULL)
 			pretty_printf("%s,", name);
 
-		pretty_printf("STRUCT_FIELD_LIST(");
+		pretty_printf("FIELD_LIST(");
 		dump_struct_or_union_field_list(
 				type_specifier->u.struct_or_union_specifier.field_list);
 		pretty_printf(")");
 		break;
-	default:
-		UNIMPLEMENTED;
+	}
+	case ENUM_TYPE_SPECIFIER: {
+		pretty_printf("ENUM_TYPE_SPECIFIER(");
+		char *name = type_specifier->u.enum_specifier.name;
+		ASTEnumerator *enumerator_list =
+			type_specifier->u.enum_specifier.enumerator_list;
+
+		if (name != NULL) {
+			pretty_printf("%s", name);
+			if (enumerator_list != NULL)
+				pretty_printf(",");
+		}
+
+		while (enumerator_list != NULL) {
+			pretty_printf("ENUMERATOR(");
+			if (enumerator_list->name != NULL) {
+				pretty_printf("%s", enumerator_list->name);
+			}
+			if (enumerator_list->value != NULL) {
+				if (enumerator_list->name != NULL)
+					pretty_printf(",");
+				dump_expr(enumerator_list->value);
+			}
+			pretty_printf(")");
+			enumerator_list = enumerator_list->next;
+		}
+	}
 	}
 
 	pretty_printf(")");

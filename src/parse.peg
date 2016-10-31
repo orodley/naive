@@ -113,6 +113,7 @@ build_enumerator =
 build_enum_tagged_named_type =
 	build(ASTTypeSpecifier, 2,
 		t, ENUM_TYPE_SPECIFIER,
+		u.enum_specifier.name, "((Token *)#1)->u.symbol",
 		u.enum_specifier.enumerator_list, NULL)
 
 type_qualifier =
