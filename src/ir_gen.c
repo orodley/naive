@@ -355,8 +355,7 @@ static IrConst *eval_constant_expr(IrBuilder *builder, TypeEnv *type_env,
 }
 
 static void decl_to_cdecl(IrBuilder *builder, Env *env,
-		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
-		CDecl *cdecl);
+		CType *decl_spec_type, ASTDeclarator *declarator, CDecl *cdecl);
 
 static bool matches_sequence(ASTDeclSpecifier *decl_specifier_list, int length, ...)
 {
@@ -457,14 +456,15 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 		Array(CDecl) *fields = &type->u.strukt.fields;
 
 		while (field_list != NULL) {
-			ASTDeclSpecifier *decl_specs = field_list->decl_specifier_list;
+			CType *decl_spec_type = decl_specifier_list_to_c_type(
+					builder, env, field_list->decl_specifier_list);
 			ASTFieldDeclarator *field_declarator = field_list->field_declarator_list;
 			while (field_declarator != NULL) {
 				assert(field_declarator->t == NORMAL_FIELD_DECLARATOR);
 				ASTDeclarator *declarator = field_declarator->u.declarator;
 
 				CDecl *cdecl = ARRAY_APPEND(fields, CDecl);
-				decl_to_cdecl(builder, env, decl_specs, declarator, cdecl);
+				decl_to_cdecl(builder, env, decl_spec_type, declarator, cdecl);
 
 				field_declarator = field_declarator->next;
 			}
@@ -596,8 +596,8 @@ typedef struct CDeclAux
 } CDeclAux;
 
 static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
-		ASTDeclSpecifier *decl_specifier_list,
-		ASTDirectDeclarator *direct_declarator, CDeclAux *cdecl) {
+		CType *decl_spec_type, ASTDirectDeclarator *direct_declarator,
+		CDeclAux *cdecl) {
 	TypeEnv *type_env = &env->type_env;
 
 	switch (direct_declarator->t) {
@@ -619,9 +619,11 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 				sizeof(*arg_c_types) * arity);
 
 		for (u32 i = 0; i < arity; i++) {
+			CType *decl_spec_type = decl_specifier_list_to_c_type(
+					builder, env, params->decl_specifier_list);
 			CDecl cdecl;
-			decl_to_cdecl(builder, env, params->decl_specifier_list,
-					params->declarator, &cdecl);
+			decl_to_cdecl(
+					builder, env, decl_spec_type, params->declarator, &cdecl);
 
 			// As per 6.7.5.3.7, parameters of array type are adjusted to
 			// pointers to the element type.
@@ -635,7 +637,7 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 		ASTDirectDeclarator *function_declarator =
 			direct_declarator->u.function_declarator.declarator;
 		CDeclAux func_name_cdecl;
-		direct_declarator_to_cdecl(builder, env, decl_specifier_list,
+		direct_declarator_to_cdecl(builder, env, decl_spec_type,
 				function_declarator, &func_name_cdecl);
 
 		CType *ctype = pool_alloc(&builder->trans_unit->pool, sizeof *ctype);
@@ -652,7 +654,7 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 	}
 	case IDENTIFIER_DECLARATOR: {
 		cdecl->name = direct_declarator->u.name;
-		cdecl->type = decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
+		cdecl->type = decl_spec_type;
 		cdecl->ident_type = &cdecl->type;
 		break;
 	}
@@ -661,7 +663,7 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 			direct_declarator->u.array_declarator.element_declarator;
 
 		CDeclAux elem_cdecl;
-		direct_declarator_to_cdecl(builder, env, decl_specifier_list,
+		direct_declarator_to_cdecl(builder, env, decl_spec_type,
 				elem_declarator, &elem_cdecl);
 
 		CType *array = array_type(builder, type_env, *elem_cdecl.ident_type);
@@ -689,18 +691,16 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 }
 
 static void decl_to_cdecl_aux(IrBuilder *builder, Env *env,
-		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
-		CDeclAux *cdecl)
+		CType *decl_spec_type, ASTDeclarator *declarator, CDeclAux *cdecl)
 {
 	if (declarator == NULL) {
 		cdecl->name = NULL;
-		cdecl->type =
-			decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
+		cdecl->type = decl_spec_type;
 		cdecl->ident_type = &cdecl->type;
 	} else if (declarator->t == POINTER_DECLARATOR) {
 		CDeclAux pointee_cdecl;
 		assert(declarator->u.pointer_declarator.decl_specifier_list == NULL);
-		decl_to_cdecl_aux(builder, env, decl_specifier_list,
+		decl_to_cdecl_aux(builder, env, decl_spec_type,
 				declarator->u.pointer_declarator.pointee, &pointee_cdecl);
 		cdecl->name = pointee_cdecl.name;
 		CType *ptr = pointer_type(&env->type_env, *pointee_cdecl.ident_type);
@@ -711,18 +711,16 @@ static void decl_to_cdecl_aux(IrBuilder *builder, Env *env,
 		assert(declarator->t == DIRECT_DECLARATOR);
 		ASTDirectDeclarator *direct_declarator = declarator->u.direct_declarator;
 
-		direct_declarator_to_cdecl(builder, env, decl_specifier_list,
+		direct_declarator_to_cdecl(builder, env, decl_spec_type,
 				direct_declarator, cdecl);
 	}
 }
 
 static void decl_to_cdecl(IrBuilder *builder, Env *env,
-		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
-		CDecl *cdecl)
+		CType *decl_spec_type, ASTDeclarator *declarator, CDecl *cdecl)
 {
 	CDeclAux cdecl_aux;
-	decl_to_cdecl_aux(
-			builder, env, decl_specifier_list, declarator, &cdecl_aux);
+	decl_to_cdecl_aux(builder, env, decl_spec_type, declarator, &cdecl_aux);
 	cdecl->name = cdecl_aux.name;
 	cdecl->type = cdecl_aux.type;
 }
@@ -746,8 +744,10 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
 		CType **result_c_type)
 {
+	CType *decl_spec_type =
+		decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
 	CDecl cdecl;
-	decl_to_cdecl(builder, env, decl_specifier_list, declarator, &cdecl);
+	decl_to_cdecl(builder, env, decl_spec_type, declarator, &cdecl);
 	CType *ctype = cdecl.type;
 	if (ctype->t == FUNCTION_TYPE) {
 		u32 arity = ctype->u.function.arity;
@@ -893,8 +893,10 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			for (u32 i = 0; param != NULL; i++, param = param->next) {
 				Binding *binding = ARRAY_APPEND(param_bindings, Binding);
 
+				CType *decl_spec_type = decl_specifier_list_to_c_type(
+						builder, &env, param->decl_specifier_list);
 				CDecl cdecl;
-				decl_to_cdecl(builder, &env, param->decl_specifier_list,
+				decl_to_cdecl(builder, &env, decl_spec_type,
 						param->declarator, &cdecl);
 				// @HACK: We have to do this because decl_to_cdecl does extra
 				// stuff to adjust parameter types when it knows that the
@@ -926,11 +928,13 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 					decl_specifier_list->u.storage_class_specifier == TYPEDEF_SPECIFIER) {
 				assert(init_declarator != NULL);
 				decl_specifier_list = decl_specifier_list->next;
+				CType *decl_spec_type = decl_specifier_list_to_c_type(
+						builder, &env, decl_specifier_list);
 
 				while (init_declarator != NULL) {
 					assert(init_declarator->initializer == NULL);
 					CDecl cdecl;
-					decl_to_cdecl(builder, &env, decl_specifier_list,
+					decl_to_cdecl(builder, &env, decl_spec_type,
 							init_declarator->declarator, &cdecl);
 
 					TypeEnvEntry *new_type_alias =
@@ -1047,20 +1051,13 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 {
 	ASTInitDeclarator *init_declarator = decl->init_declarators;
-
-	// @TODO: Remove this temporary hack. It's here so that stuff like:
-	//     enum Foo { A, B, C };
-	// works in function scope. Here there are no declarators, so we otherwise
-	// wouldn't process the type spec, and thereby execute its side effect of
-	// defining the type 'Foo'.
-	if (init_declarator == NULL)
+	CType *decl_spec_type =
 		decl_specifier_list_to_c_type(builder, env, decl->decl_specifier_list);
 	
 	while (init_declarator != NULL) {
 		CDecl cdecl;
-		decl_to_cdecl(builder, env, decl->decl_specifier_list,
-				init_declarator->declarator,
-				&cdecl);
+		decl_to_cdecl(builder, env, decl_spec_type,
+				init_declarator->declarator, &cdecl);
 
 		Binding *binding = ARRAY_APPEND(&env->scope->bindings, Binding);
 		cdecl_to_binding(builder, &cdecl, binding);
@@ -1796,7 +1793,9 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ASTDeclarator *declarator = expr->u.type->declarator;
 
 		CDecl cdecl;
-		decl_to_cdecl(builder, env, decl_specifier_list, declarator, &cdecl);
+		CType *decl_spec_type = decl_specifier_list_to_c_type(
+				builder, env, decl_specifier_list);
+		decl_to_cdecl(builder, env, decl_spec_type, declarator, &cdecl);
 
 		// @TODO: This should be a size_t
 		CType *result_type = &env->type_env.int_type;
@@ -1902,7 +1901,9 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case CAST_EXPR: {
 		CDecl cdecl;
 		ASTTypeName *type_name = expr->u.cast.cast_type;
-		decl_to_cdecl(builder, env, type_name->decl_specifier_list,
+		CType *decl_spec_type = decl_specifier_list_to_c_type(
+				builder, env, type_name->decl_specifier_list);
+		decl_to_cdecl(builder, env, decl_spec_type,
 				type_name->declarator, &cdecl);
 		assert(cdecl.name == NULL);
 		CType *cast_type = cdecl.type;
