@@ -1280,6 +1280,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		assert(env->continue_target != NULL);
 		build_branch(builder, env->continue_target);
 		break;
+	case EMPTY_STATEMENT:
+		break;
 	default:
 		UNIMPLEMENTED;
 	}
