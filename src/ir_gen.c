@@ -341,6 +341,19 @@ typedef struct Env
 	IrBlock *continue_target;
 } Env;
 
+static IrConst *eval_constant_expr(IrBuilder *builder, TypeEnv *type_env,
+		ASTExpr *constant_expr)
+{
+	switch (constant_expr->t) {
+	case INT_LITERAL_EXPR:
+		// @TODO: Determine type properly.
+		return add_int_const(builder, c_type_to_ir_type(&type_env->int_type),
+				constant_expr->u.int_literal);
+	default:
+		UNIMPLEMENTED;
+	}
+}
+
 static void decl_to_cdecl(IrBuilder *builder, Env *env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
 		CDecl *cdecl);
@@ -536,9 +549,15 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 		u64 curr_enum_value = 0;
 		while (enumerator_list != NULL) {
 			char *name = enumerator_list->name;
-			ASTExpr *value = enumerator_list->value;
+			ASTExpr *expr = enumerator_list->value;
 
-			assert(value == NULL);
+			if (expr != NULL) {
+				IrConst *value =
+					eval_constant_expr(builder, &env->type_env, expr);
+				assert(value->type.t == IR_INT);
+				curr_enum_value = value->u.integer;
+			}
+
 			Binding *binding = ARRAY_APPEND(&env->scope->bindings, Binding);
 			binding->name = name;
 			binding->constant = true;
@@ -552,19 +571,6 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 		return ctype;
 	}
 	default: UNIMPLEMENTED;
-	}
-}
-
-static IrConst *eval_constant_expr(IrBuilder *builder, TypeEnv *type_env,
-		ASTExpr *constant_expr)
-{
-	switch (constant_expr->t) {
-	case INT_LITERAL_EXPR:
-		// @TODO: Determine type properly.
-		return add_int_const(builder, c_type_to_ir_type(&type_env->int_type),
-				constant_expr->u.int_literal);
-	default:
-		UNIMPLEMENTED;
 	}
 }
 

@@ -103,7 +103,8 @@ build_enum =
 enumerator_list = list(ASTEnumerator, enumerator, TOK_COMMA)
 
 enumerator =
-	seq(build_enumerator, TOK_SYMBOL, opt(seq(second, TOK_ASSIGN, expr)))
+	seq(build_enumerator, TOK_SYMBOL,
+		opt(seq(second, TOK_ASSIGN, assignment_expr)))
 
 build_enumerator =
 	build(ASTEnumerator, 2,
