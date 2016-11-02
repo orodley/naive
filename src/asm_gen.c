@@ -229,6 +229,7 @@ static void asm_gen_instr(
 	case OP_LOCAL: {
 		// @TODO: Alignment of stack slots. This could probably use similar
 		// logic to that of struct layout.
+		instr->u.stack_offset = builder->local_stack_usage;
 		emit_instr2(builder,
 				MOV,
 				asm_vreg(next_vreg(builder), 64),
@@ -236,7 +237,7 @@ static void asm_gen_instr(
 		emit_instr2(builder,
 				ADD,
 				asm_vreg(next_vreg(builder), 64),
-				asm_const(builder->local_stack_usage));
+				asm_const(instr->u.stack_offset));
 		assign_vreg(builder, instr);
 
 		builder->local_stack_usage += size_of_ir_type(instr->type);
@@ -334,7 +335,19 @@ static void asm_gen_instr(
 		AsmArg pointer = asm_value(ir_pointer);
 		AsmArg value = asm_value(ir_value);
 
-		if (ir_pointer.t == VALUE_GLOBAL) {
+		// Open-code the addressing of locals when we can, rather than using
+		// the vreg created by OP_LOCAL.
+		// @TODO: We probably want to open-code it in all cases, just using a
+		// temporary register where we need to.
+		bool directly_storeable = value.t == ASM_ARG_REGISTER ||
+			(value.t == ASM_ARG_CONST && value.u.constant.t == ASM_CONST_IMMEDIATE);
+		if (ir_pointer.t == VALUE_INSTR && ir_pointer.u.instr->op == OP_LOCAL
+				&& directly_storeable) {
+			u32 offset = ir_pointer.u.instr->u.stack_offset;
+			AsmArg stack_address =
+				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
+			emit_instr2(builder, MOV, stack_address, value);
+		} else if (ir_pointer.t == VALUE_GLOBAL) {
 			AsmArg rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
@@ -362,7 +375,12 @@ static void asm_gen_instr(
 		AsmArg target = asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8);
 		assign_vreg(builder, instr);
 
-		if (pointer.t == VALUE_GLOBAL) {
+		if (pointer.t == VALUE_INSTR && pointer.u.instr->op == OP_LOCAL) {
+			u32 offset = pointer.u.instr->u.stack_offset;
+			AsmArg stack_address =
+				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
+			emit_instr2(builder, MOV, target, stack_address);
+		} else if (pointer.t == VALUE_GLOBAL) {
 			AsmArg rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
