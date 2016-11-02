@@ -340,11 +340,25 @@ typedef struct SwitchCase
 	IrBlock *block;
 } SwitchCase;
 
+typedef struct GotoLabel
+{
+	char *name;
+	IrBlock *block;
+} GotoLabel;
+
+typedef struct GotoFixup
+{
+	char *label_name;
+	IrInstr *instr;
+} GotoFixup;
+
 typedef struct Env
 {
 	Scope *scope;
 	TypeEnv type_env;
 	Array(SwitchCase) case_labels;
+	Array(GotoLabel) goto_labels;
+	Array(GotoFixup) goto_fixups;
 	IrBlock *break_target;
 	IrBlock *continue_target;
 } Env;
@@ -866,6 +880,8 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	init_type_env(&env.type_env);
 	env.scope = &global_scope;
 	env.case_labels = EMPTY_ARRAY;
+	env.goto_labels = EMPTY_ARRAY;
+	env.goto_fixups = EMPTY_ARRAY;
 	env.break_target = NULL;
 	env.continue_target = NULL;
 
@@ -1017,7 +1033,24 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 		toplevel = toplevel->next;
 	}
 
+	for (u32 i = 0; i < env.goto_fixups.size; i++) {
+		GotoFixup *fixup = ARRAY_REF(&env.goto_fixups, GotoFixup, i);
+		assert(fixup->instr->op == OP_BRANCH);
+		assert(fixup->instr->u.target_block == NULL);
+
+		for (u32 j = 0; j < env.goto_labels.size; j++) {
+			GotoLabel *label = ARRAY_REF(&env.goto_labels, GotoLabel, j);
+			if (streq(label->name, fixup->label_name)) {
+				fixup->instr->u.target_block = label->block;
+				break;
+			}
+		}
+		assert(fixup->instr->u.target_block != NULL);
+	}
+
 	pool_free(&env.type_env.pool);
+	array_free(&env.goto_labels);
+	array_free(&env.goto_fixups);
 	array_free(&env.type_env.struct_types);
 	array_free(&env.type_env.union_types);
 	array_free(&env.type_env.enum_types);
@@ -1219,16 +1252,18 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		break;
 	}
 	case LABELED_STATEMENT: {
-		char *label = statement->u.labeled_statement.label_name;
-		IrBlock *label_block = add_block(builder, label);
+		char *label_name = statement->u.labeled_statement.label_name;
+		IrBlock *label_block = add_block(builder, label_name);
 		build_branch(builder, label_block);
 		builder->current_block = label_block;
-		if (streq(label, "default")) {
+		if (streq(label_name, "default")) {
 			SwitchCase *default_case = ARRAY_APPEND(&env->case_labels, SwitchCase);
 			default_case->is_default = true;
 			default_case->block = label_block;
 		} else {
-			UNIMPLEMENTED;
+			GotoLabel *label = ARRAY_APPEND(&env->goto_labels, GotoLabel);
+			label->name = label_name;
+			label->block = label_block;
 		}
 
 		ir_gen_statement(builder, env, statement->u.labeled_statement.statement);
@@ -1354,6 +1389,15 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
 		break;
 	}
+	case GOTO_STATEMENT: {
+		IrInstr *branch_instr = build_branch(builder, NULL);
+		GotoFixup *fixup = ARRAY_APPEND(&env->goto_fixups, GotoFixup);
+		fixup->label_name = statement->u.goto_label;
+		fixup->instr = branch_instr;
+
+		builder->current_block = add_block(builder, "goto.after");
+		break;
+	}
 	case BREAK_STATEMENT:
 		assert(env->break_target != NULL);
 		build_branch(builder, env->break_target);
@@ -1364,8 +1408,6 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		break;
 	case EMPTY_STATEMENT:
 		break;
-	default:
-		UNIMPLEMENTED;
 	}
 }
 

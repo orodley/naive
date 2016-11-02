@@ -241,8 +241,7 @@ statement =
 labeled_statement =
 	or(seq(build_labeled_statement, identifier, TOK_COLON, statement),
 		seq(build_case_statement,
-			keyword(case), expr, TOK_COLON, statement),
-		seq(build_labeled_statement, keyword(default), TOK_COLON, statement))
+			keyword(case), expr, TOK_COLON, statement))
 
 build_case_statement =
 	build(ASTStatement, 4,
@@ -331,13 +330,13 @@ build_for_decl_statement =
 		u.for_statement.body, #7)
 
 jump_statement =
-	or(seq(build_goto_statement, keyword(goto), identifier),
+	or(seq(build_goto_statement, keyword(goto), identifier, TOK_SEMICOLON),
 		seq(build_continue_statement, keyword(continue), TOK_SEMICOLON),
 		seq(build_break_statement, keyword(break), TOK_SEMICOLON),
 		seq(build_return_statement, keyword(return), opt(expr), TOK_SEMICOLON))
 
 build_goto_statement =
-	build(ASTStatement, 2,
+	build(ASTStatement, 3,
 		t, GOTO_STATEMENT,
 		u.goto_label, "((Token *)#1)->u.symbol")
 

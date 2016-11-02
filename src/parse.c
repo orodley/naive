@@ -799,6 +799,7 @@ static void dump_statement(ASTStatement *statement)
 		break;
 	case LABELED_STATEMENT:
 		pretty_printf("%s,", statement->u.labeled_statement.label_name);
+		dump_statement(statement->u.labeled_statement.statement);
 		break;
 	case COMPOUND_STATEMENT: {
 		ASTBlockItem *block_item = statement->u.block_item_list;
