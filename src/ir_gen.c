@@ -333,10 +333,18 @@ static CType *struct_type(TypeEnv *type_env, char *name)
 	return type;
 }
 
+typedef struct SwitchCase
+{
+	bool is_default;
+	IrConst *value;
+	IrBlock *block;
+} SwitchCase;
+
 typedef struct Env
 {
 	Scope *scope;
 	TypeEnv type_env;
+	Array(SwitchCase) case_labels;
 	IrBlock *break_target;
 	IrBlock *continue_target;
 } Env;
@@ -857,6 +865,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	Env env;
 	init_type_env(&env.type_env);
 	env.scope = &global_scope;
+	env.case_labels = EMPTY_ARRAY;
 	env.break_target = NULL;
 	env.continue_target = NULL;
 
@@ -1151,6 +1160,79 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		}
 
 		builder->current_block = after_block;
+		break;
+	}
+	case SWITCH_STATEMENT: {
+		Array(SwitchCase) prev_case_labels = env->case_labels;
+		env->case_labels = EMPTY_ARRAY;
+
+		IrBlock *switch_entry = builder->current_block;
+		IrBlock *after = add_block(builder, "switch.after");
+		IrBlock *prev_break_target = env->break_target;
+		env->break_target = after;
+
+		builder->current_block = add_block(builder, "switch.body");
+		ir_gen_statement(builder, env, statement->u.expr_and_statement.statement);
+		build_branch(builder, after);
+
+		builder->current_block = switch_entry;
+		Term switch_value =
+			ir_gen_expr(builder, env, statement->u.expr_and_statement.expr, RVALUE_CONTEXT);
+		assert(switch_value.ctype->t == INTEGER_TYPE);
+		for (u32 i = 0; i < env->case_labels.size; i++) {
+			SwitchCase *label = ARRAY_REF(&env->case_labels, SwitchCase, i);
+			if (label->is_default) {
+				build_branch(builder, label->block);
+			} else {
+				IrBlock *next = add_block(builder, "switch.cmp");
+				IrValue cmp = build_binary_instr(builder,
+						OP_EQ,
+						switch_value.value,
+						value_const(switch_value.value.type,
+							label->value->u.integer));
+				build_cond(builder, cmp, label->block, next);
+				builder->current_block = next;
+			}
+		}
+
+		build_branch(builder, after);
+		builder->current_block = after;
+
+		env->break_target = prev_break_target;
+		array_free(&env->case_labels);
+		env->case_labels = prev_case_labels;
+		break;
+	}
+	case CASE_STATEMENT: {
+		// @TODO: Ensure we're inside a switch statement.
+		IrBlock *case_block = add_block(builder, "switch.case");
+		build_branch(builder, case_block);
+		builder->current_block = case_block;
+
+		ir_gen_statement(builder, env, statement->u.expr_and_statement.statement);
+
+		SwitchCase *switch_case = ARRAY_APPEND(&env->case_labels, SwitchCase);
+		switch_case->is_default = false;
+		switch_case->value = eval_constant_expr(builder, &env->type_env,
+				statement->u.expr_and_statement.expr);
+		switch_case->block = case_block;
+		break;
+	}
+	case LABELED_STATEMENT: {
+		char *label = statement->u.labeled_statement.label_name;
+		IrBlock *label_block = add_block(builder, label);
+		build_branch(builder, label_block);
+		builder->current_block = label_block;
+		if (streq(label, "default")) {
+			SwitchCase *default_case = ARRAY_APPEND(&env->case_labels, SwitchCase);
+			default_case->is_default = true;
+			default_case->block = label_block;
+		} else {
+			UNIMPLEMENTED;
+		}
+
+		ir_gen_statement(builder, env, statement->u.labeled_statement.statement);
+
 		break;
 	}
 	case WHILE_STATEMENT: {

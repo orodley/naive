@@ -84,7 +84,7 @@ AsmArg asm_deref(AsmArg asm_arg)
 AsmArg asm_offset_reg(RegClass reg, u8 width, AsmConst offset)
 {
 	if (offset.t == ASM_CONST_IMMEDIATE && offset.u.immediate == 0) {
-		return asm_deref(asm_phys_reg(reg, width));
+		return asm_phys_reg(reg, width);
 	} else {
 		AsmArg asm_arg = {
 			.is_deref = false,

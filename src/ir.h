@@ -228,6 +228,7 @@ typedef struct IrInstr
 			u32 arity;
 			IrPhiParam *params;
 		} phi;
+		u32 stack_offset;
 	} u;
 } IrInstr;
 
