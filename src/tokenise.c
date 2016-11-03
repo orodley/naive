@@ -362,7 +362,7 @@ static void read_int_literal_suffix(Reader *reader)
 	bool read_length_suffix = false;
 	bool read_unsigned_suffix = false;
 
-	for (;;) {
+	while (!at_end(reader)) {
 		char c = read_char(reader);
 		switch (c) {
 		case 'u': case 'U':

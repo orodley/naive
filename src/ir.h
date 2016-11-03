@@ -222,13 +222,16 @@ typedef struct IrInstr
 			IrBlock *else_block;
 		} cond;
 		IrBlock *target_block;
-		IrType type;
+		struct
+		{
+			IrType type;
+			u32 stack_offset;
+		} local;
 		struct
 		{
 			u32 arity;
 			IrPhiParam *params;
 		} phi;
-		u32 stack_offset;
 	} u;
 } IrInstr;
 
@@ -279,5 +282,7 @@ IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType resu
 IrValue build_phi(IrBuilder *builder, IrType type, u32 arity);
 
 void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value);
+
+IrValue builtin_memcpy(IrBuilder *builder);
 
 #endif

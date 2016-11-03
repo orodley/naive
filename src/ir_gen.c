@@ -1904,11 +1904,27 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		Term lhs_ptr = ir_gen_expr(builder, env, lhs, LVALUE_CONTEXT);
 		Term rhs_term = ir_gen_expr(builder, env, rhs, RVALUE_CONTEXT);
 
-		build_store(
-				builder,
-				lhs_ptr.value,
-				convert_type(builder, rhs_term, lhs_ptr.ctype).value,
-				c_type_to_ir_type(lhs_ptr.ctype));
+		if (lhs_ptr.ctype->t == STRUCT_TYPE) {
+			assert(c_type_eq(lhs_ptr.ctype, rhs_term.ctype));
+
+			IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,
+					3 * sizeof *memcpy_args);
+			memcpy_args[0] = lhs_ptr.value,
+			memcpy_args[1] = rhs_term.value,
+			// @TODO: Don't hardcode the size of a pointer!
+			memcpy_args[2] = value_const((IrType) { .t = IR_INT, .u.bit_width = 64 },
+					size_of_ir_type(*lhs_ptr.ctype->u.strukt.ir_type)),
+
+			// @TODO: Open-code this for small sizes.
+			build_call(builder, builtin_memcpy(builder),
+					(IrType) { .t = IR_POINTER }, 3, memcpy_args);
+		} else {
+			build_store(
+					builder,
+					lhs_ptr.value,
+					convert_type(builder, rhs_term, lhs_ptr.ctype).value,
+					c_type_to_ir_type(lhs_ptr.ctype));
+		}
 		return rhs_term;
 	}
 	case COMMA_EXPR:

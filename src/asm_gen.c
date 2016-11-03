@@ -229,7 +229,7 @@ static void asm_gen_instr(
 	case OP_LOCAL: {
 		// @TODO: Alignment of stack slots. This could probably use similar
 		// logic to that of struct layout.
-		instr->u.stack_offset = builder->local_stack_usage;
+		instr->u.local.stack_offset = builder->local_stack_usage;
 		emit_instr2(builder,
 				MOV,
 				asm_vreg(next_vreg(builder), 64),
@@ -237,10 +237,10 @@ static void asm_gen_instr(
 		emit_instr2(builder,
 				ADD,
 				asm_vreg(next_vreg(builder), 64),
-				asm_const(instr->u.stack_offset));
+				asm_const(instr->u.local.stack_offset));
 		assign_vreg(builder, instr);
 
-		builder->local_stack_usage += size_of_ir_type(instr->type);
+		builder->local_stack_usage += size_of_ir_type(instr->u.local.type);
 
 		break;
 	}
@@ -343,7 +343,7 @@ static void asm_gen_instr(
 			(value.t == ASM_ARG_CONST && value.u.constant.t == ASM_CONST_IMMEDIATE);
 		if (ir_pointer.t == VALUE_INSTR && ir_pointer.u.instr->op == OP_LOCAL
 				&& directly_storeable) {
-			u32 offset = ir_pointer.u.instr->u.stack_offset;
+			u32 offset = ir_pointer.u.instr->u.local.stack_offset;
 			AsmArg stack_address =
 				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
 			emit_instr2(builder, MOV, stack_address, value);
@@ -376,7 +376,7 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 
 		if (pointer.t == VALUE_INSTR && pointer.u.instr->op == OP_LOCAL) {
-			u32 offset = pointer.u.instr->u.stack_offset;
+			u32 offset = pointer.u.instr->u.local.stack_offset;
 			AsmArg stack_address =
 				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
 			emit_instr2(builder, MOV, target, stack_address);

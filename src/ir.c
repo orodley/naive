@@ -58,8 +58,6 @@ IrBlock *add_block_to_function(
 	return block;
 }
 
-// @TODO: Split this into two: first add the function with no initializer, then
-// add an initializer for the function.
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 		IrType return_type, u32 arity, IrType *arg_types)
 {
@@ -244,7 +242,7 @@ static void dump_instr(IrInstr *instr)
 
 	switch (instr->op) {
 	case OP_LOCAL:
-		dump_ir_type(instr->u.type);
+		dump_ir_type(instr->u.local.type);
 		break;
 	case OP_FIELD:
 		dump_value(instr->u.field.struct_ptr);
@@ -511,7 +509,8 @@ IrValue build_local(IrBuilder *builder, IrType type)
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_LOCAL;
 	instr->type = (IrType) { .t = IR_POINTER };
-	instr->u.type = type;
+	instr->u.local.type = type;
+	instr->u.local.stack_offset = 0;
 
 	return value_instr(instr);
 }
@@ -730,4 +729,29 @@ IrConst *add_struct_const(IrBuilder *builder, IrType type)
 			type.u.strukt.num_fields * sizeof *konst->u.struct_fields);
 
 	return konst;
+}
+
+// @TODO: Make this not linear in the number of functions in the TU.
+IrValue builtin_memcpy(IrBuilder *builder)
+{
+	for (u32 i = 0; i < builder->trans_unit->globals.size; i++) {
+		IrGlobal *global =
+			*ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, i);
+		if (streq(global->name, "memcpy"))
+			return value_global(global);
+	}
+
+	IrType pointer = (IrType) { .t = IR_POINTER };
+	IrType arg_types[] = {
+		pointer,
+		pointer,
+		// @TODO: Don't hardcode the size of a pointer!
+		(IrType) { .t = IR_INT, .u.bit_width = 64 }
+	};
+	return value_global(trans_unit_add_function(
+				builder->trans_unit,
+				"memcpy",
+				(IrType) { .t = IR_POINTER },
+				STATIC_ARRAY_LENGTH(arg_types),
+				arg_types));
 }
