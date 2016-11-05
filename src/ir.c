@@ -732,15 +732,22 @@ IrConst *add_struct_const(IrBuilder *builder, IrType type)
 }
 
 // @TODO: Make this not linear in the number of functions in the TU.
-IrValue builtin_memcpy(IrBuilder *builder)
+static IrValue builtin_function(IrBuilder *builder, char *name, u32 arity,
+		IrType return_type, IrType *arg_types)
 {
 	for (u32 i = 0; i < builder->trans_unit->globals.size; i++) {
 		IrGlobal *global =
 			*ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, i);
-		if (streq(global->name, "memcpy"))
+		if (streq(global->name, name))
 			return value_global(global);
 	}
 
+	return value_global(trans_unit_add_function(
+				builder->trans_unit, name, return_type, arity, arg_types));
+}
+
+IrValue builtin_memcpy(IrBuilder *builder)
+{
 	IrType pointer = (IrType) { .t = IR_POINTER };
 	IrType arg_types[] = {
 		pointer,
@@ -748,10 +755,19 @@ IrValue builtin_memcpy(IrBuilder *builder)
 		// @TODO: Don't hardcode the size of a pointer!
 		(IrType) { .t = IR_INT, .u.bit_width = 64 }
 	};
-	return value_global(trans_unit_add_function(
-				builder->trans_unit,
-				"memcpy",
-				(IrType) { .t = IR_POINTER },
-				STATIC_ARRAY_LENGTH(arg_types),
-				arg_types));
+	return builtin_function(builder, "memcpy", 3, pointer, arg_types);
+}
+
+IrValue builtin_memset(IrBuilder *builder)
+{
+	IrType arg_types[] = {
+		(IrType) { .t = IR_POINTER },
+		// @TODO: Don't hardcode the size of an int!
+		(IrType) { .t = IR_INT, .u.bit_width = 32 },
+		// @TODO: Don't hardcode size_t!
+		(IrType) { .t = IR_INT, .u.bit_width = 64 },
+	};
+
+	return builtin_function(
+			builder, "memset", 3, (IrType) { .t = IR_POINTER }, arg_types);
 }

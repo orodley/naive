@@ -284,5 +284,6 @@ IrValue build_phi(IrBuilder *builder, IrType type, u32 arity);
 void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value);
 
 IrValue builtin_memcpy(IrBuilder *builder);
+IrValue builtin_memset(IrBuilder *builder);
 
 #endif

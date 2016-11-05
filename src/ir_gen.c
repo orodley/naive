@@ -1090,6 +1090,215 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 	};
 }
 
+typedef struct SubObject
+{
+	CType *ctype;
+	ASTExpr *expr;
+	u32 offset;
+
+	enum
+	{
+		SUB_OBJECT_ARRAY_ELEM,
+		SUB_OBJECT_STRUCT_FIELD,
+	} t;
+	union
+	{
+		u32 array_index;
+		struct
+		{
+			CType *struct_type;
+			u32 field_index;
+		} struct_field;
+	} u;
+} SubObject;
+
+static void add_sub_objects(IrBuilder *builder, TypeEnv *type_env,
+		Array(SubObject) *sub_objects, u32 starting_offset,
+		CType *aggregate_type, ASTInitializerElement *initializer_element)
+{
+	ASTDesignator *designator_list = initializer_element->designator_list;
+	bool no_designators = designator_list == NULL;
+	ASTInitializer *initializer = initializer_element->initializer;
+
+	SubObject new_sub_object = {
+		.ctype = aggregate_type,
+		.expr = NULL,
+		.offset = starting_offset,
+	};
+	while (designator_list != NULL) {
+		switch (designator_list->t) {
+		case INDEX_DESIGNATOR: {
+			assert(new_sub_object.ctype->t == ARRAY_TYPE);
+			new_sub_object.ctype = new_sub_object.ctype->u.array.elem_type;
+			IrConst *index = eval_constant_expr(
+					builder, type_env, designator_list->u.index_expr);
+			assert(index->type.t == IR_INT);
+
+			new_sub_object.offset += index->u.integer
+				* size_of_ir_type(c_type_to_ir_type(new_sub_object.ctype));
+			break;
+		}
+		case FIELD_DESIGNATOR: {
+			assert(new_sub_object.ctype->t == STRUCT_TYPE);
+			Array(CDecl) *fields = &new_sub_object.ctype->u.strukt.fields;
+			CDecl *selected_field = NULL;
+			u32 field_number;
+			for (u32 i = 0; i < fields->size; i++) {
+				CDecl *field = ARRAY_REF(fields, CDecl, i);
+				if (streq(field->name, designator_list->u.field_name)) {
+					selected_field = field;
+					field_number = i;
+					break;
+				}
+			}
+			assert(selected_field != NULL);
+
+			IrStructField *ir_fields =
+				new_sub_object.ctype->u.strukt.ir_type->u.strukt.fields;
+			new_sub_object.ctype = selected_field->type;
+			new_sub_object.offset += ir_fields[field_number].offset;
+			break;
+		}
+		}
+
+		designator_list = designator_list->next;
+	}
+
+	if (no_designators) {
+		if (sub_objects->size == 0) {
+			switch (aggregate_type->t) {
+			case STRUCT_TYPE: {
+				Array(CDecl) *fields = &aggregate_type->u.strukt.fields;
+				IrStructField *ir_fields =
+					aggregate_type->u.strukt.ir_type->u.strukt.fields;
+				new_sub_object.ctype = ARRAY_REF(fields, CDecl, 0)->type;
+				new_sub_object.offset = ir_fields[0].offset;
+				new_sub_object.t = SUB_OBJECT_STRUCT_FIELD;
+				new_sub_object.u.struct_field.struct_type = aggregate_type;
+				new_sub_object.u.struct_field.field_index = 0;
+				break;
+			}
+			case ARRAY_TYPE:
+				new_sub_object.ctype = aggregate_type->u.array.elem_type;
+				new_sub_object.offset = 0;
+				new_sub_object.t = SUB_OBJECT_ARRAY_ELEM;
+				new_sub_object.u.array_index = 0;
+				break;
+			default:
+				UNREACHABLE;
+			}
+		} else {
+			SubObject *prev_sub_object =
+				ARRAY_REF(sub_objects, SubObject, sub_objects->size - 1);
+			switch (prev_sub_object->t) {
+			case SUB_OBJECT_ARRAY_ELEM:
+				new_sub_object.ctype = prev_sub_object->ctype;
+				new_sub_object.offset = prev_sub_object->offset
+					+ size_of_ir_type(c_type_to_ir_type(new_sub_object.ctype));
+
+				new_sub_object.t = SUB_OBJECT_ARRAY_ELEM;
+				new_sub_object.u.array_index =
+					prev_sub_object->u.array_index + 1;
+				break;
+			case SUB_OBJECT_STRUCT_FIELD: {
+				Array(CDecl) *fields =
+					&prev_sub_object->u.struct_field.struct_type->u.strukt.fields;
+				IrStructField *ir_fields =
+					new_sub_object.ctype->u.strukt.ir_type->u.strukt.fields;
+
+				u32 index = prev_sub_object->u.struct_field.field_index;
+				assert(index + 1 < fields->size);
+				new_sub_object.ctype = ARRAY_REF(fields, CDecl, index + 1)->type;
+				new_sub_object.offset =
+					ir_fields[index].offset
+					- starting_offset
+					+ ir_fields[index + 1].offset;
+
+				new_sub_object.t = SUB_OBJECT_STRUCT_FIELD;
+				new_sub_object.u.struct_field.struct_type =
+					prev_sub_object->u.struct_field.struct_type;
+				new_sub_object.u.struct_field.field_index = index + 1;
+				break;
+			}
+			}
+		}
+	}
+
+	switch (initializer->t) {
+	case EXPR_INITIALIZER: {
+		SubObject *sub_object = NULL;
+		for (u32 i = 0; i < sub_objects->size; i++) {
+			SubObject *existing_sub_object =
+				ARRAY_REF(sub_objects, SubObject, i);
+			if (existing_sub_object->offset == new_sub_object.offset) {
+				sub_object = existing_sub_object;
+				break;
+			}
+		}
+		if (sub_object == NULL)
+			sub_object = ARRAY_APPEND(sub_objects, SubObject);
+
+		new_sub_object.expr = initializer->u.expr;
+		*sub_object = new_sub_object;
+		break;
+	}
+	case BRACE_INITIALIZER: {
+		ASTInitializerElement *initializer_element_list =
+			initializer->u.initializer_element_list;
+		while (initializer_element_list != NULL) {
+			add_sub_objects(builder, type_env, sub_objects, new_sub_object.offset,
+					new_sub_object.ctype, initializer_element_list);
+			initializer_element_list = initializer_element_list->next;
+		}
+		break;
+	}
+	}
+}
+
+static void ir_gen_initializer(IrBuilder *builder, Env *env,
+		Term to_init, ASTInitializerElement *initializer_element_list)
+{
+	Array(SubObject) sub_objects;
+	ARRAY_INIT(&sub_objects, SubObject, 5);
+
+	// @TODO: There should be a better way to structure this such that we don't
+	// need to duplicate the handling of brace initializers.
+	while (initializer_element_list != NULL) {
+		add_sub_objects(builder, &env->type_env, &sub_objects, 0, to_init.ctype,
+				initializer_element_list);
+		initializer_element_list = initializer_element_list->next;
+	}
+
+	IrValue *memset_args = pool_alloc(&builder->trans_unit->pool,
+			3 * sizeof *memset_args);
+	memset_args[0] = to_init.value;
+	memset_args[1] = value_const(c_type_to_ir_type(&env->type_env.int_type), 0);
+		// @TODO: Don't hardcode size_t!
+	memset_args[2] = value_const((IrType) { .t = IR_INT, .u.bit_width = 64 },
+			size_of_ir_type(c_type_to_ir_type(to_init.ctype)));
+
+	// @TODO: Open-code this for small sizes
+	build_call(builder, builtin_memset(builder),
+			(IrType) { .t = IR_POINTER }, 3, memset_args);
+
+	// @TODO: Sort initializer element list by offset because something
+	// something cache something something.
+
+	IrType int_ptr_type = (IrType) { .t = IR_INT, .u.bit_width = 64 };
+	IrValue int_ptr = build_type_instr(builder, OP_CAST, to_init.value, int_ptr_type);
+	for (u32 i = 0; i < sub_objects.size; i++) {
+		SubObject *sub_object = ARRAY_REF(&sub_objects, SubObject, i);
+		IrValue ptr = build_binary_instr(builder, OP_ADD,
+				int_ptr, value_const(int_ptr_type, sub_object->offset));
+		Term val = ir_gen_expr(builder, env, sub_object->expr, RVALUE_CONTEXT);
+		assert(c_type_compatible(val.ctype, sub_object->ctype));
+		build_store(builder, ptr, convert_type(builder, val, sub_object->ctype).value,
+				c_type_to_ir_type(val.ctype));
+	}
+
+	array_free(&sub_objects);
+}
+
 static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 {
 	ASTInitDeclarator *init_declarator = decl->init_declarators;
@@ -1106,14 +1315,23 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 
 		ASTInitializer *initializer = init_declarator->initializer;
 		if (initializer != NULL) {
-			assert(initializer->t == EXPR_INITIALIZER);
-			Term init_term = ir_gen_expr(builder, env,
-					initializer->u.expr, RVALUE_CONTEXT);
-			build_store(
-				builder,
-				binding->term.value,
-				convert_type(builder, init_term, binding->term.ctype).value,
-				c_type_to_ir_type(binding->term.ctype));
+			// @TODO: This case isn't really necessary, as it should work
+			// through ir_gen_initializer. However, ir_gen_initializer
+			// currently unconditionally memsets to zero before assigning to
+			// fields, which just feels gross to do for every local scalar
+			// value. Once we've fixed this, we should remove this case.
+			if (initializer->t == EXPR_INITIALIZER) {
+				Term init_term = ir_gen_expr(builder, env,
+						initializer->u.expr, RVALUE_CONTEXT);
+				build_store(
+					builder,
+					binding->term.value,
+					convert_type(builder, init_term, binding->term.ctype).value,
+					c_type_to_ir_type(binding->term.ctype));
+			} else {
+				ir_gen_initializer(builder, env, binding->term,
+						initializer->u.initializer_element_list);
+			}
 		}
 
 		init_declarator = init_declarator->next;
