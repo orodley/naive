@@ -241,6 +241,7 @@ static void dump_instr(IrInstr *instr)
 	putchar('(');
 
 	switch (instr->op) {
+	case OP_INVALID: UNREACHABLE;
 	case OP_LOCAL:
 		dump_ir_type(instr->u.local.type);
 		break;

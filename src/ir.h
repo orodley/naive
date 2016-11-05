@@ -133,6 +133,8 @@ typedef struct IrValue
 } IrValue;
 
 #define IR_OPS \
+	X(OP_INVALID), \
+\
 	X(OP_BIT_XOR), \
 	X(OP_BIT_OR), \
 	X(OP_BIT_AND), \

@@ -63,6 +63,8 @@ typedef struct ParseError
 \
 		X(CONDITIONAL_EXPR), \
 \
+		X(COMPOUND_EXPR), \
+\
 		X(ASSIGN_EXPR), \
 		X(MULTIPLY_ASSIGN_EXPR), \
 		X(DIVIDE_ASSIGN_EXPR), \
@@ -112,6 +114,11 @@ typedef struct ASTExpr
 			struct ASTExpr *arg2;
 			struct ASTExpr *arg3;
 		} ternary_op;
+		struct
+		{
+			struct ASTTypeName *type_name;
+			struct ASTInitializerElement *initializer_element_list;
+		} compound;
 		struct
 		{
 			struct ASTExpr *struct_expr;

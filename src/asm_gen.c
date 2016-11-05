@@ -226,6 +226,7 @@ static void asm_gen_instr(
 		AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block, IrInstr *instr)
 {
 	switch (instr->op) {
+	case OP_INVALID: UNREACHABLE;
 	case OP_LOCAL: {
 		// @TODO: Alignment of stack slots. This could probably use similar
 		// logic to that of struct layout.

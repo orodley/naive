@@ -385,6 +385,12 @@ argument_expr_list = list(ASTArgument, seq(build_argument, assignment_expr), TOK
 
 build_argument = build(ASTArgument, 1, expr, #0)
 
+build_compound_initializer =
+	build(ASTExpr, 7,
+		t, COMPOUND_EXPR,
+		u.compound.initializer_element_list, #4,
+		u.compound.type_name, #1)
+
 
 unary_expr =
     or(postfix_expr,

@@ -270,16 +270,6 @@ static ASTExpr *build_postfix_expr(Parser *parser,
 	return NULL;
 }
 
-static ASTExpr *build_compound_initializer(Parser *parser,
-		void *a, void *b, void *c, void *d, void *e, void *f, void *g)
-{
-	// @TODO
-	IGNORE(parser);
-	IGNORE(a); IGNORE(b); IGNORE(c); IGNORE(d); IGNORE(e); IGNORE(f); IGNORE(g);
-	return NULL;
-}
-
-
 static ASTExpr *build_unary_expr(Parser *parser, Token *token,
 		ASTExpr *arg)
 {
@@ -715,6 +705,8 @@ static char *expr_type_names[] = {
 };
 #undef X
 
+static void dump_initializer_element_list(ASTInitializerElement *element_list);
+
 static void dump_expr(ASTExpr *expr)
 {
 	pretty_printf("%s(", expr_type_names[expr->t]);
@@ -773,9 +765,11 @@ static void dump_expr(ASTExpr *expr)
 		pretty_printf(",");
 		dump_expr(expr->u.ternary_op.arg3);
 		break;
-	default:
-		printf("\n\nGot unknown expr type %d\n", expr->t);
-		UNREACHABLE;
+	case COMPOUND_EXPR:
+		dump_type_name(expr->u.compound.type_name);
+		pretty_printf(",");
+		dump_initializer_element_list(expr->u.compound.initializer_element_list);
+		break;
 	}
 
 	pretty_printf(")");

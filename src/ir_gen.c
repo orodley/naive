@@ -747,6 +747,18 @@ static void decl_to_cdecl(IrBuilder *builder, Env *env,
 	cdecl->type = cdecl_aux.type;
 }
 
+static CType *type_name_to_c_type(
+		IrBuilder *builder, Env *env, ASTTypeName *type_name)
+{
+	CDecl cdecl;
+	CType *decl_spec_type = decl_specifier_list_to_c_type(
+			builder, env, type_name->decl_specifier_list);
+	decl_to_cdecl(builder, env, decl_spec_type,
+			type_name->declarator, &cdecl);
+	assert(cdecl.name == NULL);
+	return cdecl.type;
+}
+
 static void cdecl_to_binding(IrBuilder *builder, CDecl *cdecl, Binding *binding)
 {
 	IrType ir_type = c_type_to_ir_type(cdecl->type);
@@ -1299,6 +1311,9 @@ static void ir_gen_initializer(IrBuilder *builder, Env *env,
 	array_free(&sub_objects);
 }
 
+static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
+		Term right, IrOp ir_op, Term *pre_assign_value);
+
 static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 {
 	ASTInitDeclarator *init_declarator = decl->init_declarators;
@@ -1323,11 +1338,8 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 			if (initializer->t == EXPR_INITIALIZER) {
 				Term init_term = ir_gen_expr(builder, env,
 						initializer->u.expr, RVALUE_CONTEXT);
-				build_store(
-					builder,
-					binding->term.value,
-					convert_type(builder, init_term, binding->term.ctype).value,
-					c_type_to_ir_type(binding->term.ctype));
+				ir_gen_assign_op(builder, env,
+						binding->term, init_term, OP_INVALID, NULL);
 			} else {
 				ir_gen_initializer(builder, env, binding->term,
 						initializer->u.initializer_element_list);
@@ -1849,22 +1861,39 @@ static Term ir_gen_binary_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
 		Term right, IrOp ir_op, Term *pre_assign_value)
 {
-	Term load = (Term) {
-		.ctype = left.ctype,
-		.value = build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
-	};
-	Term result = ir_gen_binary_operator(builder, env, load, right, ir_op);
+	Term result = right;
 
-	assert(c_type_compatible(left.ctype, result.ctype));
-	Term converted = convert_type(builder, result, left.ctype);
+	if (left.ctype->t == STRUCT_TYPE) {
+		assert(c_type_eq(left.ctype, right.ctype));
 
-	build_store(builder,
-			left.value,
-			converted.value,
-			c_type_to_ir_type(result.ctype));
+		IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,
+				3 * sizeof *memcpy_args);
+		memcpy_args[0] = left.value,
+		memcpy_args[1] = right.value,
+		// @TODO: Don't hardcode the size of a pointer!
+		memcpy_args[2] = value_const((IrType) { .t = IR_INT, .u.bit_width = 64 },
+				size_of_ir_type(*left.ctype->u.strukt.ir_type)),
 
-	if (pre_assign_value != NULL)
-		*pre_assign_value = load;
+		// @TODO: Open-code this for small sizes.
+		build_call(builder, builtin_memcpy(builder),
+				(IrType) { .t = IR_POINTER }, 3, memcpy_args);
+	} else {
+		if (ir_op != OP_INVALID) {
+			Term load = (Term) {
+				.ctype = left.ctype,
+				.value = build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
+			};
+			result = ir_gen_binary_operator(builder, env, load, right, ir_op);
+
+			if (pre_assign_value != NULL)
+				*pre_assign_value = load;
+
+		}
+
+		result = convert_type(builder, result, left.ctype);
+		build_store(builder, left.value, result.value,
+				c_type_to_ir_type(left.ctype));
+	}
 
 	return result;
 }
@@ -2056,6 +2085,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case GREATER_THAN_OR_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_GTE);
 	case LESS_THAN_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_LT);
 	case LESS_THAN_OR_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_LTE);
+
+	case ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_INVALID);
 	case ADD_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_ADD);
 	case MINUS_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SUB);
 	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {
@@ -2114,36 +2145,6 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 				arg_array);
 
 		return (Term) { .ctype = return_type, .value = value, };
-	}
-	case ASSIGN_EXPR: {
-		ASTExpr *lhs = expr->u.binary_op.arg1;
-		ASTExpr *rhs = expr->u.binary_op.arg2;
-
-		Term lhs_ptr = ir_gen_expr(builder, env, lhs, LVALUE_CONTEXT);
-		Term rhs_term = ir_gen_expr(builder, env, rhs, RVALUE_CONTEXT);
-
-		if (lhs_ptr.ctype->t == STRUCT_TYPE) {
-			assert(c_type_eq(lhs_ptr.ctype, rhs_term.ctype));
-
-			IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,
-					3 * sizeof *memcpy_args);
-			memcpy_args[0] = lhs_ptr.value,
-			memcpy_args[1] = rhs_term.value,
-			// @TODO: Don't hardcode the size of a pointer!
-			memcpy_args[2] = value_const((IrType) { .t = IR_INT, .u.bit_width = 64 },
-					size_of_ir_type(*lhs_ptr.ctype->u.strukt.ir_type)),
-
-			// @TODO: Open-code this for small sizes.
-			build_call(builder, builtin_memcpy(builder),
-					(IrType) { .t = IR_POINTER }, 3, memcpy_args);
-		} else {
-			build_store(
-					builder,
-					lhs_ptr.value,
-					convert_type(builder, rhs_term, lhs_ptr.ctype).value,
-					c_type_to_ir_type(lhs_ptr.ctype));
-		}
-		return rhs_term;
 	}
 	case COMMA_EXPR:
 		ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT);
@@ -2229,6 +2230,17 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		phi_set_param(phi, 1, else_block, else_term.value);
 		return (Term) { .ctype = then_term.ctype, .value = phi };
 	}
+	case COMPOUND_EXPR: {
+		CType *type =
+			type_name_to_c_type(builder, env, expr->u.compound.type_name);
+		IrValue local = build_local(builder, c_type_to_ir_type(type));
+		Term compound_value = { .value = local, .ctype = type };
+
+		ir_gen_initializer(builder, env, compound_value,
+				expr->u.compound.initializer_element_list);
+
+		return compound_value;
+	}
 	case SIZEOF_EXPR_EXPR: {
 		ASTExpr *sizeof_expr = expr->u.unary_arg;
 
@@ -2259,15 +2271,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return (Term) { .ctype = result_type, .value = value };
 	}
 	case CAST_EXPR: {
-		CDecl cdecl;
-		ASTTypeName *type_name = expr->u.cast.cast_type;
-		CType *decl_spec_type = decl_specifier_list_to_c_type(
-				builder, env, type_name->decl_specifier_list);
-		decl_to_cdecl(builder, env, decl_spec_type,
-				type_name->declarator, &cdecl);
-		assert(cdecl.name == NULL);
-		CType *cast_type = cdecl.type;
-
+		CType *cast_type =
+			type_name_to_c_type(builder, env, expr->u.cast.cast_type);
 		Term castee =
 			ir_gen_expr(builder, env, expr->u.cast.arg, RVALUE_CONTEXT);
 		return convert_type(builder, castee, cast_type);
