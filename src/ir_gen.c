@@ -1863,7 +1863,7 @@ static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
 {
 	Term result = right;
 
-	if (left.ctype->t == STRUCT_TYPE) {
+	if (left.ctype->t == STRUCT_TYPE || left.ctype->t == ARRAY_TYPE) {
 		assert(c_type_eq(left.ctype, right.ctype));
 
 		IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,

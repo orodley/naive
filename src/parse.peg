@@ -179,7 +179,18 @@ build_parameter_decl =
 		decl_specifier_list, #0,
 		declarator, #1)
 
-type_name = seq(build_type_name, decl_specifiers, opt(declarator))
+type_name = seq(build_type_name, decl_specifiers, opt(abstract_declarator))
+
+abstract_declarator =
+	or(seq(build_pointee_declarator, opt(pointer), direct_abstract_declarator),
+		seq(build_terminal_pointer, pointer))
+
+direct_abstract_declarator =
+	fold(build_sub_declarator,
+		seq(optional_declarator,
+			opt(seq(build_declarator, TOK_LROUND, abstract_declarator, TOK_RROUND))),
+		which(seq(middle, TOK_LSQUARE, opt(expr), TOK_RSQUARE),
+			seq(middle, TOK_LROUND, parameter_type_list, TOK_RROUND)))
 
 build_type_name =
 	build(ASTTypeName, 2,
@@ -352,16 +363,9 @@ build_return_statement =
 
 
 primary_expr =
-    or(identifier_not_sizeof,
+    or(identifier,
         constant,
         seq(middle, TOK_LROUND, expr, TOK_RROUND))
-
-identifier = seq(build_identifier, TOK_SYMBOL)
-
-build_identifier =
-	build(ASTExpr, 1,
-		t, IDENTIFIER_EXPR,
-		u.identifier, "((Token *)#0)->u.symbol")
 
 constant =
 	seq(build_constant,

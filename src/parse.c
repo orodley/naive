@@ -559,26 +559,58 @@ ASTDirectDeclarator *build_sub_declarator(Parser *parser,
 	return result;
 }
 
-static ParserResult identifier_not_sizeof(Parser *parser);
+ASTDirectDeclarator *optional_declarator(Parser *parser,
+		ASTDirectDeclarator *declarator)
+{
+	// This can happen if this is an abstract declarator. In this case we
+	// generate an ident declarator with a NULL name, so that we can handle
+	// declarators and abstract declarators uniformly.
+	if (declarator == NULL) {
+		declarator = pool_alloc(parser->pool, sizeof *declarator);
+		declarator->t = IDENTIFIER_DECLARATOR;
+		declarator->u.name = NULL;
+	}
+
+	return declarator;
+}
+
+static ParserResult identifier(Parser *parser);
 
 #include "parse.inc"
 
+
 // In general we prefer not to reject identifiers that are keywords during
 // parsing, because it's easier to provide good error messages by doing so
-// during ir_gen instead. However we need to reject "sizeof" so that
-// "sizeof *foo" isn't interpreted as MULTIPLY_EXPR.
-static ParserResult identifier_not_sizeof(Parser *parser)
+// during ir_gen instead. However we need to reject "sizeof" so that "sizeof
+// *foo" isn't interpreted as MULTIPLY_EXPR.
+//
+// Similarly, we have to reject type names when parsing identifiers. Otherwise
+// "(int[3])foo" is parsed not as a cast expression, but rather as a bracketed
+// array index expression followed by an extraneous token.
+static ParserResult identifier(Parser *parser)
 {
-	u32 start = parser->position;
 	Token *token = read_token(parser);
 	if (token->t != TOK_SYMBOL) {
-		return revert(parser, start);
-	}
-	if (streq(token->u.symbol, "sizeof")) {
-		return revert(parser, start);
+		back_up(parser);
+		return failure;
 	}
 
-	return success(build_identifier(parser, token));
+	char *name = token->u.symbol;
+	if (streq(name, "sizeof")) {
+		back_up(parser);
+		return failure;
+	}
+	TypeTableEntry entry;
+	if (type_table_look_up_name(&parser->defined_types, name, &entry)) {
+		back_up(parser);
+		return failure;
+	}
+
+	ASTExpr *ident_expr = pool_alloc(parser->pool, sizeof *ident_expr);
+	ident_expr->t = IDENTIFIER_EXPR;
+	ident_expr->u.identifier = name;
+
+	return success(ident_expr);
 }
 
 
@@ -1022,7 +1054,9 @@ static void dump_direct_declarator(ASTDirectDeclarator *declarator)
 		dump_declarator(declarator->u.declarator);
 		break;
 	case IDENTIFIER_DECLARATOR:
-		pretty_printf("IDENTIFIER_DECLARATOR(%s", declarator->u.name);
+		pretty_printf("IDENTIFIER_DECLARATOR(");
+		if (declarator->u.name != NULL)
+			pretty_printf("%s", declarator->u.name);
 		break;
 	case FUNCTION_DECLARATOR:
 		pretty_printf("FUNCTION_DECLARATOR(");
