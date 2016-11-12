@@ -352,10 +352,18 @@ typedef struct GotoFixup
 	IrInstr *instr;
 } GotoFixup;
 
+typedef struct InlineFunction
+{
+	IrGlobal *global;
+	CType *function_type;
+	ASTFunctionDef function_def;
+} InlineFunction;
+
 typedef struct Env
 {
 	Scope *scope;
 	TypeEnv type_env;
+	Array(InlineFunction) inline_functions;
 	Array(SwitchCase) case_labels;
 	Array(GotoLabel) goto_labels;
 	Array(GotoFixup) goto_fixups;
@@ -881,6 +889,53 @@ static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 	}
 }
 
+void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
+		CType *function_type, ASTFunctionDef *function_def)
+{
+	IrConst *konst = add_init_to_function(builder->trans_unit, global);
+	IrFunction *function = &konst->u.function;
+
+	builder->current_function = function;
+	builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
+
+	Scope scope;
+	scope.parent_scope = env->scope;
+	Array(Binding) *param_bindings = &scope.bindings;
+	ARRAY_INIT(param_bindings, Binding, 5);
+	env->scope = &scope;
+
+	// @TODO: We shouldn't have to re-process all of the parameter decls.
+	// At the moment we have to because we throw away the name of the
+	// parameter when parsing function parameter declarators, since
+	// this has nothing to do with the type.
+	ASTParameterDecl *param =
+		params_for_function_declarator(function_def->declarator);
+	for (u32 i = 0; param != NULL; i++, param = param->next) {
+		Binding *binding = ARRAY_APPEND(param_bindings, Binding);
+
+		CType *decl_spec_type = decl_specifier_list_to_c_type(
+				builder, env, param->decl_specifier_list);
+		CDecl cdecl;
+		decl_to_cdecl(builder, env, decl_spec_type,
+				param->declarator, &cdecl);
+		// @HACK: We have to do this because decl_to_cdecl does extra
+		// stuff to adjust parameter types when it knows that the
+		// declarator is for a parameter. The proper fix is just to not
+		// re-process at all.
+		cdecl.type = function_type->u.function.arg_type_array[i];
+		cdecl_to_binding(builder, &cdecl, binding);
+		build_store(builder,
+				binding->term.value,
+				value_arg(i, global->type.u.function.arg_types[i]),
+				c_type_to_ir_type(binding->term.ctype));
+	}
+
+	ir_gen_statement(builder, env, function_def->body);
+
+	env->scope = env->scope->parent_scope;
+	array_free(param_bindings);
+}
+
 void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 {
 	Scope global_scope;
@@ -891,6 +946,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	Env env;
 	init_type_env(&env.type_env);
 	env.scope = &global_scope;
+	env.inline_functions = EMPTY_ARRAY;
 	env.case_labels = EMPTY_ARRAY;
 	env.goto_labels = EMPTY_ARRAY;
 	env.goto_fixups = EMPTY_ARRAY;
@@ -906,51 +962,35 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 		case FUNCTION_DEF: {
 			ASTFunctionDef *func = toplevel->u.function_def;
 			ASTDeclSpecifier *decl_specifier_list = func->decl_specifier_list;
+			bool is_inline = false;
+			while (decl_specifier_list != NULL
+					&& decl_specifier_list->t == FUNCTION_SPECIFIER
+					&& decl_specifier_list->u.function_specifier == INLINE_SPECIFIER) {
+				is_inline = true;
+				decl_specifier_list = decl_specifier_list->next;
+			}
+
 			ASTDeclarator *declarator = func->declarator;
 
 			global = ir_global_for_decl(builder, &env, decl_specifier_list,
 					declarator, &global_type);
-			IrConst *konst = add_init_to_function(builder->trans_unit, global);
-			IrFunction *function = &konst->u.function;
 
-			builder->current_function = function;
-			builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
-
-			Scope scope;
-			scope.parent_scope = &global_scope;
-			Array(Binding) *param_bindings = &scope.bindings;
-			ARRAY_INIT(param_bindings, Binding, 5);
-			env.scope = &scope;
-
-			// @TODO: We shouldn't have to re-parse all of the parameter decls.
-			// At the moment we have to because we throw away the name of the
-			// parameter when parsing function parameter declarators, since
-			// this has nothing to do with the type.
-			ASTParameterDecl *param = params_for_function_declarator(declarator);
-			for (u32 i = 0; param != NULL; i++, param = param->next) {
-				Binding *binding = ARRAY_APPEND(param_bindings, Binding);
-
-				CType *decl_spec_type = decl_specifier_list_to_c_type(
-						builder, &env, param->decl_specifier_list);
-				CDecl cdecl;
-				decl_to_cdecl(builder, &env, decl_spec_type,
-						param->declarator, &cdecl);
-				// @HACK: We have to do this because decl_to_cdecl does extra
-				// stuff to adjust parameter types when it knows that the
-				// declarator is for a parameter. The proper fix is just to not
-				// re-parse at all.
-				cdecl.type = global_type->u.function.arg_type_array[i];
-				cdecl_to_binding(builder, &cdecl, binding);
-				build_store(builder,
-						binding->term.value,
-						value_arg(i, global->type.u.function.arg_types[i]),
-						c_type_to_ir_type(binding->term.ctype));
+			if (is_inline) {
+				*ARRAY_APPEND(&env.inline_functions, InlineFunction) =
+					(InlineFunction) {
+						.global = global,
+						.function_type = global_type,
+						.function_def = {
+							.decl_specifier_list = decl_specifier_list,
+							.declarator = declarator,
+							.old_style_param_decl_list =
+								func->old_style_param_decl_list,
+							.body = func->body,
+						},
+					};
+			} else {
+				ir_gen_function(builder, &env, global, global_type, func);
 			}
-
-			ir_gen_statement(builder, &env, func->body);
-
-			env.scope = env.scope->parent_scope;
-			array_free(param_bindings);
 
 			break;
 		}
@@ -961,8 +1001,36 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			assert(decl_specifier_list != NULL);
 
 
-			if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER &&
-					decl_specifier_list->u.storage_class_specifier == TYPEDEF_SPECIFIER) {
+			if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
+					&& decl_specifier_list->u.storage_class_specifier == EXTERN_SPECIFIER
+					&& decl_specifier_list->next != NULL
+					&& decl_specifier_list->next->t == FUNCTION_SPECIFIER
+					&& decl_specifier_list->next->u.function_specifier == INLINE_SPECIFIER) {
+				decl_specifier_list = decl_specifier_list->next->next;
+
+				CType *decl_spec_type = decl_specifier_list_to_c_type(
+						builder, &env, decl_specifier_list);
+				CDecl cdecl;
+				decl_to_cdecl(builder, &env, decl_spec_type,
+						init_declarator->declarator, &cdecl);
+
+				InlineFunction *matching = NULL;
+
+				for (u32 i = 0; i < env.inline_functions.size; i++) {
+					InlineFunction *inline_function =
+						ARRAY_REF(&env.inline_functions, InlineFunction, i);
+					if (streq(inline_function->global->name, cdecl.name)) {
+						assert(c_type_eq(cdecl.type, inline_function->function_type));
+						matching = inline_function;
+						break;
+					}
+				}
+				assert(matching != NULL);
+
+				ir_gen_function(builder, &env, matching->global,
+						matching->function_type, &matching->function_def);
+			} else if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
+					&& decl_specifier_list->u.storage_class_specifier == TYPEDEF_SPECIFIER) {
 				assert(init_declarator != NULL);
 				decl_specifier_list = decl_specifier_list->next;
 				CType *decl_spec_type = decl_specifier_list_to_c_type(
