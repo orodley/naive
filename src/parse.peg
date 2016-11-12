@@ -58,7 +58,8 @@ build_named_type =
 
 struct_or_union_specifier =
 	or(seq(build_struct_or_union, struct_or_union, opt(TOK_SYMBOL),
-			TOK_LCURLY, list(ASTFieldDecl, field_decl), TOK_RCURLY),
+			TOK_LCURLY, list(ASTFieldDecl, field_decl), TOK_RCURLY,
+			opt(attribute)),
 		seq(build_struct_or_union_tagged_named_type, struct_or_union, TOK_SYMBOL))
 
 struct_or_union = which(keyword(struct), keyword(union))
@@ -88,6 +89,12 @@ build_field_declarator =
 	build(ASTFieldDeclarator, 1,
 		t, NORMAL_FIELD_DECLARATOR,
 		u.declarator, #0)
+
+attribute =
+	seq(build_attribute, keyword(__attribute__), TOK_LROUND, TOK_LROUND,
+		TOK_SYMBOL, TOK_RROUND, TOK_RROUND)
+
+build_attribute = build(ASTAttribute, 6, name, "((Token *)#3)->u.symbol")
 
 enum_specifier =
 	or(seq(build_enum, keyword(enum), opt(TOK_SYMBOL), TOK_LCURLY,

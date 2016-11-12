@@ -398,6 +398,11 @@ typedef struct ASTFieldDecl
 	ASTFieldDeclarator *field_declarator_list;
 } ASTFieldDecl;
 
+typedef struct ASTAttribute
+{
+	char *name;
+} ASTAttribute;
+
 typedef struct ASTTypeSpecifier
 {
 	enum
@@ -415,6 +420,7 @@ typedef struct ASTTypeSpecifier
 		{
 			char *name;
 			ASTFieldDecl *field_list;
+			ASTAttribute *attribute;
 		} struct_or_union_specifier;
 		struct
 		{

@@ -280,7 +280,7 @@ static void set_array_type_length(CType *array_type, u64 size)
 	assert(array_type->t == ARRAY_TYPE);
 
 	array_type->u.array.size = size;
-	if (array_type->u.array.elem_type->t == IR_ARRAY) {
+	if (array_type->u.array.elem_type->t == ARRAY_TYPE) {
 		size *= array_type->u.array.elem_type->u.array.size;
 	}
 
@@ -454,6 +454,8 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 		ASTFieldDecl *field_list =
 			type_spec->u.struct_or_union_specifier.field_list;
 		char *name = type_spec->u.struct_or_union_specifier.name;
+		ASTAttribute *attribute = type_spec->u.struct_or_union_specifier.attribute;
+		bool is_packed = attribute != NULL && streq(attribute->name, "packed");
 
 		CType *existing_type = NULL;
 		if (name != NULL) {
@@ -519,7 +521,8 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 			max_field_align = max(max_field_align, field_align);
 
 			if (type_spec->t == STRUCT_TYPE_SPECIFIER) {
-				current_offset = align_to(current_offset, field_align);
+				if (!is_packed)
+					current_offset = align_to(current_offset, field_align);
 				ir_struct->u.strukt.fields[i].offset = current_offset;
 
 				current_offset += field_size;
@@ -531,8 +534,8 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 				type_spec->t == STRUCT_TYPE_SPECIFIER
 					? current_offset
 					: max_field_size,
-				max_field_align);
-		ir_struct->u.strukt.alignment = max_field_align;
+				is_packed ? 1 : max_field_align);
+		ir_struct->u.strukt.alignment = is_packed ? 1 : max_field_align;
 
 		type->u.strukt.ir_type = ir_struct;
 		type->u.strukt.incomplete = false;

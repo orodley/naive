@@ -475,7 +475,8 @@ ASTTypeSpecifier *build_struct_or_union_tagged_named_type(
 }
 
 ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
-		Token *opt_name, Token *lcurly, ASTFieldDecl *field_list, Token *rcurly)
+		Token *opt_name, Token *lcurly, ASTFieldDecl *field_list, Token *rcurly,
+		ASTAttribute *attribute)
 {
 	IGNORE(lcurly);
 	IGNORE(rcurly);
@@ -490,6 +491,7 @@ ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
 		result->u.struct_or_union_specifier.name = opt_name->u.symbol;
 	}
 	result->u.struct_or_union_specifier.field_list = field_list;
+	result->u.struct_or_union_specifier.attribute = attribute;
 
 	return result;
 }
@@ -939,6 +941,13 @@ static void dump_struct_or_union_field_list(ASTFieldDecl *field_list)
 	}
 }
 
+static void dump_attribute(ASTAttribute *attribute)
+{
+	pretty_printf("ATTRIBUTE(");
+	pretty_printf("%s", attribute->name);
+	pretty_printf(")");
+}
+
 static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 {
 	switch (type_specifier->t) {
@@ -958,6 +967,12 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 		dump_struct_or_union_field_list(
 				type_specifier->u.struct_or_union_specifier.field_list);
 		pretty_printf(")");
+
+		if (type_specifier->u.struct_or_union_specifier.attribute != NULL) {
+			pretty_printf(",");
+			dump_attribute(type_specifier->u.struct_or_union_specifier.attribute);
+		}
+
 		break;
 	}
 	case ENUM_TYPE_SPECIFIER: {
