@@ -459,13 +459,17 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 		} else {
 			assert(asm_const.t == ASM_CONST_IMMEDIATE);
 			offset = asm_const.u.immediate;
+			encoded_instr->displacement = offset;
 			// @TODO: Negative numbers
-			if ((offset & 0xFF) == offset)
+			if ((offset & 0xFF) == offset) {
 				encoded_instr->mod = 1;
-			else if ((offset & 0xFFFFFFFF) == offset)
+				encoded_instr->displacement_size = 1;
+			} else if ((offset & 0xFFFFFFFF) == offset) {
 				encoded_instr->mod = 2;
-			else
+				encoded_instr->displacement_size = 4;
+			} else {
 				assert(!"Offset too large!");
+			}
 		}
 
 		switch (reg) {
