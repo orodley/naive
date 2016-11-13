@@ -174,12 +174,25 @@ static AsmArg asm_value(AsmBuilder *builder, IrValue value)
 	}
 	case VALUE_ARG: {
 		assert(value.type.t == IR_INT || value.type.t == IR_POINTER);
+		u32 index = value.u.arg_index;
 
-		if (value.u.arg_index < STATIC_ARRAY_LENGTH(argument_registers)) {
-			return pre_alloced_vreg(builder, argument_registers[value.u.arg_index],
+		if (index < STATIC_ARRAY_LENGTH(argument_registers)) {
+			return pre_alloced_vreg(builder, argument_registers[index],
 					size_of_ir_type(value.type) * 8);
 		} else {
-			UNIMPLEMENTED;
+			// Arguments past the 6th are passed on the stack, above the
+			// previous base pointer and return address (hence 16 bytes).
+			// See the System V x86-64 spec, figure 3.3
+			u32 bp_offset =
+				16 + (index - STATIC_ARRAY_LENGTH(argument_registers)) * 8;
+			u32 vreg = next_vreg(builder);
+			emit_instr2(builder,
+					MOV,
+					asm_vreg(vreg, 64),
+					asm_deref(asm_offset_reg(REG_CLASS_BP, 64,
+							asm_const(bp_offset).u.constant)));
+			append_vreg(builder);
+			return asm_vreg(vreg, size_of_ir_type(value.type) * 8);
 		}
 	}
 	case VALUE_GLOBAL: {
@@ -450,18 +463,40 @@ static void asm_gen_instr(
 	}
 	case OP_CALL: {
 		u32 arity = instr->u.call.arity;
-		assert(arity <= STATIC_ARRAY_LENGTH(argument_registers));
+		u32 max_reg_args = STATIC_ARRAY_LENGTH(argument_registers);
+		i32 args_stack_space = (arity - max_reg_args) * 8;
+		if (args_stack_space > 0) {
+			emit_instr2(builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
+					asm_const(args_stack_space));
+		}
+
 		for (u32 i = 0; i < arity; i++) {
 			AsmArg arg = asm_value(builder, instr->u.call.arg_array[i]);
 			// Use the 64-bit version of the register, as all argument
 			// registers are 64-bit.
 			if (arg.t == ASM_ARG_REGISTER)
 				arg.u.reg.width = 64;
-			AsmArg arg_target_reg = pre_alloced_vreg(builder, argument_registers[i], 64);
-			emit_instr2(builder, MOV, arg_target_reg, arg);
+
+			if (i < max_reg_args) {
+				AsmArg arg_target_reg =
+					pre_alloced_vreg(builder, argument_registers[i], 64);
+				emit_instr2(builder, MOV, arg_target_reg, arg);
+			} else {
+				u32 slot = (i - max_reg_args) * 8;
+				emit_instr2(builder,
+						MOV,
+						asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
+								asm_const(slot).u.constant)),
+						arg);
+			}
 		}
 
 		emit_instr1(builder, CALL, asm_value(builder, instr->u.call.callee));
+
+		if (args_stack_space > 0) {
+			emit_instr2(builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
+					asm_const(args_stack_space));
+		}
 
 		if (instr->u.call.return_type.t != IR_VOID)
 			assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
