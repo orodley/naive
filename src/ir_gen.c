@@ -935,6 +935,9 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 
 	ir_gen_statement(builder, env, function_def->body);
 
+	if (function_type->u.function.return_type->t == VOID_TYPE)
+		build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
+
 	env->scope = env->scope->parent_scope;
 	array_free(param_bindings);
 }

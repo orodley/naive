@@ -10,10 +10,6 @@ void foo(int a, int b, int c, int d, int e, int f, int g, int h)
 	assert(f == 5);
 	assert(g == 6);
 	assert(h == 7);
-
-	// @TODO: This shouldn't be necessary, but there's a bug at the moment with
-	// functions without an explicit return. Remove once this is fixed.
-	return;
 }
 
 int main()
