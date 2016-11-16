@@ -71,7 +71,7 @@ typedef struct AsmConst
 	} u;
 } AsmConst;
 
-typedef struct AsmArg
+typedef struct AsmValue
 {
 	// @TODO: This is kinda messy considering that OFFSET_REGISTER doesn't make
 	// sense if this isn't set.
@@ -79,10 +79,10 @@ typedef struct AsmArg
 
 	enum
 	{
-		ASM_ARG_REGISTER,
-		ASM_ARG_OFFSET_REGISTER,
-		ASM_ARG_LABEL,
-		ASM_ARG_CONST,
+		ASM_VALUE_REGISTER,
+		ASM_VALUE_OFFSET_REGISTER,
+		ASM_VALUE_LABEL,
+		ASM_VALUE_CONST,
 	} t;
 
 	union
@@ -96,7 +96,7 @@ typedef struct AsmArg
 		AsmConst constant;
 		AsmLabel *label;
 	} u;
-} AsmArg;
+} AsmValue;
 
 #define ASM_OPS \
 	X(NOP), \
@@ -138,7 +138,7 @@ typedef struct AsmInstr
 {
 	AsmOp op;
 	u8 num_args;
-	AsmArg args[3];
+	AsmValue args[3];
 
 	u8 num_deps;
 	u32 vreg_deps[2];
@@ -258,13 +258,13 @@ void init_asm_module(AsmModule *asm_module, char *input_file_name);
 
 void free_asm_module(AsmModule *asm_module);
 
-AsmArg asm_vreg(u32 vreg_number, u8 width);
-AsmArg asm_phys_reg(RegClass reg, u8 width);
-AsmArg asm_offset_reg(RegClass reg, u8 width, AsmConst offset);
-AsmArg asm_const(u64 constant);
-AsmArg asm_deref(AsmArg asm_arg);
-AsmArg asm_global(AsmGlobal *global);
-AsmArg asm_label(AsmLabel *label);
+AsmValue asm_vreg(u32 vreg_number, u8 width);
+AsmValue asm_phys_reg(RegClass reg, u8 width);
+AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset);
+AsmValue asm_const(u64 constant);
+AsmValue asm_deref(AsmValue asm_arg);
+AsmValue asm_global(AsmGlobal *global);
+AsmValue asm_label(AsmLabel *label);
 
 void dump_asm_function(AsmFunction *asm_function);
 void dump_asm_module(AsmModule *asm_module);

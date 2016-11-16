@@ -35,7 +35,7 @@ AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 	return instr;
 }
 
-AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmArg arg1)
+AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmValue arg1)
 {
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
@@ -47,7 +47,7 @@ AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmArg arg1)
 	return instr;
 }
 
-AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
+AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmValue arg1, AsmValue arg2)
 {
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
@@ -61,7 +61,7 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmArg arg1, AsmArg arg2)
 }
 
 AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
-		AsmArg arg1, AsmArg arg2, AsmArg arg3)
+		AsmValue arg1, AsmValue arg2, AsmValue arg3)
 {
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
@@ -75,10 +75,10 @@ AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
 	return instr;
 }
 
-static inline void add_dep(AsmInstr *instr, AsmArg dep)
+static inline void add_dep(AsmInstr *instr, AsmValue dep)
 {
 	assert(instr->num_deps < STATIC_ARRAY_LENGTH(instr->vreg_deps));
-	assert(dep.t == ASM_ARG_REGISTER);
+	assert(dep.t == ASM_VALUE_REGISTER);
 	assert(dep.u.reg.t == V_REG);
 
 	instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg_number;;
@@ -114,7 +114,7 @@ static VRegInfo *assign_vreg(AsmBuilder *builder, IrInstr *instr)
 	return vreg;
 }
 
-static AsmArg pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
+static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 {
 	u32 vreg_number = next_vreg(builder);
 
@@ -133,7 +133,7 @@ AsmLabel *append_label(AsmBuilder *builder, char *name)
 	return label;
 }
 
-static AsmArg asm_value(AsmBuilder *builder, IrValue value)
+static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
 	switch (value.t) {
 	case VALUE_CONST:
@@ -157,8 +157,8 @@ static AsmArg asm_value(AsmBuilder *builder, IrValue value)
 			return asm_vreg(vreg, 64);
 		}
 		case OP_CAST: {
-			AsmArg cast_value = asm_value(builder, instr->u.arg);
-			if (cast_value.t == ASM_ARG_REGISTER)
+			AsmValue cast_value = asm_value(builder, instr->u.arg);
+			if (cast_value.t == ASM_VALUE_REGISTER)
 				cast_value.u.reg.width = size_of_ir_type(instr->type) * 8;
 
 			return cast_value;
@@ -208,8 +208,8 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 	assert(instr->type.t == IR_INT);
 	u8 width = instr->type.u.bit_width;
 
-	AsmArg arg1 = asm_value(builder, instr->u.binary_op.arg1);
-	AsmArg arg2 = asm_value(builder, instr->u.binary_op.arg2);
+	AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
+	AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
 	emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
 	emit_instr2(builder, op, asm_vreg(next_vreg(builder), width), arg2);
 
@@ -218,8 +218,8 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 
 static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 {
-	AsmArg arg1 = asm_value(builder, instr->u.binary_op.arg1);
-	AsmArg arg2 = asm_value(builder, instr->u.binary_op.arg2);
+	AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
+	AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
 	u32 vreg = next_vreg(builder);
 	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
 	emit_instr2(builder, CMP, arg1, arg2);
@@ -362,21 +362,21 @@ static void asm_gen_instr(
 		IrType type = instr->u.store.type;
 		assert(ir_type_eq(&ir_value.type, &type));
 
-		AsmArg pointer = asm_value(builder, ir_pointer);
-		AsmArg value = asm_value(builder, ir_value);
+		AsmValue pointer = asm_value(builder, ir_pointer);
+		AsmValue value = asm_value(builder, ir_value);
 
 		// Use offset_register directly where we can, to fold the addition into
 		// the MOV rather than having a separate instruction.
-		bool directly_storeable = value.t == ASM_ARG_REGISTER ||
-			(value.t == ASM_ARG_CONST && value.u.constant.t == ASM_CONST_IMMEDIATE);
+		bool directly_storeable = value.t == ASM_VALUE_REGISTER ||
+			(value.t == ASM_VALUE_CONST && value.u.constant.t == ASM_CONST_IMMEDIATE);
 		if (ir_pointer.t == VALUE_INSTR && ir_pointer.u.instr->op == OP_LOCAL
 				&& directly_storeable) {
 			u32 offset = ir_pointer.u.instr->u.local.stack_offset;
-			AsmArg stack_address =
+			AsmValue stack_address =
 				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
 			emit_instr2(builder, MOV, stack_address, value);
 		} else if (ir_pointer.t == VALUE_GLOBAL) {
-			AsmArg rip_relative_addr =
+			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
 						64,
@@ -385,10 +385,10 @@ static void asm_gen_instr(
 							.u.global = ir_pointer.u.global->asm_global
 						});
 			emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
-		} else if (size_of_ir_type(type) < 8 || value.t != ASM_ARG_CONST) {
+		} else if (size_of_ir_type(type) < 8 || value.t != ASM_VALUE_CONST) {
 			emit_instr2(builder, MOV, asm_deref(pointer), value);
-		} else if (size_of_ir_type(type) == 8 && value.t == ASM_ARG_CONST) {
-			AsmArg temp_vreg = asm_vreg(next_vreg(builder), 64);
+		} else if (size_of_ir_type(type) == 8 && value.t == ASM_VALUE_CONST) {
+			AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
 			emit_instr2(builder, MOV, temp_vreg, value);
 			emit_instr2(builder, MOV, asm_deref(pointer), temp_vreg);
 		} else {
@@ -400,16 +400,16 @@ static void asm_gen_instr(
 	case OP_LOAD: {
 		IrValue pointer = instr->u.load.pointer;
 		IrType type = instr->u.load.type;
-		AsmArg target = asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8);
+		AsmValue target = asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8);
 		assign_vreg(builder, instr);
 
 		if (pointer.t == VALUE_INSTR && pointer.u.instr->op == OP_LOCAL) {
 			u32 offset = pointer.u.instr->u.local.stack_offset;
-			AsmArg stack_address =
+			AsmValue stack_address =
 				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
 			emit_instr2(builder, MOV, target, stack_address);
 		} else if (pointer.t == VALUE_GLOBAL) {
-			AsmArg rip_relative_addr =
+			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
 						64,
@@ -471,14 +471,14 @@ static void asm_gen_instr(
 		}
 
 		for (u32 i = 0; i < arity; i++) {
-			AsmArg arg = asm_value(builder, instr->u.call.arg_array[i]);
+			AsmValue arg = asm_value(builder, instr->u.call.arg_array[i]);
 			// Use the 64-bit version of the register, as all argument
 			// registers are 64-bit.
-			if (arg.t == ASM_ARG_REGISTER)
+			if (arg.t == ASM_VALUE_REGISTER)
 				arg.u.reg.width = 64;
 
 			if (i < max_reg_args) {
-				AsmArg arg_target_reg =
+				AsmValue arg_target_reg =
 					pre_alloced_vreg(builder, argument_registers[i], 64);
 				emit_instr2(builder, MOV, arg_target_reg, arg);
 			} else {
@@ -509,7 +509,7 @@ static void asm_gen_instr(
 		assert(instr->type.t == IR_INT);
 		u8 width = instr->type.u.bit_width;
 
-		AsmArg arg = asm_value(builder, instr->u.arg);
+		AsmValue arg = asm_value(builder, instr->u.arg);
 		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg);
 		emit_instr1(builder, NOT, asm_vreg(next_vreg(builder), width));
 
@@ -520,7 +520,7 @@ static void asm_gen_instr(
 		assert(instr->type.t == IR_INT);
 		u8 width = instr->type.u.bit_width;
 
-		AsmArg arg = asm_value(builder, instr->u.arg);
+		AsmValue arg = asm_value(builder, instr->u.arg);
 		u32 vreg = next_vreg(builder);
 		emit_instr2(builder, XOR, asm_vreg(vreg, width), asm_vreg(vreg, width));
 		emit_instr2(builder, TEST, arg, arg);
@@ -535,16 +535,16 @@ static void asm_gen_instr(
 		assert(instr->type.t == IR_INT);
 		u8 width = instr->type.u.bit_width;
 
-		AsmArg arg1 = asm_value(builder, instr->u.binary_op.arg1);
-		AsmArg arg2 = asm_value(builder, instr->u.binary_op.arg2);
+		AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
+		AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
 
-		if (arg1.t != ASM_ARG_CONST && arg2.t != ASM_ARG_CONST) {
+		if (arg1.t != ASM_VALUE_CONST && arg2.t != ASM_VALUE_CONST) {
 			emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
 			emit_instr2(builder, IMUL, asm_vreg(next_vreg(builder), width), arg2);
 		} else {
-			AsmArg const_arg;
-			AsmArg non_const_arg;
-			if (arg1.t == ASM_ARG_CONST) {
+			AsmValue const_arg;
+			AsmValue non_const_arg;
+			if (arg1.t == ASM_VALUE_CONST) {
 				const_arg = arg1;
 				non_const_arg = arg2;
 			} else {
@@ -552,7 +552,7 @@ static void asm_gen_instr(
 				non_const_arg = arg1;
 			}
 
-			assert(non_const_arg.t != ASM_ARG_CONST);
+			assert(non_const_arg.t != ASM_VALUE_CONST);
 
 			emit_instr3(builder, IMUL,
 					asm_vreg(next_vreg(builder), width),
@@ -567,21 +567,21 @@ static void asm_gen_instr(
 		assert(instr->type.t == IR_INT);
 		u8 width = instr->type.u.bit_width;
 
-		AsmArg arg1 = asm_value(builder, instr->u.binary_op.arg1);
-		AsmArg arg2 = asm_value(builder, instr->u.binary_op.arg2);
+		AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
+		AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
 
-		AsmArg reg_arg2 = arg2;
-		if (arg2.t == ASM_ARG_CONST) {
+		AsmValue reg_arg2 = arg2;
+		if (arg2.t == ASM_VALUE_CONST) {
 			reg_arg2 = asm_vreg(next_vreg(builder), width);
 			emit_instr2(builder, MOV, reg_arg2, arg2);
 			append_vreg(builder);
 		}
 
-		AsmArg quotient = pre_alloced_vreg(builder, REG_CLASS_A, width);
+		AsmValue quotient = pre_alloced_vreg(builder, REG_CLASS_A, width);
 		instr->vreg_number = quotient.u.reg.u.vreg_number;
 		emit_instr2(builder, MOV, quotient, arg1);
 
-		AsmArg sign_extension = pre_alloced_vreg(builder, REG_CLASS_D, width);
+		AsmValue sign_extension = pre_alloced_vreg(builder, REG_CLASS_D, width);
 		switch (width) {
 		case 32: {
 			AsmInstr *cdq = emit_instr0(builder, CDQ);
@@ -605,11 +605,11 @@ static void asm_gen_instr(
 	}
 }
 
-static Register *arg_reg(AsmArg *arg)
+static Register *arg_reg(AsmValue *arg)
 {
-	if (arg->t == ASM_ARG_REGISTER)
+	if (arg->t == ASM_VALUE_REGISTER)
 		return &arg->u.reg;
-	if (arg->t == ASM_ARG_OFFSET_REGISTER)
+	if (arg->t == ASM_VALUE_OFFSET_REGISTER)
 		return &arg->u.offset_register.reg;
 	return NULL;
 }
@@ -689,7 +689,7 @@ static void allocate_registers(AsmBuilder *builder)
 	for (u32 i = 0; i < body->size; i++) {
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 		for (u32 j = 0; j < instr->num_args; j++) {
-			AsmArg *arg = instr->args + j;
+			AsmValue *arg = instr->args + j;
 			Register *reg = arg_reg(arg);
 			if (reg != NULL && reg->t == V_REG) {
 				u32 reg_num = reg->u.vreg_number;
@@ -873,7 +873,7 @@ static void allocate_registers(AsmBuilder *builder)
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 
 		for (u32 j = 0; j < instr->num_args; j++) {
-			AsmArg *arg = instr->args + j;
+			AsmValue *arg = instr->args + j;
 			Register *reg = arg_reg(arg);
 			if (reg == NULL)
 				continue;
