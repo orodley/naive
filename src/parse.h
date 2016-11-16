@@ -161,7 +161,7 @@ typedef enum ASTStatementType
 } ASTStatementType;
 #undef X
 
-typedef struct
+typedef struct ASTForStatement
 {
 	enum
 	{
