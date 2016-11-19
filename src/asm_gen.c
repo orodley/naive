@@ -13,6 +13,7 @@ void init_asm_builder(AsmBuilder *builder, char *input_file_name)
 	init_asm_module(&builder->asm_module, input_file_name);
 
 	builder->local_stack_usage = 0;
+	builder->curr_sp_diff = 0;
 	builder->virtual_registers = EMPTY_ARRAY;
 }
 
@@ -91,11 +92,6 @@ static inline u32 next_vreg(AsmBuilder *builder)
 	return builder->virtual_registers.size;
 }
 
-static RegClass argument_registers[] = {
-	REG_CLASS_DI, REG_CLASS_SI, REG_CLASS_D,
-	REG_CLASS_C, REG_CLASS_R8, REG_CLASS_R9,
-};
-
 static VRegInfo *append_vreg(AsmBuilder *builder)
 {
 	VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
@@ -152,7 +148,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 			emit_instr2(builder,
 					ADD,
 					asm_vreg(vreg, 64),
-					asm_const(instr->u.local.stack_offset));
+					asm_const(instr->u.local.stack_offset + builder->curr_sp_diff));
 			append_vreg(builder);
 			return asm_vreg(vreg, 64);
 		}
@@ -173,26 +169,38 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 		}
 	}
 	case VALUE_ARG: {
-		assert(value.type.t == IR_INT || value.type.t == IR_POINTER);
 		u32 index = value.u.arg_index;
+		ArgClass *arg_class =
+			ARRAY_REF(&builder->current_function->arg_classes, ArgClass, index);
 
-		if (index < STATIC_ARRAY_LENGTH(argument_registers)) {
-			return pre_alloced_vreg(builder, argument_registers[index],
+		switch (arg_class->t) {
+		case ARG_CLASS_REG:
+			return pre_alloced_vreg(builder, arg_class->u.reg,
 					size_of_ir_type(value.type) * 8);
-		} else {
-			// Arguments past the 6th are passed on the stack, above the
-			// previous base pointer and return address (hence 16 bytes).
+		case ARG_CLASS_MEM: {
+			// Arguments passed on the stack sit above the previous frame
+			// pointer and return address (hence 16 bytes).
 			// See the System V x86-64 spec, figure 3.3
-			u32 bp_offset =
-				16 + (index - STATIC_ARRAY_LENGTH(argument_registers)) * 8;
+			AsmValue bp_offset = asm_const(arg_class->u.mem.offset + 16);
+
 			u32 vreg = next_vreg(builder);
-			emit_instr2(builder,
-					MOV,
-					asm_vreg(vreg, 64),
-					asm_deref(asm_offset_reg(REG_CLASS_BP, 64,
-							asm_const(bp_offset).u.constant)));
 			append_vreg(builder);
-			return asm_vreg(vreg, size_of_ir_type(value.type) * 8);
+			if (arg_class->u.mem.remains_in_memory) {
+				emit_instr2(builder,
+						MOV,
+						asm_vreg(vreg, 64),
+						asm_phys_reg(REG_CLASS_BP, 64));
+				emit_instr2(builder, ADD, asm_vreg(vreg, 64), bp_offset);
+				return asm_vreg(vreg, 64);
+			} else {
+				emit_instr2(builder,
+						MOV,
+						asm_vreg(vreg, 64),
+						asm_deref(asm_offset_reg(REG_CLASS_BP, 64,
+								bp_offset.u.constant)));
+				return asm_vreg(vreg, size_of_ir_type(value.type) * 8);
+			}
+		}
 		}
 	}
 	case VALUE_GLOBAL: {
@@ -260,6 +268,11 @@ static void handle_phi_nodes(AsmBuilder *builder, IrBlock *src_block,
 		assert(encountered_src_block);
 	}
 }
+
+static RegClass argument_registers[] = {
+	REG_CLASS_DI, REG_CLASS_SI, REG_CLASS_D,
+	REG_CLASS_C, REG_CLASS_R8, REG_CLASS_R9,
+};
 
 static void asm_gen_instr(
 		AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block, IrInstr *instr)
@@ -371,7 +384,8 @@ static void asm_gen_instr(
 			(value.t == ASM_VALUE_CONST && value.u.constant.t == ASM_CONST_IMMEDIATE);
 		if (ir_pointer.t == VALUE_INSTR && ir_pointer.u.instr->op == OP_LOCAL
 				&& directly_storeable) {
-			u32 offset = ir_pointer.u.instr->u.local.stack_offset;
+			u32 offset = ir_pointer.u.instr->u.local.stack_offset
+				+ builder->curr_sp_diff;
 			AsmValue stack_address =
 				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
 			emit_instr2(builder, MOV, stack_address, value);
@@ -404,7 +418,8 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 
 		if (pointer.t == VALUE_INSTR && pointer.u.instr->op == OP_LOCAL) {
-			u32 offset = pointer.u.instr->u.local.stack_offset;
+			u32 offset = pointer.u.instr->u.local.stack_offset
+				+ builder->curr_sp_diff;
 			AsmValue stack_address =
 				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
 			emit_instr2(builder, MOV, target, stack_address);
@@ -463,12 +478,17 @@ static void asm_gen_instr(
 	}
 	case OP_CALL: {
 		u32 arity = instr->u.call.arity;
-		u32 max_reg_args = STATIC_ARRAY_LENGTH(argument_registers);
-		i32 args_stack_space = (arity - max_reg_args) * 8;
+		AsmGlobal *target = instr->u.call.callee.u.global->asm_global;
+		assert(target->t == ASM_GLOBAL_FUNCTION);
+		i32 args_stack_space = target->u.function.args_stack_space;
 		if (args_stack_space > 0) {
 			emit_instr2(builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
 					asm_const(args_stack_space));
 		}
+		builder->curr_sp_diff = args_stack_space;
+
+		Array(u32) arg_vregs;
+		ARRAY_INIT(&arg_vregs, u32, STATIC_ARRAY_LENGTH(argument_registers));
 
 		for (u32 i = 0; i < arity; i++) {
 			AsmValue arg = asm_value(builder, instr->u.call.arg_array[i]);
@@ -477,26 +497,69 @@ static void asm_gen_instr(
 			if (arg.t == ASM_VALUE_REGISTER)
 				arg.u.reg.width = 64;
 
-			if (i < max_reg_args) {
+			assert(instr->u.call.callee.t == VALUE_GLOBAL);
+			ArgClass *arg_class =
+				ARRAY_REF(&target->u.function.arg_classes, ArgClass, i);
+
+			switch (arg_class->t) {
+			case ARG_CLASS_REG: {
 				AsmValue arg_target_reg =
-					pre_alloced_vreg(builder, argument_registers[i], 64);
+					pre_alloced_vreg(builder, arg_class->u.reg, 64);
 				emit_instr2(builder, MOV, arg_target_reg, arg);
-			} else {
-				u32 slot = (i - max_reg_args) * 8;
-				emit_instr2(builder,
-						MOV,
-						asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
-								asm_const(slot).u.constant)),
-						arg);
+				*ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
+				break;
+			}
+			case ARG_CLASS_MEM: {
+				AsmValue location = asm_const(arg_class->u.mem.offset);
+				if (arg_class->u.mem.size <= 8) {
+					emit_instr2(builder,
+							MOV, 
+							asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
+									location.u.constant)),
+							arg);
+				} else {
+					u32 src_vreg = next_vreg(builder);
+					append_vreg(builder);
+					u32 temp_vreg = next_vreg(builder);
+					append_vreg(builder);
+					emit_instr2(builder, MOV, asm_vreg(src_vreg, 64), arg);
+					for (u32 i = 0; i < arg_class->u.mem.size; i++) {
+						AsmConst offset =
+							asm_const(location.u.constant.u.immediate + i).u.constant;
+						emit_instr2(builder, MOV, asm_vreg(temp_vreg, 8),
+								asm_deref(asm_vreg(src_vreg, 64)));
+						emit_instr2(builder,
+								MOV,
+								asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+								asm_vreg(temp_vreg, 8));
+						emit_instr2(builder,
+								ADD,
+								asm_vreg(src_vreg, 64),
+								asm_const(1));
+					}
+				}
+				break;
+			}
 			}
 		}
 
 		emit_instr1(builder, CALL, asm_value(builder, instr->u.call.callee));
 
+		// Insert fake uses at the call instr, so that we don't allocate
+		// registers used for arguments for any temporary registers used to
+		// copy structs to the stack.
+		for (u32 i = 0; i < arg_vregs.size; i++) {
+			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
+			vreg->live_range_end = builder->current_block->size;
+		}
+
+		array_free(&arg_vregs);
+
 		if (args_stack_space > 0) {
 			emit_instr2(builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
 					asm_const(args_stack_space));
 		}
+		builder->curr_sp_diff = 0;
 
 		if (instr->u.call.return_type.t != IR_VOID)
 			assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
@@ -603,6 +666,61 @@ static void asm_gen_instr(
 	case OP_LT: asm_gen_relational_instr(builder, instr, SETL); break;
 	case OP_LTE: asm_gen_relational_instr(builder, instr, SETLE); break;
 	}
+}
+
+// @TODO: This doesn't handle indirect calls, as the target of the call doesn't
+// have an associated global.
+// @TODO: This doesn't conform to the ABI, but it's definitely okay as long as
+// we only call/are called by stuff we compile, and it's probably okay as long
+// as structs passed/returned by value aren't involved.
+// The specific issue is that we always classify structs as memory arguments
+// and pass them by the stack, but the calling convention is more complicated
+// than that.
+static void classify_arguments(IrGlobal *ir_global)
+{
+	assert(ir_global->type.t == IR_FUNCTION);
+	u32 arity = ir_global->type.u.function.arity;
+	IrType *arg_types = ir_global->type.u.function.arg_types;
+
+	AsmGlobal *asm_global = ir_global->asm_global;
+	assert(asm_global->t == ASM_GLOBAL_FUNCTION);
+	AsmFunction *asm_func = &asm_global->u.function;
+	Array(ArgClass) *arg_classes = &asm_func->arg_classes;
+
+	u32 curr_offset = 0;
+	u32 curr_reg_index = 0;
+
+	for (u32 i = 0; i < arity; i++) {
+		ArgClass *arg_class = ARRAY_APPEND(arg_classes, ArgClass);
+		IrType *arg_type = arg_types + i;
+		switch (arg_type->t) {
+		case IR_INT: case IR_POINTER:
+			if (curr_reg_index < STATIC_ARRAY_LENGTH(argument_registers)) {
+				arg_class->t = ARG_CLASS_REG;
+				arg_class->u.reg = argument_registers[curr_reg_index++];
+			} else {
+				arg_class->t = ARG_CLASS_MEM;
+				arg_class->u.mem.offset = curr_offset;
+				arg_class->u.mem.size = 8;
+				arg_class->u.mem.remains_in_memory = false;
+				curr_offset += 8;
+			}
+			break;
+		case IR_STRUCT: {
+			arg_class->t = ARG_CLASS_MEM;
+			u32 size = size_of_ir_type(*arg_type);
+			arg_class->u.mem.offset = curr_offset;
+			arg_class->u.mem.size = size;
+			arg_class->u.mem.remains_in_memory = true;
+			curr_offset += size;
+			break;
+		}
+		case IR_ARRAY: case IR_FUNCTION: case IR_VOID:
+			UNREACHABLE;
+		}
+	}
+
+	asm_func->args_stack_space = curr_offset;
 }
 
 static Register *arg_reg(AsmValue *arg)
@@ -899,6 +1017,11 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	AsmGlobal *asm_func = ir_global->asm_global;
 	assert(asm_func != NULL);
 
+	asm_func->defined = ir_global->initializer != NULL;
+	if (!asm_func->defined) {
+		return;
+	}
+
 	builder->current_function = &asm_func->u.function;
 	builder->current_block = &asm_func->u.function.body;
 
@@ -908,11 +1031,6 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	ret_label->name = "ret";
 	ret_label->offset = 0;
 	asm_func->u.function.ret_label = ret_label;
-
-	asm_func->defined = ir_global->initializer != NULL;
-	if (!asm_func->defined) {
-		return;
-	}
 
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
@@ -1047,6 +1165,11 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 			pool_alloc(&builder->asm_module.pool, sizeof *asm_global);
 		*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = asm_global;
 
+		ir_global->asm_global = asm_global;
+		asm_global->name = ir_global->name;
+		asm_global->defined = ir_global->initializer != NULL;
+		asm_global->offset = 0;
+
 		switch (ir_global->linkage) {
 		case IR_GLOBAL_LINKAGE: asm_global->linkage = ASM_GLOBAL_LINKAGE; break;
 		case IR_LOCAL_LINKAGE: asm_global->linkage = ASM_LOCAL_LINKAGE; break;
@@ -1057,16 +1180,12 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 
 			asm_global->t = ASM_GLOBAL_FUNCTION;
 			init_asm_function(new_function, ir_global->name);
+			classify_arguments(ir_global);
 		} else {
 			asm_global->t = ASM_GLOBAL_VAR;
 			asm_global->u.var.size_bytes = size_of_ir_type(ir_global->type);
 			asm_global->u.var.value = NULL;
 		}
-
-		ir_global->asm_global = asm_global;
-		asm_global->name = ir_global->name;
-		asm_global->defined = ir_global->initializer != NULL;
-		asm_global->offset = 0;
 	}
 
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {

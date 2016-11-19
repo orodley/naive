@@ -146,9 +146,40 @@ typedef struct AsmInstr
 	AsmLabel *label;
 } AsmInstr;
 
+typedef struct ArgClass
+{
+	enum
+	{
+		ARG_CLASS_REG,
+		ARG_CLASS_MEM,
+	} t;
+
+	union
+	{
+		RegClass reg;
+		struct
+		{
+			u32 offset;
+			u32 size;
+			bool remains_in_memory;
+		} mem;
+	} u;
+} ArgClass;
+
 typedef struct AsmFunction
 {
+	// @TODO: This seems unnecessary, since we have a name field on AsmGlobal
+	// anyway. Remove.
 	char *name;
+
+	u32 args_stack_space;
+
+	// @TODO: We should probably compute this on the fly at callsites and in
+	// functions for passing/receiving params respectively. Otherwise this
+	// doesn't work for indirect calls, as there is no corresponding
+	// AsmFunction to store arg_classes on. It could be cached here to avoid
+	// recomputing where necessary, but it's not too expensive to compute.
+	Array(ArgClass) arg_classes;
 
 	Array(AsmInstr) prologue;
 	Array(AsmInstr) body;

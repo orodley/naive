@@ -42,6 +42,7 @@ void init_asm_function(AsmFunction *function, char *name)
 {
 	function->name = name;
 
+	ARRAY_INIT(&function->arg_classes, ArgClass, 6);
 	ARRAY_INIT(&function->prologue, AsmInstr, 10);
 	ARRAY_INIT(&function->body, AsmInstr, 20);
 	ARRAY_INIT(&function->epilogue, AsmInstr, 10);

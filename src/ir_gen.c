@@ -892,6 +892,9 @@ static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 	}
 }
 
+static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
+		Term right, IrOp ir_op, Term *pre_assign_value);
+
 void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 		CType *function_type, ASTFunctionDef *function_def)
 {
@@ -927,10 +930,12 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 		// re-process at all.
 		cdecl.type = function_type->u.function.arg_type_array[i];
 		cdecl_to_binding(builder, &cdecl, binding);
-		build_store(builder,
-				binding->term.value,
-				value_arg(i, global->type.u.function.arg_types[i]),
-				c_type_to_ir_type(binding->term.ctype));
+
+		Term arg = {
+			.ctype = cdecl.type,
+			.value = value_arg(i, global->type.u.function.arg_types[i]),
+		};
+		ir_gen_assign_op(builder, env, binding->term, arg, OP_INVALID, NULL);
 	}
 
 	ir_gen_statement(builder, env, function_def->body);
@@ -1295,10 +1300,7 @@ static void add_sub_objects(IrBuilder *builder, TypeEnv *type_env,
 				u32 index = prev_sub_object->u.struct_field.field_index;
 				assert(index + 1 < fields->size);
 				new_sub_object.ctype = ARRAY_REF(fields, CDecl, index + 1)->type;
-				new_sub_object.offset =
-					ir_fields[index].offset
-					- starting_offset
-					+ ir_fields[index + 1].offset;
+				new_sub_object.offset = starting_offset + ir_fields[index + 1].offset;
 
 				new_sub_object.t = SUB_OBJECT_STRUCT_FIELD;
 				new_sub_object.u.struct_field.struct_type =

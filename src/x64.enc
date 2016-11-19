@@ -29,6 +29,7 @@ JE  rel                =         [0F 84] cd
 
 JMP rel                =         E9 cd
 
+MOV r/m8, r8           =         88 /r
 MOV r8, r/m8           =         8A /r
 MOV r/m32, r32         =         89 /r
 MOV r32, r/m32         =         8B /r

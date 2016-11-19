@@ -19,6 +19,7 @@ typedef struct AsmBuilder
 
 	Array(VRegInfo) virtual_registers;
 	u32 local_stack_usage;
+	u32 curr_sp_diff;
 } AsmBuilder;
 
 void init_asm_builder(AsmBuilder *builder, char *input_file_name);

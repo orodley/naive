@@ -470,6 +470,7 @@ ASTTypeSpecifier *build_struct_or_union_tagged_named_type(
 		UNION_TYPE_SPECIFIER;
 	tagged_type->u.struct_or_union_specifier.name = name->u.symbol;
 	tagged_type->u.struct_or_union_specifier.field_list = NULL;
+	tagged_type->u.struct_or_union_specifier.attribute = NULL;
 
 	return tagged_type;
 }
