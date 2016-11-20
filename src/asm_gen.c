@@ -175,8 +175,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 
 		switch (arg_class->t) {
 		case ARG_CLASS_REG:
-			return pre_alloced_vreg(builder, arg_class->u.reg,
-					size_of_ir_type(value.type) * 8);
+			return asm_vreg(arg_class->u.reg.vreg, size_of_ir_type(value.type) * 8);
 		case ARG_CLASS_MEM: {
 			// Arguments passed on the stack sit above the previous frame
 			// pointer and return address (hence 16 bytes).
@@ -504,7 +503,7 @@ static void asm_gen_instr(
 			switch (arg_class->t) {
 			case ARG_CLASS_REG: {
 				AsmValue arg_target_reg =
-					pre_alloced_vreg(builder, arg_class->u.reg, 64);
+					pre_alloced_vreg(builder, arg_class->u.reg.reg, 64);
 				emit_instr2(builder, MOV, arg_target_reg, arg);
 				*ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
 				break;
@@ -697,7 +696,7 @@ static void classify_arguments(IrGlobal *ir_global)
 		case IR_INT: case IR_POINTER:
 			if (curr_reg_index < STATIC_ARRAY_LENGTH(argument_registers)) {
 				arg_class->t = ARG_CLASS_REG;
-				arg_class->u.reg = argument_registers[curr_reg_index++];
+				arg_class->u.reg.reg = argument_registers[curr_reg_index++];
 			} else {
 				arg_class->t = ARG_CLASS_MEM;
 				arg_class->u.mem.offset = curr_offset;
@@ -837,7 +836,13 @@ static void allocate_registers(AsmBuilder *builder)
 		dump_asm_function(builder->current_function);
 		for (u32 i = 0; i < builder->virtual_registers.size; i++) {
 			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
-			printf("#%u: [%d, %d]\n", i, vreg->live_range_start, vreg->live_range_end);
+			printf("#%u: [%d, %d]", i, vreg->live_range_start, vreg->live_range_end);
+			if (vreg->assigned_register != INVALID_REG_CLASS) {
+				// @TODO: Move register dumping stuff we we can dump the name
+				// here rather than just a number
+				printf(" (%d)", vreg->assigned_register);
+			}
+			putchar('\n');
 		}
 		putchar('\n');
 	}
@@ -887,7 +892,7 @@ static void allocate_registers(AsmBuilder *builder)
 			ARRAY_REMOVE(&active_vregs, VRegInfo *, 0);
 		}
 
-		if (vreg->assigned_register  == INVALID_REG_CLASS) {
+		if (vreg->assigned_register == INVALID_REG_CLASS) {
 			// @TODO: Insert spills when there are no free registers to assign.
 			assert(free_regs_bitset != 0);
 			u32 first_free_alloc_index = lowest_set_bit(free_regs_bitset);
@@ -1046,10 +1051,25 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		block->label = label;
 	}
 
+	// Pre-allocate virtual registers for argument registers. This is to avoid
+	// spills if this isn't a leaf function, since we'll need to use the same
+	// registers for our own calls.
+	for (u32 i = 0; i < asm_func->u.function.arg_classes.size; i++) {
+		ArgClass *arg_class =
+			ARRAY_REF(&asm_func->u.function.arg_classes, ArgClass, i);
+		if (arg_class->t == ARG_CLASS_REG) {
+			emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), 64),
+					asm_phys_reg(arg_class->u.reg.reg, 64));
+			arg_class->u.reg.vreg = next_vreg(builder);
+			append_vreg(builder);
+		}
+	}
+
 	for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
 		IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
 
-		u32 first_instr_of_block_index = builder->current_function->body.size;
+		u32 first_instr_of_block_index = block_index == 0
+			? 0 : builder->current_function->body.size;
 		Array(IrInstr *) *instrs = &block->instrs;
 		for (u32 i = 0; i < instrs->size; i++) {
 			IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);

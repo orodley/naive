@@ -795,10 +795,21 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 	decl_to_cdecl(builder, env, decl_spec_type, declarator, &cdecl);
 	CType *ctype = cdecl.type;
 	if (ctype->t == FUNCTION_TYPE) {
+		// Struct returns are handled in the frontend, by adding a pointer
+		// parameter at the start, and allocating a local in the caller.
+		bool struct_ret = ctype->u.function.return_type->t == STRUCT_TYPE;
+
 		u32 arity = ctype->u.function.arity;
+		if (struct_ret)
+			arity++;
+
 		IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
 		
-		for (u32 i = 0; i < arity; i++) {
+		u32 i = 0;
+		if (struct_ret) {
+			arg_ir_types[i++] = (IrType) { .t = IR_POINTER };
+		}
+		for (; i < arity; i++) {
 			CType *arg_c_type = cdecl.type->u.function.arg_type_array[i];
 			arg_ir_types[i] = c_type_to_ir_type(arg_c_type);
 		}
@@ -815,10 +826,12 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 		}
 		
 		if (global == NULL) {
-			global = trans_unit_add_function(
-					builder->trans_unit, cdecl.name,
-					c_type_to_ir_type(ctype->u.function.return_type),
-					arity, arg_ir_types);
+			IrType return_type = struct_ret
+				? (IrType) { .t = IR_VOID }
+				: c_type_to_ir_type(ctype->u.function.return_type);
+
+			global = trans_unit_add_function(builder->trans_unit, cdecl.name,
+					return_type, arity, arg_ir_types);
 		}
 
 		assert(global->type.t == IR_FUNCTION);
@@ -1464,7 +1477,18 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		} else {
 			Term term =
 				ir_gen_expr(builder, env, statement->u.expr, RVALUE_CONTEXT);
-			build_unary_instr(builder, OP_RET, term.value);
+			if (term.ctype->t == STRUCT_TYPE) {
+				// If we return a struct, the first arg is a pointer to space
+				// the caller allocated for the struct.
+				Term caller_ptr = (Term) {
+					.ctype = term.ctype,
+					.value = value_arg(0, (IrType) { .t = IR_POINTER }),
+				};
+				ir_gen_assign_op(builder, env, caller_ptr, term, OP_INVALID, NULL);
+				build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
+			} else {
+				build_unary_instr(builder, OP_RET, term.value);
+			}
 		}
 		break;
 	}
@@ -2199,26 +2223,42 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			arg = arg->next;
 		}
 
+		// Struct returns are handled in the frontend, by adding a pointer
+		// parameter at the start, and allocating a local in the caller.
+		bool struct_ret = callee.ctype->u.function.return_type->t == STRUCT_TYPE;
+		if (struct_ret)
+			arity++;
+
 		assert(callee.ctype->t == FUNCTION_TYPE);
 
 		CType *return_type = callee.ctype->u.function.return_type;
 		IrValue *arg_array = pool_alloc(&builder->trans_unit->pool,
 				arity * sizeof(*arg_array));
 
+		u32 i = 0;
+		IrValue local_for_ret_value;
+		if (struct_ret) {
+			local_for_ret_value =
+				build_local(builder, c_type_to_ir_type(return_type));
+			arg_array[i++] = local_for_ret_value;
+		}
+
 		arg = expr->u.function_call.arg_list;
-		for (u32 i = 0; arg != NULL; i++, arg = arg->next) {
+		for (; arg != NULL; i++, arg = arg->next) {
 			Term arg_term = ir_gen_expr(builder, env, arg->expr, RVALUE_CONTEXT);
 			CType *arg_type = callee.ctype->u.function.arg_type_array[i];
 			assert(c_type_compatible(arg_term.ctype, arg_type));
 			arg_array[i] = convert_type(builder, arg_term, arg_type).value;
 		}
 
-		IrValue value = build_call(
-				builder,
-				callee.value,
-				c_type_to_ir_type(return_type),
-				arity,
-				arg_array);
+		IrType return_ir_type = struct_ret
+			? (IrType) { .t = IR_VOID }
+			: c_type_to_ir_type(return_type);
+
+		IrValue value = build_call(builder, callee.value, return_ir_type,
+				arity, arg_array);
+		if (struct_ret)
+			value = local_for_ret_value;
 
 		return (Term) { .ctype = return_type, .value = value, };
 	}

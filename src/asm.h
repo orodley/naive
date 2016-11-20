@@ -156,7 +156,11 @@ typedef struct ArgClass
 
 	union
 	{
-		RegClass reg;
+		struct
+		{
+			u32 vreg;
+			RegClass reg;
+		} reg;
 		struct
 		{
 			u32 offset;
