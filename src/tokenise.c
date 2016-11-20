@@ -616,6 +616,11 @@ static bool tokenise_aux(Reader *reader)
 					if (!read_hex_number(reader, &value))
 						return false;
 					break;
+				default:
+					issue_error(&start_source_loc,
+							"Invalid escape character '%c'"
+							" in character literal", c);
+					return false;
 				}
 			} else {
 				value = c;
@@ -1067,7 +1072,7 @@ static bool handle_pp_directive(Reader *reader)
 			issue_error(&directive_start, "Unmatched #endif");
 			return false;
 		}
-		ARRAY_POP(&reader->pp_scope_stack, PPCondScope);
+		reader->pp_scope_stack.size--;
 	} else if (!ignoring_tokens(reader)) {
 		if (streq(directive, "include")) {
 			skip_whitespace_and_comments(reader, false);
@@ -1099,11 +1104,15 @@ static bool handle_pp_directive(Reader *reader)
 				return false;
 			}
 
-			if (!tokenise_file(reader, includee_path, include_path_source_loc))
-				return false;
+			bool tok_success =
+				tokenise_file(reader, includee_path, include_path_source_loc);
 			
 			free(include_path);
-			free(includee_path);
+			if (include_path != includee_path)
+				free(includee_path);
+
+			if (!tok_success)
+				return false;
 
 			skip_whitespace_and_comments(reader, false);
 			if (peek_char(reader) != '\n') {

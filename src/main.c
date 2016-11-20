@@ -30,7 +30,7 @@ static bool flag_dump_ir = false;
 static bool flag_dump_asm = false;
 bool flag_dump_live_ranges = false;
 
-static char *make_temp_file();
+static char *make_temp_file(void);
 static int compile_file(char *input_filename, char *output_filename, bool syntax_only);
 static int make_file_executable(char *filename);
 
@@ -171,8 +171,8 @@ int main(int argc, char *argv[])
 		int result = 0;
 		for (u32 i = 0; i < temp_filenames.size; i++) {
 			char *temp_filename = *ARRAY_REF(&temp_filenames, char *, i);
-			int result = remove(temp_filename);
-			if (result != 0) {
+			int ret = remove(temp_filename);
+			if (ret != 0) {
 				perror("Failed to remove temporary object file");
 				result = 9;
 			}

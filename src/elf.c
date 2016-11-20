@@ -230,7 +230,7 @@ typedef struct ELFFile
 static void init_elf_file(ELFFile *elf_file, FILE *output_file, ELFFileType type)
 {
 	ZERO_STRUCT(elf_file);
-	memset(elf_file->section_info, sizeof elf_file->section_info, 0);
+	memset(elf_file->section_info, 0, sizeof elf_file->section_info);
 
 	elf_file->output_file = output_file;
 	elf_file->type = type;
@@ -683,6 +683,7 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 		perror("Failed to read from ELF file");
 		return false;
 	}
+	assert(file_header.shstrtab_index < file_header.sht_entries);
 
 	// This should have been checked already
 	assert(strneq((char *)file_header.identifier, "\x7F" "ELF", 4));
@@ -701,10 +702,7 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 	bool ret = true;
 	ELFSectionHeader *headers =
 		malloc(sizeof *headers * file_header.sht_entries);
-	for (u32 i = 0; i < file_header.sht_entries; i++) {
-		ELFSectionHeader *header = headers + i;
-		checked_fread(header, sizeof *header, 1, input_file);
-	}
+	checked_fread(headers, sizeof *headers, file_header.sht_entries, input_file);
 
 	ELFSectionHeader *shstrtab_header = headers + file_header.shstrtab_index;
 	assert(shstrtab_header->type == SHT_STRTAB);
