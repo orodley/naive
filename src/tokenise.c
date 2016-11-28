@@ -70,9 +70,7 @@ typedef struct Macro
 
 static Macro *look_up_macro(Array(Macro) *macro_env, char *name)
 {
-	// Iterate in reverse order so that macro params have priority over a
-	// macro with the same name.
-	for (i32 i = macro_env->size - 1; i >= 0; i--) {
+	for (u32 i = 0; i < macro_env->size; i++) {
 		Macro *m = ARRAY_REF(macro_env, Macro, i);
 		if (streq(m->name, name)) {
 			return m;
@@ -480,13 +478,14 @@ static bool substitute_macro_params(Reader *reader, Macro *macro)
 				ret = false;
 				goto cleanup;
 			}
-			ARRAY_INIT(&reader->curr_macro_params, Macro, 5);
 			Macro *arg_macro = ARRAY_APPEND(&reader->curr_macro_params, Macro);
 			arg_macro->name = *ARRAY_REF(&macro->arg_names, char *, args_processed);
 			arg_macro->value = strndup((char *)arg_chars.elements, arg_chars.size); 
 			arg_macro->arg_names = EMPTY_ARRAY;
 			array_clear(&arg_chars);
 			args_processed++;
+
+			skip_whitespace_and_comments(reader, false);
 
 			if (c == ')') {
 				ret = true;
@@ -898,6 +897,7 @@ static bool tokenise_aux(Reader *reader)
 								return false;
 
 							array_free(&reader->curr_macro_params);
+							reader->curr_macro_params = EMPTY_ARRAY;
 							reader->curr_macro_params = old_params;
 						}
 					}
