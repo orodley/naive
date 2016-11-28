@@ -42,6 +42,7 @@ typedef struct CType
 			struct CType *return_type;
 			struct CType **arg_type_array;
 			u32 arity;
+			bool variable_arity;
 		} function;
 		struct
 		{
@@ -642,7 +643,14 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 
 		u32 arity = 0;
 		while (params != NULL) {
-			arity++;
+			switch (params->t) {
+			case PARAMETER_DECL:
+				arity++;
+				break;
+			case ELLIPSIS_DECL:
+				assert(params->next == NULL);
+				break;
+			}
 			params = params->next;
 		}
 
@@ -652,18 +660,29 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 				&builder->trans_unit->pool,
 				sizeof(*arg_c_types) * arity);
 
-		for (u32 i = 0; i < arity; i++) {
-			CType *decl_spec_type = decl_specifier_list_to_c_type(
-					builder, env, params->decl_specifier_list);
-			CDecl cdecl;
-			decl_to_cdecl(
-					builder, env, decl_spec_type, params->declarator, &cdecl);
+		bool variable_arity = false;
+		for (u32 i = 0; params != NULL; i++) {
+			switch (params->t) {
+			case PARAMETER_DECL: {
+				CType *decl_spec_type = decl_specifier_list_to_c_type(
+						builder, env, params->decl_specifier_list);
+				CDecl cdecl;
+				decl_to_cdecl(
+						builder, env, decl_spec_type, params->declarator, &cdecl);
 
-			// As per 6.7.5.3.7, parameters of array type are adjusted to
-			// pointers to the element type.
-			cdecl.type = decay_to_pointer(type_env, cdecl.type);
+				// As per 6.7.5.3.7, parameters of array type are adjusted to
+				// pointers to the element type.
+				cdecl.type = decay_to_pointer(type_env, cdecl.type);
 
-			arg_c_types[i] = cdecl.type;
+				arg_c_types[i] = cdecl.type;
+				break;
+			}
+			case ELLIPSIS_DECL:
+				variable_arity = true;
+				// Can't have more params after an ellipsis.
+				assert(params->next == NULL);
+				break;
+			}
 
 			params = params->next;
 		}
@@ -677,6 +696,7 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 		CType *ctype = pool_alloc(&builder->trans_unit->pool, sizeof *ctype);
 		ctype->t = FUNCTION_TYPE;
 		ctype->u.function.arity = arity;
+		ctype->u.function.variable_arity = variable_arity;
 		ctype->u.function.arg_type_array = arg_c_types;
 		ctype->u.function.return_type = func_name_cdecl.type;;
 
@@ -832,7 +852,8 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 				: c_type_to_ir_type(ctype->u.function.return_type);
 
 			global = trans_unit_add_function(builder->trans_unit, cdecl.name,
-					return_type, arity, arg_ir_types);
+					return_type, arity, ctype->u.function.variable_arity,
+					arg_ir_types);
 		}
 
 		assert(global->type.t == IR_FUNCTION);
@@ -931,6 +952,11 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 	ASTParameterDecl *param =
 		params_for_function_declarator(function_def->declarator);
 	for (u32 i = 0; param != NULL; i++, param = param->next) {
+		if (param->t == ELLIPSIS_DECL) {
+			assert(param->next == NULL);
+			continue;
+		}
+
 		Binding *binding = ARRAY_APPEND(param_bindings, Binding);
 
 		CType *decl_spec_type = decl_specifier_list_to_c_type(
@@ -1024,7 +1050,6 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ASTDeclSpecifier *decl_specifier_list = decl->decl_specifier_list;
 			ASTInitDeclarator *init_declarator = decl->init_declarators;
 			assert(decl_specifier_list != NULL);
-
 
 			if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
 					&& decl_specifier_list->u.storage_class_specifier == EXTERN_SPECIFIER
@@ -2214,27 +2239,67 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case MULTIPLY_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_DIV);
 	case FUNCTION_CALL_EXPR: {
-		Term callee = ir_gen_expr(builder, env,
-				expr->u.function_call.callee, RVALUE_CONTEXT);
+		ASTExpr *callee_expr = expr->u.function_call.callee;
 
-		u32 arity = 0;
+		u32 call_arity = 0;
 		ASTArgument *arg = expr->u.function_call.arg_list;
 		while (arg != NULL) {
-			arity++;
+			call_arity++;
 			arg = arg->next;
 		}
+
+		if (callee_expr->t == IDENTIFIER_EXPR) {
+			char *name = callee_expr->u.identifier;
+			if (streq(name, "__builtin_va_start")) {
+				assert(call_arity == 1);
+
+				Term va_list_ptr = ir_gen_expr(
+						builder, env, expr->u.function_call.arg_list->expr,
+						RVALUE_CONTEXT);
+				assert(va_list_ptr.ctype->t == POINTER_TYPE);
+
+				return (Term) {
+					.ctype = &env->type_env.void_type,
+					.value = build_builtin_va_start(builder, va_list_ptr.value),
+				};
+			} else if (streq(name, "__builtin_va_arg")) {
+				assert(call_arity == 2);
+
+				Term va_list_ptr = ir_gen_expr(
+						builder, env, expr->u.function_call.arg_list->expr,
+						RVALUE_CONTEXT);
+				Term object_size = ir_gen_expr(
+						builder, env, expr->u.function_call.arg_list->next->expr,
+						RVALUE_CONTEXT);
+
+				assert(va_list_ptr.ctype->t == POINTER_TYPE);
+
+				assert(object_size.ctype->t == INTEGER_TYPE);
+				assert(object_size.value.t == VALUE_CONST);
+
+				return (Term) {
+					.ctype = pointer_type(&env->type_env, &env->type_env.void_type),
+					.value = build_builtin_va_arg(builder, va_list_ptr.value,
+						value_const(object_size.value.type,
+							object_size.value.u.constant)),
+				};
+			}
+		}
+
+		Term callee = ir_gen_expr(builder, env, callee_expr, RVALUE_CONTEXT);
+		assert(callee.ctype->t == FUNCTION_TYPE);
+
+		u32 callee_arity = callee.ctype->u.function.arity;
 
 		// Struct returns are handled in the frontend, by adding a pointer
 		// parameter at the start, and allocating a local in the caller.
 		bool struct_ret = callee.ctype->u.function.return_type->t == STRUCT_TYPE;
 		if (struct_ret)
-			arity++;
-
-		assert(callee.ctype->t == FUNCTION_TYPE);
+			call_arity++;
 
 		CType *return_type = callee.ctype->u.function.return_type;
 		IrValue *arg_array = pool_alloc(&builder->trans_unit->pool,
-				arity * sizeof(*arg_array));
+				call_arity * sizeof(*arg_array));
 
 		u32 i = 0;
 		IrValue local_for_ret_value;
@@ -2247,9 +2312,14 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		arg = expr->u.function_call.arg_list;
 		for (; arg != NULL; i++, arg = arg->next) {
 			Term arg_term = ir_gen_expr(builder, env, arg->expr, RVALUE_CONTEXT);
-			CType *arg_type = callee.ctype->u.function.arg_type_array[i];
-			assert(c_type_compatible(arg_term.ctype, arg_type));
-			arg_array[i] = convert_type(builder, arg_term, arg_type).value;
+
+			if (i < callee_arity) {
+				CType *arg_type = callee.ctype->u.function.arg_type_array[i];
+				assert(c_type_compatible(arg_term.ctype, arg_type));
+				arg_term = convert_type(builder, arg_term, arg_type);
+			}
+
+			arg_array[i] = arg_term.value;
 		}
 
 		IrType return_ir_type = struct_ret
@@ -2257,7 +2327,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			: c_type_to_ir_type(return_type);
 
 		IrValue value = build_call(builder, callee.value, return_ir_type,
-				arity, arg_array);
+				call_arity, arg_array);
 		if (struct_ret)
 			value = local_for_ret_value;
 

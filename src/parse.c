@@ -147,13 +147,6 @@ static inline void *second(Parser *parser, void *a, void *b)
 	return b;
 }
 
-static inline void *ignore(Parser *parser, ...)
-{
-	IGNORE(parser);
-
-	return NULL;
-}
-
 static char *direct_declarator_name(ASTDirectDeclarator *declarator);
 
 static char *declarator_name(ASTDeclarator *declarator)
@@ -1050,11 +1043,21 @@ static void dump_parameter_decls(ASTParameterDecl *param_decls)
 {
 	pretty_printf("PARAM_DECLS(");
 	while (param_decls != NULL) {
-		pretty_printf("PARAM(");
-		dump_decl_specifier_list(param_decls->decl_specifier_list);
-		pretty_printf(",");
-		dump_declarator(param_decls->declarator);
-		pretty_printf("),");
+		switch (param_decls->t) {
+		case PARAMETER_DECL:
+			pretty_printf("PARAM(");
+			dump_decl_specifier_list(param_decls->decl_specifier_list);
+			pretty_printf(",");
+			dump_declarator(param_decls->declarator);
+			pretty_printf(")");
+			break;
+		case ELLIPSIS_DECL:
+			pretty_printf("ELLIPSIS");
+			break;
+		}
+
+		if (param_decls->next != NULL)
+			pretty_printf(",");
 
 		param_decls = param_decls->next;
 	}

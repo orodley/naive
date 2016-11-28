@@ -289,6 +289,12 @@ typedef struct ASTTypeName
 
 typedef struct ASTParameterDecl
 {
+	enum
+	{
+		PARAMETER_DECL,
+		ELLIPSIS_DECL,
+	} t;
+
 	struct ASTParameterDecl *next;
 
 	struct ASTDeclSpecifier *decl_specifier_list;

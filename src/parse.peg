@@ -173,18 +173,19 @@ build_declarator =
 		t, DECLARATOR,
 		u.declarator, #1)
 
-parameter_type_list =
-	seq(first,
-		list(ASTParameterDecl, parameter_decl, TOK_COMMA),
-		opt(seq(ignore, TOK_COMMA, TOK_ELLIPSIS)))
+parameter_type_list = list(ASTParameterDecl, parameter_decl, TOK_COMMA)
 
 parameter_decl =
-	seq(build_parameter_decl, decl_specifiers, declarator)
+	or(seq(build_parameter_decl, decl_specifiers, declarator),
+		seq(build_ellipsis_decl, TOK_ELLIPSIS))
 
 build_parameter_decl =
 	build(ASTParameterDecl, 2,
+		t, PARAMETER_DECL,
 		decl_specifier_list, #0,
 		declarator, #1)
+
+build_ellipsis_decl = build(ASTParameterDecl, 1, t, ELLIPSIS_DECL)
 
 type_name = seq(build_type_name, decl_specifiers, opt(abstract_declarator))
 

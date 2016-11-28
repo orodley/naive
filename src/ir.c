@@ -59,7 +59,7 @@ IrBlock *add_block_to_function(
 }
 
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
-		IrType return_type, u32 arity, IrType *arg_types)
+		IrType return_type, u32 arity, bool variable_arity, IrType *arg_types)
 {
 	IrGlobal *new_global = pool_alloc(&trans_unit->pool, sizeof *new_global);
 	*ARRAY_APPEND(&trans_unit->globals, IrGlobal *) = new_global;
@@ -75,6 +75,7 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 	IrType function_type = {
 		.t = IR_FUNCTION,
 		.u.function.arity = arity,
+		.u.function.variable_arity = variable_arity,
 		.u.function.return_type = return_type_ptr,
 		.u.function.arg_types = arg_types_ptr,
 	};
@@ -194,6 +195,8 @@ void dump_ir_type(IrType type)
 			if (i != arity - 1)
 				fputs(", ", stdout);
 		}
+		if (type.u.function.variable_arity)
+			fputs(", ...", stdout);
 		fputs(") -> ", stdout);
 		dump_ir_type(*type.u.function.return_type);
 
@@ -287,7 +290,7 @@ static void dump_instr(IrInstr *instr)
 		}
 	case OP_RET_VOID:
 		break;
-	case OP_RET: case OP_BIT_NOT: case OP_LOG_NOT:
+	case OP_RET: case OP_BIT_NOT: case OP_LOG_NOT: case OP_BUILTIN_VA_START:
 		dump_value(instr->u.arg);
 		break;
 	case OP_CALL:
@@ -299,7 +302,7 @@ static void dump_instr(IrInstr *instr)
 		break;
 	case OP_BIT_XOR: case OP_BIT_AND: case OP_BIT_OR: case OP_MUL: case OP_DIV:
 	case OP_EQ: case OP_ADD: case OP_SUB: case OP_NEQ: case OP_GT: case OP_GTE:
-	case OP_LT: case OP_LTE:
+	case OP_LT: case OP_LTE: case OP_BUILTIN_VA_ARG:
 		dump_value(instr->u.binary_op.arg1);
 		fputs(", ", stdout);
 		dump_value(instr->u.binary_op.arg2);
@@ -744,7 +747,7 @@ static IrValue builtin_function(IrBuilder *builder, char *name, u32 arity,
 	}
 
 	return value_global(trans_unit_add_function(
-				builder->trans_unit, name, return_type, arity, arg_types));
+				builder->trans_unit, name, return_type, arity, false, arg_types));
 }
 
 IrValue builtin_memcpy(IrBuilder *builder)
@@ -771,4 +774,26 @@ IrValue builtin_memset(IrBuilder *builder)
 
 	return builtin_function(
 			builder, "memset", 3, (IrType) { .t = IR_POINTER }, arg_types);
+}
+
+IrValue build_builtin_va_start(IrBuilder *builder, IrValue va_list_ptr)
+{
+	IrInstr *instr = append_instr(builder);
+	instr->op = OP_BUILTIN_VA_START;
+	instr->type = (IrType) { .t = IR_VOID };
+	instr->u.arg = va_list_ptr;
+
+	return value_instr(instr);
+}
+
+IrValue build_builtin_va_arg(IrBuilder *builder, IrValue va_list_ptr,
+		IrValue object_size)
+{
+	IrInstr *instr = append_instr(builder);
+	instr->op = OP_BUILTIN_VA_ARG;
+	instr->type = (IrType) { .t = IR_POINTER };
+	instr->u.binary_op.arg1 = va_list_ptr;
+	instr->u.binary_op.arg2 = object_size;
+
+	return value_instr(instr);
 }

@@ -476,10 +476,27 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_CALL: {
-		u32 arity = instr->u.call.arity;
+		u32 call_arity = instr->u.call.arity;
+
+		assert(instr->u.call.callee.t == VALUE_GLOBAL);
 		AsmGlobal *target = instr->u.call.callee.u.global->asm_global;
 		assert(target->t == ASM_GLOBAL_FUNCTION);
+
+		IrType callee_type = instr->u.call.callee.u.global->type;
+		assert(callee_type.t == IR_FUNCTION);
+
+		u32 callee_arity = callee_type.u.function.arity;
+
+		assert(call_arity == callee_arity
+				|| (call_arity > callee_arity
+					&& callee_type.u.function.variable_arity));
+
 		i32 args_stack_space = target->u.function.args_stack_space;
+		// For varags. Every vararg is currently passed by the stack, so we add
+		// the necessary amount of stack space.
+		for (u32 i = callee_arity; i < call_arity; i++) {
+			args_stack_space += size_of_ir_type(instr->u.call.arg_array[i].type);
+		}
 		if (args_stack_space > 0) {
 			emit_instr2(builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
 					asm_const(args_stack_space));
@@ -489,14 +506,13 @@ static void asm_gen_instr(
 		Array(u32) arg_vregs;
 		ARRAY_INIT(&arg_vregs, u32, STATIC_ARRAY_LENGTH(argument_registers));
 
-		for (u32 i = 0; i < arity; i++) {
+		for (u32 i = 0; i < callee_arity; i++) {
 			AsmValue arg = asm_value(builder, instr->u.call.arg_array[i]);
 			// Use the 64-bit version of the register, as all argument
 			// registers are 64-bit.
 			if (arg.t == ASM_VALUE_REGISTER)
 				arg.u.reg.width = 64;
 
-			assert(instr->u.call.callee.t == VALUE_GLOBAL);
 			ArgClass *arg_class =
 				ARRAY_REF(&target->u.function.arg_classes, ArgClass, i);
 
@@ -540,6 +556,21 @@ static void asm_gen_instr(
 				break;
 			}
 			}
+		}
+
+		// Handle any varargs, which we always put on the stack.
+		u32 curr_arg_location = target->u.function.args_stack_space;
+		for (u32 i = callee_arity; i < call_arity; i++) {
+			IrValue arg = instr->u.call.arg_array[i];
+			u32 size = size_of_ir_type(arg.type);
+			assert(size <= 8);
+
+			emit_instr2(builder,
+					MOV,
+					asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
+							asm_const(curr_arg_location).u.constant)),
+					asm_value(builder, arg));
+			curr_arg_location += size;
 		}
 
 		emit_instr1(builder, CALL, asm_value(builder, instr->u.call.callee));
@@ -664,6 +695,29 @@ static void asm_gen_instr(
 	case OP_GTE: asm_gen_relational_instr(builder, instr, SETGE); break;
 	case OP_LT: asm_gen_relational_instr(builder, instr, SETL); break;
 	case OP_LTE: asm_gen_relational_instr(builder, instr, SETLE); break;
+	case OP_BUILTIN_VA_START: {
+		AsmValue bp_offset =
+			asm_const(builder->current_function->args_stack_space + 16);
+		emit_instr2(builder, MOV, asm_deref(asm_value(builder, instr->u.arg)), bp_offset);
+		break;
+	}
+	case OP_BUILTIN_VA_ARG: {
+		AsmValue va_list_ptr = asm_value(builder, instr->u.binary_op.arg1);
+		assert(instr->u.binary_op.arg2.t == VALUE_CONST);
+		u64 size = instr->u.binary_op.arg2.u.constant;
+		assert(size <= 8);
+
+		u32 vreg1 = next_vreg(builder);
+		AsmValue vreg_32 = asm_vreg(vreg1, 32);
+		AsmValue vreg_64 = asm_vreg(vreg1, 64);
+		assign_vreg(builder, instr);
+
+		emit_instr2(builder, XOR, vreg_64, vreg_64);
+		emit_instr2(builder, MOV, vreg_32, asm_deref(va_list_ptr));
+		emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_const(size));
+		emit_instr2(builder, ADD, vreg_64, asm_phys_reg(REG_CLASS_BP, 64));
+		break;
+	}
 	}
 }
 

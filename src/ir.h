@@ -42,6 +42,7 @@ typedef struct IrType
 		{
 			struct IrType *return_type;
 			u32 arity;
+			bool variable_arity;
 			struct IrType *arg_types;
 		} function;
 		struct
@@ -162,7 +163,10 @@ typedef struct IrValue
 	X(OP_RET_VOID), \
 	X(OP_BRANCH), \
 	X(OP_COND), \
-	X(OP_PHI)
+	X(OP_PHI), \
+\
+	X(OP_BUILTIN_VA_START), \
+	X(OP_BUILTIN_VA_ARG),
 
 #define X(x) x
 typedef enum IrOp
@@ -240,7 +244,7 @@ typedef struct IrInstr
 void trans_unit_init(TransUnit *trans_unit);
 void trans_unit_free(TransUnit *trans_unit);
 IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
-		IrType return_type, u32 arity, IrType *arg_types);
+		IrType return_type, u32 arity, bool variable_arity, IrType *arg_types);
 IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type);
 IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields);
 
@@ -287,5 +291,9 @@ void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value)
 
 IrValue builtin_memcpy(IrBuilder *builder);
 IrValue builtin_memset(IrBuilder *builder);
+
+IrValue build_builtin_va_start(IrBuilder *builder, IrValue va_list_ptr);
+IrValue build_builtin_va_arg(IrBuilder *builder, IrValue va_list_ptr,
+		IrValue object_size);
 
 #endif
