@@ -423,7 +423,15 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 {
 	TypeEnv *type_env = &env->type_env;
 
+	// @TODO: Actually handle type qualifiers rather than ignoring them.
+	while (decl_specifier_list != NULL &&
+			decl_specifier_list->t == TYPE_QUALIFIER) {
+		decl_specifier_list = decl_specifier_list->next;
+	}
+
+	assert(decl_specifier_list != NULL);
 	assert(decl_specifier_list->t == TYPE_SPECIFIER);
+
 	ASTTypeSpecifier *type_spec = decl_specifier_list->u.type_specifier;
 
 	switch (type_spec->t) {
