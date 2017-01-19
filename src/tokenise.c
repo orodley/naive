@@ -971,16 +971,22 @@ static char *look_up_include_path(char *including_file, char *include_path)
 
 	// Try system headers
 
-	char system_path[] = "/opt/naive/include/";
-	base_path = system_path;
-	base_length = (sizeof system_path) - 1;
+	char *system_paths[] = {
+		"/opt/naive/freestanding/",
+		"/opt/naive/include/",
+	};
 
-	include_path_length = strlen(include_path);
-	potential_path = concat(
-			base_path, base_length, include_path, include_path_length);
-	if (file_exists(potential_path))
-		return potential_path;
-	free(potential_path);
+	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(system_paths); i++) {
+		base_path = system_paths[i];
+		base_length = strlen(base_path);
+
+		include_path_length = strlen(include_path);
+		potential_path = concat(
+				base_path, base_length, include_path, include_path_length);
+		if (file_exists(potential_path))
+			return potential_path;
+		free(potential_path);
+	}
 
 	// @TODO: Support -I flag.
 

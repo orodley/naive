@@ -64,12 +64,13 @@ libc.a: $(call objs_for_dir,libc) $(HEADERS)
 	@cp $@ /opt/naive
 	@rm -rf /opt/naive/include
 	@cp -r libc/include /opt/naive
+	@cp -r freestanding /opt/naive
 
 
 libc/%.o: libc/%.c
 	@echo 'CC $@'
 	@$(CC) -c $(CFLAGS) -fno-asynchronous-unwind-tables -ffreestanding \
-		-nostdinc -I libc -I libc/include $< -o $@
+		-I libc -I libc/include $< -o $@
 
 %.o: %.c $(HEADERS) $(GEN_FILES)
 	@echo 'CC $<'
