@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "array.h"
@@ -26,6 +27,8 @@ void free_asm_module(AsmModule *asm_module)
 
 		if (global->t == ASM_GLOBAL_FUNCTION) {
 			AsmFunction *function = &global->u.function;
+			if (function->call_seq.arg_classes != NULL)
+				free(function->call_seq.arg_classes);
 			array_free(&function->prologue);
 			array_free(&function->body);
 			array_free(&function->epilogue);
@@ -42,7 +45,7 @@ void init_asm_function(AsmFunction *function, char *name)
 {
 	function->name = name;
 
-	ARRAY_INIT(&function->arg_classes, ArgClass, 6);
+	function->call_seq.arg_classes = NULL;
 	ARRAY_INIT(&function->prologue, AsmInstr, 10);
 	ARRAY_INIT(&function->body, AsmInstr, 20);
 	ARRAY_INIT(&function->epilogue, AsmInstr, 10);

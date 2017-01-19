@@ -638,6 +638,9 @@ typedef struct CDeclAux
 	char *name;
 } CDeclAux;
 
+static void decl_to_cdecl_aux(IrBuilder *builder, Env *env,
+		CType *decl_spec_type, ASTDeclarator *declarator, CDeclAux *cdecl);
+
 static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 		CType *decl_spec_type, ASTDirectDeclarator *direct_declarator,
 		CDeclAux *cdecl) {
@@ -706,11 +709,11 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 		ctype->u.function.arity = arity;
 		ctype->u.function.variable_arity = variable_arity;
 		ctype->u.function.arg_type_array = arg_c_types;
-		ctype->u.function.return_type = func_name_cdecl.type;;
+		ctype->u.function.return_type = *func_name_cdecl.ident_type;
 
 		*func_name_cdecl.ident_type = ctype;
 		cdecl->name = func_name_cdecl.name;
-		cdecl->type = ctype;
+		cdecl->type = func_name_cdecl.type;
 		cdecl->ident_type = &ctype->u.function.return_type;
 		break;
 	}
@@ -746,9 +749,11 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 		}
 
 		break;
-	} 
-	default:
-		UNIMPLEMENTED;
+	}
+	case DECLARATOR:
+		decl_to_cdecl_aux(builder, env,
+				decl_spec_type, direct_declarator->u.declarator, cdecl);
+		break;
 	}
 }
 
@@ -1217,6 +1222,11 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 		// Array values are only ever passed around as pointers to the first
 		// element anyway, so this conversion is a no-op that just changes type.
 		assert(term.value.type.t == IR_POINTER);
+		converted = term.value;
+	} else if (target_type->t == POINTER_TYPE
+			&& term.ctype->t == FUNCTION_TYPE
+			&& c_type_eq(target_type->u.pointee_type, term.ctype)) {
+		// Implicit conversion from function to pointer-to-function.
 		converted = term.value;
 	} else {
 		UNIMPLEMENTED;
@@ -2295,7 +2305,16 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		}
 
 		Term callee = ir_gen_expr(builder, env, callee_expr, RVALUE_CONTEXT);
-		assert(callee.ctype->t == FUNCTION_TYPE);
+		// @TODO: We should never have objects of bare function type in the
+		// first place - when ir_gen'ing an identifier expr referring to a
+		// global function it should have type "pointer to F", where F is the
+		// type of the function in question.
+		if (callee.ctype->t != FUNCTION_TYPE) {
+			assert(callee.ctype->t == POINTER_TYPE);
+			CType *pointee_type = callee.ctype->u.pointee_type;
+			assert(pointee_type->t == FUNCTION_TYPE);
+			callee.ctype = pointee_type;
+		}
 
 		u32 callee_arity = callee.ctype->u.function.arity;
 

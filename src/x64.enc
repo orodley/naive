@@ -9,6 +9,7 @@ AND r/m32, imm8        =         83 /4 ib
 AND r/m64, r32         = REX.W + 21 /r
 
 CALL rel               =         E8 cd
+CALL r/m64             =         FF /2
 
 CDQ                    =         99
 

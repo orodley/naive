@@ -161,7 +161,7 @@ direct_declarator =
 		or(seq(build_ident_declarator, TOK_SYMBOL),
 			seq(build_declarator, TOK_LROUND, declarator, TOK_RROUND)),
 		which(seq(middle, TOK_LSQUARE, opt(expr), TOK_RSQUARE),
-			seq(middle, TOK_LROUND, parameter_type_list, TOK_RROUND)))
+			seq(middle, TOK_LROUND, parameter_list, TOK_RROUND)))
 
 build_ident_declarator =
 	build(ASTDirectDeclarator, 1,
@@ -173,10 +173,11 @@ build_declarator =
 		t, DECLARATOR,
 		u.declarator, #1)
 
-parameter_type_list = list(ASTParameterDecl, parameter_decl, TOK_COMMA)
+parameter_list = list(ASTParameterDecl, parameter_decl, TOK_COMMA)
 
 parameter_decl =
 	or(seq(build_parameter_decl, decl_specifiers, declarator),
+		seq(build_parameter_decl, decl_specifiers, abstract_declarator),
 		seq(build_ellipsis_decl, TOK_ELLIPSIS))
 
 build_parameter_decl =
@@ -198,7 +199,7 @@ direct_abstract_declarator =
 		seq(optional_declarator,
 			opt(seq(build_declarator, TOK_LROUND, abstract_declarator, TOK_RROUND))),
 		which(seq(middle, TOK_LSQUARE, opt(expr), TOK_RSQUARE),
-			seq(middle, TOK_LROUND, parameter_type_list, TOK_RROUND)))
+			seq(middle, TOK_LROUND, parameter_list, TOK_RROUND)))
 
 build_type_name =
 	build(ASTTypeName, 2,

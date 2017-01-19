@@ -171,7 +171,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 	case VALUE_ARG: {
 		u32 index = value.u.arg_index;
 		ArgClass *arg_class =
-			ARRAY_REF(&builder->current_function->arg_classes, ArgClass, index);
+			builder->current_function->call_seq.arg_classes + index;
 
 		switch (arg_class->t) {
 		case ARG_CLASS_REG:
@@ -272,6 +272,55 @@ static RegClass argument_registers[] = {
 	REG_CLASS_DI, REG_CLASS_SI, REG_CLASS_D,
 	REG_CLASS_C, REG_CLASS_R8, REG_CLASS_R9,
 };
+
+// @TODO: This doesn't conform to the ABI, but it's definitely okay as long as
+// we only call/are called by stuff we compile, and it's probably okay as long
+// as structs passed/returned by value aren't involved.
+// The specific issue is that we always classify structs as memory arguments
+// and pass them by the stack, but the calling convention is more complicated
+// than that.
+static CallSeq classify_arguments(u32 arity, IrType *arg_types)
+{
+	ArgClass *arg_classes = malloc(arity * sizeof *arg_classes);
+
+	u32 curr_offset = 0;
+	u32 curr_reg_index = 0;
+
+	for (u32 i = 0; i < arity; i++) {
+		ArgClass *arg_class = arg_classes + i;
+		IrType *arg_type = arg_types + i;
+		switch (arg_type->t) {
+		case IR_INT: case IR_POINTER:
+			if (curr_reg_index < STATIC_ARRAY_LENGTH(argument_registers)) {
+				arg_class->t = ARG_CLASS_REG;
+				arg_class->u.reg.reg = argument_registers[curr_reg_index++];
+			} else {
+				arg_class->t = ARG_CLASS_MEM;
+				arg_class->u.mem.offset = curr_offset;
+				arg_class->u.mem.size = 8;
+				arg_class->u.mem.remains_in_memory = false;
+				curr_offset += 8;
+			}
+			break;
+		case IR_STRUCT: {
+			arg_class->t = ARG_CLASS_MEM;
+			u32 size = size_of_ir_type(*arg_type);
+			arg_class->u.mem.offset = curr_offset;
+			arg_class->u.mem.size = size;
+			arg_class->u.mem.remains_in_memory = true;
+			curr_offset += size;
+			break;
+		}
+		case IR_ARRAY: case IR_FUNCTION: case IR_VOID:
+			UNREACHABLE;
+		}
+	}
+
+	return (CallSeq) {
+		.stack_space = curr_offset,
+		.arg_classes = arg_classes,
+	};
+}
 
 static void asm_gen_instr(
 		AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block, IrInstr *instr)
@@ -478,20 +527,46 @@ static void asm_gen_instr(
 	case OP_CALL: {
 		u32 call_arity = instr->u.call.arity;
 
-		assert(instr->u.call.callee.t == VALUE_GLOBAL);
-		AsmGlobal *target = instr->u.call.callee.u.global->asm_global;
-		assert(target->t == ASM_GLOBAL_FUNCTION);
+		u32 callee_arity;
+		CallSeq call_seq;
 
-		IrType callee_type = instr->u.call.callee.u.global->type;
-		assert(callee_type.t == IR_FUNCTION);
+		bool call_seq_needs_freeing;
+		if (instr->u.call.callee.t == VALUE_GLOBAL) {
+			AsmGlobal *target = instr->u.call.callee.u.global->asm_global;
+			assert(target->t == ASM_GLOBAL_FUNCTION);
 
-		u32 callee_arity = callee_type.u.function.arity;
+			IrType callee_type = instr->u.call.callee.u.global->type;
+			assert(callee_type.t == IR_FUNCTION);
 
-		assert(call_arity == callee_arity
-				|| (call_arity > callee_arity
-					&& callee_type.u.function.variable_arity));
+			callee_arity = callee_type.u.function.arity;
 
-		i32 args_stack_space = target->u.function.args_stack_space;
+			assert(call_arity == callee_arity
+					|| (call_arity > callee_arity
+						&& callee_type.u.function.variable_arity));
+
+			call_seq = target->u.function.call_seq;
+			call_seq_needs_freeing = false;
+		} else {
+			// Indirect call
+
+			// @TODO: In this case we assume that we aren't calling a varargs
+			// function. This isn't correct - it's perfectly valid to call a
+			// varargs function indirectly. To fix this we need to propagate
+			// the type of the called function to the IR level.
+			callee_arity = call_arity;
+
+			IrType *arg_types = malloc(call_arity * sizeof *arg_types);
+			for (u32 i = 0; i < call_arity; i++)
+				arg_types[i] = instr->u.call.arg_array[i].type;
+
+			call_seq = classify_arguments(callee_arity, arg_types);
+			call_seq_needs_freeing = true;
+
+			free(arg_types);
+		}
+
+		i32 args_stack_space = call_seq.stack_space;
+
 		// For varags. Every vararg is currently passed by the stack, so we add
 		// the necessary amount of stack space.
 		for (u32 i = callee_arity; i < call_arity; i++) {
@@ -513,8 +588,7 @@ static void asm_gen_instr(
 			if (arg.t == ASM_VALUE_REGISTER)
 				arg.u.reg.width = 64;
 
-			ArgClass *arg_class =
-				ARRAY_REF(&target->u.function.arg_classes, ArgClass, i);
+			ArgClass *arg_class = call_seq.arg_classes + i;
 
 			switch (arg_class->t) {
 			case ARG_CLASS_REG: {
@@ -559,7 +633,7 @@ static void asm_gen_instr(
 		}
 
 		// Handle any varargs, which we always put on the stack.
-		u32 curr_arg_location = target->u.function.args_stack_space;
+		u32 curr_arg_location = call_seq.stack_space;
 		for (u32 i = callee_arity; i < call_arity; i++) {
 			IrValue arg = instr->u.call.arg_array[i];
 			u32 size = size_of_ir_type(arg.type);
@@ -572,6 +646,10 @@ static void asm_gen_instr(
 					asm_value(builder, arg));
 			curr_arg_location += size;
 		}
+
+		// Done with call_seq now
+		if (call_seq_needs_freeing)
+			free(call_seq.arg_classes);
 
 		emit_instr1(builder, CALL, asm_value(builder, instr->u.call.callee));
 
@@ -697,7 +775,7 @@ static void asm_gen_instr(
 	case OP_LTE: asm_gen_relational_instr(builder, instr, SETLE); break;
 	case OP_BUILTIN_VA_START: {
 		AsmValue bp_offset =
-			asm_const(builder->current_function->args_stack_space + 16);
+			asm_const(builder->current_function->call_seq.stack_space + 16);
 		emit_instr2(builder, MOV, asm_deref(asm_value(builder, instr->u.arg)), bp_offset);
 		break;
 	}
@@ -719,61 +797,6 @@ static void asm_gen_instr(
 		break;
 	}
 	}
-}
-
-// @TODO: This doesn't handle indirect calls, as the target of the call doesn't
-// have an associated global.
-// @TODO: This doesn't conform to the ABI, but it's definitely okay as long as
-// we only call/are called by stuff we compile, and it's probably okay as long
-// as structs passed/returned by value aren't involved.
-// The specific issue is that we always classify structs as memory arguments
-// and pass them by the stack, but the calling convention is more complicated
-// than that.
-static void classify_arguments(IrGlobal *ir_global)
-{
-	assert(ir_global->type.t == IR_FUNCTION);
-	u32 arity = ir_global->type.u.function.arity;
-	IrType *arg_types = ir_global->type.u.function.arg_types;
-
-	AsmGlobal *asm_global = ir_global->asm_global;
-	assert(asm_global->t == ASM_GLOBAL_FUNCTION);
-	AsmFunction *asm_func = &asm_global->u.function;
-	Array(ArgClass) *arg_classes = &asm_func->arg_classes;
-
-	u32 curr_offset = 0;
-	u32 curr_reg_index = 0;
-
-	for (u32 i = 0; i < arity; i++) {
-		ArgClass *arg_class = ARRAY_APPEND(arg_classes, ArgClass);
-		IrType *arg_type = arg_types + i;
-		switch (arg_type->t) {
-		case IR_INT: case IR_POINTER:
-			if (curr_reg_index < STATIC_ARRAY_LENGTH(argument_registers)) {
-				arg_class->t = ARG_CLASS_REG;
-				arg_class->u.reg.reg = argument_registers[curr_reg_index++];
-			} else {
-				arg_class->t = ARG_CLASS_MEM;
-				arg_class->u.mem.offset = curr_offset;
-				arg_class->u.mem.size = 8;
-				arg_class->u.mem.remains_in_memory = false;
-				curr_offset += 8;
-			}
-			break;
-		case IR_STRUCT: {
-			arg_class->t = ARG_CLASS_MEM;
-			u32 size = size_of_ir_type(*arg_type);
-			arg_class->u.mem.offset = curr_offset;
-			arg_class->u.mem.size = size;
-			arg_class->u.mem.remains_in_memory = true;
-			curr_offset += size;
-			break;
-		}
-		case IR_ARRAY: case IR_FUNCTION: case IR_VOID:
-			UNREACHABLE;
-		}
-	}
-
-	asm_func->args_stack_space = curr_offset;
 }
 
 static Register *arg_reg(AsmValue *arg)
@@ -1108,9 +1131,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	// Pre-allocate virtual registers for argument registers. This is to avoid
 	// spills if this isn't a leaf function, since we'll need to use the same
 	// registers for our own calls.
-	for (u32 i = 0; i < asm_func->u.function.arg_classes.size; i++) {
-		ArgClass *arg_class =
-			ARRAY_REF(&asm_func->u.function.arg_classes, ArgClass, i);
+	for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
+		ArgClass *arg_class = asm_func->u.function.call_seq.arg_classes + i;
 		if (arg_class->t == ARG_CLASS_REG) {
 			emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), 64),
 					asm_phys_reg(arg_class->u.reg.reg, 64));
@@ -1251,10 +1273,12 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 
 		if (ir_global->type.t == IR_FUNCTION) {
 			AsmFunction *new_function = &asm_global->u.function;
+			u32 arity = ir_global->type.u.function.arity;
+			IrType *arg_types = ir_global->type.u.function.arg_types;
 
 			asm_global->t = ASM_GLOBAL_FUNCTION;
 			init_asm_function(new_function, ir_global->name);
-			classify_arguments(ir_global);
+			new_function->call_seq = classify_arguments(arity, arg_types);
 		} else {
 			asm_global->t = ASM_GLOBAL_VAR;
 			asm_global->u.var.size_bytes = size_of_ir_type(ir_global->type);
