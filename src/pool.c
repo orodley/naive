@@ -47,8 +47,10 @@ void *pool_alloc(Pool *pool, size_t size)
 {
 	PoolBlock *block = pool->first_block_with_space;
 	if (block->used + size > pool->block_size) {
+		u32 new_block_size = size > pool->block_size ? size : pool->block_size;
+
 		PoolBlock *new_block = malloc(sizeof *new_block);
-		block_init(new_block, pool->block_size);
+		block_init(new_block, new_block_size);
 		pool->first_block_with_space->next = new_block;
 		pool->first_block_with_space = new_block;
 
