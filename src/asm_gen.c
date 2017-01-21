@@ -1262,7 +1262,13 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 		*ARRAY_APPEND(&builder->asm_module.globals, AsmGlobal *) = asm_global;
 
 		ir_global->asm_global = asm_global;
-		asm_global->name = ir_global->name;
+
+		u32 name_len = strlen(ir_global->name);
+		char *name_copy = pool_alloc(&builder->asm_module.pool, name_len + 1);
+		memcpy(name_copy, ir_global->name, name_len);
+		name_copy[name_len] = '\0';
+
+		asm_global->name = name_copy;
 		asm_global->defined = ir_global->initializer != NULL;
 		asm_global->offset = 0;
 
