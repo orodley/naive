@@ -179,7 +179,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 		case ARG_CLASS_MEM: {
 			// Arguments passed on the stack sit above the previous frame
 			// pointer and return address (hence 16 bytes).
-			// See the System V x86-64 spec, figure 3.3
+			// See the System V x86-64 ABI spec, figure 3.3
 			AsmValue bp_offset = asm_const(arg_class->u.mem.offset + 16);
 
 			u32 vreg = next_vreg(builder);
@@ -572,11 +572,29 @@ static void asm_gen_instr(
 		for (u32 i = callee_arity; i < call_arity; i++) {
 			args_stack_space += size_of_ir_type(instr->u.call.arg_array[i].type);
 		}
-		if (args_stack_space > 0) {
+
+		// As specified by the System V x86-64 ABI, we have to ensure that the
+		// end of our stack frame is aligned to 16 bytes. The end of the
+		// previous stack frame was aligned to 16 bytes, so this amounts to
+		// making sure the size of our stack frame is a multiple of 16. We
+		// calculate the size of our stack frame as follows:
+		// * Return address pushed by call (8 bytes)
+		// * rbp pushed by us (8 bytes)
+		// * Space for our locals
+		// * Space for the arguments we're about to pass
+		// See the System V x86-64 ABI spec, section 3.2.2
+		u32 stack_frame_size =
+			8 + 8 + builder->local_stack_usage + args_stack_space;
+		u32 stack_align_padding =
+			align_to(stack_frame_size, 16) - stack_frame_size;
+
+		u32 args_plus_padding = args_stack_space + stack_align_padding;
+		if (args_plus_padding > 0) {
 			emit_instr2(builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
-					asm_const(args_stack_space));
+					asm_const(args_plus_padding));
 		}
-		builder->curr_sp_diff = args_stack_space;
+
+		builder->curr_sp_diff = args_plus_padding;
 
 		Array(u32) arg_vregs;
 		ARRAY_INIT(&arg_vregs, u32, STATIC_ARRAY_LENGTH(argument_registers));
@@ -663,9 +681,9 @@ static void asm_gen_instr(
 
 		array_free(&arg_vregs);
 
-		if (args_stack_space > 0) {
+		if (args_plus_padding > 0) {
 			emit_instr2(builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
-					asm_const(args_stack_space));
+					asm_const(args_plus_padding));
 		}
 		builder->curr_sp_diff = 0;
 
@@ -1100,9 +1118,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	assert(asm_func != NULL);
 
 	asm_func->defined = ir_global->initializer != NULL;
-	if (!asm_func->defined) {
+	if (!asm_func->defined)
 		return;
-	}
 
 	builder->current_function = &asm_func->u.function;
 	builder->current_block = &asm_func->u.function.body;
@@ -1193,6 +1210,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		emit_instr1(builder, PUSH, asm_phys_reg(reg, 64));
 		temp_regs_bitset &= ~(1 << reg);
 	}
+
 	if (builder->local_stack_usage != 0) {
 		emit_instr2(builder,
 				SUB,
