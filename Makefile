@@ -17,7 +17,7 @@ ifneq (, $(shell which ccache))
 	CC := CCACHE_CPP2=yes ccache $(CC)
 endif
 
-SRC_DIRS := src libc
+SRC_DIRS := src libc freestanding
 
 GEN_FILES := $(patsubst %.peg, %.inc, $(shell find $(SRC_DIRS) -name '*.peg'))
 GEN_FILES += $(patsubst %.enc, %.inc, $(shell find $(SRC_DIRS) -name '*.enc'))
