@@ -159,7 +159,7 @@ typedef struct ArgClass
 	{
 		struct
 		{
-			u32 vreg;
+			u32 vreg; // @TODO: Is this used?
 			RegClass reg;
 		} reg;
 		struct

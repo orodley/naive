@@ -381,7 +381,9 @@ constant =
 		or(TOK_INT_LITERAL, TOK_FLOAT_LITERAL, TOK_STRING_LITERAL))
 
 postfix_expr =
-    or(fold(build_postfix_expr,
+    or(seq(build_builtin_va_arg, keyword(__builtin_va_arg), TOK_LROUND, expr,
+			TOK_COMMA, type_name, TOK_RROUND),
+		fold(build_postfix_expr,
 			primary_expr,
 			which(seq(middle, TOK_LSQUARE, expr, TOK_RSQUARE),
 				seq(middle, TOK_LROUND, argument_expr_list, TOK_RROUND),
@@ -397,6 +399,12 @@ postfix_expr =
 argument_expr_list = list(ASTArgument, seq(build_argument, assignment_expr), TOK_COMMA)
 
 build_argument = build(ASTArgument, 1, expr, #0)
+
+build_builtin_va_arg =
+	build(ASTExpr, 6,
+		t, BUILTIN_VA_ARG_EXPR,
+		u.builtin_va_arg.va_list_expr, #2,
+		u.builtin_va_arg.type_name, #4)
 
 build_compound_initializer =
 	build(ASTExpr, 7,

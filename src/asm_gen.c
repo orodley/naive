@@ -553,10 +553,9 @@ static void asm_gen_instr(
 	case OP_CALL: {
 		u32 call_arity = instr->u.call.arity;
 
-		u32 callee_arity;
 		CallSeq call_seq;
 
-		bool call_seq_needs_freeing;
+		bool gen_new_call_seq;
 		if (instr->u.call.callee.t == VALUE_GLOBAL) {
 			AsmGlobal *target = instr->u.call.callee.u.global->asm_global;
 			assert(target->t == ASM_GLOBAL_FUNCTION);
@@ -564,40 +563,37 @@ static void asm_gen_instr(
 			IrType callee_type = instr->u.call.callee.u.global->type;
 			assert(callee_type.t == IR_FUNCTION);
 
-			callee_arity = callee_type.u.function.arity;
-
+			u32 callee_arity = callee_type.u.function.arity;
 			assert(call_arity == callee_arity
 					|| (call_arity > callee_arity
 						&& callee_type.u.function.variable_arity));
 
-			call_seq = target->u.function.call_seq;
-			call_seq_needs_freeing = false;
+			if (!callee_type.u.function.variable_arity) {
+				gen_new_call_seq = false;
+				call_seq = target->u.function.call_seq;
+			} else {
+				// We always need to create a new CallSeq for varargs
+				// functions, because they can be called differently at every
+				// callsite.
+				gen_new_call_seq = true;
+			}
 		} else {
-			// Indirect call
+			// We need to create a new CallSeq because with an indirect call we
+			// have no global to grab the pre-generated CallSeq from.
+			gen_new_call_seq = true;
+		}
 
-			// @TODO: In this case we assume that we aren't calling a varargs
-			// function. This isn't correct - it's perfectly valid to call a
-			// varargs function indirectly. To fix this we need to propagate
-			// the type of the called function to the IR level.
-			callee_arity = call_arity;
-
+		if (gen_new_call_seq) {
 			IrType *arg_types = malloc(call_arity * sizeof *arg_types);
 			for (u32 i = 0; i < call_arity; i++)
 				arg_types[i] = instr->u.call.arg_array[i].type;
 
-			call_seq = classify_arguments(callee_arity, arg_types);
-			call_seq_needs_freeing = true;
+			call_seq = classify_arguments(call_arity, arg_types);
 
 			free(arg_types);
 		}
 
 		i32 args_stack_space = call_seq.stack_space;
-
-		// For varags. Every vararg is currently passed by the stack, so we add
-		// the necessary amount of stack space.
-		for (u32 i = callee_arity; i < call_arity; i++) {
-			args_stack_space += size_of_ir_type(instr->u.call.arg_array[i].type);
-		}
 
 		// As specified by the System V x86-64 ABI, we have to ensure that the
 		// end of our stack frame is aligned to 16 bytes. The end of the
@@ -625,7 +621,7 @@ static void asm_gen_instr(
 		Array(u32) arg_vregs;
 		ARRAY_INIT(&arg_vregs, u32, STATIC_ARRAY_LENGTH(argument_registers));
 
-		for (u32 i = 0; i < callee_arity; i++) {
+		for (u32 i = 0; i < call_arity; i++) {
 			AsmValue arg = asm_value(builder, instr->u.call.arg_array[i]);
 			// Use the 64-bit version of the register, as all argument
 			// registers are 64-bit.
@@ -676,24 +672,24 @@ static void asm_gen_instr(
 			}
 		}
 
-		// Handle any varargs, which we always put on the stack.
-		u32 curr_arg_location = call_seq.stack_space;
-		for (u32 i = callee_arity; i < call_arity; i++) {
-			IrValue arg = instr->u.call.arg_array[i];
-			u32 size = size_of_ir_type(arg.type);
-			assert(size <= 8);
+		// In the case that gen_new_call_seq is true, either this is a call to
+		// a varargs function, or it's an indirect call and we conservatively
+		// assume it could be a varargs function.
+		//
+		// The only difference on the caller side between varargs and regular
+		// functions is that al must be set to (at least) the number of vector
+		// registers used to pass arguments. We never use vector registers to
+		// pass arguments because that isn't implemented yet, so we just set it
+		// to zero.
+		//
+		// @TODO: Once we pass args in vector registers, set al appropriately.
+		if (gen_new_call_seq) {
+			emit_instr2(builder, MOV,
+					pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_const(0));
 
-			emit_instr2(builder,
-					MOV,
-					asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
-							asm_const(curr_arg_location).u.constant)),
-					asm_value(builder, arg));
-			curr_arg_location += size;
-		}
-
-		// Done with call_seq now
-		if (call_seq_needs_freeing)
+			// Done with call_seq now
 			free(call_seq.arg_classes);
+		}
 
 		emit_instr1(builder, CALL, asm_value(builder, instr->u.call.callee));
 
@@ -821,9 +817,56 @@ static void asm_gen_instr(
 	case OP_LT: asm_gen_relational_instr(builder, instr, SETL); break;
 	case OP_LTE: asm_gen_relational_instr(builder, instr, SETLE); break;
 	case OP_BUILTIN_VA_START: {
-		AsmValue bp_offset =
-			asm_const(builder->current_function->call_seq.stack_space + 16);
-		emit_instr2(builder, MOV, asm_deref(asm_value(builder, instr->u.arg)), bp_offset);
+		AsmValue va_list_ptr = asm_vreg(next_vreg(builder), 64);
+		append_vreg(builder);
+		emit_instr2(builder, MOV, va_list_ptr, asm_value(builder, instr->u.arg));
+
+		// Initialise as specified in System V x86-64 section 3.5.7
+
+		// We haven't consumed any args yet, so register_save_area +
+		// next_int_reg_offset should point to the start of the register save
+		// area. However, we need to make sure that next_int_reg_offset is 48
+		// when we run out of registers in the register save area, because
+		// that's what the ABI says. So, we set next_int_reg_offset to 48 minus
+		// the size of the register save area, and subtract the same amount
+		// from register_save_area. This way we start out pointing at the
+		// correct place, but still end up at 48 when we're out of space.
+		AsmValue starting_offset = asm_const(48 - builder->register_save_area_size);
+
+		emit_instr2(builder, MOV,
+				asm_deref(va_list_ptr), starting_offset);
+
+		// Skip next_vector_reg_offset since we don't use vector registers for
+		// passing arguments yet.
+
+		emit_instr2(builder, ADD, va_list_ptr, asm_const(8));
+
+		// Stack args start at the bottom of the previous stack frame, which is
+		// always rbp + 16
+		emit_instr2(builder,
+				MOV,
+				asm_deref(va_list_ptr),
+				asm_phys_reg(REG_CLASS_BP, 64));
+		emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_const(16));
+
+		emit_instr2(builder, ADD, va_list_ptr, asm_const(8));
+
+		// The register save area is always at the bottom of our stack frame.
+		// However, as mentioned above, we need to offset this value for ABI
+		// reasons.
+		AsmValue register_save_area = asm_vreg(next_vreg(builder), 64);
+		append_vreg(builder);
+
+		emit_instr2(builder,
+				MOV,
+				register_save_area,
+				asm_phys_reg(REG_CLASS_SP, 64));
+		emit_instr2(builder, SUB, register_save_area, starting_offset);
+		emit_instr2(builder,
+				MOV,
+				asm_deref(va_list_ptr),
+				register_save_area);
+
 		break;
 	}
 	case OP_BUILTIN_VA_ARG: {
@@ -1177,6 +1220,11 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	// Pre-allocate virtual registers for argument registers. This is to avoid
 	// spills if this isn't a leaf function, since we'll need to use the same
 	// registers for our own calls.
+	// In the same loop we figure out how much space we need for our register
+	// save area if this is a varargs function. It defaults to 48 (6 registers
+	// that are 8 bytes each), but we omit any that were already used for
+	// arguments before the "..."
+	u32 register_save_area_size = 48;
 	for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
 		ArgClass *arg_class = asm_func->u.function.call_seq.arg_classes + i;
 		if (arg_class->t == ARG_CLASS_REG) {
@@ -1184,7 +1232,19 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 					asm_phys_reg(arg_class->u.reg.reg, 64));
 			arg_class->u.reg.vreg = next_vreg(builder);
 			append_vreg(builder);
+
+			register_save_area_size -= 8;
 		}
+	}
+
+	// If this is a varargs function, add space for the register save area.
+	// Since we add this before compiling the body of the function, the
+	// register save area is always at the bottom of the stack frame, as long
+	// as we're not in the process of calling a function. We don't care about
+	// that case though, because we only need the location for va_start.
+	if (ir_global->type.u.function.variable_arity) {
+		builder->local_stack_usage += register_save_area_size;
+		builder->register_save_area_size = register_save_area_size;
 	}
 
 	for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
@@ -1246,6 +1306,33 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 				asm_phys_reg(REG_CLASS_SP, 64),
 				asm_const(builder->local_stack_usage));
 	}
+
+	// Argument registers are stored in increasing order in the register save
+	// area. We only bother storing the registers that could be used to pass
+	// varargs arguments. e.g.: for "void foo(int a, int b, ...)" we don't save
+	// rdi or rsi.
+	// See the System V x86-64 ABI spec, figure 3.33
+	if (ir_global->type.u.function.variable_arity) {
+		u32 num_reg_args = 0;
+		for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
+			ArgClass *arg_class = asm_func->u.function.call_seq.arg_classes + i;
+
+			if (arg_class->t == ARG_CLASS_REG) {
+				num_reg_args++;
+			}
+		}
+
+		for (u32 i = num_reg_args;
+				i < STATIC_ARRAY_LENGTH(argument_registers);
+				i++) {
+			AsmConst offset = asm_const((i - num_reg_args) * 8).u.constant;
+			emit_instr2(builder,
+					MOV,
+					asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+					asm_phys_reg(argument_registers[i], 64));
+		}
+	}
+
 	AsmInstr *prologue_first_instr = ARRAY_REF(builder->current_block, AsmInstr, 0);
 	prologue_first_instr->label = entry_label;
 
@@ -1331,6 +1418,11 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 
 			asm_global->t = ASM_GLOBAL_FUNCTION;
 			init_asm_function(new_function, ir_global->name);
+
+			// Note that we do this even for varargs functions where the
+			// CallSeq needs to be computed per-call. This is so that when
+			// compiling the function itself we have info on the args before
+			// the ..., e.g.: for register allocation.
 			new_function->call_seq = classify_arguments(arity, arg_types);
 		} else {
 			asm_global->t = ASM_GLOBAL_VAR;

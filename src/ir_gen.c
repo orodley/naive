@@ -2381,32 +2381,22 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 				Term va_list_ptr = ir_gen_expr(
 						builder, env, expr->u.function_call.arg_list->expr,
 						RVALUE_CONTEXT);
-				assert(va_list_ptr.ctype->t == POINTER_TYPE);
+				assert(va_list_ptr.ctype->t == ARRAY_TYPE);
+				assert(va_list_ptr.ctype->u.array.elem_type->t == STRUCT_TYPE);
+
+				// @TODO: Search through the type env and asert that the elem
+				// type is the same as the type bound to "va_list".
 
 				return (Term) {
 					.ctype = &env->type_env.void_type,
 					.value = build_builtin_va_start(builder, va_list_ptr.value),
 				};
-			} else if (streq(name, "__builtin_va_arg")) {
-				assert(call_arity == 2);
-
-				Term va_list_ptr = ir_gen_expr(
-						builder, env, expr->u.function_call.arg_list->expr,
-						RVALUE_CONTEXT);
-				Term object_size = ir_gen_expr(
-						builder, env, expr->u.function_call.arg_list->next->expr,
-						RVALUE_CONTEXT);
-
-				assert(va_list_ptr.ctype->t == POINTER_TYPE);
-
-				assert(object_size.ctype->t == INTEGER_TYPE);
-				assert(object_size.value.t == VALUE_CONST);
-
+			} else if (streq(name, "__builtin_va_end")) {
+				// va_end is a NOP for System V x64, so just return a dummy
+				// value, and give it void type to ensure it's not used.
 				return (Term) {
-					.ctype = pointer_type(&env->type_env, &env->type_env.void_type),
-					.value = build_builtin_va_arg(builder, va_list_ptr.value,
-						value_const(object_size.value.type,
-							object_size.value.u.constant)),
+					.ctype = &env->type_env.void_type,
+					.value = value_const((IrType) { .t = IR_VOID }, 0),
 				};
 			}
 		}
@@ -2449,7 +2439,6 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 			if (i < callee_arity) {
 				CType *arg_type = callee.ctype->u.function.arg_type_array[i];
-				assert(c_type_compatible(arg_term.ctype, arg_type));
 				arg_term = convert_type(builder, arg_term, arg_type);
 			}
 
@@ -2597,6 +2586,42 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		Term castee =
 			ir_gen_expr(builder, env, expr->u.cast.arg, RVALUE_CONTEXT);
 		return convert_type(builder, castee, cast_type);
+	}
+	case BUILTIN_VA_ARG_EXPR: {
+		Term va_list_term = ir_gen_expr(builder, env,
+				expr->u.builtin_va_arg.va_list_expr, RVALUE_CONTEXT);
+		CType *arg_type = type_name_to_c_type(builder, env,
+				expr->u.builtin_va_arg.type_name);
+
+		assert(va_list_term.ctype->t == ARRAY_TYPE);
+		assert(va_list_term.ctype->u.array.elem_type->t == STRUCT_TYPE);
+
+		// @TODO: Search through the type env and asert that the elem type is
+		// the same as the type bound to "va_list".
+
+		assert(arg_type->t == INTEGER_TYPE);
+
+		IrGlobal *global_builtin_va_arg_int = NULL;
+		for (u32 i = 0; i < builder->trans_unit->globals.size; i++) {
+			IrGlobal *global =
+				*ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, i);
+			if (streq(global->name, "__builtin_va_arg_int")) {
+				global_builtin_va_arg_int = global;
+				break;
+			}
+		}
+		assert(global_builtin_va_arg_int != NULL);
+
+		IrType int_type = c_type_to_ir_type(&env->type_env.int_type);
+
+		IrValue *args = malloc(sizeof *args * 1);
+		args[0] = va_list_term.value;
+		return (Term) {
+			.ctype = &env->type_env.int_type,
+			.value = build_call(builder,
+					value_global(global_builtin_va_arg_int), int_type,
+					1, args)
+		};
 	}
 	default:
 		printf("%d\n", expr->t);

@@ -77,7 +77,9 @@ typedef struct ParseError
 		X(BIT_XOR_ASSIGN_EXPR), \
 		X(BIT_OR_ASSIGN_EXPR), \
 \
-		X(COMMA_EXPR),
+		X(COMMA_EXPR), \
+\
+		X(BUILTIN_VA_ARG_EXPR),
 
 #define X(x) x
 typedef enum ASTExprType
@@ -129,6 +131,11 @@ typedef struct ASTExpr
 			struct ASTTypeName *cast_type;
 			struct ASTExpr *arg;
 		} cast;
+		struct
+		{
+			struct ASTExpr *va_list_expr;
+			struct ASTTypeName *type_name;
+		} builtin_va_arg;
 	} u;
 } ASTExpr;
 

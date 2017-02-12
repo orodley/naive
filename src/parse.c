@@ -769,6 +769,11 @@ static void dump_expr(ASTExpr *expr)
 		pretty_printf(",");
 		dump_expr(expr->u.cast.arg);
 		break;
+	case BUILTIN_VA_ARG_EXPR:
+		dump_expr(expr->u.builtin_va_arg.va_list_expr);
+		pretty_printf(",");
+		dump_type_name(expr->u.builtin_va_arg.type_name);
+		break;
 	case SIZEOF_TYPE_EXPR:
 		dump_type_name(expr->u.type);
 		break;

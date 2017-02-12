@@ -19,6 +19,7 @@ typedef struct AsmBuilder
 
 	Array(VRegInfo) virtual_registers;
 	u32 local_stack_usage;
+	u32 register_save_area_size;
 	u32 curr_sp_diff;
 } AsmBuilder;
 

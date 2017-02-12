@@ -32,12 +32,13 @@ JMP rel                =         E9 cd
 
 MOV r/m8, r8           =         88 /r
 MOV r8, r/m8           =         8A /r
+MOV r8, imm8           =         B0 +rb ib
 MOV r/m32, r32         =         89 /r
 MOV r32, r/m32         =         8B /r
 MOV r/m32, imm32       =         C7 /0 id
 MOV r/m64, r64         = REX.W + 89 /r
-MOV r/m64, imm32       = REX.W + C7 /0 id
 MOV r64,   r/m64       = REX.W + 8B /r
+MOV r/m64, imm32       = REX.W + C7 /0 id
 MOV r64,   imm64       = REX.W + B8 +rd io
 
 MOVSX r32, r/m8        =         [0F BE] /r
