@@ -506,10 +506,10 @@ static void asm_gen_instr(
 
 		if (instr->type.u.bit_width == 64
 				&& instr->u.arg.type.u.bit_width == 32) {
-			// Implicit zero-extending of MOV 32 - 64
+			// Implicit zero-extending of MOV 32 -> 32
 			emit_instr2(builder,
 					MOV,
-					asm_vreg(next_vreg(builder), 64),
+					asm_vreg(next_vreg(builder), 32),
 					asm_value(builder, instr->u.arg));
 			assign_vreg(builder, instr);
 		} else {
