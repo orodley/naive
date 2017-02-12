@@ -88,15 +88,17 @@ typedef struct IrConst
 	} u;
 } IrConst;
 
+typedef enum IrLinkage
+{
+	IR_GLOBAL_LINKAGE,
+	IR_LOCAL_LINKAGE,
+} IrLinkage;
+
 typedef struct IrGlobal
 {
 	char *name;
 	IrType type;
-	enum
-	{
-		IR_GLOBAL_LINKAGE,
-		IR_LOCAL_LINKAGE,
-	} linkage;
+	IrLinkage linkage;
 	AsmGlobal *asm_global;
 	IrConst *initializer;
 } IrGlobal;

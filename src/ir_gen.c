@@ -1026,6 +1026,20 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 		case FUNCTION_DEF: {
 			ASTFunctionDef *func = toplevel->u.function_def;
 			ASTDeclSpecifier *decl_specifier_list = func->decl_specifier_list;
+
+			IrLinkage linkage = IR_GLOBAL_LINKAGE;
+			while (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER) {
+				switch (decl_specifier_list->u.storage_class_specifier) {
+				case STATIC_SPECIFIER:
+					linkage = IR_LOCAL_LINKAGE;
+					break;
+				default:
+					UNIMPLEMENTED;
+				}
+
+				decl_specifier_list = decl_specifier_list->next;
+			}
+
 			bool is_inline = false;
 			while (decl_specifier_list != NULL
 					&& decl_specifier_list->t == FUNCTION_SPECIFIER
@@ -1038,6 +1052,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 			global = ir_global_for_decl(builder, &env, decl_specifier_list,
 					declarator, &global_type);
+			global->linkage = linkage;
 
 			if (is_inline) {
 				*ARRAY_APPEND(&env.inline_functions, InlineFunction) =
