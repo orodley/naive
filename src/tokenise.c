@@ -510,6 +510,48 @@ cleanup:
 	return ret;
 }
 
+i64 read_char_in_literal(Reader *reader, SourceLoc *start_source_loc) {
+	u64 value;
+
+	char c = read_char(reader);
+	if (c == '\\') {
+		switch (read_char(reader)) {
+		case '\\': value = '\\'; break;
+		case '\'': value = '\''; break;
+		case '"': value = '"'; break; // no idea why this exists
+		case 'a': value = '\a'; break;
+		case 'b': value = '\b'; break;
+		case 'f': value = '\f'; break;
+		case 'n': value = '\n'; break;
+		case 'r': value = '\r'; break;
+		case 't': value = '\t'; break;
+		case 'v': value = '\v'; break;
+		case '0':
+			if (!read_octal_number(reader, &value))
+				return -1;
+			break;
+		case 'x':
+			if (!read_hex_number(reader, &value))
+				return -1;
+			break;
+		default:
+			issue_error(start_source_loc,
+					"Invalid escape character '%c'", c);
+			return -1;
+		}
+	} else {
+		value = c;
+	}
+
+	if (value > 0xFF) {
+		issue_error(start_source_loc,
+				"Character constant larger than a character");
+		return -1;
+	}
+
+	return value;
+}
+
 static bool tokenise_aux(Reader *reader)
 {
 	while (!at_end(reader)) {
@@ -574,62 +616,29 @@ static bool tokenise_aux(Reader *reader)
 			break;
 		}
 		case '"': {
-			u32 start_index = reader->position;
-			for (;;) {
-				char c = read_char(reader);
+			Array(char) string_literal_chars;
+			ARRAY_INIT(&string_literal_chars, char, 20);
+			while (peek_char(reader) != '"') {
+				i64 c = read_char_in_literal(reader, &start_source_loc);
+				if (c == -1) {
+					array_free(&string_literal_chars);
+					return false;
+				}
 
-				if (c == '\\')
-					advance(reader);
-				else if (c == '"')
-					break;
+				*ARRAY_APPEND(&string_literal_chars, char) = (char)c;
 			}
-
-			u32 length = ((reader->position - 1) - start_index);
+			read_char(reader);
+			*ARRAY_APPEND(&string_literal_chars, char) = '\0';
 
 			Token *token = append_token(reader, start_source_loc, TOK_STRING_LITERAL);
-			token->u.string_literal = strndup(
-					reader->buffer.buffer + start_index, length);
+			token->u.string_literal = (char *)string_literal_chars.elements;
 
 			break;
 		}
 		case '\'': {
-			u64 value;
-			char c = read_char(reader);
-			if (c == '\\') {
-				switch (read_char(reader)) {
-				case '\\': value = '\\'; break;
-				case '\'': value = '\''; break;
-				case '"': value = '"'; break; // no idea why this exists
-				case 'a': value = '\a'; break;
-				case 'b': value = '\b'; break;
-				case 'f': value = '\f'; break;
-				case 'n': value = '\n'; break;
-				case 'r': value = '\r'; break;
-				case 't': value = '\t'; break;
-				case 'v': value = '\v'; break;
-				case '0':
-					if (!read_octal_number(reader, &value))
-						return false;
-					break;
-				case 'x':
-					if (!read_hex_number(reader, &value))
-						return false;
-					break;
-				default:
-					issue_error(&start_source_loc,
-							"Invalid escape character '%c'"
-							" in character literal", c);
-					return false;
-				}
-			} else {
-				value = c;
-			}
-
-			if (value > 0xFF) {
-				issue_error(&start_source_loc,
-						"Character constant larger than a character");
+			i64 value = read_char_in_literal(reader, &start_source_loc);
+			if (value == -1)
 				return false;
-			}
 
 			if (read_char(reader) != '\'') {
 				issue_error(&start_source_loc, "Unterminated character literal");

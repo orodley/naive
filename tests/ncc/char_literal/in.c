@@ -9,6 +9,7 @@ int main()
 	assert('\n' == 10);
 	assert('\r' == 13);
 	assert('\0' == 0);
+	assert('\'' == 39);
 	assert('\01' == 1);
 	assert('\013' == 013);
 	assert('\x12' == 0x12);
