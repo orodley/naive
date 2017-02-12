@@ -91,7 +91,7 @@ static inline void add_dep(AsmInstr *instr, AsmValue dep)
 	assert(dep.t == ASM_VALUE_REGISTER);
 	assert(dep.u.reg.t == V_REG);
 
-	instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg_number;;
+	instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg_number;
 }
 
 // @TODO: Rethink name? "next" kinda suggests side effects, i.e. "move to the
