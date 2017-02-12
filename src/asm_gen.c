@@ -29,7 +29,7 @@ AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 {
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
-	instr->num_args = 0;
+	instr->arity = 0;
 	instr->num_deps = 0;
 	instr->label = NULL;
 
@@ -40,7 +40,7 @@ AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmValue arg1)
 {
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
-	instr->num_args = 1;
+	instr->arity = 1;
 	instr->args[0] = arg1;
 	instr->num_deps = 0;
 	instr->label = NULL;
@@ -52,7 +52,7 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmValue arg1, AsmValue arg
 {
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
-	instr->num_args = 2;
+	instr->arity = 2;
 	instr->args[0] = arg1;
 	instr->args[1] = arg2;
 	instr->num_deps = 0;
@@ -75,7 +75,7 @@ AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
 {
 	AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
 	instr->op = op;
-	instr->num_args = 3;
+	instr->arity = 3;
 	instr->args[0] = arg1;
 	instr->args[1] = arg2;
 	instr->args[2] = arg3;
@@ -972,7 +972,7 @@ static void allocate_registers(AsmBuilder *builder)
 	Array(AsmInstr) *body = &builder->current_function->body;
 	for (u32 i = 0; i < body->size; i++) {
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
-		for (u32 j = 0; j < instr->num_args; j++) {
+		for (u32 j = 0; j < instr->arity; j++) {
 			AsmValue *arg = instr->args + j;
 			Register *reg = arg_reg(arg);
 			if (reg != NULL && reg->t == V_REG) {
@@ -1162,7 +1162,7 @@ static void allocate_registers(AsmBuilder *builder)
 	for (u32 i = 0; i < body->size; i++) {
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 
-		for (u32 j = 0; j < instr->num_args; j++) {
+		for (u32 j = 0; j < instr->arity; j++) {
 			AsmValue *arg = instr->args + j;
 			Register *reg = arg_reg(arg);
 			if (reg == NULL)
@@ -1270,7 +1270,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	u32 used_callee_save_regs_bitset = 0;
 	for (u32 i = 0; i < builder->current_function->body.size; i++) {
 		AsmInstr *instr = ARRAY_REF(&builder->current_function->body, AsmInstr, i);
-		for (u32 j = 0; j < instr->num_args; j++) {
+		for (u32 j = 0; j < instr->arity; j++) {
 			Register *reg = arg_reg(instr->args + j);
 			if (reg != NULL &&
 					reg->t == PHYS_REG &&

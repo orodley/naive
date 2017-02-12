@@ -217,7 +217,7 @@ static void dump_asm_instr(AsmInstr *instr)
 
 	putchar(' ');
 
-	for (u32 i = 0; i < instr->num_args; i++) {
+	for (u32 i = 0; i < instr->arity; i++) {
 		if (i != 0)
 			fputs(", ", stdout);
 
@@ -539,7 +539,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 		} else if (arg_order == MR) {
 			memory_operand = instr->args;
 			register_operand = instr->args + 1;
-		} else if (instr->num_args == 1) {
+		} else if (instr->arity == 1) {
 			memory_operand = instr->args;
 			register_operand = NULL;
 		} else {
@@ -571,7 +571,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 	if (immediate_size != -1) {
 		encoded_instr.immediate_size = immediate_size;
 		AsmValue* immediate_arg = NULL;
-		for (u32 i = 0; i < instr->num_args; i++) {
+		for (u32 i = 0; i < instr->arity; i++) {
 			if (instr->args[i].t == ASM_VALUE_CONST
 					|| instr->args[i].t == ASM_VALUE_LABEL) {
 				// Check that we only have one immediate.

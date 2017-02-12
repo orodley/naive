@@ -116,7 +116,7 @@ static void assemble_instr(Array(u8) *output, AsmModule *asm_module, AsmInstr *i
             if len(encoding.args) == 0:
                 indent = '\t\t'
             else:
-                output.append("\t\tif ((instr->num_args == %d) && %s) {\n" % \
+                output.append("\t\tif ((instr->arity == %d) && %s) {\n" % \
                         (len(encoding.args),
                             ' && '.join(arg_condition(arg, i)
                                 for i, arg in enumerate(encoding.args))))

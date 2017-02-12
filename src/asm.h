@@ -138,7 +138,7 @@ typedef enum AsmOp
 typedef struct AsmInstr
 {
 	AsmOp op;
-	u8 num_args;
+	u8 arity;
 	AsmValue args[3];
 
 	u8 num_deps;
