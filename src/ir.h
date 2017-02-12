@@ -158,6 +158,7 @@ typedef struct IrValue
 	X(OP_CAST), \
 	X(OP_ZEXT), \
 	X(OP_SEXT), \
+	X(OP_TRUNC), \
 	X(OP_FIELD), \
 	X(OP_LOAD), \
 	X(OP_STORE), \

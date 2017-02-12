@@ -1309,12 +1309,13 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 	IrValue converted;
 	if (term.ctype->t == INTEGER_TYPE && target_type->t == INTEGER_TYPE) {
 		IrType ir_type = c_type_to_ir_type(target_type);
-		if (term.ctype->u.integer.is_signed) {
-			converted =
-				build_type_instr(builder, OP_SEXT, term.value, ir_type);
+
+		if (c_type_to_ir_type(term.ctype).u.bit_width > ir_type.u.bit_width) {
+			converted = build_type_instr(builder, OP_TRUNC, term.value, ir_type);
+		} else if (term.ctype->u.integer.is_signed) {
+			converted = build_type_instr(builder, OP_SEXT, term.value, ir_type);
 		} else {
-			converted =
-				build_type_instr(builder, OP_ZEXT, term.value, ir_type);
+			converted = build_type_instr(builder, OP_ZEXT, term.value, ir_type);
 		}
 	} else if (term.ctype->t == POINTER_TYPE && target_type->t == POINTER_TYPE) {
 		converted = term.value;

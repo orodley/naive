@@ -266,7 +266,7 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		dump_ir_type(instr->u.store.type);
 		break;
-	case OP_CAST: case OP_ZEXT: case OP_SEXT:
+	case OP_CAST: case OP_ZEXT: case OP_SEXT: case OP_TRUNC:
 		dump_value(instr->u.arg);
 		fputs(", ", stdout);
 		dump_ir_type(instr->type);

@@ -533,6 +533,23 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
+	case OP_TRUNC: {
+		assert(instr->type.t == IR_INT);
+		assert(instr->u.arg.type.t == IR_INT);
+
+		AsmValue value = asm_value(builder, instr->u.arg);
+
+		// For register we can implicitly truncate by just using the smaller
+		// version of the register.
+		if (value.t == ASM_VALUE_REGISTER) {
+			assert(value.u.reg.t == V_REG);
+			instr->vreg_number = value.u.reg.u.vreg_number;
+		} else {
+			UNIMPLEMENTED;
+		}
+
+		break;
+	}
 	case OP_CALL: {
 		u32 call_arity = instr->u.call.arity;
 
