@@ -727,6 +727,9 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
+	// @TODO: This doesn't work in all cases because SHL is weird and can't
+	// take an arbitrary register as the rhs.
+	case OP_SHL: asm_gen_binary_instr(builder, instr, SHL); break;
 	case OP_ADD: asm_gen_binary_instr(builder, instr, ADD); break;
 	case OP_SUB: asm_gen_binary_instr(builder, instr, SUB); break;
 	case OP_MUL: {

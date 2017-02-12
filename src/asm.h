@@ -109,6 +109,7 @@ typedef struct AsmValue
 	X(AND), \
 	X(OR), \
 	X(NOT), \
+	X(SHL), \
 	X(ADD), \
 	X(SUB), \
 	X(PUSH), \

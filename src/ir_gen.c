@@ -2241,6 +2241,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			.ctype = result_type,
 		};
 	}
+	case LEFT_SHIFT_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SHL);
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_DIV);
 	case EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_EQ);
