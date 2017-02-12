@@ -1243,6 +1243,11 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 			&& c_type_eq(target_type->u.pointee_type, term.ctype)) {
 		// Implicit conversion from function to pointer-to-function.
 		converted = term.value;
+	} else if (target_type->t == VOID_TYPE) {
+		// Converting to void does nothing. The resulting value can't possibly
+		// be used (since it has type void) so it doesn't actually matter what
+		// that value is as long as the conversion doesn't cause side effects.
+		converted = term.value;
 	} else {
 		UNIMPLEMENTED;
 	}
