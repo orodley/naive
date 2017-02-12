@@ -146,7 +146,10 @@ static Token _unexpected_token;
 
     def generate_parser(self, parser, name=None):
         if name is None:
-            name = ''.join('_' if c in "[], \"'" else c for c in `parser`) + \
+            # We prefix with 'p' because otherwise we  generate reserved names
+            # like '__foo' in some cases.
+            name = 'p' + \
+                    ''.join('_' if c in "[], \"'" else c for c in `parser`) + \
                     `len(self.definitions)`
         if isinstance(parser, str):
             if parser.startswith('TOK_'):
