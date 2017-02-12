@@ -58,6 +58,15 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmValue arg1, AsmValue arg
 	instr->num_deps = 0;
 	instr->label = NULL;
 
+	if (op == MOV
+			&& arg1.t == ASM_VALUE_REGISTER
+			&& arg2.t == ASM_VALUE_REGISTER
+			&& arg1.u.reg.width != arg2.u.reg.width
+			&& !arg1.is_deref
+			&& !arg2.is_deref) {
+		assert(!"Bad MOV! Registers are different sizes.");
+	}
+
 	return instr;
 }
 
