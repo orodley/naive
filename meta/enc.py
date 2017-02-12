@@ -55,7 +55,7 @@ def generate_encoder(input_filename, output_filename):
                     r' *(?P<use_rex_w>REX\.W *\+ *)? *' +
                     r'(?P<opcode>([0-9a-fA-F]+|\[[0-9a-fA-F ]+\])) *' +
                     r'(?P<slash>/.)? *' +
-                    r'(?P<reg_in_opcode>\+rd)? *' +
+                    r'(?P<reg_in_opcode>\+r[bwdo])? *' +
                     r'(?P<immediate>[ic][bdo])? *',
                     encoding)
 
