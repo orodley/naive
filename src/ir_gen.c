@@ -33,7 +33,7 @@ typedef struct CType
 				SHORT,
 				INT,
 				LONG,
-				LONGLONG,
+				LONG_LONG,
 			} type;
 			bool is_signed;
 		} integer;
@@ -125,7 +125,9 @@ static IrType c_type_to_ir_type(CType *ctype)
 		u32 bit_width;
 		switch (ctype->u.integer.type) {
 		case BOOL: case CHAR: bit_width = 8; break;
+		case SHORT: bit_width = 16; break;
 		case INT: bit_width = 32; break;
+		case LONG: case LONG_LONG: bit_width = 64; break;
 		default: UNIMPLEMENTED;
 		}
 
@@ -155,7 +157,7 @@ static u8 rank(CType *type)
 	case SHORT: return 2;
 	case INT: return 3;
 	case LONG: return 4;
-	case LONGLONG: return 5;
+	case LONG_LONG: return 5;
 	}
 }
 
@@ -209,9 +211,16 @@ typedef struct TypeEnv
 
 	CType void_type;
 	CType char_type;
+	CType unsigned_char_type;
 	CType bool_type;
 	CType int_type;
 	CType unsigned_int_type;
+	CType short_type;
+	CType unsigned_short_type;
+	CType long_type;
+	CType unsigned_long_type;
+	CType long_long_type;
+	CType unsigned_long_long_type;
 } TypeEnv;
 
 static void init_type_env(TypeEnv *type_env)
@@ -236,6 +245,21 @@ static void init_type_env(TypeEnv *type_env)
 		// System V x86-64 says "char" == "signed char"
 		.u.integer.is_signed = true,
 	};
+	type_env->unsigned_char_type = (CType) {
+		.t = INTEGER_TYPE,
+		.u.integer.type = CHAR,
+		.u.integer.is_signed = false,
+	};
+	type_env->short_type = (CType) {
+		.t = INTEGER_TYPE,
+		.u.integer.type = SHORT,
+		.u.integer.is_signed = true,
+	};
+	type_env->unsigned_short_type = (CType) {
+		.t = INTEGER_TYPE,
+		.u.integer.type = SHORT,
+		.u.integer.is_signed = false,
+	};
 	type_env->int_type = (CType) {
 		.t = INTEGER_TYPE,
 		.u.integer.type = INT,
@@ -244,6 +268,26 @@ static void init_type_env(TypeEnv *type_env)
 	type_env->unsigned_int_type = (CType) {
 		.t = INTEGER_TYPE,
 		.u.integer.type = INT,
+		.u.integer.is_signed = false,
+	};
+	type_env->long_type = (CType) {
+		.t = INTEGER_TYPE,
+		.u.integer.type = LONG,
+		.u.integer.is_signed = true,
+	};
+	type_env->unsigned_long_type = (CType) {
+		.t = INTEGER_TYPE,
+		.u.integer.type = LONG,
+		.u.integer.is_signed = false,
+	};
+	type_env->long_long_type = (CType) {
+		.t = INTEGER_TYPE,
+		.u.integer.type = LONG_LONG,
+		.u.integer.is_signed = true,
+	};
+	type_env->unsigned_long_long_type = (CType) {
+		.t = INTEGER_TYPE,
+		.u.integer.type = LONG_LONG,
 		.u.integer.is_signed = false,
 	};
 }
@@ -415,7 +459,10 @@ static bool matches_sequence(ASTDeclSpecifier *decl_specifier_list, int length, 
 	}
 
 	va_end(args);
-	return true;
+
+	// Only return true if we consumed all of the type specifiers, because some
+	// sequences are prefixes of other sequences.
+	return decl_specifier_list == NULL;
 }
 
 static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
@@ -436,24 +483,62 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 
 	switch (type_spec->t) {
 	case NAMED_TYPE_SPECIFIER: {
+		// @TODO: This would be more efficiently (but perhaps less readably?)
+		// encoded as a tree, so as to eliminate redundant comparisons.
 		if (matches_sequence(decl_specifier_list, 1, "void")) {
 			return &type_env->void_type;
 		}
-		if (matches_sequence(decl_specifier_list, 1, "char")) {
+		if (matches_sequence(decl_specifier_list, 1, "char")
+				|| matches_sequence(decl_specifier_list, 2, "signed", "char")) {
 			return &type_env->char_type;
+		}
+		if (matches_sequence(decl_specifier_list, 2, "unsigned", "char")) {
+			return &type_env->unsigned_char_type;
 		}
 		if (matches_sequence(decl_specifier_list, 1, "_Bool")) {
 			return &type_env->bool_type;
 		}
-		if (matches_sequence(decl_specifier_list, 1, "unsigned")
-				|| matches_sequence(decl_specifier_list, 2, "unsigned", "int")) {
-			return &type_env->unsigned_int_type;
+		if (matches_sequence(decl_specifier_list, 1, "short")
+				|| matches_sequence(decl_specifier_list, 2, "signed", "short")
+				|| matches_sequence(decl_specifier_list, 2, "short", "int")
+				|| matches_sequence(decl_specifier_list, 3, "signed", "short", "int")) {
+			return &type_env->short_type;
+		}
+		if (matches_sequence(decl_specifier_list, 2, "unsigned", "short")
+				|| matches_sequence(decl_specifier_list, 3, "unsigned", "short", "int")) {
+			return &type_env->unsigned_short_type;
 		}
 		if (matches_sequence(decl_specifier_list, 1, "int")
 				|| matches_sequence(decl_specifier_list, 1, "signed")
 				|| matches_sequence(decl_specifier_list, 2, "signed", "int")) {
 			return &type_env->int_type;
 		}
+		if (matches_sequence(decl_specifier_list, 1, "unsigned")
+				|| matches_sequence(decl_specifier_list, 2, "unsigned", "int")) {
+			return &type_env->unsigned_int_type;
+		}
+		if (matches_sequence(decl_specifier_list, 1, "long")
+				|| matches_sequence(decl_specifier_list, 2, "signed", "long")
+				|| matches_sequence(decl_specifier_list, 2, "long", "int")
+				|| matches_sequence(decl_specifier_list, 3, "signed", "long", "int")) {
+			return &type_env->long_type;
+		}
+		if (matches_sequence(decl_specifier_list, 2, "unsigned", "long")
+				|| matches_sequence(decl_specifier_list, 3, "unsigned", "long", "int")) {
+			return &type_env->unsigned_long_type;
+		}
+		if (matches_sequence(decl_specifier_list, 2, "long", "long")
+				|| matches_sequence(decl_specifier_list, 3, "signed", "long", "long")
+				|| matches_sequence(decl_specifier_list, 3, "long", "long", "int")
+				|| matches_sequence(decl_specifier_list, 4, "signed", "long", "long", "int")) {
+			return &type_env->long_long_type;
+		}
+		if (matches_sequence(decl_specifier_list, 3, "unsigned", "long", "long")
+				|| matches_sequence(decl_specifier_list, 4, "unsigned", "long", "long", "int")) {
+			return &type_env->unsigned_long_long_type;
+		}
+
+		// Phew
 
 		CType *type = search(&type_env->typedef_types, type_spec->u.name);
 		assert(type != NULL);
