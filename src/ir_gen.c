@@ -409,6 +409,7 @@ typedef struct Env
 {
 	Scope *scope;
 	TypeEnv type_env;
+	CType *current_function_type;
 	Array(InlineFunction) inline_functions;
 	Array(SwitchCase) case_labels;
 	Array(GotoLabel) goto_labels;
@@ -1043,6 +1044,8 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 	ARRAY_INIT(param_bindings, Binding, 5);
 	env->scope = &scope;
 
+	env->current_function_type = function_type;
+
 	// @TODO: We shouldn't have to re-process all of the parameter decls.
 	// At the moment we have to because we throw away the name of the
 	// parameter when parsing function parameter declarators, since
@@ -1095,6 +1098,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	Env env;
 	init_type_env(&env.type_env);
 	env.scope = &global_scope;
+	env.current_function_type = NULL;
 	env.inline_functions = EMPTY_ARRAY;
 	env.case_labels = EMPTY_ARRAY;
 	env.goto_labels = EMPTY_ARRAY;
@@ -1637,7 +1641,10 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 				ir_gen_assign_op(builder, env, caller_ptr, term, OP_INVALID, NULL);
 				build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
 			} else {
-				build_unary_instr(builder, OP_RET, term.value);
+				CType *return_type =
+					env->current_function_type->u.function.return_type;
+				Term converted = convert_type(builder, term, return_type);
+				build_unary_instr(builder, OP_RET, converted.value);
 			}
 		}
 		break;
