@@ -173,40 +173,42 @@ typedef enum ELF64RelocType
 //   * .rela.text
 //   * .bss
 //   * .data
+//   * .rela.data
 //   * .shstrtab
 //   * .symtab
 //   * .strtab
 //
 // The headers are in the same order, but with a NULL header at the start that
-// has no corresponding sections, as required by the spec.
+// has no corresponding section, as required by the spec.
 //
-// Note that we write out .rela.text even if there are no relocations. In this
-// case we set the size to zero in the header and don't write any data for it.
-// This is simpler than having to handle it not being present, and it costs 
-// only 64 bytes in object files without relocations. We do the same thing for
-// .bss and .data, with the same tradeoff.
+// Note that we write out .rela.text, .bss, .data & .rela.data even if they are
+// empty. In this case we set the size to zero in the header and don't write
+// any data for it. This is simpler than having to handle it not being present,
+// and it costs only 64 bytes in object files without relocations.
 
-#define NUM_SECTIONS 8
+#define NUM_SECTIONS 9
 
-//                         0           1          2           3          4
-//                         0 123456 78901234567 89012 345678 9012345678 90123456 7
-#define SHSTRTAB_CONTENTS "\0.text\0.rela.text\0.bss\0.data\0.shstrtab\0.symtab\0.strtab"
+//                         0           1          2           3          4          5          6
+//                         0 123456 78901234567 89012 345678 90123456789 0123456789 01234567 8901234
+#define SHSTRTAB_CONTENTS "\0.text\0.rela.text\0.bss\0.data\0.rela.data\0.shstrtab\0.symtab\0.strtab"
 #define TEXT_NAME 1
 #define RELA_TEXT_NAME 7
 #define BSS_NAME 18
 #define DATA_NAME 23
-#define SHSTRTAB_NAME 29
-#define SYMTAB_NAME 39
-#define STRTAB_NAME 47
+#define RELA_DATA_NAME 29
+#define SHSTRTAB_NAME 40
+#define SYMTAB_NAME 50
+#define STRTAB_NAME 58
 
 // Starts from 1 because the NULL header is at 0.
 #define TEXT_INDEX 1
 #define RELA_TEXT_INDEX 2
 #define BSS_INDEX 3
 #define DATA_INDEX 4
-#define SHSTRTAB_INDEX 5
-#define SYMTAB_INDEX 6
-#define STRTAB_INDEX 7
+#define RELA_DATA_INDEX 5
+#define SHSTRTAB_INDEX 6
+#define SYMTAB_INDEX 7
+#define STRTAB_INDEX 8
 
 
 typedef struct SectionInfo
@@ -532,6 +534,20 @@ static void finish_strtab_section(ELFFile *elf_file)
 		checked_fwrite(&data_header, sizeof data_header, 1, output_file);
 	}
 
+	// .rela.data
+	{
+		ELFSectionHeader rela_data_header;
+		ZERO_STRUCT(&rela_data_header);
+		rela_data_header.shstrtab_index_for_name = RELA_DATA_NAME;
+		rela_data_header.type = SHT_RELA;
+		rela_data_header.misc_info = DATA_INDEX;
+		rela_data_header.linked_section = SYMTAB_INDEX;
+		rela_data_header.section_location = elf_file->section_info[RELA_DATA_INDEX].offset;
+		rela_data_header.section_size = elf_file->section_info[RELA_DATA_INDEX].size;
+		rela_data_header.entry_size = sizeof(ELF64Rela);
+		checked_fwrite(&rela_data_header, sizeof rela_data_header, 1, output_file);
+	}
+
 	// .shstrtab
 	{
 		ELFSectionHeader shstrtab_header;
@@ -664,6 +680,36 @@ typedef struct Symbol
 	u8 *contents;
 } Symbol;
 
+void process_rela_section(ELFSectionHeader *rela_header, Symbol **file_symbols,
+		FILE *input_file, u32 initial_location, u32 existing_section_size,
+		u32 corresponding_section_index)
+{
+	if (rela_header != NULL) {
+		assert(rela_header->type == SHT_RELA);
+		assert(rela_header->entry_size == sizeof(ELF64Rela));
+
+		checked_fseek(input_file,
+				initial_location + rela_header->section_location,
+				SEEK_SET);
+		u32 rela_entries = rela_header->section_size / rela_header->entry_size;
+		for (u32 rela_index = 0; rela_index < rela_entries; rela_index++) {
+			ELF64Rela rela;
+			checked_fread(&rela, sizeof rela, 1, input_file);
+
+			ELF64RelocType type = ELF64_RELA_TYPE(rela.type_and_symbol);
+			u32 symtab_index = ELF64_RELA_SYMBOL(rela.type_and_symbol);
+			Symbol *corresponding_symbol = file_symbols[symtab_index];
+			assert(corresponding_symbol != NULL);
+
+			Relocation *reloc = ARRAY_APPEND(&corresponding_symbol->relocs, Relocation);
+			reloc->type = type;
+			reloc->addend = rela.addend;
+			reloc->section_index = corresponding_section_index;
+			reloc->section_offset = existing_section_size + rela.section_offset;
+		}
+	}
+}
+
 // @TODO: Handle archives correctly. Currently we just treat them as a series
 // of object files, but archives have different semantics.
 // See http://eli.thegreenplace.net/2013/07/09/library-order-in-static-linking
@@ -720,6 +766,7 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 	ELFSectionHeader *rela_text_header = NULL;
 	u32 data_section_index = SHN_UNDEF;
 	ELFSectionHeader *data_header = NULL;
+	ELFSectionHeader *rela_data_header = NULL;
 	u32 bss_section_index = SHN_UNDEF;
 	ELFSectionHeader *bss_header = NULL;
 	for (u32 i = 0; i < file_header.sht_entries; i++) {
@@ -735,13 +782,15 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 		} else if (streq(section_name, ".strtab")) {
 			strtab_header = curr_header;
 		} else if (strneq(section_name, ".rela", 5)) {
-			if (!streq(section_name, ".rela.text")) {
-				fprintf(stderr, "Relocations for non-text sections are not"
-						" supported (found section %s)\n", section_name);
+			if (streq(section_name, ".rela.text")) {
+				rela_text_header = curr_header;
+			} else if (streq(section_name, ".rela.data")) {
+				rela_data_header = curr_header;
+			} else {
+				fprintf(stderr, "Relocations for that section are not"
+						" supported (found rela section %s)\n", section_name);
 				goto cleanup1;
 			}
-
-			rela_text_header = curr_header;
 		} else if (streq(section_name, ".bss")) {
 			bss_header = curr_header;
 			bss_section_index = i;
@@ -773,13 +822,6 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 	assert(symtab_header->entry_size == sizeof(ELF64Symbol));
 
 	assert(strtab_header->type == SHT_STRTAB);
-
-	if (rela_text_header != NULL) {
-		assert(rela_text_header->type == SHT_RELA);
-		assert(rela_text_header->linked_section == symtab_section_index);
-		assert(rela_text_header->misc_info == text_section_index);
-		assert(rela_text_header->entry_size == sizeof(ELF64Rela));
-	}
 
 	char *strtab = malloc(strtab_header->section_size);
 	checked_fseek(input_file,
@@ -917,27 +959,10 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 		}
 	}
 
-	if (rela_text_header != NULL) {
-		checked_fseek(input_file,
-				initial_location + rela_text_header->section_location,
-				SEEK_SET);
-		u32 rela_entries = rela_text_header->section_size / rela_text_header->entry_size;
-		for (u32 rela_index = 0; rela_index < rela_entries; rela_index++) {
-			ELF64Rela rela;
-			checked_fread(&rela, sizeof rela, 1, input_file);
-
-			ELF64RelocType type = ELF64_RELA_TYPE(rela.type_and_symbol);
-			u32 symtab_index = ELF64_RELA_SYMBOL(rela.type_and_symbol);
-			Symbol *corresponding_symbol = file_symbols[symtab_index];
-			assert(corresponding_symbol != NULL);
-
-			Relocation *reloc = ARRAY_APPEND(&corresponding_symbol->relocs, Relocation);
-			reloc->type = type;
-			reloc->addend = rela.addend;
-			reloc->section_index = TEXT_INDEX;
-			reloc->section_offset = existing_text_size + rela.section_offset;
-		}
-	}
+	process_rela_section(rela_text_header, file_symbols, input_file,
+			initial_location, existing_text_size, TEXT_INDEX);
+	process_rela_section(rela_data_header, file_symbols, input_file,
+			initial_location, existing_data_size, DATA_INDEX);
 
 
 cleanup2:
