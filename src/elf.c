@@ -161,6 +161,7 @@ typedef enum ELF64RelocType
 {
 	R_X86_64_64 = 1,
 	R_X86_64_PC32 = 2,
+	R_X86_64_32S = 11,
 } ELF64RelocType;
 
 
@@ -1136,7 +1137,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 				final_value =
 					symbol_mem_location + reloc->addend - (i32)reloc_mem_location;
 				break;
-			case R_X86_64_64:
+			case R_X86_64_64: case R_X86_64_32S:
 				final_value = symbol_mem_location + reloc->addend;
 				break;
 			default:
@@ -1145,6 +1146,8 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 				assert(false);
 			}
 
+			// @TODO: We should be writing different numbers of bytes for
+			// different relocation types, e.g.: R_X86_64_64 should be 8 bytes.
 			u8 final_value_bytes[] = {
 				final_value & 0xFF,
 				(final_value >> 8) & 0xFF,
