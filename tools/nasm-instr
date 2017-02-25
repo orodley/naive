@@ -15,7 +15,7 @@ EOF
 echo "$@" >> "$temp_asm"
 
 if nasm "$temp_asm" -o "$temp_bin"; then
-	hexdump "$temp_bin" -e '/1 "%02X "'
+	hexdump "$temp_bin" -v -e '/1 "%02X "'
 	echo
 
 	rm "$temp_asm" "$temp_bin"
