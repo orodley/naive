@@ -1139,6 +1139,10 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 			case R_X86_64_64:
 				final_value = symbol_mem_location + reloc->addend;
 				break;
+			default:
+				fprintf(stderr, "Unsupported relocation type: %d\n",
+						(int)reloc->type);
+				assert(false);
 			}
 
 			u8 final_value_bytes[] = {
