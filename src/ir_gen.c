@@ -2096,7 +2096,7 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	// @TODO: Determine type correctly.
 	CType *result_type = &env->type_env.int_type;
 
-	if (!(ir_op == OP_EQ
+	if (!((ir_op == OP_EQ || ir_op == OP_NEQ)
 				&& left.ctype->t == POINTER_TYPE
 				&& right.ctype->t == POINTER_TYPE)) {
 		// @TODO: Proper arithmetic conversions
