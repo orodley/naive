@@ -1321,6 +1321,19 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 		} else {
 			converted = build_type_instr(builder, OP_ZEXT, term.value, ir_type);
 		}
+	} else if (term.ctype->t == INTEGER_TYPE && target_type->t == POINTER_TYPE) {
+		u32 width = c_type_to_ir_type(term.ctype).u.bit_width;
+
+		IrValue value = term.value;
+		if (width < 64) {
+			value = build_type_instr(builder, OP_ZEXT, term.value,
+					(IrType) { .t = IR_INT, .u.bit_width = 64 });
+		} else {
+			assert(width == 64);
+		}
+
+		converted = build_type_instr(
+				builder, OP_CAST, value, c_type_to_ir_type(target_type));
 	} else if (term.ctype->t == POINTER_TYPE && target_type->t == POINTER_TYPE) {
 		converted = term.value;
 	} else if (term.ctype->t == ARRAY_TYPE && target_type->t == POINTER_TYPE) {
