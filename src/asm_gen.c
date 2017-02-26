@@ -598,19 +598,13 @@ static void asm_gen_instr(
 		// As specified by the System V x86-64 ABI, we have to ensure that the
 		// end of our stack frame is aligned to 16 bytes. The end of the
 		// previous stack frame was aligned to 16 bytes, so this amounts to
-		// making sure the size of our stack frame is a multiple of 16. We
-		// calculate the size of our stack frame as follows:
-		// * Return address pushed by call (8 bytes)
-		// * rbp pushed by us (8 bytes)
-		// * Space for our locals
-		// * Space for the arguments we're about to pass
+		// making sure the size of our stack frame is a multiple of 16. The
+		// prologue ensures that we're correctly aligned before the call, so we
+		// just need to make sure that the space we use for passing arguments
+		// is correctly aligned.
+		//
 		// See the System V x86-64 ABI spec, section 3.2.2
-		u32 stack_frame_size =
-			8 + 8 + builder->local_stack_usage + args_stack_space;
-		u32 stack_align_padding =
-			align_to(stack_frame_size, 16) - stack_frame_size;
-
-		u32 args_plus_padding = args_stack_space + stack_align_padding;
+		u32 args_plus_padding = align_to(args_stack_space, 16);
 		if (args_plus_padding > 0) {
 			emit_instr2(builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
 					asm_const(args_plus_padding));
@@ -1280,6 +1274,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		}
 	}
 
+	u32 num_callee_save_regs = bit_count(used_callee_save_regs_bitset);
+
 	builder->current_block = &builder->current_function->prologue;
 
 	AsmLabel *entry_label = pool_alloc(&builder->asm_module.pool, sizeof *entry_label);
@@ -1300,11 +1296,24 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		temp_regs_bitset &= ~(1 << reg);
 	}
 
-	if (builder->local_stack_usage != 0) {
+	u32 stack_adjustment = builder->local_stack_usage;
+
+	// Ensure that the stack frame size is a multiple of 16 before entering the
+	// body of the function. Then each "call" op just needs to ensure that its
+	// stack arg area is correctly aligned. The return address and the previous
+	// value of rbp are pushed, for a total of 16 bytes which doesn't affect
+	// alignment. Then we push callee-save registers and subtract space for
+	// locals. This may affect alignment, so we add padding if necessary.
+	//
+	// See the System V x86-64 ABI spec, section 3.2.2
+	stack_adjustment +=
+		-(num_callee_save_regs * 8 + builder->local_stack_usage) % 16;
+
+	if (stack_adjustment != 0) {
 		emit_instr2(builder,
 				SUB,
 				asm_phys_reg(REG_CLASS_SP, 64),
-				asm_const(builder->local_stack_usage));
+				asm_const(stack_adjustment));
 	}
 
 	// Argument registers are stored in increasing order in the register save
@@ -1343,7 +1352,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		emit_instr2(builder,
 				ADD,
 				asm_phys_reg(REG_CLASS_SP, 64),
-				asm_const(builder->local_stack_usage));
+				asm_const(stack_adjustment));
 	}
 	temp_regs_bitset = used_callee_save_regs_bitset;
 	while (temp_regs_bitset != 0) {
