@@ -7,22 +7,34 @@ __syscall:
 	push rbp
 	mov rbp, rsp
 
-	; Callee-save registers
+	; Regular callee-save registers
 	push rbx
 	push r12
 	push r13
 	push r14
 	push r15
 
-	; The syscall calling convention on x64 corresponds to the x64 calling
-	; convention, with syscall number in rax. Since we pass the syscall number
-	; as the first argument and then the rest, we shift them all down into rax.
+	; The kernel also clobbers rcx and r11
+	push rcx
+	push r11
+
+	; The syscall calling convention on x64 is to pass the syscall number in
+	; rax, and all arguments in registers in the following sequence:
+	;   rdi, rsi, rdx, r10, r8, r9
+	; This is almost the same as the regular System V x86-64 calling
+	; convention, except argument 4 is in r10 rather than rcx.
 	mov rax, rdi
 	mov rdi, rsi
 	mov rsi, rdx
 	mov rdx, rcx
+	mov r10, r8
+	mov r8, r9
+	mov r9, [rbp + 16]
 
 	syscall
+
+	pop r11
+	pop rcx
 
 	pop r15
 	pop r14

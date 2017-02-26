@@ -15,5 +15,5 @@ int open(const char *pathname, int flags, ...)
 
 	va_end(varargs);
 
-	return __syscall(2, (uint64_t)pathname, flags, mode);
+	return __syscall(2, (uint64_t)pathname, flags, mode, 0, 0, 0);
 }
