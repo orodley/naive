@@ -11,9 +11,15 @@ typedef struct _IO_FILE FILE;
 
 extern FILE *stdout;
 
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
 FILE *fopen(const char *path, const char *mode);
 int fclose(FILE *fp);
+int fseek(FILE *stream, long offset, int whence);
+long ftell(FILE *stream);
 
 int fputc(int c, FILE *stream);
 int fputs(const char *s, FILE *stream);
