@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/mman.h>
 
 static size_t align_to(size_t n, size_t align)
@@ -21,6 +22,16 @@ static HeapEntryHeader *heap_free_list = NULL;
 static uint8_t *heap_start = NULL;
 static size_t heap_size = 0;
 
+uint8_t *ptr_for_header(HeapEntryHeader *header)
+{
+	return (uint8_t *)header + sizeof(HeapEntryHeader);
+}
+
+HeapEntryHeader *header_for_ptr(void *ptr)
+{
+	return (HeapEntryHeader *)((uint8_t *)ptr - sizeof(HeapEntryHeader));
+}
+
 void *malloc(size_t size)
 {
 	HeapEntryHeader *curr_entry = heap_free_list;
@@ -33,7 +44,7 @@ void *malloc(size_t size)
 				prev_entry->next = curr_entry->next;
 			}
 
-			return (uint8_t *)curr_entry + sizeof(HeapEntryHeader);
+			return ptr_for_header(curr_entry);
 		}
 
 		prev_entry = curr_entry;
@@ -62,7 +73,7 @@ void *malloc(size_t size)
 	new_header->next = NULL;
 	new_header->size = size;
 
-	return (uint8_t *)new_header + sizeof(HeapEntryHeader);
+	return ptr_for_header(new_header);
 }
 
 // We put this in the same TU because when do you ever use malloc without using
@@ -70,8 +81,27 @@ void *malloc(size_t size)
 // details.
 void free(void *ptr)
 {
-	HeapEntryHeader *header =
-		(HeapEntryHeader *)((uint8_t *)ptr - sizeof(HeapEntryHeader));
+	HeapEntryHeader *header = header_for_ptr(ptr);
 	header->next = heap_free_list;
 	heap_free_list = header;
+}
+
+void *realloc(void *ptr, size_t size)
+{
+	HeapEntryHeader *header = header_for_ptr(ptr);
+	if (header->size >= size)
+		return ptr;
+
+	void *new_ptr = malloc(size);
+	memcpy(new_ptr, ptr, size);
+	free(ptr);
+
+	return new_ptr;
+}
+
+void *calloc(size_t nmemb, size_t size)
+{
+	void *ptr = malloc(nmemb * size);
+	memset(ptr, 0, nmemb * size);
+	return ptr;
 }
