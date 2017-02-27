@@ -34,6 +34,9 @@ HeapEntryHeader *header_for_ptr(void *ptr)
 
 void *malloc(size_t size)
 {
+	if (size == 0)
+		return NULL;
+
 	HeapEntryHeader *curr_entry = heap_free_list;
 	HeapEntryHeader *prev_entry = NULL;
 	while (curr_entry != NULL) {
@@ -81,6 +84,9 @@ void *malloc(size_t size)
 // details.
 void free(void *ptr)
 {
+	if (ptr == NULL)
+		return;
+
 	HeapEntryHeader *header = header_for_ptr(ptr);
 	header->next = heap_free_list;
 	heap_free_list = header;
@@ -88,6 +94,9 @@ void free(void *ptr)
 
 void *realloc(void *ptr, size_t size)
 {
+	if (size == 0)
+		return NULL;
+
 	HeapEntryHeader *header = header_for_ptr(ptr);
 	if (header->size >= size)
 		return ptr;
@@ -101,6 +110,9 @@ void *realloc(void *ptr, size_t size)
 
 void *calloc(size_t nmemb, size_t size)
 {
+	if (nmemb == 0 || size == 0)
+		return NULL;
+
 	void *ptr = malloc(nmemb * size);
 	memset(ptr, 0, nmemb * size);
 	return ptr;
