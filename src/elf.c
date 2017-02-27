@@ -161,6 +161,7 @@ typedef enum ELF64RelocType
 {
 	R_X86_64_64 = 1,
 	R_X86_64_PC32 = 2,
+	R_X86_64_32 = 10,
 	R_X86_64_32S = 11,
 } ELF64RelocType;
 
@@ -1137,7 +1138,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 				final_value =
 					symbol_mem_location + reloc->addend - (i32)reloc_mem_location;
 				break;
-			case R_X86_64_64: case R_X86_64_32S:
+			case R_X86_64_64: case R_X86_64_32S: case R_X86_64_32:
 				final_value = symbol_mem_location + reloc->addend;
 				break;
 			default:
