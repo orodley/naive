@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -15,5 +16,11 @@ int open(const char *pathname, int flags, ...)
 
 	va_end(varargs);
 
-	return __syscall(2, (uint64_t)pathname, flags, mode, 0, 0, 0);
+	int ret = __syscall(2, (uint64_t)pathname, flags, mode, 0, 0, 0);
+	if (ret < 0) {
+		errno = -ret;
+		return -1;
+	}
+
+	return ret;
 }
