@@ -208,7 +208,7 @@ def run_testcase(testcase):
         test_result.error = "non-zero return code %d" % status_code
     if run_stdout != testcase.expected_run_stdout:
         test_result.error = "expected runtime stdout of %r, got %r" % \
-            (testcase.expected-run-stdout, run_stdout)
+            (testcase.expected_run_stdout, run_stdout)
     if run_stderr != testcase.expected_run_stderr:
         test_result.error = "expected runtime stderr of %r, got %r" % \
             (testcase.expected_run_stderr, run_stderr)
