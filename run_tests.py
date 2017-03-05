@@ -85,7 +85,7 @@ def main():
 class Testcase(object):
     __slots__ = ['name', 'binary', 'cc_proc',
             'expected_compile_stdout', 'expected_compile_stderr',
-            'expected_run_stdout', 'expected_run_stderr', 'stdin']
+            'expected_run_stdout', 'expected_run_stderr', 'run_stdin']
 
 def start_compiling(test_dir):
     testcase = Testcase()
@@ -97,7 +97,7 @@ def start_compiling(test_dir):
     testcase.expected_compile_stderr = ''
     testcase.expected_run_stdout = ''
     testcase.expected_run_stderr = ''
-    testcase.stdin = ''
+    testcase.run_stdin = ''
 
     test_filenames = []
     extra_flags = []
@@ -141,7 +141,7 @@ def create_test_files(test_dir):
         program_proc = subprocess.Popen(binary_path,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE,
             cwd=os.path.abspath(test_dir))
-        run_stdout, run_stderr = program_proc.communicate(testcase.stdin)
+        run_stdout, run_stderr = program_proc.communicate(testcase.run_stdin)
         os.remove(binary_path)
 
     def create_file(contents, filename):
@@ -200,7 +200,7 @@ def run_testcase(testcase):
     program_proc = subprocess.Popen(binary_path,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE,
         cwd=test_dir)
-    run_stdout, run_stderr = program_proc.communicate(testcase.stdin)
+    run_stdout, run_stderr = program_proc.communicate(testcase.run_stdin)
     status_code = program_proc.returncode
     os.remove(binary_path)
 
