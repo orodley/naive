@@ -865,8 +865,6 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 			initial_location + symtab_header->section_location,
 			SEEK_SET);
 
-	Array(Symbol) section_symbols;
-	ARRAY_INIT(&section_symbols, Symbol, file_header.sht_entries);
 	Symbol **file_symbols = calloc(sizeof(*file_symbols) * symbols_in_symtab, 1);
 
 	// @TODO: We can iterate across this more efficiently by using the
@@ -924,8 +922,6 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 				symbol = ARRAY_APPEND(symbol_table, Symbol);
 				ZERO_STRUCT(symbol);
 				ARRAY_INIT(&symbol->relocs, Relocation, 5);
-			} else if (type == STT_SECTION) {
-				symbol = ARRAY_APPEND(&section_symbols, Symbol);
 			} else {
 				symbol = ARRAY_REF(symbol_table, Symbol, found_symbol_index);
 				if (symbol->defined) {
@@ -968,7 +964,6 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 
 
 cleanup2:
-	array_free(&section_symbols);
 	free(file_symbols);
 	free(strtab);
 cleanup1:
