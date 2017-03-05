@@ -5,8 +5,11 @@ NASM ?= nasm
 PEG ?= meta/peg.py
 ENC ?= meta/enc.py
 
-CFLAGS := $(CFLAGS) -std=c99 -Isrc \
-	-Werror -Wall -Wextra -Wstrict-prototypes -Wformat
+COMMON_CFLAGS := $(CFLAGS) -std=c99 -Werror -Wall -Wextra -Wstrict-prototypes \
+	-Wformat
+NCC_CFLAGS := -Isrc
+LIBC_CFLAGS := -fno-asynchronous-unwind-tables -ffreestanding -fno-common \
+	-I libc -I libc/include
 
 ifneq (, $(shell which ccache))
 	ifeq ($(CC), clang)
@@ -34,11 +37,11 @@ objs_for_dir = $(patsubst %.c, %.o, $(shell find $(1) -name '*.c')) \
 all: ncc libc.a tags
 
 .PHONY: asan
-asan: CFLAGS += -fsanitize=address
+asan: NCC_CFLAGS += -fsanitize=address
 asan: all
 
 .PHONY: msan
-msan: CFLAGS += -fsanitize=memory -fsanitize-memory-track-origins=2
+msan: NCC_CFLAGS += -fsanitize=memory -fsanitize-memory-track-origins=2
 msan: all
 
 .PHONY: test
@@ -52,7 +55,7 @@ tags: ncc
 
 ncc: $(call objs_for_dir,src)
 	@echo 'CC $@'
-	@$(CC) $(CFLAGS) $^ -o $@
+	@$(CC) $(COMMON_CFLAGS) $(NCC_CFLAGS) $^ -o $@
 
 libc.a: $(call objs_for_dir,libc) $(HEADERS)
 	@echo 'AR $@'
@@ -69,12 +72,11 @@ libc.a: $(call objs_for_dir,libc) $(HEADERS)
 
 libc/%.o: libc/%.c
 	@echo 'CC $@'
-	@$(CC) -c $(CFLAGS) -fno-asynchronous-unwind-tables -ffreestanding \
-		-I libc -I libc/include $< -o $@
+	@$(CC) -c $(COMMON_CFLAGS) $(LIBC_CFLAGS) $< -o $@
 
-%.o: %.c $(HEADERS) $(GEN_FILES)
+src/%.o: src/%.c $(HEADERS) $(GEN_FILES)
 	@echo 'CC $<'
-	@$(CC) -c $(CFLAGS) -g $< -o $@
+	@$(CC) -c $(COMMON_CFLAGS) $(NCC_CFLAGS) -g $< -o $@
 
 %.o: %.s
 	@echo 'NASM $<'
