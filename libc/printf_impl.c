@@ -2,7 +2,7 @@
 
 #include "printf_impl.h"
 
-char digits[] = "0123456789abcdef";
+static char digits[] = "0123456789abcdef";
 
 int print_unsigned(Sink *sink, void *sink_arg, unsigned long x, int radix)
 {
@@ -51,7 +51,7 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
 {
 	int chars_printed = 0;
 
-	for (int i = 0; format[i] != 0; i++) {
+	for (int i = 0; format[i] != '\0'; i++) {
 		char c = format[i];
 		if (c != '%') {
 			int ret = sink(sink_arg, c);
