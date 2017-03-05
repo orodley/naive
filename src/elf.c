@@ -682,9 +682,9 @@ typedef struct Symbol
 	u8 *contents;
 } Symbol;
 
-void process_rela_section(ELFSectionHeader *rela_header, Symbol **file_symbols,
-		FILE *input_file, u32 initial_location, u32 existing_section_size,
-		u32 corresponding_section_index)
+void process_rela_section(ELFSectionHeader *rela_header, u32 *file_symbols,
+		Array(Symbol) *symbol_table, FILE *input_file, u32 initial_location,
+		u32 existing_section_size, u32 corresponding_section_index)
 {
 	if (rela_header != NULL) {
 		assert(rela_header->type == SHT_RELA);
@@ -700,10 +700,12 @@ void process_rela_section(ELFSectionHeader *rela_header, Symbol **file_symbols,
 
 			ELF64RelocType type = ELF64_RELA_TYPE(rela.type_and_symbol);
 			u32 symtab_index = ELF64_RELA_SYMBOL(rela.type_and_symbol);
-			Symbol *corresponding_symbol = file_symbols[symtab_index];
+			Symbol *corresponding_symbol =
+				ARRAY_REF(symbol_table, Symbol, file_symbols[symtab_index]);
 			assert(corresponding_symbol != NULL);
 
-			Relocation *reloc = ARRAY_APPEND(&corresponding_symbol->relocs, Relocation);
+			Relocation *reloc =
+				ARRAY_APPEND(&corresponding_symbol->relocs, Relocation);
 			reloc->type = type;
 			reloc->addend = rela.addend;
 			reloc->section_index = corresponding_section_index;
@@ -865,7 +867,7 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 			initial_location + symtab_header->section_location,
 			SEEK_SET);
 
-	Symbol **file_symbols = calloc(sizeof(*file_symbols) * symbols_in_symtab, 1);
+	u32 *file_symbols = calloc(sizeof(*file_symbols) * symbols_in_symtab, 1);
 
 	// @TODO: We can iterate across this more efficiently by using the
 	// information in the header about the last local symbol. We can also use
@@ -901,28 +903,35 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 		}
 
 		if (symtab_symbol.section == SHN_UNDEF) {
-			Symbol *symbol;
+			u32 symbol_index;
+
 			if (found_symbol_index == -1) {
-				symbol = ARRAY_APPEND(symbol_table, Symbol);
+				symbol_index = symbol_table->size;
+
+				Symbol *symbol = ARRAY_APPEND(symbol_table, Symbol);
 				symbol->defined = false;
 				symbol->name = strdup(symbol_name);
 				symbol->binding = binding;
 				symbol->contents = NULL;
 				ARRAY_INIT(&symbol->relocs, Relocation, 5);
 			} else {
-				symbol = ARRAY_REF(symbol_table, Symbol, found_symbol_index);
+				symbol_index = found_symbol_index;
 			}
 
-			file_symbols[symtab_index] = symbol;
+			file_symbols[symtab_index] = symbol_index;
 		} else if (symtab_symbol.section == text_section_index
 				|| symtab_symbol.section == bss_section_index
 				|| symtab_symbol.section == data_section_index) {
 			Symbol *symbol;
+			u32 symbol_index;
 			if (found_symbol_index == -1) {
+				symbol_index = symbol_table->size;
+
 				symbol = ARRAY_APPEND(symbol_table, Symbol);
 				ZERO_STRUCT(symbol);
 				ARRAY_INIT(&symbol->relocs, Relocation, 5);
 			} else {
+				symbol_index = found_symbol_index;
 				symbol = ARRAY_REF(symbol_table, Symbol, found_symbol_index);
 				if (symbol->defined) {
 					fprintf(stderr,
@@ -951,16 +960,16 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 			symbol->size = symtab_symbol.size;
 			symbol->contents = NULL;
 
-			file_symbols[symtab_index] = symbol;
+			file_symbols[symtab_index] = symbol_index;
 		} else {
 			UNREACHABLE;
 		}
 	}
 
-	process_rela_section(rela_text_header, file_symbols, input_file,
-			initial_location, existing_text_size, TEXT_INDEX);
-	process_rela_section(rela_data_header, file_symbols, input_file,
-			initial_location, existing_data_size, DATA_INDEX);
+	process_rela_section(rela_text_header, file_symbols, symbol_table,
+			input_file, initial_location, existing_text_size, TEXT_INDEX);
+	process_rela_section(rela_data_header, file_symbols, symbol_table,
+			input_file, initial_location, existing_data_size, DATA_INDEX);
 
 
 cleanup2:
