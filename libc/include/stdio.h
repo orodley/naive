@@ -11,6 +11,7 @@ typedef struct _IO_FILE FILE;
 
 extern FILE *stdin;
 extern FILE *stdout;
+extern FILE *stderr;
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
