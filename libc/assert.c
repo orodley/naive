@@ -1,8 +1,12 @@
+#include <stdio.h>
 #include <stdlib.h>
 
-// @TODO: Call abort instead of just crashing.
-// @TODO: Print filename, line number, and function.
-void __assert_fail()
+// @NOTE: .rodata hack
+static char fmt[] = "Assert failure at %s:%d\n";
+
+// @TODO: Print stringified expr and function name.
+void __assert_fail(const char *filename, int line)
 {
+	fprintf(stderr, fmt, filename, line);
 	abort();
 }

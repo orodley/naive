@@ -1,10 +1,8 @@
 #ifndef _ASSERT_H
 #define _ASSERT_H
 
-#define assert(x) if (!(x)) __assert_fail()
+#define assert(x) if (!(x)) __assert_fail(__FILE__, __LINE__)
 
-// @TODO: void in argument list. Right now the below actually means no
-// arguments because we haven't implemented non-strict prototypes.
-void __assert_fail();
+void __assert_fail(const char *file, int line);
 
 #endif
