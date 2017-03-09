@@ -303,7 +303,6 @@ static bool tokenise_string(Reader *reader, char *string)
 	buffer.length = strlen(string);
 	reader->buffer = buffer;
 	reader->position = 0;
-	reader->source_loc = (SourceLoc) { "<macro>", 1, 1 };
 
 	if (!tokenise_aux(reader))
 		return false;
