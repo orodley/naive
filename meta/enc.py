@@ -116,10 +116,8 @@ static void assemble_instr(Array(u8) *output, AsmModule *asm_module, AsmInstr *i
             if len(encoding.args) == 0:
                 indent = '\t\t'
             else:
-                output.append("\t\tif ((instr->arity == %d) && %s) {\n" % \
-                        (len(encoding.args),
-                            ' && '.join(arg_condition(arg, i)
-                                for i, arg in enumerate(encoding.args))))
+                output.append("\t\tif ((instr->arity == %d) && %s) {\n" %
+                        (len(encoding.args), arg_conditions(encoding.args)))
                 indent = '\t\t\t'
             output.append(("%sencode_instr(output, asm_module, instr, %s);\n" +
                            "%sreturn;\n")
@@ -153,32 +151,47 @@ static void assemble_instr(Array(u8) *output, AsmModule *asm_module, AsmInstr *i
 def check_width(width):
     assert int(width) in [8, 16, 32, 64]
 
-def arg_condition(arg, i):
-    if arg.startswith('r/m'):
-        width = arg[3:]
-        check_width(width)
-        return ('((instr->args[%d].t == ASM_VALUE_REGISTER'
-                + ' && instr->args[%d].u.reg.width == %s)'
-                + ' || (instr->args[%d].is_deref'
-                + ' && instr->args[%d].u.reg.width == 64))') % (i, i, width, i, i)
-    if arg[0] == 'r' and all(c.isdigit() for c in arg[1:]):
-        width = arg[1:]
-        check_width(width)
-        return ('(instr->args[%d].t == ASM_VALUE_REGISTER)'
-                + ' && instr->args[%d].u.reg.width == %s'
-                + ' && !instr->args[%d].is_deref') % (i, i, width, i)
-    if arg == 'imm8':
-        return '(is_const_and_fits(instr->args[%d], 8))' % i
-    if arg == 'imm32':
-        return '(is_const_and_fits(instr->args[%d], 32))' % i
-    if arg == 'imm64':
-        return '(is_const_and_fits(instr->args[%d], 64))' % i
-    if arg == 'rel':
-        return ('(instr->args[%d].t == ASM_VALUE_LABEL'
-                + ' || instr->args[%d].t == ASM_VALUE_CONST)') % (i, i)
+def arg_conditions(args):
+    conditions = []
+    ext_width = 0
 
-    print "Unknown arg type: '%s'" % arg
-    assert False
+    for i, arg in enumerate(args):
+        arg_str = 'instr->args[%d]' % i
+        if arg.startswith('r/m'):
+            width = arg[3:]
+            check_width(width)
+            ext_width = width
+
+            conditions.append((
+                '(({0}.t == ASM_VALUE_REGISTER'
+                + ' && {0}.u.reg.width == {1})'
+                + ' || ({0}.is_deref'
+                + ' && {0}.u.reg.width == 64))').format(arg_str, width))
+        elif arg[0] == 'r' and all(c.isdigit() for c in arg[1:]):
+            width = arg[1:]
+            check_width(width)
+            ext_width = width
+
+            conditions.append((
+                '({0}.t == ASM_VALUE_REGISTER)'
+                + ' && {0}.u.reg.width == {1}'
+                + ' && !{0}.is_deref').format(arg_str, width))
+        elif arg.startswith('imm'):
+            width = arg[3:]
+            check_width(width)
+            conditions.append((
+                '(is_const_and_fits({0}, {1}, {2}, '
+                + 'is_sign_extending_instr(instr)))')
+                .format(arg_str, ext_width, width))
+        elif arg == 'rel':
+            conditions.append((
+                '({0}.t == ASM_VALUE_LABEL'
+                + ' || {0}.t == ASM_VALUE_CONST)').format(arg_str))
+        else:
+            print "Unknown arg type: '%s'" % arg
+            assert False
+
+    return ' && '.join(conditions)
 
 def to_c_val(x):
     if isinstance(x, bool):

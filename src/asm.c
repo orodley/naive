@@ -130,9 +130,41 @@ AsmValue asm_global(AsmGlobal *global)
 	};
 }
 
-// @TODO: Negative numbers
-static bool is_const_and_fits(AsmValue asm_value, u32 bits)
+// Certain instructions sign-extend their immediates. We need to know which
+// ones so that we can correctly determine the width we need for the immediate.
+static bool is_sign_extending_instr(AsmInstr *instr)
 {
+	AsmOp op = instr->op;
+	return op == ADD || op == AND || op == ADC || op == CMP || op == IMUL
+		|| op == OR || op == SBB || op == SUB || op == TEST;
+}
+
+// We need to deal with negative numbers here. For example, -4 should fit into
+// an 8-bit immediate, even though as a 64-bit int (which is how we store
+// constants) this is 0xFFFFFFFFFFFFFFFC, which looks like it doesn't fit into
+// 8 bits. Really the issue here isn't negative vs. positive numbers though -
+// numbers are just patterns of bits, and all we care about is that we get the
+// correct pattern of bits out the end. To deal with this, all we need is:
+// * A canonical pattern of bits that we expect to end up with.
+// * The bit width we're trying to fit into.
+// * The bit width we'll be implicitly extended to, e.g.: for ADD r/m64, imm8
+//   the immediate will be extended to 64 bits.
+// * Whether the immediate is sign-extended. This is an important point because
+//   without it we try to put 255 into an 8-bit immediate, and if it's
+//   sign-extended to a larger width we end up with a different value since the
+//   MSB is 1.
+//
+// Then to check if it fits we can do something like this:
+// a = canonical input value
+// b = truncate a to ext_width
+// c = truncate a to imm_width
+// d = sign- or zero-extend c to ext_width
+// a fits iff d == b
+static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
+		u32 imm_width, bool sext)
+{
+	assert(ext_width >= imm_width);
+
 	if (asm_value.t != ASM_VALUE_CONST) {
 		return false;
 	}
@@ -140,20 +172,39 @@ static bool is_const_and_fits(AsmValue asm_value, u32 bits)
 	AsmConst constant = asm_value.u.constant;
 	switch (constant.t) {
 	case ASM_CONST_IMMEDIATE: {
+		// Handle this case specially, as various bitwise calculations are
+		// harder if we don't have any extra bits to work with.
+		if (imm_width == 64)
+			return true;
+
 		u64 imm = constant.u.immediate;
+		u64 canonical_value;
 
-		u64 truncated;
+		if (ext_width == 64) {
+			canonical_value = imm;
+		} else {
+			// Sanity check the truncation - our canonical value should always
+			// fit into ext_width, e.g.: we shouldn't be trying to add 1<<63 to
+			// a 32-bit value. "fitting" here means either the bits we will
+			// truncate are all zero, or they are all one and the MSB is one,
+			// so sign-extension would produce the same value.
+			u64 ext_trunc_bits = imm >> ext_width;
+			assert(ext_trunc_bits == 0
+					|| (ext_trunc_bits == (1ULL << (64 - ext_width)) - 1)
+						&& ((imm >> (ext_width - 1)) & 1) == 1);
 
-		// Handle this case specially, as 1 << 64 - 1 doesn't work to get a 64-bit
-		// mask.
-		if (bits == 64)
-			truncated = imm;
-		else
-			truncated = imm & ((1ull << bits) - 1);
-		return truncated == imm;
+			canonical_value = imm & ((1ULL << ext_width) - 1);
+		}
+
+		u64 truncated = imm & ((1ULL << imm_width) - 1);
+		u64 extended = truncated;
+		if (sext && ((truncated & (1ULL << (imm_width - 1))) != 0)) {
+			extended |= ((1ULL << (ext_width - imm_width)) - 1) << imm_width;
+		}
+		return canonical_value == extended;
 	}
 	case ASM_CONST_GLOBAL:
-		return bits == 64;
+		return imm_width == 64;
 	}
 }
 

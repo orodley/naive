@@ -126,7 +126,9 @@ typedef struct AsmValue
 	X(SETLE), \
 	X(TEST), \
 	X(JMP), \
-	X(JE)
+	X(JE), \
+	X(ADC), \
+	X(SBB)
 
 #define X(x) x
 typedef enum AsmOp
