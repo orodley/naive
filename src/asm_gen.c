@@ -1348,7 +1348,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	builder->current_block = &builder->current_function->epilogue;
 
-	if (builder->local_stack_usage != 0) {
+	if (stack_adjustment != 0) {
 		emit_instr2(builder,
 				ADD,
 				asm_phys_reg(REG_CLASS_SP, 64),
