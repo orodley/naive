@@ -1860,8 +1860,16 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
 		build_branch(builder, pre_header);
 		builder->current_block = pre_header;
-		Term condition_term =
-			ir_gen_expr(builder, env, f->condition, RVALUE_CONTEXT);
+		Term condition_term;
+		if (f->condition != NULL) {
+			condition_term =
+				ir_gen_expr(builder, env, f->condition, RVALUE_CONTEXT);
+		} else {
+			condition_term = (Term) {
+				.value = value_const(c_type_to_ir_type(&env->type_env.int_type), 1),
+				.ctype = &env->type_env.int_type,
+			};
+		}
 
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 		build_cond(builder, condition_term.value, body, after);
