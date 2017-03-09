@@ -13,8 +13,10 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 
 	while (read_so_far != bytes_to_read) {
 		ssize_t read_this_time = read(stream->fd, buf, bytes_to_read);
-		if (read_this_time == -1)
+		if (read_this_time <= 0) {
+			stream->eof = read_this_time == 0;
 			return read_so_far / size;
+		}
 
 		read_so_far += read_this_time;
 		buf += read_this_time;
