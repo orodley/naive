@@ -27,4 +27,6 @@ struct stat
 
 int fstat(int fd, struct stat *buf);
 
+int fchmod(int fd, mode_t mode);
+
 #endif
