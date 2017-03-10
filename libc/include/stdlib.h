@@ -12,4 +12,6 @@ void exit(int status);
 // @TODO: void in arg list
 void abort();
 
+long atol(const char *nptr);
+
 #endif
