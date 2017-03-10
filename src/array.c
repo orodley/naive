@@ -24,7 +24,9 @@ void array_ensure_room(Array_ *array, u32 element_size, u32 count)
 			array->capacity = new_size;
 		}
 
-		array->capacity *= 2;
+		while (new_size > array->capacity) {
+			array->capacity *= 2;
+		}
 		array->elements = realloc(array->elements, array->capacity * element_size);
 	}
 }
