@@ -14,4 +14,8 @@ void abort();
 
 long atol(const char *nptr);
 
+// @TODO: void in arg list
+int rand();
+void srand(unsigned int seed);
+
 #endif
