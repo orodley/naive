@@ -1,11 +1,11 @@
 #include <stddef.h>
 
-void *memcpy(void *dest, const void *src, size_t n)
+void *memcpy(void *_dest, const void *_src, size_t n)
 {
-	unsigned char *dest_bytes = (unsigned char *)dest;
-	unsigned char *src_bytes = (unsigned char *)src;
+	unsigned char *dest = (unsigned char *)_dest;
+	unsigned char *src = (unsigned char *)_src;
 	for (size_t i = 0; i < n; i++) {
-		dest_bytes[i] = src_bytes[i];
+		dest[i] = src[i];
 	}
 
 	return dest;
