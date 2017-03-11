@@ -1958,6 +1958,21 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 		return (Term) { .ctype = selected_field->type, .value = value };
 }
 
+// @TODO: Implement this fully
+void do_arithmetic_conversions(IrBuilder *builder, Term *left, Term *right)
+{
+	assert(left->ctype->t == INTEGER_TYPE && right->ctype->t == INTEGER_TYPE);
+	if (rank(left->ctype) != rank(right->ctype)) {
+		Term *to_convert = rank(left->ctype) < rank(right->ctype) ? left : right;
+		CType *conversion_type =
+			rank(left->ctype) < rank(right->ctype) ? right->ctype : left->ctype;
+		Term converted = convert_type(builder, *to_convert, conversion_type);
+
+		to_convert->value = converted.value;
+		to_convert->ctype = conversion_type;
+	}
+}
+
 static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 {
 	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
@@ -1967,6 +1982,8 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 	bool right_is_pointer = right.ctype->t == POINTER_TYPE;
 
 	if (left.ctype->t == INTEGER_TYPE && right.ctype->t == INTEGER_TYPE) {
+		do_arithmetic_conversions(builder, &left, &right);
+
 		IrValue value = build_binary_instr(builder, OP_ADD, left.value, right.value);
 
 		// @TODO: Determine type correctly
@@ -2019,6 +2036,8 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 	bool right_is_pointer = right.ctype->t == POINTER_TYPE;
 
 	if (left.ctype->t == INTEGER_TYPE && right.ctype->t == INTEGER_TYPE) {
+		do_arithmetic_conversions(builder, &left, &right);
+
 		IrValue value = build_binary_instr(builder, OP_SUB, left.value, right.value);
 
 		// @TODO: Determine type correctly
@@ -2107,17 +2126,7 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	if (!((ir_op == OP_EQ || ir_op == OP_NEQ)
 				&& left.ctype->t == POINTER_TYPE
 				&& right.ctype->t == POINTER_TYPE)) {
-		// @TODO: Proper arithmetic conversions
-		assert(left.ctype->t == INTEGER_TYPE && right.ctype->t == INTEGER_TYPE);
-		if (rank(left.ctype) != rank(right.ctype)) {
-			Term *to_convert = rank(left.ctype) < rank(right.ctype) ? &left : &right;
-			CType *conversion_type =
-				rank(left.ctype) < rank(right.ctype) ? right.ctype : left.ctype;
-			Term converted = convert_type(builder, *to_convert, conversion_type);
-
-			to_convert->value = converted.value;
-			to_convert->ctype = conversion_type;
-		}
+		do_arithmetic_conversions(builder, &left, &right);
 	}
 
 	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
