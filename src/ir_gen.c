@@ -2355,6 +2355,14 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			.ctype = result_type,
 		};
 	}
+	case UNARY_MINUS_EXPR: {
+		Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
+
+		return (Term) {
+			.value = build_unary_instr(builder, OP_NEG, term.value),
+			.ctype = term.ctype,
+		};
+	}
 	case LEFT_SHIFT_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SHL);
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_DIV);

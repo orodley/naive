@@ -143,6 +143,7 @@ typedef struct IrValue
 	X(OP_BIT_AND), \
 	X(OP_BIT_NOT), \
 	X(OP_LOG_NOT), \
+	X(OP_NEG), \
 	X(OP_SHL), \
 	X(OP_MUL), \
 	X(OP_DIV), \

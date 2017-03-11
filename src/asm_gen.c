@@ -733,6 +733,17 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
+	case OP_NEG: {
+		assert(instr->type.t == IR_INT);
+		u8 width = instr->type.u.bit_width;
+
+		AsmValue arg = asm_value(builder, instr->u.arg);
+		emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg);
+		emit_instr1(builder, NEG, asm_vreg(next_vreg(builder), width));
+
+		assign_vreg(builder, instr);
+		break;
+	}
 	// @TODO: This doesn't work in all cases because SHL is weird and can't
 	// take an arbitrary register as the rhs.
 	case OP_SHL: asm_gen_binary_instr(builder, instr, SHL); break;

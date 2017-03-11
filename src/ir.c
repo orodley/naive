@@ -291,6 +291,7 @@ static void dump_instr(IrInstr *instr)
 	case OP_RET_VOID:
 		break;
 	case OP_RET: case OP_BIT_NOT: case OP_LOG_NOT: case OP_BUILTIN_VA_START:
+	case OP_NEG:
 		dump_value(instr->u.arg);
 		break;
 	case OP_CALL:
@@ -469,6 +470,8 @@ static u64 constant_fold_unary_op(IrOp op, u64 arg)
 		return ~arg;
 	case OP_LOG_NOT: 
 		return !arg;
+	case OP_NEG:
+		return -arg;
 	default:
 		assert(constant_foldable(op));
 		UNIMPLEMENTED;

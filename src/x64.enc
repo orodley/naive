@@ -46,6 +46,8 @@ MOVSX r32, r/m8        =         [0F BE] /r
 
 MOVZX r32, r/m8        =         [0F B6] /r
 
+NEG r/m32              =         F7 /3
+
 NOP                    =         90
 
 NOT r/m32              =         F7 /2
