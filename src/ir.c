@@ -635,6 +635,9 @@ IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 a
 
 IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType result_type)
 {
+	if (ir_type_eq(&value.type, &result_type))
+		return value;
+
 	if (value.t == VALUE_CONST) {
 		return value_const(result_type, value.u.constant);
 	}
