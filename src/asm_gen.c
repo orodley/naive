@@ -142,8 +142,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
 	switch (value.t) {
 	case VALUE_CONST:
-		assert((value.u.constant & 0xFFFFFFFF) == value.u.constant);
-		return asm_const(value.u.constant & 0xFFFFFFFF);
+		return asm_const(value.u.constant);
 	case VALUE_INSTR: {
 		IrInstr *instr = value.u.instr;
 
