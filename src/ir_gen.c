@@ -1361,181 +1361,206 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 	};
 }
 
-typedef struct SubObject
+// @TODO: We should special-case zero-initializers, so that we don't need huge
+// amounts of memory to store large zeroed arrays.
+typedef struct CInitializer
 {
-	CType *ctype;
-	ASTExpr *expr;
-	u32 offset;
+	CType *type;
 
-	enum
-	{
-		SUB_OBJECT_ARRAY_ELEM,
-		SUB_OBJECT_STRUCT_FIELD,
-	} t;
 	union
 	{
-		u32 array_index;
-		struct
-		{
-			CType *struct_type;
-			u32 field_index;
-		} struct_field;
+		IrValue leaf_value;
+		struct CInitializer *sub_elems;
 	} u;
-} SubObject;
+} CInitializer;
 
-static void add_sub_objects(IrBuilder *builder, TypeEnv *type_env,
-		Array(SubObject) *sub_objects, u32 starting_offset,
-		CType *aggregate_type, ASTInitializerElement *initializer_element)
+static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
+		CType *type, ASTInitializer *init, bool const_context,
+		CInitializer *c_init)
 {
-	ASTDesignator *designator_list = initializer_element->designator_list;
-	bool no_designators = designator_list == NULL;
-	ASTInitializer *initializer = initializer_element->initializer;
+	c_init->type = type;
 
-	SubObject new_sub_object = {
-		.ctype = aggregate_type,
-		.expr = NULL,
-		.offset = starting_offset,
-	};
-	while (designator_list != NULL) {
-		switch (designator_list->t) {
-		case INDEX_DESIGNATOR: {
-			assert(new_sub_object.ctype->t == ARRAY_TYPE);
-			new_sub_object.ctype = new_sub_object.ctype->u.array.elem_type;
-			IrConst *index = eval_constant_expr(
-					builder, type_env, designator_list->u.index_expr);
-			assert(index->type.t == IR_INT);
+	switch (type->t) {
+	case STRUCT_TYPE: case ARRAY_TYPE: {
+		assert(init->t == BRACE_INITIALIZER);
 
-			new_sub_object.offset += index->u.integer
-				* size_of_ir_type(c_type_to_ir_type(new_sub_object.ctype));
-			break;
-		}
-		case FIELD_DESIGNATOR: {
-			assert(new_sub_object.ctype->t == STRUCT_TYPE);
-			Array(CDecl) *fields = &new_sub_object.ctype->u.strukt.fields;
-			CDecl *selected_field = NULL;
-			u32 field_number;
-			for (u32 i = 0; i < fields->size; i++) {
-				CDecl *field = ARRAY_REF(fields, CDecl, i);
-				if (streq(field->name, designator_list->u.field_name)) {
-					selected_field = field;
-					field_number = i;
+		u32 num_fields;
+		if (type->t == STRUCT_TYPE)
+			num_fields = type->u.strukt.fields.size;
+		else
+			num_fields = type->u.array.size;
+
+		CInitializer *init_elems =
+			pool_alloc(pool, num_fields * sizeof *init_elems);
+		memset(init_elems, 0, num_fields * sizeof *init_elems);
+		c_init->u.sub_elems = init_elems;
+
+		ASTInitializerElement *elems = init->u.initializer_element_list;
+		u32 curr_elem_index = 0;
+		CInitializer *containing_init = c_init;
+		while (elems != NULL) {
+			CInitializer *curr_elem = c_init;
+
+			ASTDesignator *designator_list = elems->designator_list;
+			while (designator_list != NULL) {
+				CType *field_type;
+				switch (designator_list->t) {
+				case FIELD_DESIGNATOR: {
+					assert(curr_elem->type->t == STRUCT_TYPE);
+					Array(CDecl) *fields = &curr_elem->type->u.strukt.fields;
+
+					CDecl *selected_field = NULL;
+					u32 field_number;
+					for (u32 i = 0; i < fields->size; i++) {
+						CDecl *field = ARRAY_REF(fields, CDecl, i);
+						if (streq(field->name, designator_list->u.field_name)) {
+							selected_field = field;
+							field_number = i;
+							break;
+						}
+					}
+					assert(selected_field != NULL);
+
+					field_type = selected_field->type;
+					curr_elem_index = field_number;
+
 					break;
 				}
+				case INDEX_DESIGNATOR: {
+					assert(curr_elem->type->t == ARRAY_TYPE);
+					IrConst *index = eval_constant_expr(builder,
+							&env->type_env, designator_list->u.index_expr);
+					assert(index->type.t == IR_INT);
+
+					field_type = curr_elem->type->u.array.elem_type;
+					curr_elem_index = index->u.integer;
+
+					break;
+				}
+				}
+
+				curr_elem = containing_init->u.sub_elems + curr_elem_index;
+				curr_elem->type = field_type;
+
+				if (curr_elem->type->t == STRUCT_TYPE
+						|| curr_elem->type->t == ARRAY_TYPE) {
+					CInitializer *sub_elems =
+						pool_alloc(pool, num_fields * sizeof *sub_elems);
+					memset(sub_elems, 0, num_fields * sizeof *sub_elems);
+					curr_elem->u.sub_elems = sub_elems;
+				}
+
+				if (designator_list->next != NULL) {
+					containing_init = curr_elem;
+				}
+
+				designator_list = designator_list->next;
 			}
-			assert(selected_field != NULL);
 
-			IrStructField *ir_fields =
-				new_sub_object.ctype->u.strukt.ir_type->u.strukt.fields;
-			new_sub_object.ctype = selected_field->type;
-			new_sub_object.offset += ir_fields[field_number].offset;
-			break;
-		}
-		}
+			curr_elem = containing_init->u.sub_elems + curr_elem_index;
 
-		designator_list = designator_list->next;
-	}
-
-	if (no_designators) {
-		if (sub_objects->size == 0) {
-			switch (aggregate_type->t) {
-			case STRUCT_TYPE: {
-				Array(CDecl) *fields = &aggregate_type->u.strukt.fields;
-				IrStructField *ir_fields =
-					aggregate_type->u.strukt.ir_type->u.strukt.fields;
-				new_sub_object.ctype = ARRAY_REF(fields, CDecl, 0)->type;
-				new_sub_object.offset = ir_fields[0].offset;
-				new_sub_object.t = SUB_OBJECT_STRUCT_FIELD;
-				new_sub_object.u.struct_field.struct_type = aggregate_type;
-				new_sub_object.u.struct_field.field_index = 0;
-				break;
-			}
+			CType *curr_elem_type;
+			switch (containing_init->type->t) {
 			case ARRAY_TYPE:
-				new_sub_object.ctype = aggregate_type->u.array.elem_type;
-				new_sub_object.offset = 0;
-				new_sub_object.t = SUB_OBJECT_ARRAY_ELEM;
-				new_sub_object.u.array_index = 0;
+				curr_elem_type = containing_init->type->u.array.elem_type;
+				break;
+			case STRUCT_TYPE:
+				curr_elem_type =
+					ARRAY_REF(&containing_init->type->u.strukt.fields,
+						CDecl, curr_elem_index)
+					->type;
 				break;
 			default:
 				UNREACHABLE;
 			}
-		} else {
-			SubObject *prev_sub_object =
-				ARRAY_REF(sub_objects, SubObject, sub_objects->size - 1);
-			switch (prev_sub_object->t) {
-			case SUB_OBJECT_ARRAY_ELEM:
-				new_sub_object.ctype = prev_sub_object->ctype;
-				new_sub_object.offset = prev_sub_object->offset
-					+ size_of_ir_type(c_type_to_ir_type(new_sub_object.ctype));
 
-				new_sub_object.t = SUB_OBJECT_ARRAY_ELEM;
-				new_sub_object.u.array_index =
-					prev_sub_object->u.array_index + 1;
-				break;
-			case SUB_OBJECT_STRUCT_FIELD: {
-				Array(CDecl) *fields =
-					&prev_sub_object->u.struct_field.struct_type->u.strukt.fields;
-				IrStructField *ir_fields =
-					new_sub_object.ctype->u.strukt.ir_type->u.strukt.fields;
+			make_c_initializer(builder, env, pool, curr_elem_type,
+					elems->initializer, const_context, curr_elem);
 
-				u32 index = prev_sub_object->u.struct_field.field_index;
-				assert(index + 1 < fields->size);
-				new_sub_object.ctype = ARRAY_REF(fields, CDecl, index + 1)->type;
-				new_sub_object.offset = starting_offset + ir_fields[index + 1].offset;
-
-				new_sub_object.t = SUB_OBJECT_STRUCT_FIELD;
-				new_sub_object.u.struct_field.struct_type =
-					prev_sub_object->u.struct_field.struct_type;
-				new_sub_object.u.struct_field.field_index = index + 1;
-				break;
-			}
-			}
+			curr_elem_index++;
+			elems = elems->next;
 		}
-	}
 
-	switch (initializer->t) {
-	case EXPR_INITIALIZER: {
-		SubObject *sub_object = NULL;
-		for (u32 i = 0; i < sub_objects->size; i++) {
-			SubObject *existing_sub_object =
-				ARRAY_REF(sub_objects, SubObject, i);
-			if (existing_sub_object->offset == new_sub_object.offset) {
-				sub_object = existing_sub_object;
-				break;
-			}
-		}
-		if (sub_object == NULL)
-			sub_object = ARRAY_APPEND(sub_objects, SubObject);
-
-		new_sub_object.expr = initializer->u.expr;
-		*sub_object = new_sub_object;
 		break;
 	}
-	case BRACE_INITIALIZER: {
-		ASTInitializerElement *initializer_element_list =
-			initializer->u.initializer_element_list;
-		while (initializer_element_list != NULL) {
-			add_sub_objects(builder, type_env, sub_objects, new_sub_object.offset,
-					new_sub_object.ctype, initializer_element_list);
-			initializer_element_list = initializer_element_list->next;
+	default: {
+		assert(init->t == EXPR_INITIALIZER);
+		ASTExpr *expr = init->u.expr;
+		IrValue value;
+
+		if (const_context) {
+			IrConst *konst = eval_constant_expr(builder, &env->type_env, expr);
+
+			// @TODO: This would be much nicer if IrValue contained IrConst
+			// instead of just a u64.
+			assert(konst->type.t == IR_INT);
+			assert(type->t == INTEGER_TYPE);
+			value = value_const(konst->type, konst->u.integer);
+		} else {
+			Term term = ir_gen_expr(builder, env, expr, RVALUE_CONTEXT);
+
+			// @TODO: Conversions?
+			assert(c_type_compatible(term.ctype, type));
+			value = convert_type(builder, term, type).value;
 		}
+
+		c_init->u.leaf_value = value;
+	}
+	}
+}
+
+static void ir_gen_c_init(IrBuilder *builder, IrValue base_ptr,
+		CInitializer *c_init, u32 current_offset)
+{
+	CType *type = c_init->type;
+	if (type == NULL)
+		return;
+
+	switch (type->t) {
+	case ARRAY_TYPE: {
+		assert(!type->u.array.incomplete);
+		u32 elem_size =
+			size_of_ir_type(c_type_to_ir_type(type->u.array.elem_type));
+
+		for (u32 i = 0; i < type->u.array.size; i++) {
+			ir_gen_c_init(builder, base_ptr, c_init->u.sub_elems + i,
+					current_offset);
+			current_offset += elem_size;
+		}
+		break;
+	}
+	case STRUCT_TYPE:
+		for (u32 i = 0; i < type->u.strukt.fields.size; i++) {
+			ir_gen_c_init(builder, base_ptr, c_init->u.sub_elems + i,
+					current_offset);
+			CType *field_type =
+				ARRAY_REF(&type->u.strukt.fields, CDecl, i)->type;
+
+			current_offset += size_of_ir_type(c_type_to_ir_type(field_type));
+		}
+		break;
+
+	default: {
+		IrType int_ptr_type = (IrType) { .t = IR_INT, .u.bit_width = 64 };
+		IrValue field_ptr = build_binary_instr(builder, OP_ADD,
+				base_ptr, value_const(int_ptr_type, current_offset));
+		build_store(builder, field_ptr, c_init->u.leaf_value,
+				c_type_to_ir_type(type));
 		break;
 	}
 	}
 }
 
 static void ir_gen_initializer(IrBuilder *builder, Env *env,
-		Term to_init, ASTInitializerElement *initializer_element_list)
+		Term to_init, ASTInitializer *init)
 {
-	Array(SubObject) sub_objects;
-	ARRAY_INIT(&sub_objects, SubObject, 5);
+	Pool c_init_pool;
+	pool_init(&c_init_pool, sizeof(CInitializer) * 5);
 
-	// @TODO: There should be a better way to structure this such that we don't
-	// need to duplicate the handling of brace initializers.
-	while (initializer_element_list != NULL) {
-		add_sub_objects(builder, &env->type_env, &sub_objects, 0, to_init.ctype,
-				initializer_element_list);
-		initializer_element_list = initializer_element_list->next;
-	}
+	CInitializer c_init;
+	ZERO_STRUCT(&c_init);
+	make_c_initializer(
+			builder, env, &c_init_pool, to_init.ctype, init, false, &c_init);
 
 	IrValue *memset_args = pool_alloc(&builder->trans_unit->pool,
 			3 * sizeof *memset_args);
@@ -1552,19 +1577,11 @@ static void ir_gen_initializer(IrBuilder *builder, Env *env,
 	// @TODO: Sort initializer element list by offset because something
 	// something cache something something.
 
-	IrType int_ptr_type = (IrType) { .t = IR_INT, .u.bit_width = 64 };
-	IrValue int_ptr = build_type_instr(builder, OP_CAST, to_init.value, int_ptr_type);
-	for (u32 i = 0; i < sub_objects.size; i++) {
-		SubObject *sub_object = ARRAY_REF(&sub_objects, SubObject, i);
-		IrValue ptr = build_binary_instr(builder, OP_ADD,
-				int_ptr, value_const(int_ptr_type, sub_object->offset));
-		Term val = ir_gen_expr(builder, env, sub_object->expr, RVALUE_CONTEXT);
-		assert(c_type_compatible(val.ctype, sub_object->ctype));
-		build_store(builder, ptr, convert_type(builder, val, sub_object->ctype).value,
-				c_type_to_ir_type(val.ctype));
-	}
+	IrValue base_ptr = build_type_instr(builder, OP_CAST, to_init.value,
+			(IrType) { .t = IR_INT, .u.bit_width = 64 });
+	ir_gen_c_init(builder, base_ptr, &c_init, 0);
 
-	array_free(&sub_objects);
+	pool_free(&c_init_pool);
 }
 
 static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
@@ -1597,8 +1614,7 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 				ir_gen_assign_op(builder, env,
 						binding->term, init_term, OP_INVALID, NULL);
 			} else {
-				ir_gen_initializer(builder, env, binding->term,
-						initializer->u.initializer_element_list);
+				ir_gen_initializer(builder, env, binding->term, initializer);
 			}
 		}
 
@@ -2591,8 +2607,13 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrValue local = build_local(builder, c_type_to_ir_type(type));
 		Term compound_value = { .value = local, .ctype = type };
 
-		ir_gen_initializer(builder, env, compound_value,
-				expr->u.compound.initializer_element_list);
+		ASTInitializer initializer = {
+			.t = BRACE_INITIALIZER,
+			.u.initializer_element_list
+				= expr->u.compound.initializer_element_list,
+		};
+
+		ir_gen_initializer(builder, env, compound_value, &initializer);
 
 		return compound_value;
 	}
