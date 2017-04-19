@@ -900,6 +900,62 @@ static void cdecl_to_binding(IrBuilder *builder, CDecl *cdecl, Binding *binding)
 	binding->term.value = build_local(builder, ir_type);
 }
 
+static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
+{
+	if (c_type_eq(term.ctype, target_type))
+		return term;
+
+	IrValue converted;
+	if (term.ctype->t == INTEGER_TYPE && target_type->t == INTEGER_TYPE) {
+		IrType ir_type = c_type_to_ir_type(target_type);
+
+		if (c_type_to_ir_type(term.ctype).u.bit_width > ir_type.u.bit_width) {
+			converted = build_type_instr(builder, OP_TRUNC, term.value, ir_type);
+		} else if (term.ctype->u.integer.is_signed) {
+			converted = build_type_instr(builder, OP_SEXT, term.value, ir_type);
+		} else {
+			converted = build_type_instr(builder, OP_ZEXT, term.value, ir_type);
+		}
+	} else if (term.ctype->t == INTEGER_TYPE && target_type->t == POINTER_TYPE) {
+		u32 width = c_type_to_ir_type(term.ctype).u.bit_width;
+
+		IrValue value = term.value;
+		if (width < 64) {
+			value = build_type_instr(builder, OP_ZEXT, term.value,
+					(IrType) { .t = IR_INT, .u.bit_width = 64 });
+		} else {
+			assert(width == 64);
+		}
+
+		converted = build_type_instr(
+				builder, OP_CAST, value, c_type_to_ir_type(target_type));
+	} else if (term.ctype->t == POINTER_TYPE && target_type->t == POINTER_TYPE) {
+		converted = term.value;
+	} else if (term.ctype->t == ARRAY_TYPE && target_type->t == POINTER_TYPE) {
+		// Array values are only ever passed around as pointers to the first
+		// element anyway, so this conversion is a no-op that just changes type.
+		assert(term.value.type.t == IR_POINTER);
+		converted = term.value;
+	} else if (target_type->t == POINTER_TYPE
+			&& term.ctype->t == FUNCTION_TYPE
+			&& c_type_eq(target_type->u.pointee_type, term.ctype)) {
+		// Implicit conversion from function to pointer-to-function.
+		converted = term.value;
+	} else if (target_type->t == VOID_TYPE) {
+		// Converting to void does nothing. The resulting value can't possibly
+		// be used (since it has type void) so it doesn't actually matter what
+		// that value is as long as the conversion doesn't cause side effects.
+		converted = term.value;
+	} else {
+		UNIMPLEMENTED;
+	}
+
+	return (Term) {
+		.ctype = target_type,
+		.value = converted,
+	};
+}
+
 static inline IrBlock *add_block(IrBuilder *builder, char *name)
 {
 	return add_block_to_function(builder->trans_unit, builder->current_function, name);
@@ -1024,341 +1080,6 @@ static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 	default:
 		UNIMPLEMENTED;
 	}
-}
-
-static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
-		Term right, IrOp ir_op, Term *pre_assign_value);
-
-void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
-		CType *function_type, ASTFunctionDef *function_def)
-{
-	IrConst *konst = add_init_to_function(builder->trans_unit, global);
-	IrFunction *function = &konst->u.function;
-
-	builder->current_function = function;
-	builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
-
-	Scope scope;
-	scope.parent_scope = env->scope;
-	Array(Binding) *param_bindings = &scope.bindings;
-	ARRAY_INIT(param_bindings, Binding, 5);
-	env->scope = &scope;
-
-	env->current_function_type = function_type;
-
-	// @TODO: We shouldn't have to re-process all of the parameter decls.
-	// At the moment we have to because we throw away the name of the
-	// parameter when parsing function parameter declarators, since
-	// this has nothing to do with the type.
-	ASTParameterDecl *param =
-		params_for_function_declarator(function_def->declarator);
-	for (u32 i = 0; param != NULL; i++, param = param->next) {
-		if (param->t == ELLIPSIS_DECL) {
-			assert(param->next == NULL);
-			continue;
-		}
-
-		Binding *binding = ARRAY_APPEND(param_bindings, Binding);
-
-		CType *decl_spec_type = decl_specifier_list_to_c_type(
-				builder, env, param->decl_specifier_list);
-		CDecl cdecl;
-		decl_to_cdecl(builder, env, decl_spec_type,
-				param->declarator, &cdecl);
-		// @HACK: We have to do this because decl_to_cdecl does extra
-		// stuff to adjust parameter types when it knows that the
-		// declarator is for a parameter. The proper fix is just to not
-		// re-process at all.
-		cdecl.type = function_type->u.function.arg_type_array[i];
-		cdecl_to_binding(builder, &cdecl, binding);
-
-		Term arg = {
-			.ctype = cdecl.type,
-			.value = value_arg(i, global->type.u.function.arg_types[i]),
-		};
-		ir_gen_assign_op(builder, env, binding->term, arg, OP_INVALID, NULL);
-	}
-
-	ir_gen_statement(builder, env, function_def->body);
-
-	if (function_type->u.function.return_type->t == VOID_TYPE)
-		build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
-
-	env->scope = env->scope->parent_scope;
-	array_free(param_bindings);
-}
-
-void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
-{
-	Scope global_scope;
-	global_scope.parent_scope = NULL;
-	Array(Binding)* global_bindings = &global_scope.bindings;
-	ARRAY_INIT(global_bindings, Binding, 10);
-
-	Env env;
-	init_type_env(&env.type_env);
-	env.scope = &global_scope;
-	env.current_function_type = NULL;
-	env.inline_functions = EMPTY_ARRAY;
-	env.case_labels = EMPTY_ARRAY;
-	env.goto_labels = EMPTY_ARRAY;
-	env.goto_fixups = EMPTY_ARRAY;
-	env.break_target = NULL;
-	env.continue_target = NULL;
-
-	while (toplevel != NULL) {
-		IrGlobal *global = NULL;
-		CType *global_type;
-		ZERO_STRUCT(&global_type);
-
-		switch (toplevel->t) {
-		case FUNCTION_DEF: {
-			ASTFunctionDef *func = toplevel->u.function_def;
-			ASTDeclSpecifier *decl_specifier_list = func->decl_specifier_list;
-
-			IrLinkage linkage = IR_GLOBAL_LINKAGE;
-			while (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER) {
-				switch (decl_specifier_list->u.storage_class_specifier) {
-				case STATIC_SPECIFIER:
-					linkage = IR_LOCAL_LINKAGE;
-					break;
-				default:
-					UNIMPLEMENTED;
-				}
-
-				decl_specifier_list = decl_specifier_list->next;
-			}
-
-			bool is_inline = false;
-			while (decl_specifier_list != NULL
-					&& decl_specifier_list->t == FUNCTION_SPECIFIER
-					&& decl_specifier_list->u.function_specifier == INLINE_SPECIFIER) {
-				is_inline = true;
-				decl_specifier_list = decl_specifier_list->next;
-			}
-
-			ASTDeclarator *declarator = func->declarator;
-
-			global = ir_global_for_decl(builder, &env, decl_specifier_list,
-					declarator, &global_type);
-			global->linkage = linkage;
-
-			if (is_inline) {
-				*ARRAY_APPEND(&env.inline_functions, InlineFunction) =
-					(InlineFunction) {
-						.global = global,
-						.function_type = global_type,
-						.function_def = {
-							.decl_specifier_list = decl_specifier_list,
-							.declarator = declarator,
-							.old_style_param_decl_list =
-								func->old_style_param_decl_list,
-							.body = func->body,
-						},
-					};
-			} else {
-				ir_gen_function(builder, &env, global, global_type, func);
-			}
-
-			break;
-		}
-		case DECL: {
-			ASTDecl *decl = toplevel->u.decl;
-			ASTDeclSpecifier *decl_specifier_list = decl->decl_specifier_list;
-			ASTInitDeclarator *init_declarator = decl->init_declarators;
-			assert(decl_specifier_list != NULL);
-
-			if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
-					&& decl_specifier_list->u.storage_class_specifier == EXTERN_SPECIFIER
-					&& decl_specifier_list->next != NULL
-					&& decl_specifier_list->next->t == FUNCTION_SPECIFIER
-					&& decl_specifier_list->next->u.function_specifier == INLINE_SPECIFIER) {
-				decl_specifier_list = decl_specifier_list->next->next;
-
-				CType *decl_spec_type = decl_specifier_list_to_c_type(
-						builder, &env, decl_specifier_list);
-				CDecl cdecl;
-				decl_to_cdecl(builder, &env, decl_spec_type,
-						init_declarator->declarator, &cdecl);
-
-				InlineFunction *matching = NULL;
-
-				for (u32 i = 0; i < env.inline_functions.size; i++) {
-					InlineFunction *inline_function =
-						ARRAY_REF(&env.inline_functions, InlineFunction, i);
-					if (streq(inline_function->global->name, cdecl.name)) {
-						assert(c_type_eq(cdecl.type, inline_function->function_type));
-						matching = inline_function;
-						break;
-					}
-				}
-				assert(matching != NULL);
-
-				ir_gen_function(builder, &env, matching->global,
-						matching->function_type, &matching->function_def);
-			} else if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
-					&& decl_specifier_list->u.storage_class_specifier == TYPEDEF_SPECIFIER) {
-				assert(init_declarator != NULL);
-				decl_specifier_list = decl_specifier_list->next;
-				CType *decl_spec_type = decl_specifier_list_to_c_type(
-						builder, &env, decl_specifier_list);
-
-				while (init_declarator != NULL) {
-					assert(init_declarator->initializer == NULL);
-					CDecl cdecl;
-					decl_to_cdecl(builder, &env, decl_spec_type,
-							init_declarator->declarator, &cdecl);
-
-					TypeEnvEntry *new_type_alias =
-						pool_alloc(&env.type_env.pool, sizeof *new_type_alias);
-					*ARRAY_APPEND(&env.type_env.typedef_types, TypeEnvEntry *)
-						= new_type_alias;
-					new_type_alias->name = cdecl.name;
-					new_type_alias->type = *cdecl.type;
-
-					init_declarator = init_declarator->next;
-				}
-			} else {
-				ASTDeclSpecifier *type_specs = decl_specifier_list;
-				while (type_specs->t == STORAGE_CLASS_SPECIFIER) {
-					type_specs = type_specs->next;
-				}
-
-				if (init_declarator == NULL) {
-					decl_specifier_list_to_c_type(builder, &env, type_specs);
-				} else {
-					assert(init_declarator->next == NULL);
-					ASTDeclarator *declarator = init_declarator->declarator;
-
-					// @TODO: Multiple declarators in one global decl.
-					global = ir_global_for_decl(builder, &env, type_specs,
-							declarator, &global_type);
-					bool is_extern = global_type->t == FUNCTION_TYPE;
-
-					global->linkage = IR_GLOBAL_LINKAGE;
-					while (decl_specifier_list != type_specs) {
-						assert(decl_specifier_list->t == STORAGE_CLASS_SPECIFIER);
-						ASTStorageClassSpecifier storage_class =
-							decl_specifier_list->u.storage_class_specifier;
-						if (storage_class == STATIC_SPECIFIER)
-							global->linkage = IR_LOCAL_LINKAGE;
-						else if (storage_class == EXTERN_SPECIFIER)
-							is_extern = true;
-						else
-							UNIMPLEMENTED;
-
-						decl_specifier_list = decl_specifier_list->next;
-					}
-
-					ASTInitializer *init = init_declarator->initializer;
-					if (init == NULL) {
-						if (!is_extern) {
-							global->initializer =
-								zero_initializer(builder, global_type);
-						}
-					} else {
-						assert(!is_extern);
-						assert(init->t == EXPR_INITIALIZER);
-						global->initializer = eval_constant_expr(
-								builder, &env.type_env, init->u.expr);
-					}
-				}
-			}
-
-			break;
-		}
-		}
-
-		if (global != NULL) {
-			Binding *binding = ARRAY_APPEND(global_bindings, Binding);
-			binding->name = global->name;
-			binding->constant = false;
-			binding->term.ctype = global_type;
-			binding->term.value = value_global(global);
-		}
-
-		toplevel = toplevel->next;
-	}
-
-	for (u32 i = 0; i < env.goto_fixups.size; i++) {
-		GotoFixup *fixup = ARRAY_REF(&env.goto_fixups, GotoFixup, i);
-		assert(fixup->instr->op == OP_BRANCH);
-		assert(fixup->instr->u.target_block == NULL);
-
-		for (u32 j = 0; j < env.goto_labels.size; j++) {
-			GotoLabel *label = ARRAY_REF(&env.goto_labels, GotoLabel, j);
-			if (streq(label->name, fixup->label_name)) {
-				fixup->instr->u.target_block = label->block;
-				break;
-			}
-		}
-		assert(fixup->instr->u.target_block != NULL);
-	}
-
-	pool_free(&env.type_env.pool);
-	array_free(&env.goto_labels);
-	array_free(&env.goto_fixups);
-	array_free(&env.type_env.struct_types);
-	array_free(&env.type_env.union_types);
-	array_free(&env.type_env.enum_types);
-	array_free(&env.type_env.typedef_types);
-	array_free(global_bindings);
-}
-
-static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
-{
-	if (c_type_eq(term.ctype, target_type))
-		return term;
-
-	IrValue converted;
-	if (term.ctype->t == INTEGER_TYPE && target_type->t == INTEGER_TYPE) {
-		IrType ir_type = c_type_to_ir_type(target_type);
-
-		if (c_type_to_ir_type(term.ctype).u.bit_width > ir_type.u.bit_width) {
-			converted = build_type_instr(builder, OP_TRUNC, term.value, ir_type);
-		} else if (term.ctype->u.integer.is_signed) {
-			converted = build_type_instr(builder, OP_SEXT, term.value, ir_type);
-		} else {
-			converted = build_type_instr(builder, OP_ZEXT, term.value, ir_type);
-		}
-	} else if (term.ctype->t == INTEGER_TYPE && target_type->t == POINTER_TYPE) {
-		u32 width = c_type_to_ir_type(term.ctype).u.bit_width;
-
-		IrValue value = term.value;
-		if (width < 64) {
-			value = build_type_instr(builder, OP_ZEXT, term.value,
-					(IrType) { .t = IR_INT, .u.bit_width = 64 });
-		} else {
-			assert(width == 64);
-		}
-
-		converted = build_type_instr(
-				builder, OP_CAST, value, c_type_to_ir_type(target_type));
-	} else if (term.ctype->t == POINTER_TYPE && target_type->t == POINTER_TYPE) {
-		converted = term.value;
-	} else if (term.ctype->t == ARRAY_TYPE && target_type->t == POINTER_TYPE) {
-		// Array values are only ever passed around as pointers to the first
-		// element anyway, so this conversion is a no-op that just changes type.
-		assert(term.value.type.t == IR_POINTER);
-		converted = term.value;
-	} else if (target_type->t == POINTER_TYPE
-			&& term.ctype->t == FUNCTION_TYPE
-			&& c_type_eq(target_type->u.pointee_type, term.ctype)) {
-		// Implicit conversion from function to pointer-to-function.
-		converted = term.value;
-	} else if (target_type->t == VOID_TYPE) {
-		// Converting to void does nothing. The resulting value can't possibly
-		// be used (since it has type void) so it doesn't actually matter what
-		// that value is as long as the conversion doesn't cause side effects.
-		converted = term.value;
-	} else {
-		UNIMPLEMENTED;
-	}
-
-	return (Term) {
-		.ctype = target_type,
-		.value = converted,
-	};
 }
 
 // @TODO: We should special-case zero-initializers, so that we don't need huge
@@ -1549,6 +1270,340 @@ static void ir_gen_c_init(IrBuilder *builder, IrValue base_ptr,
 		break;
 	}
 	}
+}
+
+static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
+		Term right, IrOp ir_op, Term *pre_assign_value);
+
+void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
+		CType *function_type, ASTFunctionDef *function_def)
+{
+	IrConst *konst = add_init_to_function(builder->trans_unit, global);
+	IrFunction *function = &konst->u.function;
+
+	builder->current_function = function;
+	builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
+
+	Scope scope;
+	scope.parent_scope = env->scope;
+	Array(Binding) *param_bindings = &scope.bindings;
+	ARRAY_INIT(param_bindings, Binding, 5);
+	env->scope = &scope;
+
+	env->current_function_type = function_type;
+
+	// @TODO: We shouldn't have to re-process all of the parameter decls.
+	// At the moment we have to because we throw away the name of the
+	// parameter when parsing function parameter declarators, since
+	// this has nothing to do with the type.
+	ASTParameterDecl *param =
+		params_for_function_declarator(function_def->declarator);
+	for (u32 i = 0; param != NULL; i++, param = param->next) {
+		if (param->t == ELLIPSIS_DECL) {
+			assert(param->next == NULL);
+			continue;
+		}
+
+		Binding *binding = ARRAY_APPEND(param_bindings, Binding);
+
+		CType *decl_spec_type = decl_specifier_list_to_c_type(
+				builder, env, param->decl_specifier_list);
+		CDecl cdecl;
+		decl_to_cdecl(builder, env, decl_spec_type,
+				param->declarator, &cdecl);
+		// @HACK: We have to do this because decl_to_cdecl does extra
+		// stuff to adjust parameter types when it knows that the
+		// declarator is for a parameter. The proper fix is just to not
+		// re-process at all.
+		cdecl.type = function_type->u.function.arg_type_array[i];
+		cdecl_to_binding(builder, &cdecl, binding);
+
+		Term arg = {
+			.ctype = cdecl.type,
+			.value = value_arg(i, global->type.u.function.arg_types[i]),
+		};
+		ir_gen_assign_op(builder, env, binding->term, arg, OP_INVALID, NULL);
+	}
+
+	ir_gen_statement(builder, env, function_def->body);
+
+	if (function_type->u.function.return_type->t == VOID_TYPE)
+		build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
+
+	env->scope = env->scope->parent_scope;
+	array_free(param_bindings);
+}
+
+IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
+{
+	CType *type = c_init->type;
+	assert(type != NULL);
+	switch (type->t) {
+	case STRUCT_TYPE: {
+		IrConst *c = add_struct_const(builder, *type->u.strukt.ir_type);
+		Array(CDecl) *fields = &type->u.strukt.fields;
+		for (u32 i = 0; i < fields->size; i++) {
+			CType *field_type = ARRAY_REF(fields, CDecl, i)->type;
+			CInitializer *sub_init = c_init->u.sub_elems + i;
+
+			if (sub_init->type == NULL) {
+				c->u.struct_fields[i] = *zero_initializer(builder, field_type);
+			} else {
+				c->u.struct_fields[i] = *const_gen_c_init(builder, sub_init);
+			}
+		}
+
+		return c;
+	}
+	case ARRAY_TYPE: {
+		IrConst *c = add_array_const(builder, *type->u.array.ir_type);
+		CType *elem_type = type->u.array.elem_type;
+		for (u32 i = 0; i < type->u.array.size; i++) {
+			CInitializer *sub_init = c_init->u.sub_elems + i;
+
+			if (sub_init->type == NULL) {
+				c->u.array_elems[i] = *zero_initializer(builder, elem_type);
+			} else {
+				c->u.array_elems[i] = *const_gen_c_init(builder, sub_init);
+			}
+		}
+
+		return c;
+	}
+	case INTEGER_TYPE: {
+		IrValue value = c_init->u.leaf_value;
+		assert(value.type.t == IR_INT);
+		return add_int_const(builder, c_type_to_ir_type(type), value.u.constant);
+	}
+	default:
+		UNIMPLEMENTED;
+	}
+}
+
+void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
+{
+	Scope global_scope;
+	global_scope.parent_scope = NULL;
+	Array(Binding)* global_bindings = &global_scope.bindings;
+	ARRAY_INIT(global_bindings, Binding, 10);
+
+	Env env;
+	init_type_env(&env.type_env);
+	env.scope = &global_scope;
+	env.current_function_type = NULL;
+	env.inline_functions = EMPTY_ARRAY;
+	env.case_labels = EMPTY_ARRAY;
+	env.goto_labels = EMPTY_ARRAY;
+	env.goto_fixups = EMPTY_ARRAY;
+	env.break_target = NULL;
+	env.continue_target = NULL;
+
+	while (toplevel != NULL) {
+		IrGlobal *global = NULL;
+		CType *global_type;
+		ZERO_STRUCT(&global_type);
+
+		switch (toplevel->t) {
+		case FUNCTION_DEF: {
+			ASTFunctionDef *func = toplevel->u.function_def;
+			ASTDeclSpecifier *decl_specifier_list = func->decl_specifier_list;
+
+			IrLinkage linkage = IR_GLOBAL_LINKAGE;
+			while (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER) {
+				switch (decl_specifier_list->u.storage_class_specifier) {
+				case STATIC_SPECIFIER:
+					linkage = IR_LOCAL_LINKAGE;
+					break;
+				default:
+					UNIMPLEMENTED;
+				}
+
+				decl_specifier_list = decl_specifier_list->next;
+			}
+
+			bool is_inline = false;
+			while (decl_specifier_list != NULL
+					&& decl_specifier_list->t == FUNCTION_SPECIFIER
+					&& decl_specifier_list->u.function_specifier == INLINE_SPECIFIER) {
+				is_inline = true;
+				decl_specifier_list = decl_specifier_list->next;
+			}
+
+			ASTDeclarator *declarator = func->declarator;
+
+			global = ir_global_for_decl(builder, &env, decl_specifier_list,
+					declarator, &global_type);
+			global->linkage = linkage;
+
+			if (is_inline) {
+				*ARRAY_APPEND(&env.inline_functions, InlineFunction) =
+					(InlineFunction) {
+						.global = global,
+						.function_type = global_type,
+						.function_def = {
+							.decl_specifier_list = decl_specifier_list,
+							.declarator = declarator,
+							.old_style_param_decl_list =
+								func->old_style_param_decl_list,
+							.body = func->body,
+						},
+					};
+			} else {
+				ir_gen_function(builder, &env, global, global_type, func);
+			}
+
+			break;
+		}
+		case DECL: {
+			ASTDecl *decl = toplevel->u.decl;
+			ASTDeclSpecifier *decl_specifier_list = decl->decl_specifier_list;
+			ASTInitDeclarator *init_declarator = decl->init_declarators;
+			assert(decl_specifier_list != NULL);
+
+			if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
+					&& decl_specifier_list->u.storage_class_specifier == EXTERN_SPECIFIER
+					&& decl_specifier_list->next != NULL
+					&& decl_specifier_list->next->t == FUNCTION_SPECIFIER
+					&& decl_specifier_list->next->u.function_specifier == INLINE_SPECIFIER) {
+				decl_specifier_list = decl_specifier_list->next->next;
+
+				CType *decl_spec_type = decl_specifier_list_to_c_type(
+						builder, &env, decl_specifier_list);
+				CDecl cdecl;
+				decl_to_cdecl(builder, &env, decl_spec_type,
+						init_declarator->declarator, &cdecl);
+
+				InlineFunction *matching = NULL;
+
+				for (u32 i = 0; i < env.inline_functions.size; i++) {
+					InlineFunction *inline_function =
+						ARRAY_REF(&env.inline_functions, InlineFunction, i);
+					if (streq(inline_function->global->name, cdecl.name)) {
+						assert(c_type_eq(cdecl.type, inline_function->function_type));
+						matching = inline_function;
+						break;
+					}
+				}
+				assert(matching != NULL);
+
+				ir_gen_function(builder, &env, matching->global,
+						matching->function_type, &matching->function_def);
+			} else if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
+					&& decl_specifier_list->u.storage_class_specifier == TYPEDEF_SPECIFIER) {
+				assert(init_declarator != NULL);
+				decl_specifier_list = decl_specifier_list->next;
+				CType *decl_spec_type = decl_specifier_list_to_c_type(
+						builder, &env, decl_specifier_list);
+
+				while (init_declarator != NULL) {
+					assert(init_declarator->initializer == NULL);
+					CDecl cdecl;
+					decl_to_cdecl(builder, &env, decl_spec_type,
+							init_declarator->declarator, &cdecl);
+
+					TypeEnvEntry *new_type_alias =
+						pool_alloc(&env.type_env.pool, sizeof *new_type_alias);
+					*ARRAY_APPEND(&env.type_env.typedef_types, TypeEnvEntry *)
+						= new_type_alias;
+					new_type_alias->name = cdecl.name;
+					new_type_alias->type = *cdecl.type;
+
+					init_declarator = init_declarator->next;
+				}
+			} else {
+				ASTDeclSpecifier *type_specs = decl_specifier_list;
+				while (type_specs->t == STORAGE_CLASS_SPECIFIER) {
+					type_specs = type_specs->next;
+				}
+
+				if (init_declarator == NULL) {
+					decl_specifier_list_to_c_type(builder, &env, type_specs);
+				} else {
+					assert(init_declarator->next == NULL);
+					ASTDeclarator *declarator = init_declarator->declarator;
+
+					// @TODO: Multiple declarators in one global decl.
+					global = ir_global_for_decl(builder, &env, type_specs,
+							declarator, &global_type);
+					bool is_extern = global_type->t == FUNCTION_TYPE;
+
+					global->linkage = IR_GLOBAL_LINKAGE;
+					while (decl_specifier_list != type_specs) {
+						assert(decl_specifier_list->t == STORAGE_CLASS_SPECIFIER);
+						ASTStorageClassSpecifier storage_class =
+							decl_specifier_list->u.storage_class_specifier;
+						if (storage_class == STATIC_SPECIFIER)
+							global->linkage = IR_LOCAL_LINKAGE;
+						else if (storage_class == EXTERN_SPECIFIER)
+							is_extern = true;
+						else
+							UNIMPLEMENTED;
+
+						decl_specifier_list = decl_specifier_list->next;
+					}
+
+					ASTInitializer *init = init_declarator->initializer;
+					if (init == NULL) {
+						if (!is_extern) {
+							global->initializer =
+								zero_initializer(builder, global_type);
+						}
+					} else {
+						assert(!is_extern);
+
+						Pool c_init_pool;
+						pool_init(&c_init_pool, sizeof(CInitializer) * 5);
+
+						CInitializer c_init;
+						make_c_initializer(builder, &env, &c_init_pool,
+								global_type, init, true, &c_init);
+						assert(c_type_eq(c_init.type, global_type));
+
+						global->initializer =
+							const_gen_c_init(builder, &c_init);
+						pool_free(&c_init_pool);
+					}
+				}
+			}
+
+			break;
+		}
+		}
+
+		if (global != NULL) {
+			Binding *binding = ARRAY_APPEND(global_bindings, Binding);
+			binding->name = global->name;
+			binding->constant = false;
+			binding->term.ctype = global_type;
+			binding->term.value = value_global(global);
+		}
+
+		toplevel = toplevel->next;
+	}
+
+	for (u32 i = 0; i < env.goto_fixups.size; i++) {
+		GotoFixup *fixup = ARRAY_REF(&env.goto_fixups, GotoFixup, i);
+		assert(fixup->instr->op == OP_BRANCH);
+		assert(fixup->instr->u.target_block == NULL);
+
+		for (u32 j = 0; j < env.goto_labels.size; j++) {
+			GotoLabel *label = ARRAY_REF(&env.goto_labels, GotoLabel, j);
+			if (streq(label->name, fixup->label_name)) {
+				fixup->instr->u.target_block = label->block;
+				break;
+			}
+		}
+		assert(fixup->instr->u.target_block != NULL);
+	}
+
+	pool_free(&env.type_env.pool);
+	array_free(&env.goto_labels);
+	array_free(&env.goto_fixups);
+	array_free(&env.type_env.struct_types);
+	array_free(&env.type_env.union_types);
+	array_free(&env.type_env.enum_types);
+	array_free(&env.type_env.typedef_types);
+	array_free(global_bindings);
 }
 
 static void ir_gen_initializer(IrBuilder *builder, Env *env,
