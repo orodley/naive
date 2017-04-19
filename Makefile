@@ -13,7 +13,7 @@ LIBC_CFLAGS := -fno-asynchronous-unwind-tables -ffreestanding -fno-common \
 
 ifneq (, $(shell which ccache))
 	ifeq ($(CC), clang)
-		CFLAGS += -fcolor-diagnostics -Wno-parentheses-equality
+		COMMON_CFLAGS += -fcolor-diagnostics -Wno-parentheses-equality
 	endif
 
 	# CCACHE_CPP2 prevents warnings from compiling pre-preproccessed files
