@@ -148,6 +148,11 @@ static IrType c_type_to_ir_type(CType *ctype)
 	}
 }
 
+u32 size_of_c_type(CType *type)
+{
+	return size_of_ir_type(c_type_to_ir_type(type));
+}
+
 static u8 rank(CType *type)
 {
 	assert(type->t == INTEGER_TYPE);
@@ -1240,8 +1245,7 @@ static void ir_gen_c_init(IrBuilder *builder, IrValue base_ptr,
 	switch (type->t) {
 	case ARRAY_TYPE: {
 		assert(!type->u.array.incomplete);
-		u32 elem_size =
-			size_of_ir_type(c_type_to_ir_type(type->u.array.elem_type));
+		u32 elem_size = size_of_c_type(type->u.array.elem_type);
 
 		for (u32 i = 0; i < type->u.array.size; i++) {
 			ir_gen_c_init(builder, base_ptr, c_init->u.sub_elems + i,
@@ -1257,7 +1261,7 @@ static void ir_gen_c_init(IrBuilder *builder, IrValue base_ptr,
 			CType *field_type =
 				ARRAY_REF(&type->u.strukt.fields, CDecl, i)->type;
 
-			current_offset += size_of_ir_type(c_type_to_ir_type(field_type));
+			current_offset += size_of_c_type(field_type);
 		}
 		break;
 
@@ -1623,7 +1627,7 @@ static void ir_gen_initializer(IrBuilder *builder, Env *env,
 	memset_args[1] = value_const(c_type_to_ir_type(&env->type_env.int_type), 0);
 		// @TODO: Don't hardcode size_t!
 	memset_args[2] = value_const((IrType) { .t = IR_INT, .u.bit_width = 64 },
-			size_of_ir_type(c_type_to_ir_type(to_init.ctype)));
+			size_of_c_type(to_init.ctype));
 
 	// @TODO: Open-code this for small sizes
 	build_call(builder, builtin_memset(builder),
@@ -2082,8 +2086,7 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 				builder,
 				OP_MUL,
 				zext,
-				value_const(pointer_int_type,
-					size_of_ir_type(c_type_to_ir_type(pointee_type))));
+				value_const(pointer_int_type, size_of_c_type(pointee_type)));
 
 		IrValue sum = build_binary_instr(builder, OP_ADD, ptr_to_int, addend);
 		IrValue int_to_ptr = build_type_instr(builder, OP_CAST, sum,
@@ -2137,8 +2140,7 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 				builder,
 				OP_DIV,
 				cast,
-				value_const(cast.type,
-					size_of_ir_type(c_type_to_ir_type(pointee_type))));
+				value_const(cast.type, size_of_c_type(pointee_type)));
 
 		return (Term) {
 			.ctype = result_c_type,
@@ -2164,8 +2166,7 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 				builder,
 				OP_MUL,
 				zext,
-				value_const(pointer_int_type,
-					size_of_ir_type(c_type_to_ir_type(pointee_type))));
+				value_const(pointer_int_type, size_of_c_type(pointee_type)));
 
 		IrValue sum = build_binary_instr(builder, OP_SUB, ptr_to_int, subtrahend);
 		IrValue int_to_ptr = build_type_instr(builder, OP_CAST, sum,
@@ -2589,7 +2590,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		CType *result_type = &env->type_env.int_type;
 
 		IrValue value = value_const(c_type_to_ir_type(result_type),
-				size_of_ir_type(c_type_to_ir_type(cdecl.type)));
+				size_of_c_type(cdecl.type));
 
 		return (Term) { .ctype = result_type, .value = value };
 	}
@@ -2685,14 +2686,14 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		// seems messy...
 		if (sizeof_expr->t == IDENTIFIER_EXPR) {
 			Term term = ir_gen_expr(builder, env, sizeof_expr, LVALUE_CONTEXT);
-			size = size_of_ir_type(c_type_to_ir_type(term.ctype));
+			size = size_of_c_type(term.ctype);
 		} else if (sizeof_expr->t == DEREF_EXPR) {
 			ASTExpr *inner_expr = sizeof_expr->u.unary_arg;
 			if (inner_expr->t != IDENTIFIER_EXPR)
 				UNIMPLEMENTED;
 			Term term = ir_gen_expr(builder, env, inner_expr, LVALUE_CONTEXT);
 			assert(term.ctype->t == POINTER_TYPE);
-			size = size_of_ir_type(c_type_to_ir_type(term.ctype->u.pointee_type));
+			size = size_of_c_type(term.ctype->u.pointee_type);
 		} else {
 			UNIMPLEMENTED;
 		}
