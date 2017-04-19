@@ -226,6 +226,9 @@ typedef struct TypeEnv
 	CType unsigned_long_type;
 	CType long_long_type;
 	CType unsigned_long_long_type;
+
+	CType *size_type;
+	CType *int_ptr_type;
 } TypeEnv;
 
 static void init_type_env(TypeEnv *type_env)
@@ -236,6 +239,7 @@ static void init_type_env(TypeEnv *type_env)
 	ARRAY_INIT(&type_env->enum_types, TypeEnvEntry *, 10);
 	ARRAY_INIT(&type_env->typedef_types, TypeEnvEntry *, 10);
 
+	// @PORT: Most of these types are x86-64 dependent.
 	type_env->void_type = (CType) {
 		.t = VOID_TYPE,
 	};
@@ -295,6 +299,9 @@ static void init_type_env(TypeEnv *type_env)
 		.u.integer.type = LONG_LONG,
 		.u.integer.is_signed = false,
 	};
+
+	type_env->size_type = &type_env->unsigned_long_type;
+	type_env->int_ptr_type = &type_env->unsigned_long_type;
 }
 
 static CType *search(Array(TypeEnvEntry *) *types, char *name)
@@ -1235,8 +1242,8 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 	}
 }
 
-static void ir_gen_c_init(IrBuilder *builder, IrValue base_ptr,
-		CInitializer *c_init, u32 current_offset)
+static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
+		IrValue base_ptr, CInitializer *c_init, u32 current_offset)
 {
 	CType *type = c_init->type;
 	if (type == NULL)
@@ -1248,7 +1255,7 @@ static void ir_gen_c_init(IrBuilder *builder, IrValue base_ptr,
 		u32 elem_size = size_of_c_type(type->u.array.elem_type);
 
 		for (u32 i = 0; i < type->u.array.size; i++) {
-			ir_gen_c_init(builder, base_ptr, c_init->u.sub_elems + i,
+			ir_gen_c_init(builder, type_env, base_ptr, c_init->u.sub_elems + i,
 					current_offset);
 			current_offset += elem_size;
 		}
@@ -1256,7 +1263,7 @@ static void ir_gen_c_init(IrBuilder *builder, IrValue base_ptr,
 	}
 	case STRUCT_TYPE:
 		for (u32 i = 0; i < type->u.strukt.fields.size; i++) {
-			ir_gen_c_init(builder, base_ptr, c_init->u.sub_elems + i,
+			ir_gen_c_init(builder, type_env, base_ptr, c_init->u.sub_elems + i,
 					current_offset);
 			CType *field_type =
 				ARRAY_REF(&type->u.strukt.fields, CDecl, i)->type;
@@ -1266,7 +1273,7 @@ static void ir_gen_c_init(IrBuilder *builder, IrValue base_ptr,
 		break;
 
 	default: {
-		IrType int_ptr_type = (IrType) { .t = IR_INT, .u.bit_width = 64 };
+		IrType int_ptr_type = c_type_to_ir_type(type_env->int_ptr_type);
 		IrValue field_ptr = build_binary_instr(builder, OP_ADD,
 				base_ptr, value_const(int_ptr_type, current_offset));
 		build_store(builder, field_ptr, c_init->u.leaf_value,
@@ -1625,8 +1632,7 @@ static void ir_gen_initializer(IrBuilder *builder, Env *env,
 			3 * sizeof *memset_args);
 	memset_args[0] = to_init.value;
 	memset_args[1] = value_const(c_type_to_ir_type(&env->type_env.int_type), 0);
-		// @TODO: Don't hardcode size_t!
-	memset_args[2] = value_const((IrType) { .t = IR_INT, .u.bit_width = 64 },
+	memset_args[2] = value_const(c_type_to_ir_type(env->type_env.size_type),
 			size_of_c_type(to_init.ctype));
 
 	// @TODO: Open-code this for small sizes
@@ -1637,8 +1643,8 @@ static void ir_gen_initializer(IrBuilder *builder, Env *env,
 	// something cache something something.
 
 	IrValue base_ptr = build_type_instr(builder, OP_CAST, to_init.value,
-			(IrType) { .t = IR_INT, .u.bit_width = 64 });
-	ir_gen_c_init(builder, base_ptr, &c_init, 0);
+			c_type_to_ir_type(env->type_env.int_ptr_type));
+	ir_gen_c_init(builder, &env->type_env, base_ptr, &c_init, 0);
 
 	pool_free(&c_init_pool);
 }
@@ -2075,8 +2081,7 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 		CType *pointee_type = result_type->u.pointee_type;
 
 		// @TODO: Determine type correctly
-		// @TODO: Don't hardcode in the size of a pointer!
-		IrType pointer_int_type = (IrType) { .t = IR_INT, .u.bit_width = 64 };
+		IrType pointer_int_type = c_type_to_ir_type(env->type_env.int_ptr_type);
 
 		IrValue zext =
 			build_type_instr(builder, OP_ZEXT, other.value, pointer_int_type);
@@ -2123,8 +2128,7 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 		CType *pointee_type = left.ctype->u.pointee_type;
 
 		// @TODO: Determine type correctly
-		// @TODO: Don't hardcode in the size of a pointer!
-		IrType pointer_int_type = { .t = IR_INT, .u.bit_width = 64 };
+		IrType pointer_int_type = c_type_to_ir_type(env->type_env.int_ptr_type);
 
 		// @TODO: This should be ptrdiff_t
 		CType *result_c_type = &env->type_env.int_type;
@@ -2155,8 +2159,7 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
 		CType *pointee_type = result_type->u.pointee_type;
 
 		// @TODO: Determine type correctly
-		// @TODO: Don't hardcode in the size of a pointer!
-		IrType pointer_int_type = (IrType) { .t = IR_INT, .u.bit_width = 64 };
+		IrType pointer_int_type = c_type_to_ir_type(env->type_env.int_ptr_type);
 
 		IrValue zext =
 			build_type_instr(builder, OP_ZEXT, right.value, pointer_int_type);
@@ -2227,11 +2230,11 @@ static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
 
 		IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,
 				3 * sizeof *memcpy_args);
-		memcpy_args[0] = left.value,
-		memcpy_args[1] = right.value,
-		// @TODO: Don't hardcode the size of a pointer!
-		memcpy_args[2] = value_const((IrType) { .t = IR_INT, .u.bit_width = 64 },
-				size_of_ir_type(*left.ctype->u.strukt.ir_type)),
+		memcpy_args[0] = left.value;
+		memcpy_args[1] = right.value;
+		memcpy_args[2] = value_const(
+				c_type_to_ir_type(env->type_env.int_ptr_type),
+				size_of_ir_type(*left.ctype->u.strukt.ir_type));
 
 		// @TODO: Open-code this for small sizes.
 		build_call(builder, builtin_memcpy(builder),
@@ -2586,8 +2589,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 				builder, env, decl_specifier_list);
 		decl_to_cdecl(builder, env, decl_spec_type, declarator, &cdecl);
 
-		// @TODO: This should be a size_t
-		CType *result_type = &env->type_env.int_type;
+		CType *result_type = env->type_env.size_type;
 
 		IrValue value = value_const(c_type_to_ir_type(result_type),
 				size_of_c_type(cdecl.type));
@@ -2698,8 +2700,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			UNIMPLEMENTED;
 		}
 
-		// @TODO: This should be a size_t
-		CType *result_type = &env->type_env.int_type;
+		CType *result_type = env->type_env.size_type;
 		IrValue value = value_const(c_type_to_ir_type(result_type), size);
 		return (Term) { .ctype = result_type, .value = value };
 	}
