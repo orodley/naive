@@ -117,6 +117,17 @@ IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields)
 	IrType *new_type = pool_alloc(&trans_unit->pool, sizeof *new_type);
 	*ARRAY_APPEND(&trans_unit->types, IrType *) = new_type;
 
+	if (name == NULL) {
+		char fmt[] = "__anon_struct_%x";
+
+		// - 2 adjusts down for the "%x" which isn't present in the output
+		// sizeof(u32) * 2 is the max length of globals.size in hex
+		// + 1 for the null terminator
+		u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
+		name = pool_alloc(&trans_unit->pool, name_max_length);
+		snprintf(name, name_max_length, fmt, trans_unit->globals.size);
+	}
+
 	new_type->t = IR_STRUCT;
 	new_type->u.strukt.name = name;
 	new_type->u.strukt.num_fields = num_fields;
