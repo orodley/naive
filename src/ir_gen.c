@@ -2739,8 +2739,12 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			if (inner_expr->t != IDENTIFIER_EXPR)
 				UNIMPLEMENTED;
 			Term term = ir_gen_expr(builder, env, inner_expr, LVALUE_CONTEXT);
-			assert(term.ctype->t == POINTER_TYPE);
-			size = size_of_c_type(term.ctype->u.pointee_type);
+			if (term.ctype->t == POINTER_TYPE) {
+				size = size_of_c_type(term.ctype->u.pointee_type);
+			} else {
+				assert(term.ctype->t == ARRAY_TYPE);
+				size = size_of_c_type(term.ctype->u.array.elem_type);
+			}
 		} else {
 			UNIMPLEMENTED;
 		}
