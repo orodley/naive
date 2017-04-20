@@ -1158,7 +1158,27 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 
 	switch (type->t) {
 	case STRUCT_TYPE: case ARRAY_TYPE: {
-		assert(init->t == BRACE_INITIALIZER);
+		assert(init->t == BRACE_INITIALIZER
+				|| init->u.expr->t == STRING_LITERAL_EXPR);
+
+		if (init->u.expr->t == STRING_LITERAL_EXPR) {
+			char *str = init->u.expr->u.string_literal;
+			size_t len = strlen(str);
+			CInitializer *init_elems =
+				pool_alloc(pool, len * sizeof *init_elems);
+			for (u32 i = 0 ; i < len; i++) {
+				CType *char_type = &env->type_env.char_type;
+				init_elems[i] = (CInitializer) {
+					.type = char_type,
+					.u.leaf_value =
+						value_const(c_type_to_ir_type(char_type), str[i]),
+				};
+			}
+
+			c_init->u.sub_elems = init_elems;
+
+			return;
+		}
 
 		u32 num_fields;
 		if (type->t == STRUCT_TYPE)
@@ -1718,7 +1738,9 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 			// currently unconditionally memsets to zero before assigning to
 			// fields, which just feels gross to do for every local scalar
 			// value. Once we've fixed this, we should remove this case.
-			if (initializer->t == EXPR_INITIALIZER) {
+			if (initializer->t == EXPR_INITIALIZER
+					&& !(initializer->u.expr->t == STRING_LITERAL_EXPR
+						&& cdecl.type->t == ARRAY_TYPE)) {
 				Term init_term = ir_gen_expr(builder, env,
 						initializer->u.expr, RVALUE_CONTEXT);
 				ir_gen_assign_op(builder, env,
