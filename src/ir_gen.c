@@ -973,14 +973,57 @@ static inline IrBlock *add_block(IrBuilder *builder, char *name)
 	return add_block_to_function(builder->trans_unit, builder->current_function, name);
 }
 
+static void infer_array_size_from_initializer(IrBuilder *builder,
+		TypeEnv *type_env, ASTInitializer *init, CType *type)
+{
+	if (type->t != ARRAY_TYPE || !type->u.array.incomplete || init == NULL)
+		return;
+
+	u32 size;
+
+	if (init->t == BRACE_INITIALIZER) {
+		i32 current_index = -1;
+		i32 max_index = -1;
+		ASTInitializerElement *init_elem = init->u.initializer_element_list;
+		while (init_elem != NULL) {
+			ASTDesignator *designator = init_elem->designator_list;
+			if (designator != NULL) {
+				assert(designator->t == INDEX_DESIGNATOR);
+				IrConst *index_value = eval_constant_expr(
+						builder, type_env, designator->u.index_expr);
+				assert(index_value->type.t == IR_INT);
+
+				current_index = index_value->u.integer;
+			} else {
+				current_index++;
+			}
+
+			if (current_index > max_index)
+				max_index = current_index;
+
+			init_elem = init_elem->next;
+		}
+
+		size = max_index + 1;
+	} else {
+		assert(init->u.expr->t == STRING_LITERAL_EXPR);
+		size = strlen(init->u.expr->u.string_literal);
+	}
+
+	set_array_type_length(type, size);
+}
+
 static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 		ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
-		CType **result_c_type)
+		ASTInitializer *initializer, CType **result_c_type)
 {
 	CType *decl_spec_type =
 		decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
 	CDecl cdecl;
 	decl_to_cdecl(builder, env, decl_spec_type, declarator, &cdecl);
+	infer_array_size_from_initializer(
+			builder, &env->type_env, initializer, cdecl.type);
+
 	CType *ctype = cdecl.type;
 	if (ctype->t == FUNCTION_TYPE) {
 		// Struct returns are handled in the frontend, by adding a pointer
@@ -1443,7 +1486,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 			ASTDeclarator *declarator = func->declarator;
 
 			global = ir_global_for_decl(builder, &env, decl_specifier_list,
-					declarator, &global_type);
+					declarator, NULL, &global_type);
 			global->linkage = linkage;
 
 			if (is_inline) {
@@ -1535,7 +1578,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 					// @TODO: Multiple declarators in one global decl.
 					global = ir_global_for_decl(builder, &env, type_specs,
-							declarator, &global_type);
+							declarator, init_declarator->initializer, &global_type);
 					bool is_extern = global_type->t == FUNCTION_TYPE;
 
 					global->linkage = IR_GLOBAL_LINKAGE;
@@ -1662,6 +1705,8 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 		CDecl cdecl;
 		decl_to_cdecl(builder, env, decl_spec_type,
 				init_declarator->declarator, &cdecl);
+		infer_array_size_from_initializer(builder, &env->type_env,
+				init_declarator->initializer, cdecl.type);
 
 		Binding *binding = ARRAY_APPEND(&env->scope->bindings, Binding);
 		cdecl_to_binding(builder, &cdecl, binding);
