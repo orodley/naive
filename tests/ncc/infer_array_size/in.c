@@ -6,8 +6,8 @@ int main()
 {
 	int bar[] = { 4, 3, 2 };
 
-	//assert(sizeof(foo) / sizeof(*foo) == 4);
-	//assert(sizeof(bar) / sizeof(*bar) == 3);
+	assert(sizeof(foo) / sizeof(*foo) == 4);
+	assert(sizeof(bar) / sizeof(*bar) == 3);
 
 	assert(foo[0] == 1);
 	assert(foo[1] == 2);
