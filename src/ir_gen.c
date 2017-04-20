@@ -2240,13 +2240,18 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
 	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
 
-	// @TODO: Determine type correctly.
-	CType *result_type = &env->type_env.int_type;
-
 	if (!((ir_op == OP_EQ || ir_op == OP_NEQ)
 				&& left.ctype->t == POINTER_TYPE
 				&& right.ctype->t == POINTER_TYPE)) {
 		do_arithmetic_conversions(builder, &left, &right);
+	}
+
+	CType *result_type;
+	if (ir_op == OP_EQ || ir_op == OP_NEQ || ir_op == OP_LT || ir_op == OP_GT
+			|| ir_op == OP_LTE || ir_op == OP_GTE) {
+		result_type = &env->type_env.int_type;
+	} else {
+		result_type = left.ctype;
 	}
 
 	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
