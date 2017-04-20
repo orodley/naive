@@ -617,16 +617,28 @@ static bool tokenise_aux(Reader *reader)
 		case '"': {
 			Array(char) string_literal_chars;
 			ARRAY_INIT(&string_literal_chars, char, 20);
-			while (peek_char(reader) != '"') {
-				i64 c = read_char_in_literal(reader, &start_source_loc);
-				if (c == -1) {
-					array_free(&string_literal_chars);
-					return false;
+
+			for (;;) {
+				while (peek_char(reader) != '"') {
+					i64 c = read_char_in_literal(reader, &start_source_loc);
+					if (c == -1) {
+						array_free(&string_literal_chars);
+						return false;
+					}
+
+					*ARRAY_APPEND(&string_literal_chars, char) = (char)c;
 				}
 
-				*ARRAY_APPEND(&string_literal_chars, char) = (char)c;
+				read_char(reader);
+
+				u32 end_of_string = reader->position;
+				skip_whitespace_and_comments(reader, true);
+
+				if (read_char(reader) != '"') {
+					reader->position = end_of_string;
+					break;
+				}
 			}
-			read_char(reader);
 			*ARRAY_APPEND(&string_literal_chars, char) = '\0';
 
 			Token *token = append_token(reader, start_source_loc, TOK_STRING_LITERAL);
