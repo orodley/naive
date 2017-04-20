@@ -1037,7 +1037,11 @@ static bool handle_pp_directive(Reader *reader)
 
 	// Process #if and friends even if we're currently ignoring tokens.
 	if (streq(directive, "if")) {
-		UNIMPLEMENTED;
+		// This is a hack - the only place we use #if in the compiler is inside
+		// a false #ifdef. So we only need to handle #if enough to handle
+		// skipping one.
+		assert(ignoring_tokens(reader));
+		start_pp_if(reader, false);
 	} else if (streq(directive, "ifdef")) {
 		skip_whitespace_and_comments(reader, false);
 		char *macro_name = read_symbol(reader);
