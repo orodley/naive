@@ -288,6 +288,43 @@ bool tokenise(Array(SourceToken) *tokens, char *input_filename)
 	}
 	array_free(&reader.macro_env);
 
+	// Concatentate adjacent string literals
+	u32 dest = 0;
+	u32 i = 0;
+	while (i < tokens->size) {
+		SourceToken *token = ARRAY_REF(tokens, SourceToken, i);
+		u32 j = i + 1;
+		if (token->token.t == TOK_STRING_LITERAL) {
+			char *str = token->token.u.string_literal;
+			u32 str_size = strlen(str);
+
+			while (j < tokens->size
+					&& ARRAY_REF(tokens, SourceToken, j)->token.t
+						== TOK_STRING_LITERAL) {
+				char *next_str =
+					ARRAY_REF(tokens, SourceToken, j)->token.u.string_literal;
+				u32 next_str_len = strlen(next_str);
+				u32 new_size = str_size + next_str_len;
+				str = realloc(str, new_size);
+				memcpy(str + str_size, next_str, next_str_len + 1);
+
+				str_size = new_size;
+				j++;
+			}
+
+			token->token.u.string_literal = str;
+		}
+
+		if (i != dest) {
+			*ARRAY_REF(tokens, SourceToken, dest) = *token;
+		}
+
+		dest++;
+		i = j;
+	}
+
+	tokens->size = dest;
+
 	return ret;
 }
 
@@ -618,27 +655,18 @@ static bool tokenise_aux(Reader *reader)
 			Array(char) string_literal_chars;
 			ARRAY_INIT(&string_literal_chars, char, 20);
 
-			for (;;) {
-				while (peek_char(reader) != '"') {
-					i64 c = read_char_in_literal(reader, &start_source_loc);
-					if (c == -1) {
-						array_free(&string_literal_chars);
-						return false;
-					}
-
-					*ARRAY_APPEND(&string_literal_chars, char) = (char)c;
+			while (peek_char(reader) != '"') {
+				i64 c = read_char_in_literal(reader, &start_source_loc);
+				if (c == -1) {
+					array_free(&string_literal_chars);
+					return false;
 				}
 
-				read_char(reader);
-
-				u32 end_of_string = reader->position;
-				skip_whitespace_and_comments(reader, true);
-
-				if (read_char(reader) != '"') {
-					reader->position = end_of_string;
-					break;
-				}
+				*ARRAY_APPEND(&string_literal_chars, char) = (char)c;
 			}
+
+			read_char(reader);
+
 			*ARRAY_APPEND(&string_literal_chars, char) = '\0';
 
 			Token *token = append_token(reader, start_source_loc, TOK_STRING_LITERAL);

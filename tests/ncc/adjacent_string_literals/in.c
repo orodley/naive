@@ -1,8 +1,10 @@
 #include <assert.h>
 
+#define OOB "oob"
+
 int main()
 {
-	char *x = "f" /* foo */ "oob"
+	char *x = "f" /* foo */ OOB
 		// foo
 		"ar";
 
