@@ -1311,9 +1311,6 @@ void dump_token(Token *token)
 	case TOK_INT_LITERAL:
 		printf("(%" PRIu64 ")", token->u.int_literal);
 		break;
-	case TOK_FLOAT_LITERAL:
-		printf("(%lf)", token->u.float_literal);
-		break;
 	case TOK_STRING_LITERAL:
 		// @TODO: Escape the resulting string
 		printf("(\"%s\")", token->u.string_literal);

@@ -8,7 +8,6 @@
 	X(TOK_INVALID), \
 \
 	X(TOK_INT_LITERAL), \
-	X(TOK_FLOAT_LITERAL), \
 	X(TOK_STRING_LITERAL), \
 	X(TOK_SYMBOL), \
 \
@@ -89,7 +88,6 @@ typedef struct Token
 	union
 	{
 		u64 int_literal;
-		double float_literal;
 		char *symbol;
 		char *string_literal;
 	} u;

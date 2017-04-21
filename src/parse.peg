@@ -378,7 +378,7 @@ primary_expr =
 
 constant =
 	seq(build_constant,
-		or(TOK_INT_LITERAL, TOK_FLOAT_LITERAL, TOK_STRING_LITERAL))
+		or(TOK_INT_LITERAL, TOK_STRING_LITERAL))
 
 postfix_expr =
     or(seq(build_builtin_va_arg, keyword(__builtin_va_arg), TOK_LROUND, expr,
