@@ -805,6 +805,7 @@ void assemble(AsmModule *asm_module, Binary *binary)
 			if (global->defined) {
 				symbol->size = global->u.var.size_bytes;
 				assert(global->u.var.value != NULL);
+				assert(symbol->size != 0);
 				bool all_zero = true;
 				for (u32 i = 0; i < global->u.var.size_bytes; i++) {
 					if (global->u.var.value[i] != 0) {

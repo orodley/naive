@@ -166,6 +166,7 @@ u32 size_of_ir_type(IrType type)
 	case IR_STRUCT:
 		return type.u.strukt.total_size;
 	case IR_ARRAY:
+		assert(type.u.array.size != 0);
 		return type.u.array.size * size_of_ir_type(*type.u.array.elem_type);
 	case IR_VOID:
 		UNREACHABLE;

@@ -97,7 +97,8 @@ static bool c_type_eq(CType *a, CType *b)
 		assert(b != b->u.pointee_type);
 		return c_type_eq(a->u.pointee_type, b->u.pointee_type);
 	case ARRAY_TYPE:
-		return a->u.array.size == b->u.array.size
+		return ((a->u.array.incomplete && b->u.array.incomplete)
+				|| (a->u.array.size == b->u.array.size))
 			&& c_type_eq(a->u.array.elem_type, b->u.array.elem_type);
 	}
 }
@@ -139,7 +140,6 @@ static IrType c_type_to_ir_type(CType *ctype)
 	case POINTER_TYPE:
 		return (IrType) { .t = IR_POINTER };
 	case ARRAY_TYPE:
-		assert(!ctype->u.array.incomplete);
 		return *ctype->u.array.ir_type;
 	case FUNCTION_TYPE:
 		return (IrType) { .t = FUNCTION_TYPE };
@@ -357,6 +357,7 @@ static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
 	IrType *ir_array_type =
 		pool_alloc(&builder->trans_unit->pool, sizeof *ir_array_type);
 	ir_array_type->t = IR_ARRAY;
+	ir_array_type->u.array.size = 0;
 
 	IrType elem_type = c_type_to_ir_type(type);
 	IrType *ir_elem_type;

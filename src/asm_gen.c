@@ -1447,7 +1447,8 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 			new_function->call_seq = classify_arguments(arity, arg_types);
 		} else {
 			asm_global->t = ASM_GLOBAL_VAR;
-			asm_global->u.var.size_bytes = size_of_ir_type(ir_global->type);
+			asm_global->u.var.size_bytes = asm_global->defined ?
+				size_of_ir_type(ir_global->type) : 0;
 			asm_global->u.var.value = NULL;
 		}
 	}
