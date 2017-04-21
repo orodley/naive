@@ -2690,7 +2690,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		Term rhs = ir_gen_expr(builder, env, rhs_expr, RVALUE_CONTEXT);
 		assert(rhs.ctype->t == INTEGER_TYPE);
 		IrValue rhs_as_bool = build_binary_instr(builder, OP_NEQ, rhs.value,
-				value_const(c_type_to_ir_type(&env->type_env.int_type), 0));
+				value_const(c_type_to_ir_type(rhs.ctype), 0));
 		build_branch(builder, after_block);
 
 		builder->current_block = after_block;
