@@ -1162,12 +1162,16 @@ static bool handle_pp_directive(Reader *reader)
 				return false;
 			}
 
+			// @LEAK: We leak includee_path because it gets attached to
+			// SourceLoc's on tokens created by tokenise_file. Given how little
+			// data this should take up in a given compilation this is probably
+			// fine.
+
 			bool tok_success =
 				tokenise_file(reader, includee_path, include_path_source_loc);
-			
-			free(include_path);
+
 			if (include_path != includee_path)
-				free(includee_path);
+				free(include_path);
 
 			if (!tok_success)
 				return false;
