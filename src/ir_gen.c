@@ -2521,6 +2521,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		};
 	}
 	case LEFT_SHIFT_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SHL);
+	case RIGHT_SHIFT_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SHR);
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_DIV);
 	case EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_EQ);
@@ -2554,6 +2555,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case BIT_XOR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_XOR);
 	case BIT_AND_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_AND);
 	case BIT_OR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_OR);
+	case RIGHT_SHIFT_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SHR);
 	case MULTIPLY_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_DIV);
 	case FUNCTION_CALL_EXPR: {

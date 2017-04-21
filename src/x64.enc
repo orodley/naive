@@ -69,6 +69,8 @@ SETGE r/m8             =         [0F 9D] /0
 SETL r/m8              =         [0F 9C] /0
 SETLE r/m8             =         [0F 9E] /0
 
+SHR r/m32, imm8        =         C1 /5 ib
+
 SUB r/m32, r32         =         29 /r
 SUB r/m32, imm8        =         83 /5 ib
 SUB r/m64, r64         = REX.W + 29 /r
