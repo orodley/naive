@@ -431,14 +431,28 @@ typedef struct Env
 	IrBlock *continue_target;
 } Env;
 
-static IrConst *eval_constant_expr(IrBuilder *builder, TypeEnv *type_env,
+static IrConst *eval_constant_expr(IrBuilder *builder, Env *env,
 		ASTExpr *constant_expr)
 {
 	switch (constant_expr->t) {
 	case INT_LITERAL_EXPR:
 		// @TODO: Determine type properly.
-		return add_int_const(builder, c_type_to_ir_type(&type_env->int_type),
+		return add_int_const(builder, c_type_to_ir_type(&env->type_env.int_type),
 				constant_expr->u.int_literal);
+	case IDENTIFIER_EXPR: {
+		Binding *binding =
+			binding_for_name(env->scope, constant_expr->u.identifier);
+		assert(binding->constant);
+
+		Term *term = &binding->term;
+
+		assert(term->ctype->t == INTEGER_TYPE);
+		assert(term->value.type.t == IR_INT);
+		assert(term->value.t == VALUE_CONST);
+
+		return add_int_const(builder,
+				c_type_to_ir_type(term->ctype), term->value.u.constant);
+	}
 	default:
 		UNIMPLEMENTED;
 	}
@@ -694,8 +708,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 			ASTExpr *expr = enumerator_list->value;
 
 			if (expr != NULL) {
-				IrConst *value =
-					eval_constant_expr(builder, &env->type_env, expr);
+				IrConst *value = eval_constant_expr(builder, env, expr);
 				assert(value->type.t == IR_INT);
 				curr_enum_value = value->u.integer;
 			}
@@ -840,7 +853,7 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 			direct_declarator->u.array_declarator.array_length;
 		if (array_length_expr != NULL) {
 			IrConst *length_const =
-				eval_constant_expr(builder, type_env, array_length_expr);
+				eval_constant_expr(builder, env, array_length_expr);
 			assert(length_const->type.t == IR_INT);
 			u64 length = length_const->u.integer;
 
@@ -975,7 +988,7 @@ static inline IrBlock *add_block(IrBuilder *builder, char *name)
 }
 
 static void infer_array_size_from_initializer(IrBuilder *builder,
-		TypeEnv *type_env, ASTInitializer *init, CType *type)
+		Env *env, ASTInitializer *init, CType *type)
 {
 	if (type->t != ARRAY_TYPE || !type->u.array.incomplete || init == NULL)
 		return;
@@ -991,7 +1004,7 @@ static void infer_array_size_from_initializer(IrBuilder *builder,
 			if (designator != NULL) {
 				assert(designator->t == INDEX_DESIGNATOR);
 				IrConst *index_value = eval_constant_expr(
-						builder, type_env, designator->u.index_expr);
+						builder, env, designator->u.index_expr);
 				assert(index_value->type.t == IR_INT);
 
 				current_index = index_value->u.integer;
@@ -1022,8 +1035,7 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 		decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
 	CDecl cdecl;
 	decl_to_cdecl(builder, env, decl_spec_type, declarator, &cdecl);
-	infer_array_size_from_initializer(
-			builder, &env->type_env, initializer, cdecl.type);
+	infer_array_size_from_initializer(builder, env, initializer, cdecl.type);
 
 	CType *ctype = cdecl.type;
 	if (ctype->t == FUNCTION_TYPE) {
@@ -1226,7 +1238,7 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 				case INDEX_DESIGNATOR: {
 					assert(curr_elem->type->t == ARRAY_TYPE);
 					IrConst *index = eval_constant_expr(builder,
-							&env->type_env, designator_list->u.index_expr);
+							env, designator_list->u.index_expr);
 					assert(index->type.t == IR_INT);
 
 					field_type = curr_elem->type->u.array.elem_type;
@@ -1286,7 +1298,7 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 		IrValue value;
 
 		if (const_context) {
-			IrConst *konst = eval_constant_expr(builder, &env->type_env, expr);
+			IrConst *konst = eval_constant_expr(builder, env, expr);
 
 			// @TODO: This would be much nicer if IrValue contained IrConst
 			// instead of just a u64.
@@ -1726,7 +1738,7 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 		CDecl cdecl;
 		decl_to_cdecl(builder, env, decl_spec_type,
 				init_declarator->declarator, &cdecl);
-		infer_array_size_from_initializer(builder, &env->type_env,
+		infer_array_size_from_initializer(builder, env,
 				init_declarator->initializer, cdecl.type);
 
 		Binding *binding = ARRAY_APPEND(&env->scope->bindings, Binding);
@@ -1895,7 +1907,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
 		SwitchCase *switch_case = ARRAY_APPEND(&env->case_labels, SwitchCase);
 		switch_case->is_default = false;
-		switch_case->value = eval_constant_expr(builder, &env->type_env,
+		switch_case->value = eval_constant_expr(builder, env,
 				statement->u.expr_and_statement.expr);
 		switch_case->block = case_block;
 		break;
