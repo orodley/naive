@@ -595,6 +595,7 @@ static bool tokenise_aux(Reader *reader)
 			if (at_end(reader)) {
 				issue_error(&reader->source_loc,
 						"Unterminated preprocessor conditional");
+				return false;
 			}
 
 			if (read_char(reader) == '\n' && peek_char(reader) == '#') {
@@ -1077,11 +1078,52 @@ static bool handle_pp_directive(Reader *reader)
 
 	// Process #if and friends even if we're currently ignoring tokens.
 	if (streq(directive, "if")) {
-		// This is a hack - the only place we use #if in the compiler is inside
-		// a false #ifdef. So we only need to handle #if enough to handle
-		// skipping one.
-		assert(ignoring_tokens(reader));
-		start_pp_if(reader, false);
+		skip_whitespace_and_comments(reader, false);
+
+		Array(char) condition_chars;
+		ARRAY_INIT(&condition_chars, char, 10);
+		while (peek_char(reader) != '\n')
+			*ARRAY_APPEND(&condition_chars, char) = read_char(reader);
+		*ARRAY_APPEND(&condition_chars, char) = '\0';
+
+		// If we're ignoring tokens, stop ignoring them while we read the
+		// tokens for the condition.
+		*ARRAY_APPEND(&reader->pp_scope_stack, PPCondScope) = (PPCondScope) {
+			.condition = true,
+			.position = THEN,
+		};
+
+		u32 condition_tokens_start = reader->tokens->size;
+		bool success = tokenise_string(reader, (char *)condition_chars.elements);
+		array_free(&condition_chars);
+
+		ARRAY_POP(&reader->pp_scope_stack, PPCondScope);
+
+		if (!success)
+			return false;
+
+		bool cond;
+		// We do this so that we can skip stuff like #if __has_feature(...)
+		// when it's guarded by #ifdef __has_feature.
+		if (ignoring_tokens(reader)) {
+			cond = false;
+		} else {
+			// For now we only handle #if 0 and #if 1
+			Token *token = (Token *)ARRAY_REF(
+					reader->tokens, SourceToken, condition_tokens_start);
+			switch (token->t) {
+			case TOK_INT_LITERAL:
+				cond = token->u.int_literal != 0;
+				break;
+			default: UNIMPLEMENTED;
+			}
+
+			assert(reader->tokens->size == condition_tokens_start + 1);
+		}
+
+		reader->tokens->size = condition_tokens_start;
+
+		start_pp_if(reader, cond);
 	} else if (streq(directive, "ifdef")) {
 		skip_whitespace_and_comments(reader, false);
 		char *macro_name = read_symbol(reader);
