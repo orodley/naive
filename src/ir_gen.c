@@ -1725,9 +1725,6 @@ static void ir_gen_initializer(IrBuilder *builder, Env *env,
 	pool_free(&c_init_pool);
 }
 
-static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
-		Term right, IrOp ir_op, Term *pre_assign_value);
-
 static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 {
 	ASTInitDeclarator *init_declarator = decl->init_declarators;
@@ -2353,6 +2350,33 @@ static Term ir_gen_assign_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	return ir_gen_assign_op(builder, env, left, right, ir_op, NULL);
 }
 
+static Term ir_gen_inc_dec(IrBuilder *builder, Env *env, ASTExpr *expr) {
+	IrOp op;
+	switch (expr->t) {
+	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: op = OP_ADD; break;
+	case PRE_DECREMENT_EXPR: case POST_DECREMENT_EXPR: op = OP_SUB; break;
+	default: UNREACHABLE;
+	}
+	bool is_pre = expr->t == PRE_INCREMENT_EXPR || expr->t == PRE_DECREMENT_EXPR;
+
+	Term ptr = ir_gen_expr(builder, env, expr->u.unary_arg, LVALUE_CONTEXT);
+	// @TODO: Correct type
+	CType *one_type = &env->type_env.int_type;
+	Term one = (Term) {
+		.value = value_const(c_type_to_ir_type(one_type), 1),
+		.ctype = one_type,
+	};
+	Term pre_assign_value;
+	Term incremented =
+		ir_gen_assign_op(builder, env, ptr, one, op, &pre_assign_value);
+
+	if (is_pre) {
+		return incremented;
+	} else {
+		return pre_assign_value;
+	}
+}
+
 static Term ir_gen_deref(IrBuilder *builder, TypeEnv *type_env,
 		Term pointer, ExprContext context)
 {
@@ -2547,24 +2571,9 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_INVALID);
 	case ADD_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_ADD);
 	case MINUS_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SUB);
-	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: {
-		Term ptr = ir_gen_expr(builder, env, expr->u.unary_arg, LVALUE_CONTEXT);
-		// @TODO: Correct type
-		CType *one_type = &env->type_env.int_type;
-		Term one = (Term) {
-			.value = value_const(c_type_to_ir_type(one_type), 1),
-			.ctype = one_type,
-		};
-		Term pre_assign_value;
-		Term incremented =
-			ir_gen_assign_op(builder, env, ptr, one, OP_ADD, &pre_assign_value);
-
-		if (expr->t == PRE_INCREMENT_EXPR) {
-			return incremented;
-		} else {
-			return pre_assign_value;
-		}
-	}
+	case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR:
+	case PRE_DECREMENT_EXPR: case POST_DECREMENT_EXPR:
+		return ir_gen_inc_dec(builder, env, expr);
 	case BIT_XOR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_XOR);
 	case BIT_AND_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_AND);
 	case BIT_OR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_OR);
