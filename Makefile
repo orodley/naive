@@ -46,7 +46,6 @@ msan: all
 
 .PHONY: test
 test: all
-	@echo 'TEST'
 	@./run_tests.py
 
 tags: ncc
