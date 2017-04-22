@@ -429,6 +429,7 @@ typedef struct Env
 	Array(GotoFixup) goto_fixups;
 	IrBlock *break_target;
 	IrBlock *continue_target;
+	IrFunction *scratch_function;
 } Env;
 
 static IrConst *eval_constant_expr(IrBuilder *builder, Env *env,
@@ -1474,6 +1475,16 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	Array(Binding)* global_bindings = &global_scope.bindings;
 	ARRAY_INIT(global_bindings, Binding, 10);
 
+	// This is used for sizeof expr. We switch to this function, ir_gen the
+	// expression, and then switch back, keeping only the type of the resulting
+	// Term.
+	IrGlobal *scratch_function = trans_unit_add_function(
+			builder->trans_unit,
+			"__scratch",
+			(IrType) { .t = IR_VOID },
+			0, false, NULL);
+	add_init_to_function(builder->trans_unit, scratch_function);
+
 	Env env;
 	init_type_env(&env.type_env);
 	env.scope = &global_scope;
@@ -1484,6 +1495,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 	env.goto_fixups = EMPTY_ARRAY;
 	env.break_target = NULL;
 	env.continue_target = NULL;
+	env.scratch_function = &scratch_function->initializer->u.function;
 
 	while (toplevel != NULL) {
 		IrGlobal *global = NULL;
@@ -1668,6 +1680,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 		toplevel = toplevel->next;
 	}
 
+	// @TODO: Do this once per function and reset size to 0 afterwards.
 	for (u32 i = 0; i < env.goto_fixups.size; i++) {
 		GotoFixup *fixup = ARRAY_REF(&env.goto_fixups, GotoFixup, i);
 		assert(fixup->instr->op == OP_BRANCH);
@@ -1682,6 +1695,11 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 		}
 		assert(fixup->instr->u.target_block != NULL);
 	}
+
+	IrGlobal *first_global =
+		*ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, 0);
+	assert(streq(first_global->name, "__scratch"));
+	ARRAY_REMOVE(&builder->trans_unit->globals, IrGlobal *, 0);
 
 	pool_free(&env.type_env.pool);
 	array_free(&env.goto_labels);
@@ -2775,30 +2793,21 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case SIZEOF_EXPR_EXPR: {
 		ASTExpr *sizeof_expr = expr->u.unary_arg;
 
-		u64 size;
+		IrFunction *prev_function = builder->current_function;
+		IrBlock *prev_block = builder->current_block;
 
-		// @TODO: Do this more generally. We probably want a third ExprContext,
-		// SIZEOF_CONTEXT. This would behave like RVALUE_CONTEXT, but not
-		// actually generate any IR, just determine types. Either that or
-		// switch to a scratch IrFunction and delete it afterwards but that
-		// seems messy...
-		if (sizeof_expr->t == IDENTIFIER_EXPR) {
-			Term term = ir_gen_expr(builder, env, sizeof_expr, LVALUE_CONTEXT);
-			size = size_of_c_type(term.ctype);
-		} else if (sizeof_expr->t == DEREF_EXPR) {
-			ASTExpr *inner_expr = sizeof_expr->u.unary_arg;
-			if (inner_expr->t != IDENTIFIER_EXPR)
-				UNIMPLEMENTED;
-			Term term = ir_gen_expr(builder, env, inner_expr, LVALUE_CONTEXT);
-			if (term.ctype->t == POINTER_TYPE) {
-				size = size_of_c_type(term.ctype->u.pointee_type);
-			} else {
-				assert(term.ctype->t == ARRAY_TYPE);
-				size = size_of_c_type(term.ctype->u.array.elem_type);
-			}
-		} else {
-			UNIMPLEMENTED;
-		}
+		// @TODO: Maybe we should clear the function out after using it.
+		builder->current_function = env->scratch_function;
+		builder->current_block =
+			*ARRAY_REF(&builder->current_function->blocks, IrBlock *,
+					builder->current_function->blocks.size - 1);
+
+		Term term = ir_gen_expr(builder, env, sizeof_expr, RVALUE_CONTEXT);
+
+		builder->current_function = prev_function;
+		builder->current_block = prev_block;
+
+		u64 size = size_of_c_type(term.ctype);
 
 		CType *result_type = env->type_env.size_type;
 		IrValue value = value_const(c_type_to_ir_type(result_type), size);
