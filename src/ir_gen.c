@@ -1051,11 +1051,13 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 		IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
 		
 		u32 i = 0;
+		u32 j = 0;
 		if (struct_ret) {
-			arg_ir_types[i++] = (IrType) { .t = IR_POINTER };
+			arg_ir_types[0] = (IrType) { .t = IR_POINTER };
+			i++;
 		}
-		for (; i < arity; i++) {
-			CType *arg_c_type = cdecl.type->u.function.arg_type_array[i];
+		for (; i < arity; i++, j++) {
+			CType *arg_c_type = cdecl.type->u.function.arg_type_array[j];
 			arg_ir_types[i] = c_type_to_ir_type(arg_c_type);
 		}
 
