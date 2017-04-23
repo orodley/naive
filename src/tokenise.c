@@ -118,19 +118,21 @@ static inline bool at_end(Reader *reader) {
 
 static inline char peek_char(Reader *reader)
 {
-	return reader->buffer.buffer[reader->position];
+	return at_end(reader) ? EOF : reader->buffer.buffer[reader->position];
 }
 
 static inline void next_char(Reader *reader)
 {
 	reader->position++;
 
-	if (peek_char(reader) == '\n') {
-		reader->last_line_length = reader->source_loc.column;
-		reader->source_loc.line++;
-		reader->source_loc.column = 0;
-	} else {
-		reader->source_loc.column++;
+	if (!at_end(reader)) {
+		if (peek_char(reader) == '\n') {
+			reader->last_line_length = reader->source_loc.column;
+			reader->source_loc.line++;
+			reader->source_loc.column = 0;
+		} else {
+			reader->source_loc.column++;
+		}
 	}
 }
 
@@ -152,6 +154,10 @@ static void advance(Reader *reader)
 {
 	for (;;) {
 		next_char(reader);
+
+		if (at_end(reader))
+			break;
+
 		if (peek_char(reader) == '\\') {
 			next_char(reader);
 			if (peek_char(reader) == '\n') {
@@ -250,7 +256,7 @@ static char *read_symbol(Reader *reader)
 	if (!initial_ident_char(peek_char(reader)))
 		return NULL;
 
-	for (;;) {
+	while (!at_end(reader)) {
 		char c = peek_char(reader);
 		if (!ident_char(c))
 			break;
@@ -614,17 +620,22 @@ static bool tokenise_aux(Reader *reader)
 		switch (read_char(reader)) {
 		case '0': {
 			u64 value;
-			char c = peek_char(reader);
-			if (c == 'x') {
-				advance(reader);
-				if (!read_hex_number(reader, &value))
-					return false;
-			} else {
-				if (!read_octal_number(reader, &value))
-					return false;
-			}
 
-			read_int_literal_suffix(reader);
+			if (at_end(reader)) {
+				value = 0;
+			} else {
+				char c = peek_char(reader);
+				if (c == 'x') {
+					advance(reader);
+					if (!read_hex_number(reader, &value))
+						return false;
+				} else {
+					if (!read_octal_number(reader, &value))
+						return false;
+				}
+
+				read_int_literal_suffix(reader);
+			}
 
 			Token *token = append_token(reader, start_source_loc, TOK_INT_LITERAL);
 			token->u.int_literal = value;
