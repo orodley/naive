@@ -952,6 +952,7 @@ static bool tokenise_aux(Reader *reader)
 						} else {
 							read_char(reader);
 							Array(Macro) old_params = reader->curr_macro_params;
+							reader->curr_macro_params = EMPTY_ARRAY;
 							substitute_macro_params(reader, macro);
 							if (!tokenise_string(reader, macro->value))
 								return false;
