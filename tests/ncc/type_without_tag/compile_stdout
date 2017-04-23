@@ -1,0 +1,54 @@
+DECLS(
+    DECL(
+        DECL_SPECIFIER(
+            ENUM_TYPE_SPECIFIER(
+                ENUMERATOR(
+                    A
+                )ENUMERATOR(
+                    B
+                )
+            )
+        ),
+        
+    )
+)
+DECLS(
+    DECL(
+        DECL_SPECIFIER(
+            STRUCT_TYPE_SPECIFIER(
+                FIELD_LIST(
+                    FIELD(
+                        DECL_SPECIFIER(
+                            NAMED_TYPE_SPECIFIER(
+                                int
+                            )
+                        ),
+                        FIELD_DECLARATOR_LIST(
+                            NORMAL_FIELD_DECLARATOR(
+                                DIRECT_DECLARATOR(
+                                    IDENTIFIER_DECLARATOR(
+                                        a
+                                    )
+                                )
+                            ),
+                            NORMAL_FIELD_DECLARATOR(
+                                DIRECT_DECLARATOR(
+                                    IDENTIFIER_DECLARATOR(
+                                        b
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        ),
+        INIT_DECLARATOR(
+            DIRECT_DECLARATOR(
+                IDENTIFIER_DECLARATOR(
+                    foo
+                )
+            )
+        )
+    )
+)

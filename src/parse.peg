@@ -101,12 +101,6 @@ enum_specifier =
 			enumerator_list, opt(TOK_COMMA), TOK_RCURLY),
 		seq(build_enum_tagged_named_type, keyword(enum), TOK_SYMBOL))
 
-build_enum =
-	build(ASTTypeSpecifier, 6,
-		t, ENUM_TYPE_SPECIFIER,
-		u.enum_specifier.name, "((Token *)#1)->u.symbol",
-		u.enum_specifier.enumerator_list, #3)
-
 enumerator_list = list(ASTEnumerator, enumerator, TOK_COMMA)
 
 enumerator =

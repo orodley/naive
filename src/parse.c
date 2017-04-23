@@ -490,6 +490,27 @@ ASTTypeSpecifier *build_struct_or_union(Parser *parser, WhichResult *keyword,
 	return result;
 }
 
+ASTTypeSpecifier *build_enum(Parser *parser, Token *keyword_enum,
+		Token *opt_name, Token *lcurly, ASTEnumerator *enumerator_list,
+		Token *opt_comma, Token *rcurly)
+{
+	IGNORE(keyword_enum);
+	IGNORE(lcurly);
+	IGNORE(opt_comma);
+	IGNORE(rcurly);
+
+	ASTTypeSpecifier *result = pool_alloc(parser->pool, sizeof *result);
+	result->t = ENUM_TYPE_SPECIFIER;
+	if (opt_name == NULL) {
+		result->u.enum_specifier.name = NULL;
+	} else {
+		result->u.enum_specifier.name = opt_name->u.symbol;
+	}
+	result->u.enum_specifier.enumerator_list = enumerator_list;
+
+	return result;
+}
+
 // @TODO: This feels unnecessary. Couldn't we just have the parser keep
 // wrapping the next thing in the input? This is complicated a bit because
 // 'pointer' is currently a separate parser to the thing after it.
