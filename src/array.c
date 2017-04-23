@@ -62,9 +62,11 @@ void *_array_insert(Array_ *array, u32 element_size, u32 insertion_point)
 
 void _array_remove(Array_ *array, u32 element_size, u32 removal_point)
 {
-	memmove(array->elements + removal_point * element_size,
-			array->elements + (removal_point + 1) * element_size,
-			(array->size - removal_point) * element_size);
+	if (removal_point != array->size - 1) {
+		memmove(array->elements + removal_point * element_size,
+				array->elements + (removal_point + 1) * element_size,
+				(array->size - removal_point) * element_size);
+	}
 
 	array->size--;
 }
