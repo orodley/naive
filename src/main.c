@@ -68,6 +68,10 @@ int main(int argc, char *argv[])
 			} else if (streq(arg, "-c")) {
 				do_link = false;
 			} else if (streq(arg, "-o")) {
+				if (i == argc - 1) {
+					fputs("Error: No filename after '-o'", stderr);
+					return 1;
+				}
 				output_filename = argv[++i];
 			} else {
 				fprintf(stderr, "Error: Unknown command-line argument: %s\n", arg);
