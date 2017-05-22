@@ -1,7 +1,14 @@
 #ifndef NAIVE_DIAGNOSTICS_H_
 #define NAIVE_DIAGNOSTICS_H_
 
-#include "tokenise.h"
+#include "misc.h"
+
+typedef struct SourceLoc
+{
+	char *filename;
+	u32 line;
+	u32 column;
+} SourceLoc;
 
 typedef enum ErrorLevel
 {

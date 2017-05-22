@@ -22,6 +22,7 @@
 #include "misc.h"
 #include "tokenise.h"
 #include "parse.h"
+#include "preprocess.h"
 #include "util.h"
 
 static bool flag_dump_tokens = false;
@@ -31,7 +32,8 @@ static bool flag_dump_asm = false;
 bool flag_dump_live_ranges = false;
 
 static char *make_temp_file(void);
-static int compile_file(char *input_filename, char *output_filename, bool syntax_only);
+static int compile_file(char *input_filename, char *output_filename,
+		bool syntax_only, bool preprocess_only);
 static int make_file_executable(char *filename);
 
 int main(int argc, char *argv[])
@@ -48,12 +50,15 @@ int main(int argc, char *argv[])
 
 	bool do_link = true;
 	bool syntax_only = false;
+	bool preprocess_only = false;
 	char *output_filename = NULL;
 
 	for (i32 i = 1; i < argc; i++) {
 		char *arg = argv[i];
 		if (arg[0] == '-') {
-			if (streq(arg, "-dump-tokens")) {
+			if (streq(arg, "-E")) {
+				preprocess_only = true;
+			} else if (streq(arg, "-dump-tokens")) {
 				flag_dump_tokens = true;
 			} else if (streq(arg, "-dump-ast")) {
 				flag_dump_ast = true;
@@ -114,47 +119,51 @@ int main(int argc, char *argv[])
 	for (u32 i = 0; i < source_input_filenames.size; i++) {
 		char *source_input_filename = *ARRAY_REF(&source_input_filenames, char *, i);
 		char *object_filename = NULL;
-		if (do_link && !syntax_only) {
-			// In this mode we compile all given sources files to temporary
-			// object files, link the result with libc and any other object
-			// files passed on the command line, and then delete the temporary
-			// object files we created.
-			object_filename = make_temp_file();
-			*ARRAY_APPEND(&temp_filenames, char *) = object_filename;
-			*ARRAY_APPEND(&linker_input_filenames, char *) = object_filename;
-		} else if (!syntax_only) {
-			// In this mode we compile all the given source files to object
-			// files, and leave it at that.
-			if (output_filename != NULL) {
-				object_filename = output_filename;
+		if (!syntax_only && !preprocess_only) {
+			if (do_link) {
+				// In this mode we compile all given sources files to temporary
+				// object files, link the result with libc and any other object
+				// files passed on the command line, and then delete the
+				// temporary object files we created.
+				object_filename = make_temp_file();
+				*ARRAY_APPEND(&temp_filenames, char *) = object_filename;
+				*ARRAY_APPEND(&linker_input_filenames, char *) = object_filename;
 			} else {
-				u32 input_filename_length = strlen(source_input_filename);
-				object_filename = malloc(input_filename_length + 1); // @LEAK
-				memcpy(object_filename, source_input_filename, input_filename_length + 1);
-				object_filename[input_filename_length - 1] = 'o';
-				object_filename[input_filename_length] = '\0';
+				// In this mode we compile all the given source files to object
+				// files, and leave it at that.
+				if (output_filename != NULL) {
+					object_filename = output_filename;
+				} else {
+					u32 input_filename_length = strlen(source_input_filename);
+					object_filename = malloc(input_filename_length + 1); // @LEAK
+					memcpy(object_filename, source_input_filename,
+							input_filename_length + 1);
+					object_filename[input_filename_length - 1] = 'o';
+					object_filename[input_filename_length] = '\0';
 
-				u32 last_slash = input_filename_length - 1;
-				for (; last_slash != 0; last_slash--) {
-					if (object_filename[last_slash] == '/')
-						break;
-				}
+					u32 last_slash = input_filename_length - 1;
+					for (; last_slash != 0; last_slash--) {
+						if (object_filename[last_slash] == '/')
+							break;
+					}
 
-				if (last_slash != 0) {
-					object_filename[last_slash - 1] = '.';
-					object_filename += last_slash - 1;
+					if (last_slash != 0) {
+						object_filename[last_slash - 1] = '.';
+						object_filename += last_slash - 1;
+					}
 				}
 			}
 		}
 
-		int result = compile_file(source_input_filename, object_filename, syntax_only);
+		int result = compile_file(source_input_filename, object_filename,
+				syntax_only, preprocess_only);
 		if (result != 0)
 			return result;
 	}
 
 	array_free(&source_input_filenames);
 
-	if (do_link && !syntax_only) {
+	if (do_link && !syntax_only && !preprocess_only) {
 		// Implicitly link in the standard library. We have to put this after
 		// the rest of the inputs because it's an archive.
 		*ARRAY_APPEND(&linker_input_filenames, char *) = "/opt/naive/libc.a";
@@ -195,10 +204,47 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-static int compile_file(char *input_filename, char *output_filename, bool syntax_only) {
+static int compile_file(char *input_filename, char *output_filename,
+		bool syntax_only, bool preprocess_only)
+{
+	Array(char) preprocessed;
+	Array(Adjustment) adjustments;
+	if (!preprocess(input_filename, &preprocessed, &adjustments))
+		return 13;
+
+	if (preprocess_only) {
+		*ARRAY_APPEND(&preprocessed, char) = '\0';
+		puts((char *)preprocessed.elements);
+
+#if 0
+		for (u32 i = 0; i < adjustments.size; i++) {
+			Adjustment *adjustment = ARRAY_REF(&adjustments, Adjustment, i);
+
+			char *type;
+			switch (adjustment->type) {
+			case NORMAL_ADJUSTMENT: type = "normal"; break;
+			case BEGIN_MACRO_ADJUSTMENT: type = "begin_macro"; break;
+			case END_MACRO_ADJUSTMENT: type = "end_macro"; break;
+			}
+			u32 location = adjustment->location;
+			char *filename = adjustment->new_source_loc.filename;
+			u32 line = adjustment->new_source_loc.line;
+			u32 column = adjustment->new_source_loc.column;
+			printf("%u, %s -> %s:%u:%u\n", location, type, filename, line, column);
+		}
+#endif
+
+		array_free(&preprocessed);
+		array_free(&adjustments);
+		return 0;
+	}
+
 	Array(SourceToken) tokens;
-	if (!tokenise(&tokens, input_filename))
+	if (!tokenise(&tokens, &preprocessed, &adjustments))
 		return 11;
+
+	array_free(&preprocessed);
+	array_free(&adjustments);
 
 	if (flag_dump_tokens) {
 		for (u32 i = 0; i < tokens.size; i++) {

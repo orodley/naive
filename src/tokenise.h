@@ -1,8 +1,9 @@
 #ifndef NAIVE_TOKENISE_H
 #define NAIVE_TOKENISE_H
 
-#include "misc.h"
 #include "array.h"
+#include "diagnostics.h"
+#include "misc.h"
 
 #define TOKEN_TYPES \
 	X(TOK_INVALID), \
@@ -93,13 +94,6 @@ typedef struct Token
 	} u;
 } Token;
 
-typedef struct SourceLoc
-{
-	char *filename;
-	u32 line;
-	u32 column;
-} SourceLoc;
-
 typedef struct SourceToken
 {
 	// @NOTE: This is deliberately at the start, so that pointers to
@@ -110,7 +104,8 @@ typedef struct SourceToken
 
 extern char *token_type_names[];
 
-bool tokenise(Array(SourceToken) *tokens, char *input_filename);
+bool tokenise(Array(SourceToken) *tokens, Array(char) *text,
+		Array(Adjustment) *adjustments);
 void dump_token(Token *token);
 
 #endif
