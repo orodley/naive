@@ -16,7 +16,7 @@ void _array_init(Array_ *array, u32 element_size, u32 initial_capacity)
 	}
 }
 
-void array_ensure_room(Array_ *array, u32 element_size, u32 count)
+void _array_ensure_room(Array_ *array, u32 element_size, u32 count)
 {
 	u32 new_size = array->size + count;
 	if (new_size > array->capacity) {
@@ -43,7 +43,7 @@ void array_free(Array_ *array)
 
 void _array_append_elems(Array_ *array, u32 element_size, u32 size, void *elems)
 {
-	array_ensure_room(array, element_size, size);
+	_array_ensure_room(array, element_size, size);
 	u8 *end = array->elements + array->size;
 	memcpy(end, elems, size * element_size);
 	array->size += size;
@@ -51,7 +51,7 @@ void _array_append_elems(Array_ *array, u32 element_size, u32 size, void *elems)
 
 void *_array_insert(Array_ *array, u32 element_size, u32 insertion_point)
 {
-	array_ensure_room(array, element_size, 1);
+	_array_ensure_room(array, element_size, 1);
 	memmove(array->elements + (insertion_point + 1) * element_size,
 			array->elements + insertion_point * element_size,
 			(array->size - insertion_point) * element_size);

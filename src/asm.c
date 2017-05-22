@@ -352,7 +352,7 @@ static inline void write_u8(Array(u8) *output, u8 x)
 
 static inline void write_int_at(Array(u8) *output, u32 offset, u64 x, u32 size)
 {
-	array_ensure_room(output, 1, offset + size);
+	ARRAY_ENSURE_ROOM(output, u8, offset + size);
 	for (u32 n = 0; n < size; n ++) {
 		u8 byte = (x >> (n * 8)) & 0xFF;
 		*ARRAY_REF(output, u8, offset + n) = byte;
