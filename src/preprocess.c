@@ -793,8 +793,12 @@ static bool preprocess_aux(PP *pp)
 			break;
 		}
 		case '#':
-			// Token pasting operator
 			if (peek_char(reader) == '#') {
+				// Token pasting operator
+				// @TODO: Handle empty replacements properly.
+				// @TODO: Handle the case where '##' is formed out of pasting
+				// other tokens together. In this case it doesn't invoke the
+				// token pasting operator.
 				advance(reader);
 				if (pp->macro_depth == 0) {
 					issue_error(&start_source_loc,
@@ -815,15 +819,48 @@ static bool preprocess_aux(PP *pp)
 				}
 
 				skip_whitespace_and_comments(pp, false);
+			} else if (at_start_of_line) {
+				if (!handle_pp_directive(pp))
+					return false;
+			} else if (pp->macro_depth == 0) {
+				issue_error(&start_source_loc,
+						"Unexpected preprocessor directive (not at start of line)");
+				return false;
 			} else {
-				if (!at_start_of_line) {
-					issue_error(&start_source_loc,
-							"Unexpected preprocessor directive (not at start of line)");
+				// Stringification operator
+				// @TODO: Handle whitespace between preprocessing tokens.
+				// @TODO: Handle whitespace at the start or end of the
+				//        replacement text.
+				skip_whitespace_and_comments(pp, false);
+
+				SourceLoc expected_arg_name_source_loc = reader->source_loc;
+				Symbol arg_name = read_symbol(reader);
+				
+				if (arg_name.str == NULL) {
+					issue_error(&expected_arg_name_source_loc,
+							"Expected identifier after '#' operator");
 					return false;
 				}
 
-				if (!handle_pp_directive(pp))
+				Macro *macro = look_up_macro(&pp->curr_macro_params, arg_name);
+				if (macro == NULL) {
+					issue_error(&expected_arg_name_source_loc,
+							"Argument to '#' does not name a macro parameter");
 					return false;
+				}
+
+				u32 macro_value_len = strlen(macro->value);
+
+				*ARRAY_APPEND(&pp->out_chars, char) = '"';
+				for (u32 i = 0; i < macro_value_len; i++) {
+					char c = macro->value[i];
+					if (c == '"') {
+						*ARRAY_APPEND(&pp->out_chars, char) = '\\';
+					}
+
+					*ARRAY_APPEND(&pp->out_chars, char) = c;
+				}
+				*ARRAY_APPEND(&pp->out_chars, char) = '"';
 			}
 
 			break;
