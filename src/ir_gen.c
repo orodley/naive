@@ -2140,14 +2140,26 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 void do_arithmetic_conversions(IrBuilder *builder, Term *left, Term *right)
 {
 	assert(left->ctype->t == INTEGER_TYPE && right->ctype->t == INTEGER_TYPE);
-	if (rank(left->ctype) != rank(right->ctype)) {
-		Term *to_convert = rank(left->ctype) < rank(right->ctype) ? left : right;
-		CType *conversion_type =
-			rank(left->ctype) < rank(right->ctype) ? right->ctype : left->ctype;
-		Term converted = convert_type(builder, *to_convert, conversion_type);
+	if (left->ctype->u.integer.is_signed == right->ctype->u.integer.is_signed) {
+		if (rank(left->ctype) != rank(right->ctype)) {
+			Term *to_convert = rank(left->ctype) < rank(right->ctype)
+				? left
+				: right;
+			CType *conversion_type = rank(left->ctype) < rank(right->ctype)
+				? right->ctype
+				: left->ctype;
 
-		to_convert->value = converted.value;
-		to_convert->ctype = conversion_type;
+			*to_convert = convert_type(builder, *to_convert, conversion_type);
+		}
+	} else {
+		Term *signed_term = left->ctype->u.integer.is_signed ? left : right;
+		Term *unsigned_term = left->ctype->u.integer.is_signed ? right : left;
+
+		if (rank(unsigned_term->ctype) >= rank(signed_term->ctype)) {
+			*signed_term = convert_type(builder, *signed_term, unsigned_term->ctype);
+		} else {
+			UNIMPLEMENTED;
+		}
 	}
 }
 
@@ -2767,6 +2779,11 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		builder->current_block = else_block;
 		Term else_term = ir_gen_expr(builder, env, else_expr, RVALUE_CONTEXT);
 		build_branch(builder, after_block);
+
+		// @TODO: The rest of the conversions specified in C99 6.5.15.
+		if (then_term.ctype->t == INTEGER_TYPE && else_term.ctype->t == INTEGER_TYPE) {
+			do_arithmetic_conversions(builder, &then_term, &else_term);
+		}
 
 		assert(c_type_eq(then_term.ctype, else_term.ctype));
 
