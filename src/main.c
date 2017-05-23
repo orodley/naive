@@ -214,7 +214,7 @@ static int compile_file(char *input_filename, char *output_filename,
 
 	if (preprocess_only) {
 		*ARRAY_APPEND(&preprocessed, char) = '\0';
-		puts((char *)preprocessed.elements);
+		fputs((char *)preprocessed.elements, stdout);
 
 #if 0
 		for (u32 i = 0; i < adjustments.size; i++) {
