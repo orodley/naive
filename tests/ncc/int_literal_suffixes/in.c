@@ -1,3 +1,5 @@
+// FLAGS: -fsyntax-only -dump-tokens
+
 int a = 23L;
 int b = 23l;
 int c = 23LL;
