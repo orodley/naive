@@ -56,7 +56,8 @@ void advance(Reader *reader)
 		if (peek_char(reader) == '\\') {
 			reader->position++;
 			if (peek_char(reader) == '\n') {
-				reader->source_loc.column++;
+				reader->source_loc.line++;
+				reader->source_loc.column = 0;
 				continue;
 			} else {
 				reader->position--;
