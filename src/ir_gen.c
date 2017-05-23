@@ -2575,6 +2575,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case LOGICAL_NOT_EXPR: {
 		CType *result_type = &env->type_env.int_type;
 		Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
+		term = convert_type(builder, term, result_type);
 
 		return (Term) {
 			.value = build_unary_instr(builder, OP_LOG_NOT, term.value),
