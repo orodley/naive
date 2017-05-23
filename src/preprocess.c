@@ -640,8 +640,6 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 			array_clear(&arg_chars);
 			args_processed++;
 
-			skip_whitespace_and_comments(pp, false);
-
 			if (c == ')') {
 				ret = true;
 				if (args_processed != macro->arg_names.size) {
@@ -654,6 +652,8 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 				}
 
 				goto cleanup;
+			} else {
+				skip_whitespace_and_comments(pp, false);
 			}
 		} else {
 			*ARRAY_APPEND(&arg_chars, char) = c;
@@ -917,6 +917,14 @@ static bool preprocess_aux(PP *pp)
 
 						array_free(&pp->curr_macro_params);
 						pp->curr_macro_params = old_params;
+
+						// Add a space to separate tokens if necessary.
+						char next_char = peek_char(reader);
+						if (next_char != ' ' && next_char != '\n'
+								&& next_char != EOF) {
+							*ARRAY_APPEND(&pp->out_chars, char) = ' ';
+						}
+
 						add_adjustment(pp, END_MACRO_ADJUSTMENT);
 					}
 				}
