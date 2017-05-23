@@ -793,14 +793,38 @@ static bool preprocess_aux(PP *pp)
 			break;
 		}
 		case '#':
-			if (!at_start_of_line) {
-				issue_error(&start_source_loc,
-						"Unexpected preprocessor directive (not at start of line)");
-				return false;
-			}
+			// Token pasting operator
+			if (peek_char(reader) == '#') {
+				advance(reader);
+				if (pp->macro_depth == 0) {
+					issue_error(&start_source_loc,
+							"The '##' operator is only allowed in a macro definition");
+					return false;
+				}
 
-			if (!handle_pp_directive(pp))
-				return false;
+				// The only whitespace we should only ever be preceded by is at
+				// most one ' '. It's only valid in a macro definition, so it
+				// can't contain newlines, and skip_comments_and_whitespace
+				// will produce at most one space.
+				if (pp->out_chars.size >= 1) {
+					char prev_char =
+						*ARRAY_REF(&pp->out_chars, char, pp->out_chars.size - 1);
+					if (prev_char == ' ') {
+						pp->out_chars.size--;
+					}
+				}
+
+				skip_whitespace_and_comments(pp, false);
+			} else {
+				if (!at_start_of_line) {
+					issue_error(&start_source_loc,
+							"Unexpected preprocessor directive (not at start of line)");
+					return false;
+				}
+
+				if (!handle_pp_directive(pp))
+					return false;
+			}
 
 			break;
 		case EOF:
