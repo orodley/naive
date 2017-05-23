@@ -29,4 +29,6 @@ int fstat(int fd, struct stat *buf);
 
 int fchmod(int fd, mode_t mode);
 
+#define S_IXUSR 0100
+
 #endif
