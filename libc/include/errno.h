@@ -3,6 +3,7 @@
 
 extern int errno;
 
+#define EEXIST 17
 #define EISDIR 21
 
 #endif
