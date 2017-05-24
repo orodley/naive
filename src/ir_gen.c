@@ -794,6 +794,11 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 				decl_to_cdecl(
 						builder, env, decl_spec_type, params->declarator, &cdecl);
 
+				if (cdecl.type->t == VOID_TYPE) {
+					assert(i == 0);
+					assert(cdecl.name == NULL);
+				}
+
 				// As per 6.7.5.3.7, parameters of array type are adjusted to
 				// pointers to the element type.
 				cdecl.type = decay_to_pointer(type_env, cdecl.type);
@@ -809,6 +814,14 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 			}
 
 			params = params->next;
+		}
+
+		// This is a nullary function declaration, using void,
+		// e.g. int foo(void);
+		if (arity == 1 && arg_c_types[0]->t == VOID_TYPE) {
+			assert(!variable_arity);
+			arg_c_types = NULL;
+			arity = 0;
 		}
 
 		ASTDirectDeclarator *function_declarator =
@@ -1377,7 +1390,7 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 	Scope scope;
 	scope.parent_scope = env->scope;
 	Array(Binding) *param_bindings = &scope.bindings;
-	ARRAY_INIT(param_bindings, Binding, 5);
+	*param_bindings = EMPTY_ARRAY;
 	env->scope = &scope;
 
 	env->current_function_type = function_type;
@@ -1394,13 +1407,21 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 			continue;
 		}
 
-		Binding *binding = ARRAY_APPEND(param_bindings, Binding);
-
 		CType *decl_spec_type = decl_specifier_list_to_c_type(
 				builder, env, param->decl_specifier_list);
 		CDecl cdecl;
 		decl_to_cdecl(builder, env, decl_spec_type,
 				param->declarator, &cdecl);
+
+		if (cdecl.type->t == VOID_TYPE) {
+			assert(i == 0);
+			assert(cdecl.name == NULL);
+			assert(param->next == NULL);
+			break;
+		}
+
+		Binding *binding = ARRAY_APPEND(param_bindings, Binding);
+
 		// @HACK: We have to do this because decl_to_cdecl does extra
 		// stuff to adjust parameter types when it knows that the
 		// declarator is for a parameter. The proper fix is just to not
