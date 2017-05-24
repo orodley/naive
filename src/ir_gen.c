@@ -1172,6 +1172,12 @@ typedef struct CInitializer
 {
 	CType *type;
 
+	enum
+	{
+		C_INIT_COMPOUND,
+		C_INIT_LEAF,
+	} t;
+
 	union
 	{
 		IrValue leaf_value;
@@ -1185,10 +1191,10 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 {
 	c_init->type = type;
 
-	switch (type->t) {
-	case STRUCT_TYPE: case ARRAY_TYPE: {
-		assert(init->t == BRACE_INITIALIZER
-				|| init->u.expr->t == STRING_LITERAL_EXPR);
+	if (init->t == BRACE_INITIALIZER || init->u.expr->t == STRING_LITERAL_EXPR) {
+		assert(type->t == STRUCT_TYPE || type->t == ARRAY_TYPE);
+
+		c_init->t = C_INIT_COMPOUND;
 
 		if (init->u.expr->t == STRING_LITERAL_EXPR) {
 			char *str = init->u.expr->u.string_literal;
@@ -1198,6 +1204,7 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 			for (u32 i = 0 ; i < len; i++) {
 				CType *char_type = &env->type_env.char_type;
 				init_elems[i] = (CInitializer) {
+					.t = C_INIT_LEAF,
 					.type = char_type,
 					.u.leaf_value =
 						value_const(c_type_to_ir_type(char_type), str[i]),
@@ -1305,11 +1312,11 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 			curr_elem_index++;
 			elems = elems->next;
 		}
-
-		break;
-	}
-	default: {
+	} else {
 		assert(init->t == EXPR_INITIALIZER);
+
+		c_init->t = C_INIT_LEAF;
+
 		ASTExpr *expr = init->u.expr;
 		IrValue value;
 
@@ -1331,7 +1338,6 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 
 		c_init->u.leaf_value = value;
 	}
-	}
 }
 
 static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
@@ -1344,6 +1350,9 @@ static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
 	switch (type->t) {
 	case ARRAY_TYPE: {
 		assert(!type->u.array.incomplete);
+		// Array values must be initialized by compound initializers.
+		assert(c_init->t == C_INIT_COMPOUND);
+
 		u32 elem_size = size_of_c_type(type->u.array.elem_type);
 
 		for (u32 i = 0; i < type->u.array.size; i++) {
@@ -1354,17 +1363,38 @@ static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
 		break;
 	}
 	case STRUCT_TYPE:
-		for (u32 i = 0; i < type->u.strukt.fields.size; i++) {
-			ir_gen_c_init(builder, type_env, base_ptr, c_init->u.sub_elems + i,
-					current_offset);
-			CType *field_type =
-				ARRAY_REF(&type->u.strukt.fields, CDecl, i)->type;
+		switch (c_init->t) {
+		case C_INIT_COMPOUND:
+			for (u32 i = 0; i < type->u.strukt.fields.size; i++) {
+				ir_gen_c_init(builder, type_env, base_ptr,
+						c_init->u.sub_elems + i, current_offset);
+				CType *field_type =
+					ARRAY_REF(&type->u.strukt.fields, CDecl, i)->type;
 
-			current_offset += size_of_c_type(field_type);
+				current_offset += size_of_c_type(field_type);
+			}
+			break;
+		// Struct values can be initialized with expressions.
+		case C_INIT_LEAF: {
+			IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,
+					3 * sizeof *memcpy_args);
+			memcpy_args[0] = build_binary_instr(builder, OP_ADD, base_ptr,
+					value_const(c_type_to_ir_type(type_env->int_ptr_type),
+						current_offset));
+			memcpy_args[1] = c_init->u.leaf_value;
+			memcpy_args[2] = value_const(c_type_to_ir_type(type_env->size_type),
+					size_of_c_type(type));
+
+			// @TODO: Open-code this for small sizes
+			build_call(builder, builtin_memcpy(builder),
+					(IrType) { .t = IR_POINTER }, 3, memcpy_args);
+			break;
+		}
 		}
 		break;
-
 	default: {
+		assert(c_init->t == C_INIT_LEAF);
+
 		IrType int_ptr_type = c_type_to_ir_type(type_env->int_ptr_type);
 		IrValue field_ptr = build_binary_instr(builder, OP_ADD,
 				base_ptr, value_const(int_ptr_type, current_offset));
