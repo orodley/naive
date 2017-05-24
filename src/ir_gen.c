@@ -2749,7 +2749,6 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case LOGICAL_OR_EXPR: case LOGICAL_AND_EXPR: {
 		bool is_or = expr->t == LOGICAL_OR_EXPR;
 
-		IrBlock *initial_block = builder->current_block;
 		IrBlock *rhs_block = add_block(builder, is_or ? "or.rhs" : "and.rhs");
 		IrBlock *after_block = add_block(builder, is_or ? "or.after" : "and.after");
 
@@ -2763,6 +2762,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		} else {
 			build_cond(builder, lhs.value, rhs_block, after_block);
 		}
+		// ir_gen'ing the LHS expr may have changed the current block.
+		IrBlock *lhs_resultant_block = builder->current_block;
 
 		builder->current_block = rhs_block;
 		Term rhs = ir_gen_expr(builder, env, rhs_expr, RVALUE_CONTEXT);
@@ -2771,13 +2772,16 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 				value_const(c_type_to_ir_type(rhs.ctype), 0));
 		build_branch(builder, after_block);
 
+		// ir_gen'ing the RHS expr may have changed the current block.
+		IrBlock *rhs_resultant_block = builder->current_block;
+
 		builder->current_block = after_block;
 		IrValue phi =
 			build_phi(builder, c_type_to_ir_type(&env->type_env.int_type), 2);
-		phi_set_param(phi, 0, initial_block,
+		phi_set_param(phi, 0, lhs_resultant_block,
 				value_const(c_type_to_ir_type(&env->type_env.int_type),
 					is_or ? 1 : 0));
-		phi_set_param(phi, 1, rhs_block, rhs_as_bool);
+		phi_set_param(phi, 1, rhs_resultant_block, rhs_as_bool);
 
 		return (Term) { .ctype = &env->type_env.int_type, .value = phi };
 	}
