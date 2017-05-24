@@ -421,8 +421,12 @@ static void asm_gen_instr(
 	}
 	case OP_PHI: {
 		// Phi nodes are handled by asm_gen for the incoming branches, and
-		// require no codegen in their containing block.
-		assert(instr->vreg_number != -1);
+		// require no codegen in their containing block. All we need to do is
+		// make sure we have a vreg assigned, as we might not have visited the
+		// incoming blocks yet.
+		if (instr->vreg_number == -1)
+			assign_vreg(builder, instr);
+
 		break;
 	}
 	case OP_STORE: {
