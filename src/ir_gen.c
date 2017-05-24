@@ -103,6 +103,7 @@ static bool c_type_eq(CType *a, CType *b)
 	}
 }
 
+#if 0
 static bool c_type_compatible(CType *a, CType *b)
 {
 	if (c_type_eq(a, b))
@@ -116,6 +117,7 @@ static bool c_type_compatible(CType *a, CType *b)
 
 	return false;
 }
+#endif
 
 static IrType c_type_to_ir_type(CType *ctype)
 {
@@ -1330,9 +1332,6 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 			value = value_const(konst->type, konst->u.integer);
 		} else {
 			Term term = ir_gen_expr(builder, env, expr, RVALUE_CONTEXT);
-
-			// @TODO: Conversions?
-			assert(c_type_compatible(term.ctype, type));
 			value = convert_type(builder, term, type).value;
 		}
 
@@ -2841,17 +2840,24 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrBlock *else_resultant_block = builder->current_block;
 
 		// @TODO: The rest of the conversions specified in C99 6.5.15.
+		CType *result_type = then_term.ctype;
 		if (then_term.ctype->t == INTEGER_TYPE && else_term.ctype->t == INTEGER_TYPE) {
 			do_arithmetic_conversions(builder, &then_term, &else_term);
+		} else if (then_term.ctype->t == POINTER_TYPE
+				&& else_term.ctype->t == POINTER_TYPE
+				&& (then_term.ctype->u.pointee_type->t == VOID_TYPE
+					|| else_term.ctype->u.pointee_type->t == VOID_TYPE)) {
+			// IR pointers are untyped, so this is a no-op conversion.
+			result_type = pointer_type(&env->type_env, &env->type_env.void_type);
+		} else {
+			assert(c_type_eq(then_term.ctype, else_term.ctype));
 		}
-
-		assert(c_type_eq(then_term.ctype, else_term.ctype));
 
 		builder->current_block = after_block;
 		IrValue phi = build_phi(builder, c_type_to_ir_type(then_term.ctype), 2);
 		phi_set_param(phi, 0, then_resultant_block, then_term.value);
 		phi_set_param(phi, 1, else_resultant_block, else_term.value);
-		return (Term) { .ctype = then_term.ctype, .value = phi };
+		return (Term) { .ctype = result_type, .value = phi };
 	}
 	case COMPOUND_EXPR: {
 		CType *type =
