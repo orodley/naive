@@ -2800,11 +2800,15 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		builder->current_block = then_block;
 		Term then_term = ir_gen_expr(builder, env, then_expr, RVALUE_CONTEXT);
 		build_branch(builder, after_block);
+		// ir_gen'ing the "then" expr may have changed the current block.
+		IrBlock *then_resultant_block = builder->current_block;
 
 		ASTExpr *else_expr = expr->u.ternary_op.arg3;
 		builder->current_block = else_block;
 		Term else_term = ir_gen_expr(builder, env, else_expr, RVALUE_CONTEXT);
 		build_branch(builder, after_block);
+		// ir_gen'ing the "else" expr may have changed the current block.
+		IrBlock *else_resultant_block = builder->current_block;
 
 		// @TODO: The rest of the conversions specified in C99 6.5.15.
 		if (then_term.ctype->t == INTEGER_TYPE && else_term.ctype->t == INTEGER_TYPE) {
@@ -2815,8 +2819,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 		builder->current_block = after_block;
 		IrValue phi = build_phi(builder, c_type_to_ir_type(then_term.ctype), 2);
-		phi_set_param(phi, 0, then_block, then_term.value);
-		phi_set_param(phi, 1, else_block, else_term.value);
+		phi_set_param(phi, 0, then_resultant_block, then_term.value);
+		phi_set_param(phi, 1, else_resultant_block, else_term.value);
 		return (Term) { .ctype = then_term.ctype, .value = phi };
 	}
 	case COMPOUND_EXPR: {
