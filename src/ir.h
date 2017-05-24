@@ -61,6 +61,7 @@ typedef struct IrStructField
 
 typedef struct IrBlock
 {
+	u32 id;
 	char *name;
 	Array(IrInstr *) instrs;
 

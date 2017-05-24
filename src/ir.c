@@ -9,9 +9,10 @@
 #include "misc.h"
 #include "util.h"
 
-static void block_init(IrBlock *block, char *name)
+static void block_init(IrBlock *block, char *name, u32 id)
 {
 	block->name = name;
+	block->id = id;
 	ARRAY_INIT(&block->instrs, IrInstr *, 10);
 }
 
@@ -53,7 +54,7 @@ IrBlock *add_block_to_function(
 {
 	IrBlock *block = pool_alloc(&trans_unit->pool, sizeof *block);
 	*ARRAY_APPEND(&function->blocks, IrBlock *) = block;
-	block_init(block, name);
+	block_init(block, name, function->blocks.size - 1);
 
 	return block;
 }
@@ -242,6 +243,11 @@ static void dump_value(IrValue value)
 	}
 }
 
+static void dump_block_name(IrBlock *block)
+{
+	printf("%u.%s", block->id, block->name);
+}
+
 #define X(x) #x
 static char *ir_op_names[] = {
 	IR_OPS
@@ -284,17 +290,21 @@ static void dump_instr(IrInstr *instr)
 		dump_ir_type(instr->type);
 		break;
 	case OP_BRANCH:
-		fputs(instr->u.target_block->name, stdout);
+		dump_block_name(instr->u.target_block);
 		break;
 	case OP_COND:
 		dump_value(instr->u.cond.condition);
 		fputs(", ", stdout);
-		printf("%s, %s", instr->u.cond.then_block->name, instr->u.cond.else_block->name);
+		dump_block_name(instr->u.cond.then_block);
+		fputs(", ", stdout);
+		dump_block_name(instr->u.cond.else_block);
 		break;
 	case OP_PHI:
 		for (u32 i = 0; i < instr->u.phi.arity; i++) {
 			IrPhiParam *param = instr->u.phi.params + i;
-			printf("(%s, ", param->block->name);
+			putchar('(');
+			dump_block_name(param->block);
+			fputs(", ", stdout);
 			dump_value(param->value);
 			putchar(')');
 			if (i != instr->u.phi.arity - 1)
@@ -366,7 +376,8 @@ static void dump_const(IrConst *konst)
 
 		for (u32 i = 0; i < f->blocks.size; i++) {
 			IrBlock *block = *ARRAY_REF(&f->blocks, IrBlock *, i);
-			printf("%s:\n", block->name);
+			dump_block_name(block);
+			fputs(":\n", stdout);
 
 			Array(IrInstr *) *instrs = &block->instrs;
 			for (u32 i = 0; i < instrs->size; i++) {
