@@ -13,7 +13,7 @@ pp = pprint.PrettyPrinter(indent=4)
 
 Instr = namedtuple('Instr', ['opcode', 'encodings'])
 Encoding = namedtuple('Encoding',
-        ['args', 'arg_order', 'use_rex_w', 'opcode_size', 'opcode',
+        ['args', 'arg_order', 'use_rex_w', 'use_oso', 'opcode_size', 'opcode',
          'reg_and_rm', 'opcode_extension', 'immediate_size', 'reg_in_opcode',
          'fixup_type'])
 
@@ -53,6 +53,7 @@ def generate_encoder(input_filename, output_filename):
             # SIB bytes.
             match = re.match(
                     r' *(?P<use_rex_w>REX\.W *\+ *)? *' +
+                    r'(?P<use_oso>OSO *\+ *)? *' +
                     r'(?P<opcode>([0-9a-fA-F]+|\[[0-9a-fA-F ]+\])) *' +
                     r'(?P<slash>/.)? *' +
                     r'(?P<reg_in_opcode>\+r[bwdo])? *' +
@@ -60,6 +61,7 @@ def generate_encoder(input_filename, output_filename):
                     encoding)
 
             use_rex_w = bool(match.group('use_rex_w'))
+            use_oso = bool(match.group('use_oso'))
 
             opcode_str = match.group('opcode').strip('[]').replace(' ', '')
             opcode = [int(a + b, 16) for a, b in zip(opcode_str[0::2], opcode_str[1::2])]
@@ -88,9 +90,9 @@ def generate_encoder(input_filename, output_filename):
 
             reg_in_opcode = bool(match.group('reg_in_opcode'))
 
-            encoding = Encoding(args, arg_order, use_rex_w, opcode_size, opcode,
-                    reg_and_rm, opcode_extension, immediate_size, reg_in_opcode,
-                    fixup_type)
+            encoding = Encoding(args, arg_order, use_rex_w, use_oso,
+                    opcode_size, opcode, reg_and_rm, opcode_extension,
+                    immediate_size, reg_in_opcode, fixup_type)
             
             # @TODO: We should sort encodings by immediate size (ascending) so
             # that the smallest encoding gets selected automatically.
@@ -124,10 +126,10 @@ static void assemble_instr(Array(u8) *output, AsmModule *asm_module, AsmInstr *i
                     % (indent,
                         ', '.join(map(to_c_val,
                             [encoding.arg_order, encoding.use_rex_w,
-                            encoding.opcode_size, encoding.opcode,
-                            encoding.reg_and_rm, encoding.opcode_extension,
-                            encoding.immediate_size, encoding.reg_in_opcode,
-                            encoding.fixup_type])),
+                            encoding.use_oso, encoding.opcode_size,
+                            encoding.opcode, encoding.reg_and_rm,
+                            encoding.opcode_extension, encoding.immediate_size,
+                            encoding.reg_in_opcode, encoding.fixup_type])),
                         indent))
             if len(encoding.args) != 0:
                 output.append("\t\t}\n")

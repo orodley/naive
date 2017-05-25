@@ -404,11 +404,12 @@ static u32 encoded_register_number(RegClass reg)
 	}
 }
 
-#define MAX_OPCODE_SIZE 2
+#define MAX_OPCODE_SIZE 3
 
 typedef struct EncodedInstr
 {
 	u8 rex_prefix;
+	bool has_oso;
 	u8 opcode_size;
 	u8 opcode[MAX_OPCODE_SIZE];
 	u8 opcode_extension;
@@ -562,9 +563,9 @@ typedef enum RexPrefix
 
 // Called by the generated function "assemble_instr".
 static void encode_instr(Array(u8) *output, AsmModule *asm_module,
-		AsmInstr *instr, ArgOrder arg_order, bool use_rex_w, u32 opcode_size,
-		u8 opcode[], bool reg_and_rm, i32 opcode_extension, i32 immediate_size,
-		bool reg_in_opcode, FixupType fixup_type)
+		AsmInstr *instr, ArgOrder arg_order, bool use_rex_w, bool use_oso,
+		u32 opcode_size, u8 opcode[], bool reg_and_rm, i32 opcode_extension,
+		i32 immediate_size, bool reg_in_opcode, FixupType fixup_type)
 {
 	EncodedInstr encoded_instr;
 	ZERO_STRUCT(&encoded_instr);
@@ -573,6 +574,8 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 
 	if (use_rex_w)
 		encoded_instr.rex_prefix |= REX_W;
+
+	encoded_instr.has_oso = use_oso;
 
 	encoded_instr.opcode_size = opcode_size;
 	memcpy(encoded_instr.opcode, opcode, opcode_size);
@@ -689,6 +692,9 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 		// Make sure we didn't already use REX.B for the RM field or SIB.
 		assert((encoded_instr.rex_prefix & REX_B) == 0);
 		encoded_instr.rex_prefix |= REX_B;
+	}
+	if (encoded_instr.has_oso) {
+		write_u8(output, 0x66);
 	}
 	if (encoded_instr.rex_prefix != 0) {
 		encoded_instr.rex_prefix |= REX_HIGH;
