@@ -1192,13 +1192,17 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 		CInitializer *c_init)
 {
 	c_init->type = type;
+	bool string_init = init->t == EXPR_INITIALIZER
+		&& init->u.expr->t == STRING_LITERAL_EXPR;
 
-	if (init->t == BRACE_INITIALIZER || init->u.expr->t == STRING_LITERAL_EXPR) {
+	if (init->t == BRACE_INITIALIZER || (string_init && type->t == ARRAY_TYPE)) {
 		assert(type->t == STRUCT_TYPE || type->t == ARRAY_TYPE);
 
 		c_init->t = C_INIT_COMPOUND;
 
-		if (init->u.expr->t == STRING_LITERAL_EXPR) {
+		if (string_init) {
+			assert(type->t == ARRAY_TYPE);
+
 			char *str = init->u.expr->u.string_literal;
 			size_t len = strlen(str);
 			CInitializer *init_elems =
