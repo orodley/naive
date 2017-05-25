@@ -765,18 +765,20 @@ static bool preprocess_aux(PP *pp)
 
 		char c = read_char(reader);
 		switch (c) {
-		// We need to handle strings here so that we don't expand macros inside
-		// strings.
-		case '"': {
+		// We need to handle string and character literals here so that we
+		// don't expand macros inside them.
+		case '\'': case '"': {
 			if (ignoring_chars(pp))
 				break;
 
-			u32 string_start = reader->position - 1;
-			SourceLoc string_start_source_loc = reader->source_loc;
-			while (peek_char(reader) != '"') {
+			u32 literal_start = reader->position - 1;
+			SourceLoc literal_start_source_loc = reader->source_loc;
+			while (peek_char(reader) != c) {
 				if (at_end(reader)) {
-					issue_error(&string_start_source_loc,
-							"Unterminated string literal");
+					issue_error(&literal_start_source_loc,
+							c == '"'
+								? "Unterminated string literal"
+								: "Unterminated character literal");
 					return false;
 				}
 				if (peek_char(reader) == '\\') {
@@ -788,8 +790,8 @@ static bool preprocess_aux(PP *pp)
 			advance(reader);
 
 			ARRAY_APPEND_ELEMS(&pp->out_chars, char,
-					reader->position - string_start,
-					buffer->chars + string_start);
+					reader->position - literal_start,
+					buffer->chars + literal_start);
 			break;
 		}
 		case '#':
