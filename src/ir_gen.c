@@ -2187,30 +2187,59 @@ static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 }
 
 // @TODO: Implement this fully
-void do_arithmetic_conversions(IrBuilder *builder, Term *left, Term *right)
+void do_arithmetic_conversions_with_blocks(IrBuilder *builder, Term *left,
+		IrBlock *left_block, Term *right, IrBlock *right_block)
 {
 	assert(left->ctype->t == INTEGER_TYPE && right->ctype->t == INTEGER_TYPE);
+
+	IrBlock *original_block = builder->current_block;
+
 	if (left->ctype->u.integer.is_signed == right->ctype->u.integer.is_signed) {
 		if (rank(left->ctype) != rank(right->ctype)) {
-			Term *to_convert = rank(left->ctype) < rank(right->ctype)
-				? left
-				: right;
-			CType *conversion_type = rank(left->ctype) < rank(right->ctype)
-				? right->ctype
-				: left->ctype;
+			Term *to_convert;
+			CType *conversion_type;
+			IrBlock *conversion_block;
+			if (rank(left->ctype) < rank(right->ctype)) {
+				to_convert = left;
+				conversion_type = right->ctype;
+				conversion_block = left_block;
+			} else {
+				to_convert = right;
+				conversion_type = left->ctype;
+				conversion_block = right_block;
+			}
 
+			builder->current_block = conversion_block;
 			*to_convert = convert_type(builder, *to_convert, conversion_type);
 		}
 	} else {
-		Term *signed_term = left->ctype->u.integer.is_signed ? left : right;
-		Term *unsigned_term = left->ctype->u.integer.is_signed ? right : left;
+		Term *signed_term, *unsigned_term;
+		IrBlock *conversion_block;
+		if (left->ctype->u.integer.is_signed) {
+			signed_term = left;
+			unsigned_term = right;
+			conversion_block = left_block;
+		} else {
+			signed_term = right;
+			unsigned_term = left;
+			conversion_block = right_block;
+		}
 
 		if (rank(unsigned_term->ctype) >= rank(signed_term->ctype)) {
+			builder->current_block = conversion_block;
 			*signed_term = convert_type(builder, *signed_term, unsigned_term->ctype);
 		} else {
 			UNIMPLEMENTED;
 		}
 	}
+
+	builder->current_block = original_block;
+}
+
+void do_arithmetic_conversions(IrBuilder *builder, Term *left, Term *right)
+{
+	do_arithmetic_conversions_with_blocks(builder, left, builder->current_block,
+			right, builder->current_block);
 }
 
 static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
@@ -2828,21 +2857,21 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ASTExpr *then_expr = expr->u.ternary_op.arg2;
 		builder->current_block = then_block;
 		Term then_term = ir_gen_expr(builder, env, then_expr, RVALUE_CONTEXT);
-		build_branch(builder, after_block);
 		// ir_gen'ing the "then" expr may have changed the current block.
 		IrBlock *then_resultant_block = builder->current_block;
 
 		ASTExpr *else_expr = expr->u.ternary_op.arg3;
 		builder->current_block = else_block;
 		Term else_term = ir_gen_expr(builder, env, else_expr, RVALUE_CONTEXT);
-		build_branch(builder, after_block);
 		// ir_gen'ing the "else" expr may have changed the current block.
 		IrBlock *else_resultant_block = builder->current_block;
 
 		// @TODO: The rest of the conversions specified in C99 6.5.15.
 		CType *result_type = then_term.ctype;
 		if (then_term.ctype->t == INTEGER_TYPE && else_term.ctype->t == INTEGER_TYPE) {
-			do_arithmetic_conversions(builder, &then_term, &else_term);
+			do_arithmetic_conversions_with_blocks(builder,
+					&then_term, then_resultant_block,
+					&else_term, else_resultant_block);
 		} else if (then_term.ctype->t == POINTER_TYPE
 				&& else_term.ctype->t == POINTER_TYPE
 				&& (then_term.ctype->u.pointee_type->t == VOID_TYPE
@@ -2852,6 +2881,13 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		} else {
 			assert(c_type_eq(then_term.ctype, else_term.ctype));
 		}
+
+		// We have to build the branches after doing conversions, since if any
+		// conversions occur they may add instructions.
+		builder->current_block = then_resultant_block;
+		build_branch(builder, after_block);
+		builder->current_block = else_resultant_block;
+		build_branch(builder, after_block);
 
 		builder->current_block = after_block;
 		IrValue phi = build_phi(builder, c_type_to_ir_type(then_term.ctype), 2);
