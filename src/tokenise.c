@@ -192,7 +192,7 @@ i64 read_char_in_literal(Reader *reader, SourceLoc *start_source_loc) {
 		switch (read_char(reader)) {
 		case '\\': value = '\\'; break;
 		case '\'': value = '\''; break;
-		case '"': value = '"'; break; // no idea why this exists
+		case '"': value = '"'; break;
 		case 'a': value = '\a'; break;
 		case 'b': value = '\b'; break;
 		case 'f': value = '\f'; break;
