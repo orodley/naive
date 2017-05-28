@@ -337,7 +337,12 @@ void dump_asm_module(AsmModule *asm_module)
 					}
 					putchar(']');
 				}
+
+				break;
 			}
+			case ASM_GLOBAL_REF:
+				printf(" = &%s", global->u.ref->name);
+				break;
 			}
 		}
 
@@ -493,6 +498,7 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 			fixup->type = fixup_type;
 			fixup->size_bytes = 4;
 			fixup->t = FIXUP_GLOBAL;
+			fixup->section = TEXT_SECTION;
 			fixup->u.global = asm_const.u.global;
 		} else {
 			assert(asm_const.t == ASM_CONST_IMMEDIATE);
@@ -640,6 +646,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 			*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
 			encoded_instr.imm_fixup = fixup;
 			fixup->type = fixup_type;
+			fixup->section = TEXT_SECTION;
 			fixup->size_bytes = 4;
 			fixup->t = FIXUP_LABEL;
 			fixup->u.label = immediate_arg->u.label;
@@ -654,6 +661,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 				*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
 				encoded_instr.imm_fixup = fixup;
 				fixup->type = fixup_type;
+				fixup->section = TEXT_SECTION;
 				fixup->size_bytes = 4;
 				fixup->t = FIXUP_GLOBAL;
 				fixup->u.global = constant.u.global;
@@ -839,7 +847,36 @@ void assemble(AsmModule *asm_module, Binary *binary)
 			}
 
 			break;
+		case ASM_GLOBAL_REF: {
+			symbol->section = DATA_SECTION;
+			// @TODO: Alignment
+			symbol->offset = binary->data.size;
+			// @PORT: Hardcoded pointer size.
+			u8 zero_pointer[8] = { 0 };
+			ARRAY_APPEND_ELEMS(&binary->data, u8, sizeof zero_pointer, zero_pointer);
+			break;
 		}
+		}
+	}
+
+	for (u32 i = 0; i < asm_module->globals.size; i++) {
+		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
+		if (global->t != ASM_GLOBAL_REF)
+			continue;
+
+		AsmSymbol *symbol = global->symbol;
+
+		Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
+		*fixup = (Fixup) {
+			.t = FIXUP_GLOBAL,
+			.type = FIXUP_ABSOLUTE,
+			.section = DATA_SECTION,
+			.offset = symbol->offset,
+			// @PORT: Hardcoded pointer size.
+			.size_bytes = 8,
+			.u.global = global->u.ref,
+		};
+		*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
 	}
 
 	// @TODO: Emit relocations here instead?

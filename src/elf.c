@@ -263,6 +263,8 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 		Fixup *fixup = *ARRAY_REF(fixups, Fixup *, i);
 		if (fixup->t == FIXUP_LABEL)
 			continue;
+		if (fixup->section != TEXT_SECTION)
+			continue;
 
 		u32 symbol = fixup->u.global->symbol->symtab_index;
 		assert(symbol != 0);
@@ -306,15 +308,42 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 	assert(data_info->contents != NULL);
 	checked_fwrite(data_info->contents, 1, data_info->size, elf_file->output_file);
 
-	SectionInfo shstrtab_info = (SectionInfo) {
-		.offset = data_info->offset + data_info->size,
-		.size = sizeof SHSTRTAB_CONTENTS,
-	};
-	elf_file->section_info[SHSTRTAB_INDEX] = shstrtab_info;
+	// @TODO: Combine with the similar code above for .rela.text?
+	for (u32 i = 0; i < fixups->size; i++) {
+		Fixup *fixup = *ARRAY_REF(fixups, Fixup *, i);
+		if (fixup->section != DATA_SECTION)
+			continue;
+
+		assert(fixup->t == FIXUP_GLOBAL);
+		assert(fixup->type = FIXUP_ABSOLUTE);
+
+		u32 symbol = fixup->u.global->symbol->symtab_index;
+		assert(symbol != 0);
+
+		// @PORT: Hardcoded pointer size.
+		ELF64RelocType reloc_type = R_X86_64_64;
+		u32 addend = 0;
+		ELF64Rela rela = {
+			.section_offset = fixup->offset,
+			.type_and_symbol = ELF64_RELA_TYPE_AND_SYMBOL(reloc_type, symbol),
+			.addend = addend,
+		};
+
+		checked_fwrite(&rela, sizeof rela, 1, elf_file->output_file);
+	}
+
+	SectionInfo *rela_data_info = elf_file->section_info + RELA_DATA_INDEX;
+	rela_data_info->offset = data_info->offset + data_info->size;
+	rela_data_info->size =
+		checked_ftell(elf_file->output_file) - rela_data_info->offset;
+
+	SectionInfo *shstrtab_info = elf_file->section_info + SHSTRTAB_INDEX;
+	shstrtab_info->offset = rela_data_info->offset + rela_data_info->size;
+	shstrtab_info->size = sizeof SHSTRTAB_CONTENTS;
 	checked_fwrite(SHSTRTAB_CONTENTS, sizeof SHSTRTAB_CONTENTS, 1, elf_file->output_file);
 
 	elf_file->section_info[SYMTAB_INDEX].offset =
-		shstrtab_info.offset + shstrtab_info.size;
+		shstrtab_info->offset + shstrtab_info->size;
 
 	ELF64Symbol undef_symbol;
 	ZERO_STRUCT(&undef_symbol);

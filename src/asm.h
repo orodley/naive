@@ -203,12 +203,32 @@ typedef enum AsmLinkage
 	ASM_LOCAL_LINKAGE,
 } AsmLinkage;
 
+typedef enum AsmSymbolSection
+{
+	TEXT_SECTION,
+	DATA_SECTION,
+	BSS_SECTION,
+} AsmSymbolSection;
+
+typedef struct AsmSymbol
+{
+	char *name;
+	AsmSymbolSection section;
+	u32 defined;
+	AsmLinkage linkage;
+	u32 symtab_index;
+	u32 string_table_offset_for_name;
+	u32 offset;
+	u32 size;
+} AsmSymbol;
+
 typedef struct AsmGlobal
 {
 	enum
 	{
 		ASM_GLOBAL_FUNCTION,
 		ASM_GLOBAL_VAR,
+		ASM_GLOBAL_REF,
 	} t;
 
 	char *name;
@@ -217,7 +237,7 @@ typedef struct AsmGlobal
 	// a pointer.
 	bool defined;
 	i32 offset;
-	struct AsmSymbol *symbol;
+	AsmSymbol *symbol;
 
 	union
 	{
@@ -227,6 +247,7 @@ typedef struct AsmGlobal
 			u32 size_bytes;
 			u8 *value;
 		} var;
+		struct AsmGlobal *ref;
 	} u;
 } AsmGlobal;
 
@@ -246,6 +267,8 @@ typedef struct Fixup
 
 	FixupType type;
 
+	AsmSymbolSection section;
+
 	u32 offset;
 	u32 next_instr_offset;
 	u32 size_bytes;
@@ -264,25 +287,8 @@ typedef struct AsmModule
 	Pool pool;
 
 	Array(AsmGlobal *) globals;
-	Array(Fixup) fixups;
+	Array(Fixup *) fixups;
 } AsmModule;
-
-typedef struct AsmSymbol
-{
-	char *name;
-	enum
-	{
-		TEXT_SECTION,
-		BSS_SECTION,
-		DATA_SECTION,
-	} section;
-	u32 defined;
-	AsmLinkage linkage;
-	u32 symtab_index;
-	u32 string_table_offset_for_name;
-	u32 offset;
-	u32 size;
-} AsmSymbol;
 
 typedef struct Binary
 {

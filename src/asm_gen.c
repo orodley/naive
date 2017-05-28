@@ -1388,12 +1388,14 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 static void write_const(IrConst *konst, u8 *value)
 {
 	switch (konst->type.t) {
-	case IR_INT: case IR_POINTER:
+	case IR_INT:
 		for (u32 n = 0; n < size_of_ir_type(konst->type); n++) {
 			u8 byte = (konst->u.integer >> (n * 8)) & 0xFF;
 			*value++ = byte;
 		}
 		break;
+	case IR_POINTER:
+		UNREACHABLE;
 	case IR_ARRAY:
 		for (u32 n = 0; n < konst->type.u.array.size; n++) {
 			write_const(konst->u.array_elems + n, value);
@@ -1459,17 +1461,29 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
-		if (ir_global->type.t == IR_FUNCTION) {
+		AsmGlobal *asm_global = ir_global->asm_global;
+		if (!asm_global->defined)
+			continue;
+
+		IrConst *konst = ir_global->initializer;
+		switch (ir_global->type.t) {
+		case IR_FUNCTION:
 			asm_gen_function(builder, ir_global);
-		} else {
-			IrConst *konst = ir_global->initializer;
-			if (konst != NULL) {
-				AsmGlobal *asm_global = ir_global->asm_global;
-				u32 size = asm_global->u.var.size_bytes;
-				asm_global->u.var.value =
-					pool_alloc(&builder->asm_module.pool, size);
-				write_const(konst, asm_global->u.var.value);
-			}
+			break;
+		case IR_POINTER: {
+			AsmGlobal *asm_global = ir_global->asm_global;
+			asm_global->t = ASM_GLOBAL_REF;
+			asm_global->u.ref =
+				ir_global->initializer->u.global_pointer->asm_global;
+			break;
+		}
+		default: {
+			AsmGlobal *asm_global = ir_global->asm_global;
+			u32 size = asm_global->u.var.size_bytes;
+			asm_global->u.var.value =
+				pool_alloc(&builder->asm_module.pool, size);
+			write_const(konst, asm_global->u.var.value);
+		}
 		}
 	}
 }

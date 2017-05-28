@@ -747,6 +747,15 @@ IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value)
 	return konst;
 }
 
+IrConst *add_global_const(IrBuilder *builder, IrGlobal *global)
+{
+	IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);
+	konst->type = (IrType) { .t = IR_POINTER };
+	konst->u.global_pointer = global;
+
+	return konst;
+}
+
 IrConst *add_array_const(IrBuilder *builder, IrType type)
 {
 	IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);

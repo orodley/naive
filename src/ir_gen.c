@@ -456,6 +456,40 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env,
 		return add_int_const(builder,
 				c_type_to_ir_type(term->ctype), term->value.u.constant);
 	}
+	// @TODO: Deduplicate identical string literals
+	case STRING_LITERAL_EXPR: {
+		char fmt[] = "__string_literal_%x";
+
+		// - 2 adjusts down for the "%x" which isn't present in the output
+		// sizeof(u32) * 2 is the max length of globals.size in hex
+		// + 1 for the null terminator
+		u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
+		char *name = pool_alloc(&builder->trans_unit->pool, name_max_length);
+		snprintf(name, name_max_length, fmt, builder->trans_unit->globals.size);
+
+		char *string = constant_expr->u.string_literal;
+		u32 length = strlen(string) + 1;
+		CType *result_type =
+			array_type(builder, &env->type_env, &env->type_env.char_type);
+		set_array_type_length(result_type, length);
+		IrType ir_type = c_type_to_ir_type(result_type);
+		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
+		global->linkage = IR_LOCAL_LINKAGE;
+
+		IrConst *konst = add_array_const(builder, ir_type);
+		IrType ir_char_type = c_type_to_ir_type(&env->type_env.char_type);
+		for (u32 i = 0; i < length; i++) {
+			konst->u.array_elems[i] = (IrConst) {
+				.type = ir_char_type,
+				.u.integer = string[i],
+			};
+		}
+
+		konst->type = ir_type;
+		global->initializer = konst;
+
+		return add_global_const(builder, global);
+	}
 	default:
 		UNIMPLEMENTED;
 	}
@@ -1331,9 +1365,21 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 
 			// @TODO: This would be much nicer if IrValue contained IrConst
 			// instead of just a u64.
-			assert(konst->type.t == IR_INT);
-			assert(type->t == INTEGER_TYPE);
-			value = value_const(konst->type, konst->u.integer);
+			switch (type->t) {
+			case INTEGER_TYPE:
+				assert(konst->type.t == IR_INT);
+				assert(type->t == INTEGER_TYPE);
+				value = value_const(konst->type, konst->u.integer);
+				break;
+			case POINTER_TYPE: {
+				assert(konst->type.t == IR_POINTER);
+				value = value_global(konst->u.global_pointer);
+
+				break;
+			}
+			default:
+				UNIMPLEMENTED;
+			}
 		} else {
 			Term term = ir_gen_expr(builder, env, expr, RVALUE_CONTEXT);
 			value = convert_type(builder, term, type).value;
@@ -1518,6 +1564,11 @@ IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
 		IrValue value = c_init->u.leaf_value;
 		assert(value.type.t == IR_INT);
 		return add_int_const(builder, c_type_to_ir_type(type), value.u.constant);
+	}
+	case POINTER_TYPE: {
+		IrValue value = c_init->u.leaf_value;
+		assert(value.t == VALUE_GLOBAL);
+		return add_global_const(builder, value.u.global);
 	}
 	default:
 		UNIMPLEMENTED;
@@ -2605,40 +2656,14 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
 		return (Term) { .ctype = result_type, .value = value };
 	}
-	// @TODO: Deduplicate identical string literals
 	case STRING_LITERAL_EXPR: {
-		char fmt[] = "__string_literal_%x";
+		IrConst *string_literal_ptr = eval_constant_expr(builder, env, expr);
+		IrGlobal *global = string_literal_ptr->u.global_pointer;
 
-		// - 2 adjusts down for the "%x" which isn't present in the output
-		// sizeof(u32) * 2 is the max length of globals.size in hex
-		// + 1 for the null terminator
-		u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
-		char *name = pool_alloc(&builder->trans_unit->pool, name_max_length);
-		snprintf(name, name_max_length, fmt, builder->trans_unit->globals.size);
-
-		char *string = expr->u.string_literal;
-		u32 length = strlen(string) + 1;
-		CType *result_type =
-			array_type(builder, &env->type_env, &env->type_env.char_type);
-		set_array_type_length(result_type, length);
-		IrType ir_type = c_type_to_ir_type(result_type);
-		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
-		global->linkage = IR_LOCAL_LINKAGE;
-
-		IrConst *konst = add_array_const(builder, ir_type);
-		IrType ir_char_type = c_type_to_ir_type(&env->type_env.char_type);
-		for (u32 i = 0; i < length; i++) {
-			konst->u.array_elems[i] = (IrConst) {
-				.type = ir_char_type,
-				.u.integer = string[i],
-			};
-		}
-
-		konst->type = ir_type;
-
-		global->initializer = konst;
-
-		return (Term) { .ctype = result_type, .value = value_global(global) };
+		return (Term) {
+			.ctype = array_type(builder, &env->type_env, &env->type_env.char_type),
+			.value = value_global(global)
+		};
 	}
 	case ADD_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_ADD);
 	case MINUS_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SUB);
