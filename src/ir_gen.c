@@ -422,6 +422,7 @@ typedef struct InlineFunction
 
 typedef struct Env
 {
+	Scope *global_scope;
 	Scope *scope;
 	TypeEnv type_env;
 	CType *current_function_type;
@@ -434,17 +435,15 @@ typedef struct Env
 	IrFunction *scratch_function;
 } Env;
 
-static IrConst *eval_constant_expr(IrBuilder *builder, Env *env,
-		ASTExpr *constant_expr)
+static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 {
-	switch (constant_expr->t) {
+	switch (expr->t) {
 	case INT_LITERAL_EXPR:
 		// @TODO: Determine type properly.
 		return add_int_const(builder, c_type_to_ir_type(&env->type_env.int_type),
-				constant_expr->u.int_literal);
+				expr->u.int_literal);
 	case IDENTIFIER_EXPR: {
-		Binding *binding =
-			binding_for_name(env->scope, constant_expr->u.identifier);
+		Binding *binding = binding_for_name(env->scope, expr->u.identifier);
 		assert(binding->constant);
 
 		Term *term = &binding->term;
@@ -467,7 +466,7 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env,
 		char *name = pool_alloc(&builder->trans_unit->pool, name_max_length);
 		snprintf(name, name_max_length, fmt, builder->trans_unit->globals.size);
 
-		char *string = constant_expr->u.string_literal;
+		char *string = expr->u.string_literal;
 		u32 length = strlen(string) + 1;
 		CType *result_type =
 			array_type(builder, &env->type_env, &env->type_env.char_type);
@@ -489,6 +488,17 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env,
 		global->initializer = konst;
 
 		return add_global_const(builder, global);
+	}
+	case ADDRESS_OF_EXPR: {
+		ASTExpr *inner = expr->u.unary_arg;
+		assert(inner->t == IDENTIFIER_EXPR);
+		char *name = inner->u.identifier;
+
+		Binding *binding = binding_for_name(env->global_scope, name);
+		assert(binding != NULL);
+		assert(binding->term.value.t == VALUE_GLOBAL);
+
+		return add_global_const(builder, binding->term.value.u.global);
 	}
 	default:
 		UNIMPLEMENTED;
@@ -1594,6 +1604,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 	Env env;
 	init_type_env(&env.type_env);
+	env.global_scope = &global_scope;
 	env.scope = &global_scope;
 	env.current_function_type = NULL;
 	env.inline_functions = EMPTY_ARRAY;
