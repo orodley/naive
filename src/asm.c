@@ -38,10 +38,8 @@ void free_asm_module(AsmModule *asm_module)
 	pool_free(&asm_module->pool);
 }
 
-void init_asm_function(AsmFunction *function, char *name)
+void init_asm_function(AsmFunction *function)
 {
-	function->name = name;
-
 	function->call_seq.arg_classes = NULL;
 	ARRAY_INIT(&function->body, AsmInstr, 20);
 }

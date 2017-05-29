@@ -1442,7 +1442,7 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 			IrType *arg_types = ir_global->type.u.function.arg_types;
 
 			asm_global->t = ASM_GLOBAL_FUNCTION;
-			init_asm_function(new_function, ir_global->name);
+			init_asm_function(new_function);
 
 			// Note that we do this even for varargs functions where the
 			// CallSeq needs to be computed per-call. This is so that when

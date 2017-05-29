@@ -183,10 +183,6 @@ typedef struct CallSeq
 
 typedef struct AsmFunction
 {
-	// @TODO: This seems unnecessary, since we have a name field on AsmGlobal
-	// anyway. Remove.
-	char *name;
-
 	CallSeq call_seq;
 
 	Array(AsmInstr) body;
@@ -293,7 +289,7 @@ typedef struct Binary
 	u32 bss_size;
 } Binary;
 
-void init_asm_function(AsmFunction *func, char *name);
+void init_asm_function(AsmFunction *function);
 void init_asm_module(AsmModule *asm_module, char *input_file_name);
 
 void free_asm_module(AsmModule *asm_module);
