@@ -129,14 +129,6 @@ static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 	return asm_vreg(vreg_number, width);
 }
 
-AsmLabel *append_label(AsmBuilder *builder, char *name)
-{
-	AsmLabel *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
-	label->name = name;
-
-	return label;
-}
-
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
 	switch (value.t) {
@@ -1225,7 +1217,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
 		IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
-		AsmLabel *label = append_label(builder, block->name);
+		AsmLabel *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
+		label->name = block->name;
 		block->label = label;
 	}
 
