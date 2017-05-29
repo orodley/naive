@@ -192,7 +192,6 @@ typedef struct AsmFunction
 	Array(AsmInstr) body;
 
 	Array(AsmLabel *) labels;
-	AsmLabel *ret_label;
 } AsmFunction;
 
 typedef enum AsmLinkage

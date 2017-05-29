@@ -16,6 +16,7 @@ typedef struct AsmBuilder
 	AsmModule asm_module;
 	AsmFunction *current_function;
 	Array(AsmInstr) *current_block;
+	AsmLabel *ret_label;
 
 	Array(VRegInfo) virtual_registers;
 	u32 local_stack_usage;

@@ -46,7 +46,6 @@ void init_asm_function(AsmFunction *function, char *name)
 	function->call_seq.arg_classes = NULL;
 	ARRAY_INIT(&function->body, AsmInstr, 20);
 	ARRAY_INIT(&function->labels, AsmLabel *, 10);
-	function->ret_label = NULL;
 }
 
 AsmValue asm_vreg(u32 vreg_number, u8 width)

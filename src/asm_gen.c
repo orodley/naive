@@ -364,7 +364,7 @@ static void asm_gen_instr(
 	}
 	case OP_RET_VOID:
 		assert(ir_global->type.u.function.return_type->t == IR_VOID);
-		emit_instr1(builder, JMP, asm_label(builder->current_function->ret_label));
+		emit_instr1(builder, JMP, asm_label(builder->ret_label));
 
 		break;
 	case OP_RET: {
@@ -378,7 +378,7 @@ static void asm_gen_instr(
 				MOV,
 				asm_phys_reg(REG_CLASS_A, size_of_ir_type(*return_type) * 8),
 				asm_value(builder, arg));
-		emit_instr1(builder, JMP, asm_label(builder->current_function->ret_label));
+		emit_instr1(builder, JMP, asm_label(builder->ret_label));
 
 		break;
 	}
@@ -1214,7 +1214,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	AsmLabel *ret_label = pool_alloc(&builder->asm_module.pool, sizeof *ret_label);
 	ret_label->name = "ret";
 	ret_label->offset = 0;
-	asm_func->u.function.ret_label = ret_label;
+	builder->ret_label = ret_label;
 
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
