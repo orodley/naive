@@ -30,7 +30,6 @@ void free_asm_module(AsmModule *asm_module)
 			if (function->call_seq.arg_classes != NULL)
 				free(function->call_seq.arg_classes);
 			array_free(&function->body);
-			array_free(&function->labels);
 		}
 	}
 	array_free(&asm_module->globals);
@@ -45,7 +44,6 @@ void init_asm_function(AsmFunction *function, char *name)
 
 	function->call_seq.arg_classes = NULL;
 	ARRAY_INIT(&function->body, AsmInstr, 20);
-	ARRAY_INIT(&function->labels, AsmLabel *, 10);
 }
 
 AsmValue asm_vreg(u32 vreg_number, u8 width)

@@ -190,8 +190,6 @@ typedef struct AsmFunction
 	CallSeq call_seq;
 
 	Array(AsmInstr) body;
-
-	Array(AsmLabel *) labels;
 } AsmFunction;
 
 typedef enum AsmLinkage

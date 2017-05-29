@@ -133,7 +133,6 @@ AsmLabel *append_label(AsmBuilder *builder, char *name)
 {
 	AsmLabel *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
 	label->name = name;
-	*ARRAY_APPEND(&builder->current_function->labels, AsmLabel *) = label;
 
 	return label;
 }
