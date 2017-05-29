@@ -979,7 +979,7 @@ int compare_live_range_start(const void *a, const void *b)
 // @TODO: Do proper liveness analysis - right now we do nothing about jumps.
 static void allocate_registers(AsmBuilder *builder)
 {
-	Array(AsmInstr) *body = &builder->current_function->body;
+	Array(AsmInstr) *body = builder->current_block;
 	for (u32 i = 0; i < body->size; i++) {
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 		for (u32 j = 0; j < instr->arity; j++) {
@@ -1203,8 +1203,11 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	if (!asm_func->defined)
 		return;
 
+	Array(AsmInstr) body;
+	ARRAY_INIT(&body, AsmInstr, 20);
+
 	builder->current_function = &asm_func->u.function;
-	builder->current_block = &asm_func->u.function.body;
+	builder->current_block = &body;
 
 	builder->local_stack_usage = 0;
 
@@ -1261,7 +1264,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
 
 		u32 first_instr_of_block_index = block_index == 0
-			? 0 : builder->current_function->body.size;
+			? 0 : builder->current_block->size;
 		Array(IrInstr *) *instrs = &block->instrs;
 		for (u32 i = 0; i < instrs->size; i++) {
 			IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
@@ -1269,17 +1272,15 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		}
 
 		AsmInstr *first_instr_of_block = ARRAY_REF(
-				&builder->current_function->body,
-				AsmInstr,
-				first_instr_of_block_index);
+				builder->current_block, AsmInstr, first_instr_of_block_index);
 		first_instr_of_block->label = block->label;
 	}
 
 	allocate_registers(builder);
 
 	u32 used_callee_save_regs_bitset = 0;
-	for (u32 i = 0; i < builder->current_function->body.size; i++) {
-		AsmInstr *instr = ARRAY_REF(&builder->current_function->body, AsmInstr, i);
+	for (u32 i = 0; i < builder->current_block->size; i++) {
+		AsmInstr *instr = ARRAY_REF(builder->current_block, AsmInstr, i);
 		for (u32 j = 0; j < instr->arity; j++) {
 			Register *reg = arg_reg(instr->args + j);
 			if (reg != NULL &&
@@ -1292,15 +1293,17 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	u32 num_callee_save_regs = bit_count(used_callee_save_regs_bitset);
 
-	builder->current_block = &builder->current_function->prologue;
+	ARRAY_INIT(&builder->current_function->body, AsmInstr, body.size + 20);
+	builder->current_block = &builder->current_function->body;
 
 	AsmLabel *entry_label = pool_alloc(&builder->asm_module.pool, sizeof *entry_label);
 	entry_label->name = ir_global->name;
 	entry_label->offset = 0;
 	ir_func->label = entry_label;
 
-
-	emit_instr1(builder, PUSH, asm_phys_reg(REG_CLASS_BP, 64));
+	AsmInstr *prologue_first_instr =
+		emit_instr1(builder, PUSH, asm_phys_reg(REG_CLASS_BP, 64));
+	prologue_first_instr->label = entry_label;
 	emit_instr2(builder,
 			MOV,
 			asm_phys_reg(REG_CLASS_BP, 64),
@@ -1358,11 +1361,13 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		}
 	}
 
-	AsmInstr *prologue_first_instr = ARRAY_REF(builder->current_block, AsmInstr, 0);
-	prologue_first_instr->label = entry_label;
+	for (u32 j = 0; j < body.size; j++) {
+		*ARRAY_APPEND(&builder->current_function->body, AsmInstr) =
+			*ARRAY_REF(&body, AsmInstr, j);
+	}
 
-
-	builder->current_block = &builder->current_function->epilogue;
+	AsmInstr *epilogue_first_instr = ARRAY_REF(builder->current_block,
+			AsmInstr, builder->current_block->size);
 
 	if (stack_adjustment != 0) {
 		emit_instr2(builder,
@@ -1381,8 +1386,9 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	emit_instr1(builder, POP, asm_phys_reg(REG_CLASS_BP, 64));
 	emit_instr0(builder, RET);
 
-	AsmInstr *epilogue_first_instr = ARRAY_REF(builder->current_block, AsmInstr, 0);
 	epilogue_first_instr->label = ret_label;
+
+	array_free(&body);
 }
 
 static void write_const(IrConst *konst, u8 *value)

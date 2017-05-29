@@ -29,9 +29,7 @@ void free_asm_module(AsmModule *asm_module)
 			AsmFunction *function = &global->u.function;
 			if (function->call_seq.arg_classes != NULL)
 				free(function->call_seq.arg_classes);
-			array_free(&function->prologue);
 			array_free(&function->body);
-			array_free(&function->epilogue);
 			array_free(&function->labels);
 		}
 	}
@@ -46,9 +44,7 @@ void init_asm_function(AsmFunction *function, char *name)
 	function->name = name;
 
 	function->call_seq.arg_classes = NULL;
-	ARRAY_INIT(&function->prologue, AsmInstr, 10);
 	ARRAY_INIT(&function->body, AsmInstr, 20);
-	ARRAY_INIT(&function->epilogue, AsmInstr, 10);
 	ARRAY_INIT(&function->labels, AsmLabel *, 10);
 	function->ret_label = NULL;
 }
@@ -299,18 +295,10 @@ static void dump_asm_instr(AsmInstr *instr)
 
 void dump_asm_function(AsmFunction *asm_function)
 {
-	Array(AsmInstr) *instr_blocks[] = {
-		&asm_function->prologue,
-		&asm_function->body,
-		&asm_function->epilogue,
-	};
-
-	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(instr_blocks); i++) {
-		Array(AsmInstr) *instr_block = instr_blocks[i];
-		for (u32 j = 0; j < instr_block->size; j++) {
-			AsmInstr *instr = ARRAY_REF(instr_block, AsmInstr, j);
-			dump_asm_instr(instr);
-		}
+	Array(AsmInstr) *body = &asm_function->body;
+	for (u32 j = 0; j < body->size; j++) {
+		AsmInstr *instr = ARRAY_REF(body, AsmInstr, j);
+		dump_asm_instr(instr);
 	}
 }
 
@@ -787,21 +775,13 @@ void assemble(AsmModule *asm_module, Binary *binary)
 			if (global->defined) {
 				function_start = binary->text.size;
 
-				Array(AsmInstr) *instr_blocks[] = {
-					&function->prologue,
-					&function->body,
-					&function->epilogue,
-				};
-				for (u32 i = 0; i < STATIC_ARRAY_LENGTH(instr_blocks); i++) {
-					Array(AsmInstr) *instr_block = instr_blocks[i];
-
-					for (u32 j = 0; j < instr_block->size; j++) {
-						AsmInstr *instr = ARRAY_REF(instr_block, AsmInstr, j);
-						if (instr->label != NULL) {
-							instr->label->offset = binary->text.size;
-						}
-						assemble_instr(&binary->text, asm_module, instr);
+				Array(AsmInstr) *body = &function->body;
+				for (u32 j = 0; j < body->size; j++) {
+					AsmInstr *instr = ARRAY_REF(body, AsmInstr, j);
+					if (instr->label != NULL) {
+						instr->label->offset = binary->text.size;
 					}
+					assemble_instr(&binary->text, asm_module, instr);
 				}
 
 				function_size = binary->text.size - function_start;

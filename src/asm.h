@@ -189,9 +189,7 @@ typedef struct AsmFunction
 
 	CallSeq call_seq;
 
-	Array(AsmInstr) prologue;
 	Array(AsmInstr) body;
-	Array(AsmInstr) epilogue;
 
 	Array(AsmLabel *) labels;
 	AsmLabel *ret_label;
