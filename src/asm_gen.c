@@ -1429,7 +1429,6 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 
 		asm_global->name = name_copy;
 		asm_global->defined = ir_global->initializer != NULL;
-		asm_global->offset = 0;
 
 		switch (ir_global->linkage) {
 		case IR_GLOBAL_LINKAGE: asm_global->linkage = ASM_GLOBAL_LINKAGE; break;
