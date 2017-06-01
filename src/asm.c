@@ -863,17 +863,17 @@ void assemble(AsmModule *asm_module, Binary *binary)
 		u32 target_offset;
 		if (fixup->t == FIXUP_GLOBAL) {
 			AsmGlobal *global = fixup->u.global;
-			if (global->defined && global->t == ASM_GLOBAL_FUNCTION)
-				target_offset = global->offset;
-			else
+			if (global->defined && global->t == ASM_GLOBAL_FUNCTION) {
+				target_offset = global->symbol->offset;
+			} else {
 				continue;
+			}
 		} else {
 			target_offset = fixup->u.label->offset;
 		}
 
 
-		// Relative accesses are relative to the start of the next instruction,
-		// so we add on the size of the reference itself first.
+		// Relative accesses are relative to the start of the next instruction.
 		i32 value = (i32)target_offset - (i32)fixup->next_instr_offset;
 		write_int_at(&binary->text, fixup->offset, (u64)value, fixup->size_bytes);
 	}
