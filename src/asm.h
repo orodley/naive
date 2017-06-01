@@ -208,7 +208,6 @@ typedef struct AsmSymbol
 	u32 defined;
 	AsmLinkage linkage;
 	u32 symtab_index;
-	u32 string_table_offset_for_name;
 	u32 offset;
 	u32 size;
 } AsmSymbol;
