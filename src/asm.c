@@ -15,34 +15,23 @@ void init_asm_module(AsmModule *asm_module, char *input_file_name)
 	asm_module->input_file_name = input_file_name;
 	pool_init(&asm_module->pool, 1024);
 
-	ARRAY_INIT(&asm_module->text_section.symbols, AsmSymbol *, 20);
-	ARRAY_INIT(&asm_module->text_section.instrs, AsmInstr, 100);
+	ARRAY_INIT(&asm_module->text, AsmInstr, 100);
+	ARRAY_INIT(&asm_module->data, u8, 100);
+	asm_module->bss_size = 0;
 
-	ARRAY_INIT(&asm_module->data_section.symbols, AsmSymbol *, 20);
-	ARRAY_INIT(&asm_module->data_section.data, u8, 100);
-
-	ARRAY_INIT(&asm_module->bss_section.symbols, AsmSymbol *, 20);
-	asm_module->bss_section.size = 0;
-
-	ARRAY_INIT(&asm_module->externs, AsmSymbol *, 5);
+	ARRAY_INIT(&asm_module->symbols, AsmSymbol *, 60);
 	ARRAY_INIT(&asm_module->fixups, Fixup, 10);
 }
 
 void free_asm_module(AsmModule *asm_module)
 {
-	array_free(&asm_module->text_section.instrs);
-	array_free(&asm_module->text_section.symbols);
+	pool_free(&asm_module->pool);
 
-	array_free(&asm_module->data_section.data);
-	array_free(&asm_module->data_section.symbols);
-
-	array_free(&asm_module->bss_section.symbols);
-
-	array_free(&asm_module->externs);
+	array_free(&asm_module->text);
+	array_free(&asm_module->symbols);
+	array_free(&asm_module->data);
 
 	array_free(&asm_module->fixups);
-
-	pool_free(&asm_module->pool);
 }
 
 AsmValue asm_vreg(u32 vreg_number, u8 width)
@@ -287,14 +276,17 @@ static void dump_asm_instr(AsmInstr *instr)
 
 void dump_asm_module(AsmModule *asm_module)
 {
-	for (u32 i = 0; i < asm_module->externs.size; i++) {
-		AsmSymbol *symbol = *ARRAY_REF(&asm_module->externs, AsmSymbol *, i);
-		printf("extern %s\n", symbol->name);
+	Array(AsmSymbol *) *symbols = &asm_module->symbols;
+	for (u32 i = 0; i < symbols->size; i++) {
+		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
+
+		if (!symbol->defined)
+			printf("extern %s\n", symbol->name);
 	}
 	putchar('\n');
 
 	puts("section .text");
-	Array(AsmInstr) *instrs = &asm_module->text_section.instrs;
+	Array(AsmInstr) *instrs = &asm_module->text;
 	for (u32 i = 0; i < instrs->size; i++) {
 		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
 		dump_asm_instr(instr);
@@ -302,12 +294,12 @@ void dump_asm_module(AsmModule *asm_module)
 	putchar('\n');
 
 	puts("section .data");
-	Array(u8) *data = &asm_module->data_section.data;
-	Array(AsmSymbol *) *symbols = &asm_module->data_section.symbols;
+	Array(u8) *data = &asm_module->data;
 	u32 next_symbol = 0;
 	for (u32 i = 0; i < data->size; i++) {
 		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, next_symbol);
-		if (next_symbol < symbols->size && symbol->offset == i) {
+		if (symbol->section == DATA_SECTION
+				&& next_symbol < symbols->size && symbol->offset == i) {
 			dump_symbol(symbol);
 			next_symbol++;
 		}
@@ -318,9 +310,11 @@ void dump_asm_module(AsmModule *asm_module)
 
 	puts("section .bss");
 	u32 pos = 0;
-	symbols = &asm_module->bss_section.symbols;
 	for (u32 i = 0; i < symbols->size; i++) {
 		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
+		if (symbol->section != BSS_SECTION)
+			continue;
+
 		assert(symbol->offset == pos);
 
 		dump_symbol(symbol);
@@ -730,10 +724,8 @@ void assemble(AsmModule *asm_module, Binary *binary)
 	// binary->symbols are going to be, we should reserve them.
 	init_binary(binary);
 
-	Array(AsmSymbol *) *symbols = &binary->symbols;
-
 	AsmSymbol *prev_symbol = NULL;
-	Array(AsmInstr) *instrs = &asm_module->text_section.instrs;
+	Array(AsmInstr) *instrs = &asm_module->text;
 	for (u32 i = 0; i < instrs->size; i++) {
 		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
 
@@ -760,28 +752,20 @@ void assemble(AsmModule *asm_module, Binary *binary)
 		prev_symbol->size = binary->text.size - prev_symbol->offset;
 	}
 
-	ARRAY_APPEND_ELEMS(&binary->data, u8,
-			asm_module->data_section.data.size,
-			asm_module->data_section.data.elements);
+	binary->data = asm_module->data;
+	asm_module->data = EMPTY_ARRAY;
 
-	binary->bss_size = asm_module->bss_section.size;
+	binary->bss_size = asm_module->bss_size;
 
-	Array(AsmSymbol *) *sections[] = {
-		&asm_module->text_section.symbols,
-		&asm_module->data_section.symbols,
-		&asm_module->bss_section.symbols,
-		&asm_module->externs,
-	};
-	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(sections); i++) {
-		Array(AsmSymbol *) *section = sections[i];
-
-		for (u32 j = 0; j < section->size; j++) {
-			AsmSymbol *symbol = *ARRAY_REF(section, AsmSymbol *, j);
-			// Add one to account for 0 = undef symbol index
-			symbol->symtab_index = symbols->size + 1;
-			*ARRAY_APPEND(symbols, AsmSymbol *) = symbol;
-		}
+	Array(AsmSymbol *) *symbols = &asm_module->symbols;
+	for (u32 i = 0; i < symbols->size; i++) {
+		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
+		// Add one to account for 0 = undef symbol index
+		symbol->symtab_index = i + 1;
 	}
+
+	binary->symbols = asm_module->symbols;
+	asm_module->symbols = EMPTY_ARRAY;
 
 	// @TODO: Emit relocations here instead?
 	// @TODO: Remove the fixups we process here, so that write_elf_object_file

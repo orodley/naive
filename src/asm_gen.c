@@ -1301,7 +1301,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	u32 num_callee_save_regs = bit_count(used_callee_save_regs_bitset);
 
-	builder->current_block = &builder->asm_module.text_section.instrs;
+	builder->current_block = &builder->asm_module.text;
 
 	AsmSymbol *entry_label = ir_global->asm_symbol;
 
@@ -1471,19 +1471,15 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 	for (u32 i = 0; i < trans_unit->globals.size; i++) {
 		IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
 
-		Array(AsmSymbol *) *symbols;
+		Array(AsmSymbol *) *symbols = &asm_module->symbols;
 		AsmSymbolSection section;
 		if (ir_global->initializer == NULL) {
-			symbols = &asm_module->externs;
 			section = UNKNOWN_SECTION;
 		} else if (ir_global->type.t == IR_FUNCTION) {
-			symbols = &asm_module->text_section.symbols;
 			section = TEXT_SECTION;
 		} else if (is_zero(ir_global->initializer)) {
-			symbols = &asm_module->bss_section.symbols;
 			section = BSS_SECTION;
 		} else {
-			symbols = &asm_module->data_section.symbols;
 			section = DATA_SECTION;
 		}
 
@@ -1528,7 +1524,7 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 		if (ir_global->type.t == IR_FUNCTION) {
 			asm_gen_function(builder, ir_global);
 		} else if (asm_symbol->section == DATA_SECTION) {
-			Array(u8) *data = &asm_module->data_section.data;
+			Array(u8) *data = &asm_module->data;
 			// @TODO: Alignment
 			asm_symbol->offset = data->size;
 			write_const(asm_module, konst, data);
@@ -1537,10 +1533,10 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 			assert(asm_symbol->section == BSS_SECTION);
 			u32 size = size_of_ir_type(ir_global->type);
 			// @TODO: Alignment
-			asm_symbol->offset = asm_module->bss_section.size;
+			asm_symbol->offset = asm_module->bss_size;
 			asm_symbol->size = size;
 
-			asm_module->bss_section.size += size;
+			asm_module->bss_size += size;
 		}
 	}
 }

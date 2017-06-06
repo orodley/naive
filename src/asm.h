@@ -194,6 +194,9 @@ typedef struct AsmSymbol
 	AsmSymbolSection section;
 	u32 defined;
 	AsmLinkage linkage;
+	// @TODO: Do we need this? It's always just equal to the index in the
+	// symbol array plus one, maybe we can compute it in elf.c on Symbol
+	// instead?
 	u32 symtab_index;
 	u32 offset;
 	u32 size;
@@ -221,29 +224,13 @@ typedef struct Fixup
 typedef struct AsmModule
 {
 	char *input_file_name;
-
 	Pool pool;
 
-	struct
-	{
-		Array(AsmInstr) instrs;
-		Array(AsmSymbol *) symbols;
-	} text_section;
+	Array(AsmInstr) text;
+	Array(u8) data;
+	u32 bss_size;
 
-	struct
-	{
-		Array(u8) data;
-		Array(AsmSymbol *) symbols;
-	} data_section;
-
-	struct
-	{
-		u32 size;
-		Array(AsmSymbol *) symbols;
-	} bss_section;
-
-	Array(AsmSymbol *) externs;
-
+	Array(AsmSymbol *) symbols;
 	Array(Fixup) fixups;
 } AsmModule;
 
