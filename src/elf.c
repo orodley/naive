@@ -256,7 +256,7 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 	// @NOTE: In System V, file offsets and base virtual addresses for segments
 	// must be congruent modulo the page size.
 	text_info->virtual_address = 0x8000000 + text_info->offset; 
-	assert(text_info->contents != NULL);
+	assert(text_info->size == 0 || text_info->contents != NULL);
 	checked_fwrite(text_info->contents, 1, text_info->size, elf_file->output_file);
 
 	for (u32 i = 0; i < fixups->size; i++) {
@@ -641,19 +641,18 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 	ELFFile *elf_file = &_elf_file;
 	init_elf_file(elf_file, output_file, ET_REL);
 
-	Binary binary;
-	assemble(asm_module, &binary);
-	elf_file->section_info[TEXT_INDEX].size = binary.text.size;
-	elf_file->section_info[TEXT_INDEX].contents = binary.text.elements;
+	assemble(asm_module);
+	elf_file->section_info[TEXT_INDEX].size = asm_module->text.bytes.size;
+	elf_file->section_info[TEXT_INDEX].contents = asm_module->text.bytes.elements;
 
-	elf_file->section_info[BSS_INDEX].size = binary.bss_size;
+	elf_file->section_info[BSS_INDEX].size = asm_module->bss_size;
 
-	elf_file->section_info[DATA_INDEX].size = binary.data.size;
-	elf_file->section_info[DATA_INDEX].contents = binary.data.elements;
+	elf_file->section_info[DATA_INDEX].size = asm_module->data.size;
+	elf_file->section_info[DATA_INDEX].contents = asm_module->data.elements;
 
 	write_contents(elf_file, &asm_module->fixups);
 
-	Array(AsmSymbol *) *symbols = &binary.symbols;
+	Array(AsmSymbol *) *symbols = &asm_module->symbols;
 	for (u32 i = 0; i < symbols->size; i++) {
 		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
 		u32 section = SHN_UNDEF;
@@ -685,8 +684,6 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 	}
 	add_string(elf_file, asm_module->input_file_name);
 	finish_strtab_section(elf_file);
-
-	free_binary(&binary);
 
 	fclose(output_file);
 	return true;
@@ -757,7 +754,7 @@ void process_rela_section(ELFSectionHeader *rela_header, u32 *file_symbols,
 // of object files, but archives have different semantics.
 // See http://eli.thegreenplace.net/2013/07/09/library-order-in-static-linking
 // for details.
-static bool process_elf_file(FILE *input_file, Binary *binary,
+static bool process_elf_file(FILE *input_file, AsmModule *asm_module,
 		Array(Symbol) *symbol_table)
 {
 	u32 initial_location = checked_ftell(input_file);
@@ -872,9 +869,9 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 				SEEK_SET);
 	checked_fread(strtab, 1, strtab_header->section_size, input_file);
 
-	u32 existing_text_size = binary->text.size;
-	u32 existing_bss_size = binary->bss_size;
-	u32 existing_data_size = binary->data.size;
+	u32 existing_text_size = asm_module->text.bytes.size;
+	u32 existing_bss_size = asm_module->bss_size;
+	u32 existing_data_size = asm_module->data.size;
 
 	u8 *temp_buffer = NULL;
 
@@ -884,7 +881,7 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 				SEEK_SET);
 		temp_buffer = realloc(temp_buffer, text_header->section_size);
 		checked_fread(temp_buffer, text_header->section_size, 1, input_file);
-		ARRAY_APPEND_ELEMS(&binary->text, u8, text_header->section_size, temp_buffer);
+		ARRAY_APPEND_ELEMS(&asm_module->text.bytes, u8, text_header->section_size, temp_buffer);
 	}
 
 	if (data_header != NULL && data_header->section_size != 0) {
@@ -893,13 +890,13 @@ static bool process_elf_file(FILE *input_file, Binary *binary,
 				SEEK_SET);
 		temp_buffer = realloc(temp_buffer, data_header->section_size);
 		checked_fread(temp_buffer, data_header->section_size, 1, input_file);
-		ARRAY_APPEND_ELEMS(&binary->data, u8, data_header->section_size, temp_buffer);
+		ARRAY_APPEND_ELEMS(&asm_module->data, u8, data_header->section_size, temp_buffer);
 	}
 
 	free(temp_buffer);
 
 	if (bss_header != NULL)
-		binary->bss_size += bss_header->section_size;
+		asm_module->bss_size += bss_header->section_size;
 
 	u32 symbols_in_symtab = symtab_header->section_size / symtab_header->entry_size;
 	checked_fseek(input_file,
@@ -1042,8 +1039,8 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 		return false;
 	}
 
-	Binary binary;
-	init_binary(&binary);
+	AsmModule asm_module;
+	init_asm_module(&asm_module, "");
 	// @TODO: Merge with AsmSymbol so we can just use Binary?
 	Array(Symbol) symbol_table;
 	ARRAY_INIT(&symbol_table, Symbol, 100);
@@ -1061,7 +1058,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 		checked_fseek(input_file, 0, SEEK_SET);
 		switch (type) {
 		case ELF_FILE_TYPE:
-			if (!process_elf_file(input_file, &binary, &symbol_table)) {
+			if (!process_elf_file(input_file, &asm_module, &symbol_table)) {
 				ret = false;
 				goto cleanup;
 			}
@@ -1103,7 +1100,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 				// a symbol index in System V ar. We don't care about it for
 				// now.
 				if (!streq(header.name, "") &&
-						!process_elf_file(input_file, &binary, &symbol_table)) {
+						!process_elf_file(input_file, &asm_module, &symbol_table)) {
 					ret = false;
 					goto cleanup;
 				}
@@ -1127,14 +1124,14 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 	init_elf_file(elf_file, output_file, ET_EXEC);
 
 
-	elf_file->section_info[TEXT_INDEX].size = binary.text.size;
-	elf_file->section_info[TEXT_INDEX].contents = binary.text.elements;
+	elf_file->section_info[TEXT_INDEX].size = asm_module.text.bytes.size;
+	elf_file->section_info[TEXT_INDEX].contents = asm_module.text.bytes.elements;
 	Array(Fixup) empty_array = EMPTY_ARRAY;
 
-	elf_file->section_info[BSS_INDEX].size = binary.bss_size;
+	elf_file->section_info[BSS_INDEX].size = asm_module.bss_size;
 
-	elf_file->section_info[DATA_INDEX].size = binary.data.size;
-	elf_file->section_info[DATA_INDEX].contents = binary.data.elements;
+	elf_file->section_info[DATA_INDEX].size = asm_module.data.size;
+	elf_file->section_info[DATA_INDEX].contents = asm_module.data.elements;
 
 	write_contents(elf_file, &empty_array);
 
@@ -1232,6 +1229,6 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 cleanup:
 	fclose(output_file);
 	array_free(&symbol_table);
-	free_binary(&binary);
+	free_asm_module(&asm_module);
 	return ret;
 }

@@ -1301,7 +1301,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	u32 num_callee_save_regs = bit_count(used_callee_save_regs_bitset);
 
-	builder->current_block = &builder->asm_module.text;
+	builder->current_block = &builder->asm_module.text.instrs;
 
 	AsmSymbol *entry_label = ir_global->asm_symbol;
 

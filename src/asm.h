@@ -226,29 +226,18 @@ typedef struct AsmModule
 	char *input_file_name;
 	Pool pool;
 
-	Array(AsmInstr) text;
+	struct
+	{
+		Array(AsmInstr) instrs;
+		Array(u8) bytes;
+	} text;
+
 	Array(u8) data;
 	u32 bss_size;
 
 	Array(AsmSymbol *) symbols;
 	Array(Fixup) fixups;
 } AsmModule;
-
-// @TODO: This is almost the same thing as AsmModule now. The only real
-// difference is that the symbol arrays are combined (which could be changed on
-// either end) and that text contains assembled bytes instead of instructions.
-// Maybe we should instead make AsmModule contain either of the two, and
-// assemble just fills up the assembled bytes array and clears the AsmInstr
-// aray. Then we don't need to copy stuff over. In fact, if we do that we could
-// get rid of the weird inversion of control where write_elf_object_file calls
-// assemble.
-typedef struct Binary
-{
-	Array(u8) text;
-	Array(u8) data;
-	Array(AsmSymbol *) symbols;
-	u32 bss_size;
-} Binary;
 
 void init_asm_module(AsmModule *asm_module, char *input_file_name);
 
@@ -263,9 +252,6 @@ AsmValue asm_deref(AsmValue asm_arg);
 
 void dump_asm_module(AsmModule *asm_module);
 
-void init_binary(Binary *binary);
-void free_binary(Binary *binary);
-
-void assemble(AsmModule *asm_module, Binary *binary);
+void assemble(AsmModule *asm_module);
 
 #endif

@@ -15,7 +15,8 @@ void init_asm_module(AsmModule *asm_module, char *input_file_name)
 	asm_module->input_file_name = input_file_name;
 	pool_init(&asm_module->pool, 1024);
 
-	ARRAY_INIT(&asm_module->text, AsmInstr, 100);
+	ARRAY_INIT(&asm_module->text.instrs, AsmInstr, 100);
+	asm_module->text.bytes = EMPTY_ARRAY;
 	ARRAY_INIT(&asm_module->data, u8, 100);
 	asm_module->bss_size = 0;
 
@@ -27,7 +28,8 @@ void free_asm_module(AsmModule *asm_module)
 {
 	pool_free(&asm_module->pool);
 
-	array_free(&asm_module->text);
+	array_free(&asm_module->text.instrs);
+	array_free(&asm_module->text.bytes);
 	array_free(&asm_module->symbols);
 	array_free(&asm_module->data);
 
@@ -286,7 +288,7 @@ void dump_asm_module(AsmModule *asm_module)
 	putchar('\n');
 
 	puts("section .text");
-	Array(AsmInstr) *instrs = &asm_module->text;
+	Array(AsmInstr) *instrs = &asm_module->text.instrs;
 	for (u32 i = 0; i < instrs->size; i++) {
 		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
 		dump_asm_instr(instr);
@@ -702,35 +704,19 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 // This is generated from "x64.enc", and defines the function "assemble_instr".
 #include "x64.inc"
 
-void init_binary(Binary *binary)
+void assemble(AsmModule *asm_module)
 {
-	ARRAY_INIT(&binary->text, u8, 1024);
-	ARRAY_INIT(&binary->data, u8, 1024);
-	ARRAY_INIT(&binary->symbols, AsmSymbol, 10);
-
-	binary->bss_size = 0;
-}
-
-void free_binary(Binary *binary)
-{
-	array_free(&binary->text);
-	array_free(&binary->data);
-	array_free(&binary->symbols);
-}
-
-void assemble(AsmModule *asm_module, Binary *binary)
-{
-	// @TODO: We know ahead of time exactly how large binary->data and
-	// binary->symbols are going to be, we should reserve them.
-	init_binary(binary);
+	// Reserve space for 3 bytes per instruction (pulling numbers out of thin
+	// air here).
+	ARRAY_INIT(&asm_module->text.bytes, u8, asm_module->text.instrs.size * 3);
 
 	AsmSymbol *prev_symbol = NULL;
-	Array(AsmInstr) *instrs = &asm_module->text;
+	Array(AsmInstr) *instrs = &asm_module->text.instrs;
 	for (u32 i = 0; i < instrs->size; i++) {
 		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
 
-		u32 instr_start = binary->text.size;
-		assemble_instr(&binary->text, asm_module, instr);
+		u32 instr_start = asm_module->text.bytes.size;
+		assemble_instr(&asm_module->text.bytes, asm_module, instr);
 
 		AsmSymbol *symbol = instr->label;
 		if (symbol != NULL) {
@@ -749,13 +735,11 @@ void assemble(AsmModule *asm_module, Binary *binary)
 		}
 	}
 	if (prev_symbol != NULL) {
-		prev_symbol->size = binary->text.size - prev_symbol->offset;
+		prev_symbol->size = asm_module->text.bytes.size - prev_symbol->offset;
 	}
 
-	binary->data = asm_module->data;
-	asm_module->data = EMPTY_ARRAY;
-
-	binary->bss_size = asm_module->bss_size;
+	array_free(&asm_module->text.instrs);
+	asm_module->text.instrs = EMPTY_ARRAY;
 
 	Array(AsmSymbol *) *symbols = &asm_module->symbols;
 	for (u32 i = 0; i < symbols->size; i++) {
@@ -763,9 +747,6 @@ void assemble(AsmModule *asm_module, Binary *binary)
 		// Add one to account for 0 = undef symbol index
 		symbol->symtab_index = i + 1;
 	}
-
-	binary->symbols = asm_module->symbols;
-	asm_module->symbols = EMPTY_ARRAY;
 
 	// @TODO: Emit relocations here instead?
 	// @TODO: Remove the fixups we process here, so that write_elf_object_file
@@ -782,6 +763,7 @@ void assemble(AsmModule *asm_module, Binary *binary)
 
 		// Relative accesses are relative to the start of the next instruction.
 		i32 value = (i32)symbol->offset - (i32)fixup->next_instr_offset;
-		write_int_at(&binary->text, fixup->offset, (u64)value, fixup->size_bytes);
+		write_int_at(&asm_module->text.bytes, fixup->offset,
+				(u64)value, fixup->size_bytes);
 	}
 }
