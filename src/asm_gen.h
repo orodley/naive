@@ -14,14 +14,16 @@ typedef struct VRegInfo
 typedef struct AsmBuilder
 {
 	AsmModule asm_module;
-	AsmFunction *current_function;
+	IrGlobal *current_function;
 	Array(AsmInstr) *current_block;
-	AsmLabel *ret_label;
+	AsmSymbol *ret_label;
 
 	Array(VRegInfo) virtual_registers;
 	u32 local_stack_usage;
 	u32 register_save_area_size;
 	u32 curr_sp_diff;
+
+	Array(Fixup *) fixups;
 } AsmBuilder;
 
 void init_asm_builder(AsmBuilder *builder, char *input_file_name);

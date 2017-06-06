@@ -13,35 +13,36 @@
 void init_asm_module(AsmModule *asm_module, char *input_file_name)
 {
 	asm_module->input_file_name = input_file_name;
-
 	pool_init(&asm_module->pool, 1024);
 
-	ARRAY_INIT(&asm_module->globals, AsmGlobal *, 10);
-	ARRAY_INIT(&asm_module->fixups, Fixup *, 10);
+	ARRAY_INIT(&asm_module->text_section.symbols, AsmSymbol *, 20);
+	ARRAY_INIT(&asm_module->text_section.instrs, AsmInstr, 100);
+
+	ARRAY_INIT(&asm_module->data_section.symbols, AsmSymbol *, 20);
+	ARRAY_INIT(&asm_module->data_section.data, u8, 100);
+
+	ARRAY_INIT(&asm_module->bss_section.symbols, AsmSymbol *, 20);
+	asm_module->bss_section.size = 0;
+
+	ARRAY_INIT(&asm_module->externs, AsmSymbol *, 5);
+	ARRAY_INIT(&asm_module->fixups, Fixup, 10);
 }
 
 void free_asm_module(AsmModule *asm_module)
 {
-	for (u32 i = 0; i < asm_module->globals.size; i++) {
-		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
+	array_free(&asm_module->text_section.instrs);
+	array_free(&asm_module->text_section.symbols);
 
-		if (global->t == ASM_GLOBAL_FUNCTION) {
-			AsmFunction *function = &global->u.function;
-			if (function->call_seq.arg_classes != NULL)
-				free(function->call_seq.arg_classes);
-			array_free(&function->body);
-		}
-	}
-	array_free(&asm_module->globals);
+	array_free(&asm_module->data_section.data);
+	array_free(&asm_module->data_section.symbols);
+
+	array_free(&asm_module->bss_section.symbols);
+
+	array_free(&asm_module->externs);
+
 	array_free(&asm_module->fixups);
 
 	pool_free(&asm_module->pool);
-}
-
-void init_asm_function(AsmFunction *function)
-{
-	function->call_seq.arg_classes = NULL;
-	ARRAY_INIT(&function->body, AsmInstr, 20);
 }
 
 AsmValue asm_vreg(u32 vreg_number, u8 width)
@@ -100,23 +101,14 @@ AsmValue asm_const(u64 constant)
 	};
 }
 
-AsmValue asm_label(AsmLabel *label)
-{
-	return (AsmValue) {
-		.is_deref = false,
-		.t = ASM_VALUE_LABEL,
-		.u.label = label,
-	};
-}
-
-AsmValue asm_global(AsmGlobal *global)
+AsmValue asm_symbol(AsmSymbol *symbol)
 {
 	return (AsmValue) {
 		.is_deref = false,
 		.t = ASM_VALUE_CONST,
 		.u.constant = (AsmConst) {
-			.t = ASM_CONST_GLOBAL,
-			.u.global = global,
+			.t = ASM_CONST_SYMBOL,
+			.u.symbol = symbol,
 		},
 	};
 }
@@ -194,7 +186,7 @@ static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
 		}
 		return canonical_value == extended;
 	}
-	case ASM_CONST_GLOBAL:
+	case ASM_CONST_SYMBOL:
 		return imm_width == 64;
 	}
 }
@@ -239,18 +231,26 @@ static void dump_asm_const(AsmConst constant)
 			printf("%" PRIu64, (i64)x);
 		break;
 	}
-	case ASM_CONST_GLOBAL:
-		printf("%s", constant.u.global->name);
+	case ASM_CONST_SYMBOL:
+		printf("%s", constant.u.symbol->name);
 		break;
 	default:
 		UNREACHABLE;
 	}
 }
 
+static void dump_symbol(AsmSymbol *symbol)
+{
+	char *name = symbol->name;
+	if (symbol->linkage == ASM_GLOBAL_LINKAGE)
+		printf("global %s\n", name);
+	printf("%s:\n", name);
+}
+
 static void dump_asm_instr(AsmInstr *instr)
 {
 	if (instr->label != NULL)
-		printf("%s:\n", instr->label->name);
+		dump_symbol(instr->label);
 
 	putchar('\t');
 	char *op_name = asm_op_names[instr->op];
@@ -275,9 +275,6 @@ static void dump_asm_instr(AsmInstr *instr)
 			fputs(" + ", stdout);
 			dump_asm_const(arg->u.offset_register.offset);
 			break;
-		case ASM_VALUE_LABEL:
-			printf("%s", arg->u.label->name);
-			break;
 		case ASM_VALUE_CONST:
 			dump_asm_const(arg->u.constant);
 			break;
@@ -288,48 +285,48 @@ static void dump_asm_instr(AsmInstr *instr)
 	putchar('\n');
 }
 
-void dump_asm_function(AsmFunction *asm_function)
-{
-	Array(AsmInstr) *body = &asm_function->body;
-	for (u32 j = 0; j < body->size; j++) {
-		AsmInstr *instr = ARRAY_REF(body, AsmInstr, j);
-		dump_asm_instr(instr);
-	}
-}
-
 void dump_asm_module(AsmModule *asm_module)
 {
-	for (u32 i = 0; i < asm_module->globals.size; i++) {
-		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
+	for (u32 i = 0; i < asm_module->externs.size; i++) {
+		AsmSymbol *symbol = *ARRAY_REF(&asm_module->externs, AsmSymbol *, i);
+		printf("extern %s\n", symbol->name);
+	}
+	putchar('\n');
 
-		printf("global %s", global->name);
-		if (global->defined) {
-			switch (global->t) {
-			case ASM_GLOBAL_FUNCTION:
-				putchar('\n');
-				dump_asm_function(&global->u.function);
-				break;
-			case ASM_GLOBAL_VAR: {
-				if (global->u.var.value != NULL) {
-					fputs(" = [", stdout);
-					u32 size = global->u.var.size_bytes;
-					for (u32 i = 0; i < size; i++) {
-						printf("%u", global->u.var.value[i]);
-						if (i != size - 1)
-							fputs(", ", stdout);
-					}
-					putchar(']');
-				}
+	puts("section .text");
+	Array(AsmInstr) *instrs = &asm_module->text_section.instrs;
+	for (u32 i = 0; i < instrs->size; i++) {
+		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
+		dump_asm_instr(instr);
+	}
+	putchar('\n');
 
-				break;
-			}
-			case ASM_GLOBAL_REF:
-				printf(" = &%s", global->u.ref->name);
-				break;
-			}
+	puts("section .data");
+	Array(u8) *data = &asm_module->data_section.data;
+	Array(AsmSymbol *) *symbols = &asm_module->data_section.symbols;
+	u32 next_symbol = 0;
+	for (u32 i = 0; i < data->size; i++) {
+		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, next_symbol);
+		if (next_symbol < symbols->size && symbol->offset == i) {
+			dump_symbol(symbol);
+			next_symbol++;
 		}
 
-		puts("\n");
+		// @TODO: Use d[wdq] as well when possible.
+		printf("\tdb 0x%x\n", (unsigned int)*ARRAY_REF(data, u8, i));
+	}
+
+	puts("section .bss");
+	u32 pos = 0;
+	symbols = &asm_module->bss_section.symbols;
+	for (u32 i = 0; i < symbols->size; i++) {
+		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
+		assert(symbol->offset == pos);
+
+		dump_symbol(symbol);
+		printf("\tresb 0x%x\n", symbol->size);
+
+		pos += symbol->size;
 	}
 }
 
@@ -466,7 +463,7 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 		RegClass reg = get_reg_class(asm_value);
 
 		u64 offset;
-		if (asm_const.t == ASM_CONST_GLOBAL) {
+		if (asm_const.t == ASM_CONST_SYMBOL) {
 			encoded_instr->mod = 2;
 
 			// Dummy value, gets patched later.
@@ -479,10 +476,9 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 			*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
 			encoded_instr->disp_fixup = fixup;
 			fixup->type = fixup_type;
-			fixup->size_bytes = 4;
-			fixup->t = FIXUP_GLOBAL;
 			fixup->section = TEXT_SECTION;
-			fixup->u.global = asm_const.u.global;
+			fixup->size_bytes = 4;
+			fixup->symbol = asm_const.u.symbol;
 		} else {
 			assert(asm_const.t == ASM_CONST_IMMEDIATE);
 			offset = asm_const.u.immediate;
@@ -615,8 +611,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 		encoded_instr.immediate_size = immediate_size;
 		AsmValue* immediate_arg = NULL;
 		for (u32 i = 0; i < instr->arity; i++) {
-			if (instr->args[i].t == ASM_VALUE_CONST
-					|| instr->args[i].t == ASM_VALUE_LABEL) {
+			if (instr->args[i].t == ASM_VALUE_CONST) {
 				// Check that we only have one immediate.
 				assert(immediate_arg == NULL);
 				immediate_arg = instr->args + i;
@@ -624,30 +619,17 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 		}
 		assert(immediate_arg != NULL);
 
-		if (immediate_arg->t == ASM_VALUE_LABEL) {
-			Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
-			*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
-			encoded_instr.imm_fixup = fixup;
-			fixup->type = fixup_type;
-			fixup->section = TEXT_SECTION;
-			fixup->size_bytes = 4;
-			fixup->t = FIXUP_LABEL;
-			fixup->u.label = immediate_arg->u.label;
-
-			// Dummy value, gets patched later.
-			encoded_instr.immediate = 0;
-		} else if (immediate_arg->t == ASM_VALUE_CONST) {
+		if (immediate_arg->t == ASM_VALUE_CONST) {
 			AsmConst constant = immediate_arg->u.constant;
 			switch (constant.t) {
-			case ASM_CONST_GLOBAL: {
+			case ASM_CONST_SYMBOL: {
 				Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
 				*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
 				encoded_instr.imm_fixup = fixup;
 				fixup->type = fixup_type;
 				fixup->section = TEXT_SECTION;
 				fixup->size_bytes = 4;
-				fixup->t = FIXUP_GLOBAL;
-				fixup->u.global = constant.u.global;
+				fixup->symbol = constant.u.symbol;
 
 				// Dummy value, gets patched later.
 				encoded_instr.immediate = 0;
@@ -728,13 +710,11 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 
 void init_binary(Binary *binary)
 {
-	Array(u8) *text = &binary->text;
-	ARRAY_INIT(text, u8, 1024);
-	Array(u8) *data = &binary->data;
-	ARRAY_INIT(data, u8, 1024);
+	ARRAY_INIT(&binary->text, u8, 1024);
+	ARRAY_INIT(&binary->data, u8, 1024);
+	ARRAY_INIT(&binary->symbols, AsmSymbol, 10);
+
 	binary->bss_size = 0;
-	Array(AsmSymbol) *symbols = &binary->symbols;
-	ARRAY_INIT(symbols, AsmSymbol, 10);
 }
 
 void free_binary(Binary *binary)
@@ -746,135 +726,78 @@ void free_binary(Binary *binary)
 
 void assemble(AsmModule *asm_module, Binary *binary)
 {
+	// @TODO: We know ahead of time exactly how large binary->data and
+	// binary->symbols are going to be, we should reserve them.
 	init_binary(binary);
 
-	for (u32 i = 0; i < asm_module->globals.size; i++) {
-		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
-		AsmSymbol *symbol = pool_alloc(&asm_module->pool, sizeof *symbol);
-		*ARRAY_APPEND(&binary->symbols, AsmSymbol *) = symbol;
+	Array(AsmSymbol *) *symbols = &binary->symbols;
 
-		symbol->name = global->name;
-		symbol->defined = global->defined;
-		// Add one to account for 0 = undef symbol index
-		symbol->symtab_index = i + 1;
-		symbol->linkage = global->linkage;
+	AsmSymbol *prev_symbol = NULL;
+	Array(AsmInstr) *instrs = &asm_module->text_section.instrs;
+	for (u32 i = 0; i < instrs->size; i++) {
+		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
 
-		global->symbol = symbol;
+		u32 instr_start = binary->text.size;
+		assemble_instr(&binary->text, asm_module, instr);
 
-		switch (global->t) {
-		case ASM_GLOBAL_FUNCTION: {
-			AsmFunction *function = &global->u.function;
+		AsmSymbol *symbol = instr->label;
+		if (symbol != NULL) {
+			assert(symbol->section == TEXT_SECTION);
+			assert(symbol->defined);
 
-			u32 function_start;
-			u32 function_size;
-			if (global->defined) {
-				function_start = binary->text.size;
+			symbol->offset = instr_start;
 
-				Array(AsmInstr) *body = &function->body;
-				for (u32 j = 0; j < body->size; j++) {
-					AsmInstr *instr = ARRAY_REF(body, AsmInstr, j);
-					if (instr->label != NULL) {
-						instr->label->offset = binary->text.size;
-					}
-					assemble_instr(&binary->text, asm_module, instr);
+			if (symbol->linkage == ASM_GLOBAL_LINKAGE) {
+				if (prev_symbol != NULL) {
+					prev_symbol->size = instr_start - prev_symbol->offset;
 				}
 
-				function_size = binary->text.size - function_start;
-			} else {
-				function_start = function_size = 0;
+				prev_symbol = symbol;
 			}
-
-			symbol->section = TEXT_SECTION;
-			symbol->offset = function_start;
-			symbol->size = function_size;
-
-			break;
-		}
-		case ASM_GLOBAL_VAR:
-			if (global->defined) {
-				symbol->size = global->u.var.size_bytes;
-				assert(global->u.var.value != NULL);
-				assert(symbol->size != 0);
-				bool all_zero = true;
-				for (u32 i = 0; i < global->u.var.size_bytes; i++) {
-					if (global->u.var.value[i] != 0) {
-						all_zero = false;
-						break;
-					}
-				}
-
-				if (all_zero) {
-					symbol->section = BSS_SECTION;
-
-					// @TODO: Alignment
-					symbol->offset = binary->bss_size;
-					binary->bss_size += symbol->size;
-				} else {
-					symbol->section = DATA_SECTION;
-
-					// @TODO: Alignment
-					symbol->offset = binary->data.size;
-
-					u8 *value = global->u.var.value;
-					assert(value != NULL);
-					ARRAY_APPEND_ELEMS(&binary->data, u8, global->u.var.size_bytes, value);
-				}
-			}
-
-			break;
-		case ASM_GLOBAL_REF: {
-			symbol->section = DATA_SECTION;
-			// @TODO: Alignment
-			symbol->offset = binary->data.size;
-			// @PORT: Hardcoded pointer size.
-			u8 zero_pointer[8] = { 0 };
-			ARRAY_APPEND_ELEMS(&binary->data, u8, sizeof zero_pointer, zero_pointer);
-			break;
-		}
 		}
 	}
+	if (prev_symbol != NULL) {
+		prev_symbol->size = binary->text.size - prev_symbol->offset;
+	}
 
-	for (u32 i = 0; i < asm_module->globals.size; i++) {
-		AsmGlobal *global = *ARRAY_REF(&asm_module->globals, AsmGlobal *, i);
-		if (global->t != ASM_GLOBAL_REF)
-			continue;
+	ARRAY_APPEND_ELEMS(&binary->data, u8,
+			asm_module->data_section.data.size,
+			asm_module->data_section.data.elements);
 
-		AsmSymbol *symbol = global->symbol;
+	binary->bss_size = asm_module->bss_section.size;
 
-		Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
-		*fixup = (Fixup) {
-			.t = FIXUP_GLOBAL,
-			.type = FIXUP_ABSOLUTE,
-			.section = DATA_SECTION,
-			.offset = symbol->offset,
-			// @PORT: Hardcoded pointer size.
-			.size_bytes = 8,
-			.u.global = global->u.ref,
-		};
-		*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
+	Array(AsmSymbol *) *sections[] = {
+		&asm_module->text_section.symbols,
+		&asm_module->data_section.symbols,
+		&asm_module->bss_section.symbols,
+		&asm_module->externs,
+	};
+	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(sections); i++) {
+		Array(AsmSymbol *) *section = sections[i];
+
+		for (u32 j = 0; j < section->size; j++) {
+			AsmSymbol *symbol = *ARRAY_REF(section, AsmSymbol *, j);
+			// Add one to account for 0 = undef symbol index
+			symbol->symtab_index = symbols->size + 1;
+			*ARRAY_APPEND(symbols, AsmSymbol *) = symbol;
+		}
 	}
 
 	// @TODO: Emit relocations here instead?
+	// @TODO: Remove the fixups we process here, so that write_elf_object_file
+	// doesn't have to ignore them.
 	for (u32 i = 0; i < asm_module->fixups.size; i++) {
 		Fixup *fixup = *ARRAY_REF(&asm_module->fixups, Fixup *, i);
-		if (fixup->type == FIXUP_ABSOLUTE)
+		AsmSymbol *symbol = fixup->symbol;
+		if (fixup->type == FIXUP_ABSOLUTE
+				|| !symbol->defined
+				|| fixup->section != TEXT_SECTION
+				|| symbol->section != TEXT_SECTION) {
 			continue;
-
-		u32 target_offset;
-		if (fixup->t == FIXUP_GLOBAL) {
-			AsmGlobal *global = fixup->u.global;
-			if (global->defined && global->t == ASM_GLOBAL_FUNCTION) {
-				target_offset = global->symbol->offset;
-			} else {
-				continue;
-			}
-		} else {
-			target_offset = fixup->u.label->offset;
 		}
 
-
 		// Relative accesses are relative to the start of the next instruction.
-		i32 value = (i32)target_offset - (i32)fixup->next_instr_offset;
+		i32 value = (i32)symbol->offset - (i32)fixup->next_instr_offset;
 		write_int_at(&binary->text, fixup->offset, (u64)value, fixup->size_bytes);
 	}
 }

@@ -50,24 +50,18 @@ typedef struct Register
 	} u;
 } Register;
 
-typedef struct AsmLabel
-{
-	char *name;
-	u32 offset;
-} AsmLabel;
-
 typedef struct AsmConst
 {
 	enum
 	{
 		ASM_CONST_IMMEDIATE,
-		ASM_CONST_GLOBAL,
+		ASM_CONST_SYMBOL,
 	} t;
 
 	union
 	{
 		u64 immediate;
-		struct AsmGlobal *global;
+		struct AsmSymbol *symbol;
 	} u;
 } AsmConst;
 
@@ -81,7 +75,6 @@ typedef struct AsmValue
 	{
 		ASM_VALUE_REGISTER,
 		ASM_VALUE_OFFSET_REGISTER,
-		ASM_VALUE_LABEL,
 		ASM_VALUE_CONST,
 	} t;
 
@@ -94,7 +87,6 @@ typedef struct AsmValue
 			AsmConst offset;
 		} offset_register;
 		AsmConst constant;
-		AsmLabel *label;
 	} u;
 } AsmValue;
 
@@ -148,7 +140,7 @@ typedef struct AsmInstr
 	u8 num_deps;
 	u32 vreg_deps[2];
 
-	AsmLabel *label;
+	struct AsmSymbol *label;
 } AsmInstr;
 
 typedef struct ArgClass
@@ -181,13 +173,6 @@ typedef struct CallSeq
 	ArgClass *arg_classes;
 } CallSeq;
 
-typedef struct AsmFunction
-{
-	CallSeq call_seq;
-
-	Array(AsmInstr) body;
-} AsmFunction;
-
 typedef enum AsmLinkage
 {
 	ASM_GLOBAL_LINKAGE,
@@ -196,6 +181,8 @@ typedef enum AsmLinkage
 
 typedef enum AsmSymbolSection
 {
+	// @TODO: Maybe this should indicate "undefined"?
+	UNKNOWN_SECTION,
 	TEXT_SECTION,
 	DATA_SECTION,
 	BSS_SECTION,
@@ -212,34 +199,6 @@ typedef struct AsmSymbol
 	u32 size;
 } AsmSymbol;
 
-typedef struct AsmGlobal
-{
-	enum
-	{
-		ASM_GLOBAL_FUNCTION,
-		ASM_GLOBAL_VAR,
-		ASM_GLOBAL_REF,
-	} t;
-
-	char *name;
-	AsmLinkage linkage;
-	// @TODO: Remove this too? Less easy than on IrGlobal, as the value isn't
-	// a pointer.
-	bool defined;
-	AsmSymbol *symbol;
-
-	union
-	{
-		AsmFunction function;
-		struct
-		{
-			u32 size_bytes;
-			u8 *value;
-		} var;
-		struct AsmGlobal *ref;
-	} u;
-} AsmGlobal;
-
 typedef enum FixupType
 {
 	FIXUP_RELATIVE,
@@ -248,12 +207,6 @@ typedef enum FixupType
 
 typedef struct Fixup
 {
-	enum
-	{
-		FIXUP_LABEL,
-		FIXUP_GLOBAL,
-	} t;
-
 	FixupType type;
 
 	AsmSymbolSection section;
@@ -262,11 +215,7 @@ typedef struct Fixup
 	u32 next_instr_offset;
 	u32 size_bytes;
 
-	union
-	{
-		AsmLabel *label;
-		AsmGlobal *global;
-	} u;
+	AsmSymbol *symbol;
 } Fixup;
 
 typedef struct AsmModule
@@ -275,10 +224,37 @@ typedef struct AsmModule
 
 	Pool pool;
 
-	Array(AsmGlobal *) globals;
-	Array(Fixup *) fixups;
+	struct
+	{
+		Array(AsmInstr) instrs;
+		Array(AsmSymbol *) symbols;
+	} text_section;
+
+	struct
+	{
+		Array(u8) data;
+		Array(AsmSymbol *) symbols;
+	} data_section;
+
+	struct
+	{
+		u32 size;
+		Array(AsmSymbol *) symbols;
+	} bss_section;
+
+	Array(AsmSymbol *) externs;
+
+	Array(Fixup) fixups;
 } AsmModule;
 
+// @TODO: This is almost the same thing as AsmModule now. The only real
+// difference is that the symbol arrays are combined (which could be changed on
+// either end) and that text contains assembled bytes instead of instructions.
+// Maybe we should instead make AsmModule contain either of the two, and
+// assemble just fills up the assembled bytes array and clears the AsmInstr
+// aray. Then we don't need to copy stuff over. In fact, if we do that we could
+// get rid of the weird inversion of control where write_elf_object_file calls
+// assemble.
 typedef struct Binary
 {
 	Array(u8) text;
@@ -287,7 +263,6 @@ typedef struct Binary
 	u32 bss_size;
 } Binary;
 
-void init_asm_function(AsmFunction *function);
 void init_asm_module(AsmModule *asm_module, char *input_file_name);
 
 void free_asm_module(AsmModule *asm_module);
@@ -296,11 +271,9 @@ AsmValue asm_vreg(u32 vreg_number, u8 width);
 AsmValue asm_phys_reg(RegClass reg, u8 width);
 AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset);
 AsmValue asm_const(u64 constant);
+AsmValue asm_symbol(AsmSymbol *symbol);
 AsmValue asm_deref(AsmValue asm_arg);
-AsmValue asm_global(AsmGlobal *global);
-AsmValue asm_label(AsmLabel *label);
 
-void dump_asm_function(AsmFunction *asm_function);
 void dump_asm_module(AsmModule *asm_module);
 
 void init_binary(Binary *binary);

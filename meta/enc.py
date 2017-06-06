@@ -186,9 +186,7 @@ def arg_conditions(args):
                 + 'is_sign_extending_instr(instr)))')
                 .format(arg_str, ext_width, width))
         elif arg == 'rel':
-            conditions.append((
-                '({0}.t == ASM_VALUE_LABEL'
-                + ' || {0}.t == ASM_VALUE_CONST)').format(arg_str))
+            conditions.append(('({0}.t == ASM_VALUE_CONST)').format(arg_str))
         else:
             print "Unknown arg type: '%s'" % arg
             assert False

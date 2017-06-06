@@ -90,7 +90,6 @@ IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global)
 	IrConst *initializer = pool_alloc(&trans_unit->pool, sizeof *initializer);
 	initializer->type = global->type;
 	IrFunction *function = &initializer->u.function;
-	function->label = NULL;
 
 	global->initializer = initializer;
 
@@ -727,15 +726,6 @@ IrValue value_global(IrGlobal *global)
 	};
 
 	return value;
-}
-
-AsmLabel *global_label(IrGlobal *global)
-{
-	if (global->type.t == IR_FUNCTION) {
-		return global->initializer->u.function.label;
-	} else {
-		UNIMPLEMENTED;
-	}
 }
 
 IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value)

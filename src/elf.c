@@ -186,7 +186,7 @@ typedef enum ELF64RelocType
 // Note that we write out .rela.text, .bss, .data & .rela.data even if they are
 // empty. In this case we set the size to zero in the header and don't write
 // any data for it. This is simpler than having to handle it not being present,
-// and it costs only 64 bytes in object files without relocations.
+// and it costs only 64 bytes for each header.
 
 #define NUM_SECTIONS 9
 
@@ -261,21 +261,19 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 
 	for (u32 i = 0; i < fixups->size; i++) {
 		Fixup *fixup = *ARRAY_REF(fixups, Fixup *, i);
+		AsmSymbol *symbol = fixup->symbol;
 
 		if (fixup->section != TEXT_SECTION)
 			continue;
-		if (fixup->t == FIXUP_LABEL)
-			continue;
-
-		AsmGlobal *global = fixup->u.global;
-
-		if (global->defined && global->t == ASM_GLOBAL_FUNCTION
-				&& fixup->type == FIXUP_RELATIVE) {
+		if (fixup->type == FIXUP_RELATIVE
+				&& symbol->defined
+				&& fixup->section == TEXT_SECTION
+				&& symbol->section == TEXT_SECTION) {
 			continue;
 		}
 
-		u32 symbol = global->symbol->symtab_index;
-		assert(symbol != 0);
+		u32 symtab_index = symbol->symtab_index;
+		assert(symtab_index != 0);
 
 		ELF64RelocType reloc_type;
 		u32 addend;
@@ -291,7 +289,8 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 		}
 		ELF64Rela rela = {
 			.section_offset = fixup->offset,
-			.type_and_symbol = ELF64_RELA_TYPE_AND_SYMBOL(reloc_type, symbol),
+			.type_and_symbol =
+				ELF64_RELA_TYPE_AND_SYMBOL(reloc_type, symtab_index),
 			.addend = addend,
 		};
 
@@ -322,18 +321,19 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 		if (fixup->section != DATA_SECTION)
 			continue;
 
-		assert(fixup->t == FIXUP_GLOBAL);
 		assert(fixup->type = FIXUP_ABSOLUTE);
 
-		u32 symbol = fixup->u.global->symbol->symtab_index;
-		assert(symbol != 0);
+		AsmSymbol *symbol = fixup->symbol;
+		u32 symtab_index = symbol->symtab_index;
+		assert(symtab_index != 0);
 
 		// @PORT: Hardcoded pointer size.
 		ELF64RelocType reloc_type = R_X86_64_64;
 		u32 addend = 0;
 		ELF64Rela rela = {
 			.section_offset = fixup->offset,
-			.type_and_symbol = ELF64_RELA_TYPE_AND_SYMBOL(reloc_type, symbol),
+			.type_and_symbol =
+				ELF64_RELA_TYPE_AND_SYMBOL(reloc_type, symtab_index),
 			.addend = addend,
 		};
 
@@ -358,6 +358,7 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 	checked_fwrite(&undef_symbol, sizeof undef_symbol, 1, elf_file->output_file);
 }
 
+// @TODO: Why does this not add the string as well?
 static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
 		ELFSymbolBinding binding, u32 section, char *name, i32 value, u32 size)
 {
@@ -661,6 +662,7 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 			section = SHN_UNDEF;
 		} else {
 			switch (symbol->section) {
+			case UNKNOWN_SECTION: UNREACHABLE;
 			case TEXT_SECTION: section = TEXT_INDEX; break;
 			case BSS_SECTION: section = BSS_INDEX; break;
 			case DATA_SECTION: section = DATA_INDEX; break;

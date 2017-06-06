@@ -66,13 +66,12 @@ typedef struct IrBlock
 	Array(IrInstr *) instrs;
 
 	// used by asm_gen
-	AsmLabel *label;
+	AsmSymbol *label;
 } IrBlock;
 
 typedef struct IrFunction
 {
 	Array(IrBlock *) blocks;
-	AsmLabel *label;
 } IrFunction;
 
 typedef struct IrConst
@@ -100,8 +99,13 @@ typedef struct IrGlobal
 	char *name;
 	IrType type;
 	IrLinkage linkage;
-	AsmGlobal *asm_global;
+	AsmSymbol *asm_symbol;
 	IrConst *initializer;
+
+	// @TODO: We should find a better place to put this. It only makes sense
+	// for functions, but we can't put it on IrFunction because we need it for
+	// undefined functions too, to call them.
+	CallSeq call_seq;
 } IrGlobal;
 
 typedef struct IrBuilder
@@ -275,7 +279,7 @@ IrValue value_const(IrType type, u64 constant);
 IrValue value_arg(u32 arg_index, IrType type);
 IrValue value_global(IrGlobal *global);
 
-AsmLabel *global_label(IrGlobal *global);
+AsmSymbol *global_symbol(IrGlobal *global);
 
 IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value);
 IrConst *add_global_const(IrBuilder *builder, IrGlobal *global);
