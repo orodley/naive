@@ -641,7 +641,6 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 	ELFFile *elf_file = &_elf_file;
 	init_elf_file(elf_file, output_file, ET_REL);
 
-	assemble(asm_module);
 	elf_file->section_info[TEXT_INDEX].size = asm_module->text.bytes.size;
 	elf_file->section_info[TEXT_INDEX].contents = asm_module->text.bytes.elements;
 

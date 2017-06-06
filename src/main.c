@@ -305,6 +305,8 @@ static int compile_file(char *input_filename, char *output_filename,
 		dump_asm_module(&asm_builder.asm_module);
 	}
 
+	assemble(&asm_builder.asm_module);
+
 	// @NOTE: Needs to be changed if we support different object file
 	// formats.
 	if (!write_elf_object_file(output_filename, &asm_builder.asm_module))
