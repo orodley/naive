@@ -1000,13 +1000,12 @@ static void allocate_registers(AsmBuilder *builder)
 		}
 	}
 
-	// @TODO: Fix this now that we don't have an array of all the instructions
-	// in the current function. We need to record the size of text_section at
-	// the start of the function and then dump everything in between that and
-	// the end
-#if 0
 	if (flag_dump_live_ranges) {
-		dump_asm_function(builder->current_function);
+		for (u32 i = 0; i < body->size; i++) {
+			AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
+			dump_asm_instr(instr);
+		}
+
 		for (u32 i = 0; i < builder->virtual_registers.size; i++) {
 			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
 			printf("#%u: [%d, %d]", i, vreg->live_range_start, vreg->live_range_end);
@@ -1019,7 +1018,6 @@ static void allocate_registers(AsmBuilder *builder)
 		}
 		putchar('\n');
 	}
-#endif
 
 	u32 free_regs_bitset;
 	assert(STATIC_ARRAY_LENGTH(alloc_index_to_reg) < 8 * sizeof free_regs_bitset);

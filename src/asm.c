@@ -238,7 +238,7 @@ static void dump_symbol(AsmSymbol *symbol)
 	printf("%s:\n", name);
 }
 
-static void dump_asm_instr(AsmInstr *instr)
+void dump_asm_instr(AsmInstr *instr)
 {
 	if (instr->label != NULL)
 		dump_symbol(instr->label);

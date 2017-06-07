@@ -250,6 +250,7 @@ AsmValue asm_const(u64 constant);
 AsmValue asm_symbol(AsmSymbol *symbol);
 AsmValue asm_deref(AsmValue asm_arg);
 
+void dump_asm_instr(AsmInstr *instr);
 void dump_asm_module(AsmModule *asm_module);
 
 void assemble(AsmModule *asm_module);
