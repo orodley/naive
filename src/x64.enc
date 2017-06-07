@@ -15,6 +15,7 @@ CALL r/m64             =         FF /2
 
 CDQ                    =         99
 
+CMP r/m8, r8           =         38 /r
 CMP r/m8, imm8         =         80 /7 ib
 CMP r/m16, r16         =   OSO + 39 /r
 CMP r/m32, imm32       =         81 /7 id
@@ -48,6 +49,8 @@ MOV r64,   imm64       = REX.W + B8 +rd io
 
 MOVSX r16, r/m8        =   OSO + [0F BE] /r
 MOVSX r32, r/m8        =         [0F BE] /r
+MOVSX r64, r/m8        = REX.W + [0F BE] /r
+MOVSX r64, r/m32       = REX.W + 63 /r
 
 MOVZX r32, r/m8        =         [0F B6] /r
 
