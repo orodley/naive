@@ -300,8 +300,9 @@ void dump_asm_module(AsmModule *asm_module)
 	u32 next_symbol = 0;
 	for (u32 i = 0; i < data->size; i++) {
 		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, next_symbol);
-		if (symbol->section == DATA_SECTION
-				&& next_symbol < symbols->size && symbol->offset == i) {
+		if (next_symbol < symbols->size
+				&& symbol->section == DATA_SECTION
+				&& symbol->offset == i) {
 			dump_symbol(symbol);
 			next_symbol++;
 		}
