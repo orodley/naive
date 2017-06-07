@@ -697,8 +697,15 @@ static void asm_gen_instr(
 		}
 		builder->curr_sp_diff = 0;
 
-		if (instr->u.call.return_type.t != IR_VOID)
-			assign_vreg(builder, instr)->assigned_register = REG_CLASS_A;
+		if (instr->u.call.return_type.t != IR_VOID) {
+			// Move out of RAX into a new vreg. The live range of the result
+			// might overlap another case where we need to use RAX.
+			AsmValue rax_vreg = pre_alloced_vreg(builder, REG_CLASS_A, 64);
+			emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), 64), rax_vreg);
+
+			assign_vreg(builder, instr);
+		}
+
 		break;
 	}
 	case OP_BIT_XOR: asm_gen_binary_instr(builder, instr, XOR); break;
