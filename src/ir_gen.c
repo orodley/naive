@@ -2587,8 +2587,9 @@ static Term ir_gen_deref(IrBuilder *builder, TypeEnv *type_env,
 	CType *pointee_type = pointer_type->u.pointee_type;
 
 	IrValue value;
-	// Structs implicitly have their address taken.
-	if (context == LVALUE_CONTEXT || pointee_type->t == STRUCT_TYPE) {
+	// Structs and arrays implicitly have their address taken.
+	if (context == LVALUE_CONTEXT || pointee_type->t == STRUCT_TYPE
+			|| pointee_type->t == ARRAY_TYPE) {
 		value = pointer.value;
 	} else {
 		assert(context == RVALUE_CONTEXT);
