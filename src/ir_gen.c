@@ -2517,6 +2517,13 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 			}
 
 			*other_term = convert_type(builder, *other_term, ptr_term->ctype);
+		} else if (left.value.t == VALUE_GLOBAL && right.value.t == VALUE_GLOBAL) {
+			// Constant fold tautological comparisons between global.
+			return (Term) {
+				.ctype = result_type,
+				.value = value_const(
+						c_type_to_ir_type(result_type), ir_op == OP_NEQ),
+			};
 		}
 	} else {
 		do_arithmetic_conversions(builder, &left, &right);
