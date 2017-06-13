@@ -2693,8 +2693,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		CType *result_type = &env->type_env.int_type;
 
 		IrValue value = value_const(
-				(IrType) { .t = IR_INT, .u.bit_width = 32 },
-				expr->u.int_literal);
+				c_type_to_ir_type(result_type), expr->u.int_literal);
 
 		return (Term) { .ctype = result_type, .value = value };
 	}
