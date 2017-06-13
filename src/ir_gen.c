@@ -1534,6 +1534,39 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 	array_free(param_bindings);
 }
 
+IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init);
+
+void const_gen_c_init_array(IrBuilder *builder,
+		CInitializer *c_init, IrConst *konst, u32 *const_index)
+{
+	CType *type = c_init->type;
+	assert(type->t == ARRAY_TYPE);
+
+	CType *elem_type = type->u.array.elem_type;
+	u32 array_size = type->u.array.size;
+
+	if (elem_type->t == ARRAY_TYPE) {
+		for (u32 i = 0; i < array_size; i++) {
+			const_gen_c_init_array(
+					builder, c_init->u.sub_elems + i, konst, const_index);
+		}
+	} else {
+		for (u32 i = 0; i < array_size; i++) {
+			CInitializer *sub_init = c_init->u.sub_elems + i;
+
+			if (sub_init->type == NULL) {
+				konst->u.array_elems[*const_index + i] =
+					*zero_initializer(builder, elem_type);
+			} else {
+				konst->u.array_elems[*const_index + i] =
+					*const_gen_c_init(builder, sub_init);
+			}
+		}
+
+		*const_index += type->u.array.size;
+	}
+}
+
 IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
 {
 	CType *type = c_init->type;
@@ -1557,16 +1590,8 @@ IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
 	}
 	case ARRAY_TYPE: {
 		IrConst *c = add_array_const(builder, *type->u.array.ir_type);
-		CType *elem_type = type->u.array.elem_type;
-		for (u32 i = 0; i < type->u.array.size; i++) {
-			CInitializer *sub_init = c_init->u.sub_elems + i;
-
-			if (sub_init->type == NULL) {
-				c->u.array_elems[i] = *zero_initializer(builder, elem_type);
-			} else {
-				c->u.array_elems[i] = *const_gen_c_init(builder, sub_init);
-			}
-		}
+		u32 i = 0;
+		const_gen_c_init_array(builder, c_init, c, &i);
 
 		return c;
 	}
