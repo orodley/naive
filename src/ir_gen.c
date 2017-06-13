@@ -2305,20 +2305,25 @@ void do_arithmetic_conversions_with_blocks(IrBuilder *builder, Term *left,
 		}
 	} else {
 		Term *signed_term, *unsigned_term;
-		IrBlock *conversion_block;
+		IrBlock *signed_block, *unsigned_block;
 		if (left->ctype->u.integer.is_signed) {
 			signed_term = left;
 			unsigned_term = right;
-			conversion_block = left_block;
+			signed_block = left_block;
+			unsigned_block = right_block;
 		} else {
 			signed_term = right;
 			unsigned_term = left;
-			conversion_block = right_block;
+			signed_block = right_block;
+			unsigned_block = left_block;
 		}
 
 		if (rank(unsigned_term->ctype) >= rank(signed_term->ctype)) {
-			builder->current_block = conversion_block;
+			builder->current_block = signed_block;
 			*signed_term = convert_type(builder, *signed_term, unsigned_term->ctype);
+		} else if (rank(signed_term->ctype) > rank(unsigned_term->ctype)) {
+			builder->current_block = unsigned_block;
+			*unsigned_term = convert_type(builder, *unsigned_term, signed_term->ctype);
 		} else {
 			UNIMPLEMENTED;
 		}
