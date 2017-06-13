@@ -340,11 +340,10 @@ static void set_array_type_length(CType *array_type, u64 size)
 	assert(array_type->t == ARRAY_TYPE);
 
 	array_type->u.array.size = size;
+
 	if (array_type->u.array.elem_type->t == ARRAY_TYPE) {
 		size *= array_type->u.array.elem_type->u.array.size;
 	}
-
-	array_type->u.array.size = size;
 	array_type->u.array.ir_type->u.array.size = size;
 	array_type->u.array.incomplete = false;
 }
