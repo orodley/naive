@@ -226,6 +226,31 @@ static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp 
 {
 	AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
 	AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
+
+	// The only form of comparison between a register and an immediate has the
+	// immediate on the RHS. So we need to swap the LHS and RHS if the
+	// immediate is on the LHS.
+	if (arg1.t == ASM_VALUE_CONST) {
+		AsmOp flipped;
+		switch (op) {
+		case SETG: flipped = SETL; break;
+		case SETL: flipped = SETG; break;
+		case SETGE: flipped = SETLE; break;
+		case SETLE: flipped = SETGE; break;
+
+		case SETE: flipped = SETE; break;
+		case SETNE: flipped = SETNE; break;
+
+		default: UNREACHABLE;
+		}
+
+		AsmValue temp = arg1;
+		arg1 = arg2;
+		arg2 = temp;
+
+		op = flipped;
+	}
+
 	u32 vreg = next_vreg(builder);
 	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
 	emit_instr2(builder, CMP, arg1, arg2);

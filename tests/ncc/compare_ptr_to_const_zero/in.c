@@ -10,7 +10,7 @@ int main()
 	assert(!!b);
 	assert(!!"foo");
 
-	//assert(0 != b);
+	assert(0 != b);
 	assert(0 != "foo");
 	assert(b != 0);
 	assert("foo" != 0);
