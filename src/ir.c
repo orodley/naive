@@ -311,7 +311,7 @@ static void dump_instr(IrInstr *instr)
 		}
 	case OP_RET_VOID:
 		break;
-	case OP_RET: case OP_BIT_NOT: case OP_LOG_NOT: case OP_BUILTIN_VA_START:
+	case OP_RET: case OP_BIT_NOT: case OP_BUILTIN_VA_START:
 	case OP_NEG:
 		dump_value(instr->u.arg);
 		break;
@@ -491,8 +491,6 @@ static u64 constant_fold_unary_op(IrOp op, u64 arg)
 		UNREACHABLE;
 	case OP_BIT_NOT:
 		return ~arg;
-	case OP_LOG_NOT: 
-		return !arg;
 	case OP_NEG:
 		return -arg;
 	default:
@@ -504,7 +502,7 @@ static u64 constant_fold_unary_op(IrOp op, u64 arg)
 static u64 constant_fold_binary_op(IrOp op, u64 arg1, u64 arg2)
 {
 	switch (op) {
-	case OP_BIT_NOT: case OP_LOG_NOT:
+	case OP_BIT_NOT:
 		UNREACHABLE;
 	case OP_BIT_XOR: return arg1 ^ arg2;
 	case OP_BIT_AND: return arg1 & arg2;
@@ -618,8 +616,7 @@ IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue ar
 
 	IrType type = arg1.type;
 	switch (op) {
-	case OP_LOG_NOT: case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE:
-	case OP_LT: case OP_LTE:
+	case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE:
 		// @TODO: This shouldn't be hardcoded here. We should define some fixed
 		// type for IR comparisons and the caller should explicitly cast to
 		// whatever type they want (int in C).

@@ -722,19 +722,6 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
-	case OP_LOG_NOT: {
-		assert(instr->type.t == IR_INT);
-		u8 width = instr->type.u.bit_width;
-
-		AsmValue arg = asm_value(builder, instr->u.arg);
-		u32 vreg = next_vreg(builder);
-		emit_instr2(builder, XOR, asm_vreg(vreg, width), asm_vreg(vreg, width));
-		emit_instr2(builder, TEST, arg, arg);
-		emit_instr1(builder, SETE, asm_vreg(next_vreg(builder), 8));
-
-		assign_vreg(builder, instr);
-		break;
-	}
 	case OP_NEG: {
 		assert(instr->type.t == IR_INT);
 		u8 width = instr->type.u.bit_width;

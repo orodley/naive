@@ -2723,13 +2723,12 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	}
 	case LOGICAL_NOT_EXPR: {
 		CType *result_type = &env->type_env.int_type;
-		Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
-		term = convert_type(builder, term, result_type);
-
-		return (Term) {
-			.value = build_unary_instr(builder, OP_LOG_NOT, term.value),
+		Term inner = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
+		Term zero = {
 			.ctype = result_type,
+			.value = value_const(c_type_to_ir_type(result_type), 0),
 		};
+		return ir_gen_binary_operator(builder, env, inner, zero, OP_EQ);
 	}
 	case UNARY_MINUS_EXPR: {
 		Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
