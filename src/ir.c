@@ -529,6 +529,8 @@ static IrValue value_instr(IrInstr *instr)
 
 IrValue build_local(IrBuilder *builder, IrType type)
 {
+	assert(size_of_ir_type(type) != 0);
+
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_LOCAL;
 	instr->type = (IrType) { .t = IR_POINTER };

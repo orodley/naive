@@ -3015,9 +3015,6 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case COMPOUND_EXPR: {
 		CType *type =
 			type_name_to_c_type(builder, env, expr->u.compound.type_name);
-		IrValue local = build_local(builder, c_type_to_ir_type(type));
-		Term compound_value = { .value = local, .ctype = type };
-
 		ASTInitializer initializer = {
 			.t = BRACE_INITIALIZER,
 			.u.initializer_element_list
@@ -3025,6 +3022,9 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		};
 
 		infer_array_size_from_initializer(builder, env, &initializer, type);
+
+		IrValue local = build_local(builder, c_type_to_ir_type(type));
+		Term compound_value = { .value = local, .ctype = type };
 
 		ir_gen_initializer(builder, env, compound_value, &initializer);
 
