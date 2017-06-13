@@ -276,13 +276,6 @@ static void dump_instr(IrInstr *instr)
 		fputs(", ", stdout);
 		dump_value(instr->u.load.pointer);
 		break;
-	case OP_STORE:
-		dump_value(instr->u.store.pointer);
-		fputs(", ", stdout);
-		dump_value(instr->u.store.value);
-		fputs(", ", stdout);
-		dump_ir_type(instr->u.store.type);
-		break;
 	case OP_CAST: case OP_ZEXT: case OP_SEXT: case OP_TRUNC:
 		dump_value(instr->u.arg);
 		fputs(", ", stdout);
@@ -325,7 +318,7 @@ static void dump_instr(IrInstr *instr)
 	case OP_BIT_XOR: case OP_BIT_AND: case OP_BIT_OR: case OP_SHL: case OP_SHR:
 	case OP_MUL: case OP_DIV: case OP_EQ: case OP_ADD: case OP_SUB:
 	case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE:
-	case OP_BUILTIN_VA_ARG:
+	case OP_STORE: case OP_BUILTIN_VA_ARG:
 		dump_value(instr->u.binary_op.arg1);
 		fputs(", ", stdout);
 		dump_value(instr->u.binary_op.arg2);
@@ -569,14 +562,13 @@ IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type)
 	return value_instr(instr);
 }
 
-IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType type)
+IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value)
 {
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_STORE;
 	instr->type = (IrType) { .t = IR_VOID };
-	instr->u.store.pointer = pointer;
-	instr->u.store.type = type;
-	instr->u.store.value = value;
+	instr->u.binary_op.arg1 = pointer;
+	instr->u.binary_op.arg2 = value;
 
 	return value_instr(instr);
 }

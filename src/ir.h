@@ -220,12 +220,6 @@ typedef struct IrInstr
 		} load;
 		struct
 		{
-			IrValue pointer;
-			IrValue value;
-			IrType type;
-		} store;
-		struct
-		{
 			IrValue callee;
 			u32 arity;
 			IrValue *arg_array;
@@ -292,7 +286,7 @@ IrValue build_local(IrBuilder *builder, IrType type);
 IrValue build_field(IrBuilder *builder, IrValue struct_ptr, IrType type,
 		u32 field_number);
 IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type);
-IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value, IrType type);
+IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value);
 IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 arity,
 		IrValue *arg_array);
 IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType result_type);

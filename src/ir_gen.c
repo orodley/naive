@@ -1471,8 +1471,7 @@ static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
 		IrType int_ptr_type = c_type_to_ir_type(type_env->int_ptr_type);
 		IrValue field_ptr = build_binary_instr(builder, OP_ADD,
 				base_ptr, value_const(int_ptr_type, current_offset));
-		build_store(builder, field_ptr, c_init->u.leaf_value,
-				c_type_to_ir_type(type));
+		build_store(builder, field_ptr, c_init->u.leaf_value);
 		break;
 	}
 	}
@@ -2592,8 +2591,7 @@ static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
 		}
 
 		result = convert_type(builder, result, left.ctype);
-		build_store(builder, left.value, result.value,
-				c_type_to_ir_type(left.ctype));
+		build_store(builder, left.value, result.value);
 	}
 
 	return result;

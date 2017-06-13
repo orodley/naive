@@ -446,10 +446,9 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_STORE: {
-		IrValue ir_pointer = instr->u.store.pointer;
-		IrValue ir_value = instr->u.store.value;
-		IrType type = instr->u.store.type;
-		assert(ir_type_eq(&ir_value.type, &type));
+		IrValue ir_pointer = instr->u.binary_op.arg1;
+		IrValue ir_value = instr->u.binary_op.arg2;
+		IrType type = ir_value.type;
 
 		AsmValue pointer = asm_value(builder, ir_pointer);
 		AsmValue value = asm_value(builder, ir_value);
