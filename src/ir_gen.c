@@ -2490,14 +2490,6 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	if (ir_op == OP_SUB)
 		return ir_gen_sub(builder, env, left, right);
 
-	CType *result_type;
-	if (ir_op == OP_EQ || ir_op == OP_NEQ || ir_op == OP_LT || ir_op == OP_GT
-			|| ir_op == OP_LTE || ir_op == OP_GTE) {
-		result_type = &env->type_env.int_type;
-	} else {
-		result_type = left.ctype;
-	}
-
 	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
 	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
 
@@ -2505,6 +2497,7 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	bool right_is_ptr = right.ctype->t == POINTER_TYPE;
 
 	if ((ir_op == OP_EQ || ir_op == OP_NEQ) && (left_is_ptr || right_is_ptr)) {
+		CType *int_type = &env->type_env.int_type;
 		if (!left_is_ptr || !right_is_ptr) {
 			Term *ptr_term, *other_term;
 			if (left_is_ptr) {
@@ -2524,9 +2517,9 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 			// Constant fold tautological comparisons between a global and NULL.
 			if (ptr_term->value.t == VALUE_GLOBAL) {
 				return (Term) {
-					.ctype = result_type,
+					.ctype = int_type,
 					.value = value_const(
-							c_type_to_ir_type(result_type), ir_op == OP_NEQ),
+							c_type_to_ir_type(int_type), ir_op == OP_NEQ),
 				};
 			}
 
@@ -2534,13 +2527,21 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 		} else if (left.value.t == VALUE_GLOBAL && right.value.t == VALUE_GLOBAL) {
 			// Constant fold tautological comparisons between global.
 			return (Term) {
-				.ctype = result_type,
+				.ctype = int_type,
 				.value = value_const(
-						c_type_to_ir_type(result_type), ir_op == OP_NEQ),
+						c_type_to_ir_type(int_type), ir_op == OP_NEQ),
 			};
 		}
 	} else {
 		do_arithmetic_conversions(builder, &left, &right);
+	}
+
+	CType *result_type;
+	if (ir_op == OP_EQ || ir_op == OP_NEQ || ir_op == OP_LT || ir_op == OP_GT
+			|| ir_op == OP_LTE || ir_op == OP_GTE) {
+		result_type = &env->type_env.int_type;
+	} else {
+		result_type = left.ctype;
 	}
 
 	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
@@ -2584,11 +2585,10 @@ static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
 				.ctype = left.ctype,
 				.value = build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
 			};
-			result = ir_gen_binary_operator(builder, env, load, right, ir_op);
-
 			if (pre_assign_value != NULL)
 				*pre_assign_value = load;
 
+			result = ir_gen_binary_operator(builder, env, load, right, ir_op);
 		}
 
 		result = convert_type(builder, result, left.ctype);
