@@ -936,14 +936,15 @@ static void decl_to_cdecl_aux(IrBuilder *builder, Env *env,
 		cdecl->type = decl_spec_type;
 		cdecl->ident_type = &cdecl->type;
 	} else if (declarator->t == POINTER_DECLARATOR) {
-		CDeclAux pointee_cdecl;
 		assert(declarator->u.pointer_declarator.decl_specifier_list == NULL);
+
+		decl_spec_type = pointer_type(&env->type_env, decl_spec_type);
+
+		CDeclAux pointee_cdecl;
 		decl_to_cdecl_aux(builder, env, decl_spec_type,
 				declarator->u.pointer_declarator.pointee, &pointee_cdecl);
 		cdecl->name = pointee_cdecl.name;
-		CType *ptr = pointer_type(&env->type_env, *pointee_cdecl.ident_type);
-		*pointee_cdecl.ident_type = ptr;
-		cdecl->ident_type = &ptr->u.pointee_type;
+		cdecl->ident_type = &decl_spec_type->u.pointee_type;
 		cdecl->type = pointee_cdecl.type;
 	} else {
 		assert(declarator->t == DIRECT_DECLARATOR);
