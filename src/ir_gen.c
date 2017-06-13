@@ -3026,6 +3026,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 				= expr->u.compound.initializer_element_list,
 		};
 
+		infer_array_size_from_initializer(builder, env, &initializer, type);
+
 		ir_gen_initializer(builder, env, compound_value, &initializer);
 
 		return compound_value;
