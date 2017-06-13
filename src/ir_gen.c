@@ -2479,9 +2479,29 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
 	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
 
-	if (!((ir_op == OP_EQ || ir_op == OP_NEQ)
-				&& left.ctype->t == POINTER_TYPE
-				&& right.ctype->t == POINTER_TYPE)) {
+	bool left_is_ptr = left.ctype->t == POINTER_TYPE;
+	bool right_is_ptr = right.ctype->t == POINTER_TYPE;
+
+	if ((ir_op == OP_EQ || ir_op == OP_NEQ) && (left_is_ptr || right_is_ptr)) {
+		if (!left_is_ptr || !right_is_ptr) {
+			Term *ptr_term, *other_term;
+			if (left_is_ptr) {
+				ptr_term = &left;
+				other_term = &right;
+			} else {
+				ptr_term = &right;
+				other_term = &left;
+			}
+
+			// "ptr <cmp> !ptr" is only valid if "!ptr" is zero, as a constant
+			// zero integer expression is a null pointer constant.
+			assert(other_term->ctype->t == INTEGER_TYPE);
+			assert(other_term->value.t == VALUE_CONST);
+			assert(other_term->value.u.constant == 0);
+
+			*other_term = convert_type(builder, *other_term, ptr_term->ctype);
+		}
+	} else {
 		do_arithmetic_conversions(builder, &left, &right);
 	}
 
