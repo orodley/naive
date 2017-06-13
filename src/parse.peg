@@ -412,8 +412,8 @@ unary_expr =
         seq(build_unary_expr, TOK_INCREMENT, unary_expr),
         seq(build_unary_expr, TOK_DECREMENT, unary_expr),
         seq(build_unary_expr, unary_operator, cast_expr),
-        seq(build_sizeof_type, keyword(sizeof), TOK_LROUND, type_name, TOK_RROUND),
-        seq(build_sizeof_expr, keyword(sizeof), unary_expr))
+        seq(build_sizeof_expr, keyword(sizeof), unary_expr),
+        seq(build_sizeof_type, keyword(sizeof), TOK_LROUND, type_name, TOK_RROUND))
 
 unary_operator =
     or(TOK_AMPERSAND, TOK_ASTERISK, TOK_PLUS, TOK_MINUS, TOK_BIT_NOT, TOK_LOGICAL_NOT)
