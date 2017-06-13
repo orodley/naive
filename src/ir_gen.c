@@ -2476,6 +2476,14 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	if (ir_op == OP_SUB)
 		return ir_gen_sub(builder, env, left, right);
 
+	CType *result_type;
+	if (ir_op == OP_EQ || ir_op == OP_NEQ || ir_op == OP_LT || ir_op == OP_GT
+			|| ir_op == OP_LTE || ir_op == OP_GTE) {
+		result_type = &env->type_env.int_type;
+	} else {
+		result_type = left.ctype;
+	}
+
 	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
 	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
 
@@ -2499,18 +2507,19 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 			assert(other_term->value.t == VALUE_CONST);
 			assert(other_term->value.u.constant == 0);
 
+			// Constant fold tautological comparisons between a global and NULL.
+			if (ptr_term->value.t == VALUE_GLOBAL) {
+				return (Term) {
+					.ctype = result_type,
+					.value = value_const(
+							c_type_to_ir_type(result_type), ir_op == OP_NEQ),
+				};
+			}
+
 			*other_term = convert_type(builder, *other_term, ptr_term->ctype);
 		}
 	} else {
 		do_arithmetic_conversions(builder, &left, &right);
-	}
-
-	CType *result_type;
-	if (ir_op == OP_EQ || ir_op == OP_NEQ || ir_op == OP_LT || ir_op == OP_GT
-			|| ir_op == OP_LTE || ir_op == OP_GTE) {
-		result_type = &env->type_env.int_type;
-	} else {
-		result_type = left.ctype;
 	}
 
 	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
