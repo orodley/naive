@@ -8,6 +8,8 @@ ADD r/m64, r64         = REX.W + 01 /r
 AND r/m32, r32         =         21 /r
 AND r/m32, imm8        =         83 /4 ib
 AND r/m32, imm32       =         81 /4 iw
+AND r/m64, imm8        = REX.W + 83 /4 ib
+AND r/m64, imm32       = REX.W + 81 /4 ib
 AND r/m64, r64         = REX.W + 21 /r
 
 CALL rel               =         E8 cd
@@ -84,6 +86,7 @@ SHL r/m32, CL          =         D3 /4
 
 SHR r/m32, imm8        =         C1 /5 ib
 SHR r/m32, CL          =         D3 /5
+SHR r/m64, CL          = REX.W + D3 /5
 
 SUB r/m32, r32         =         29 /r
 SUB r/m32, imm8        =         83 /5 ib
