@@ -757,11 +757,46 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
-	// @TODO: This doesn't work in all cases because SH[LR] are weird and can't
-	// take an arbitrary register as the rhs.
-	case OP_SHL: asm_gen_binary_instr(builder, instr, SHL); break;
-	case OP_SHR: asm_gen_binary_instr(builder, instr, SHR); break;
+	// SHL and SHR can't take an arbitrary register as the RHS. They can take
+	// an immediate, or they can take CL. So if we have args (reg1, reg2), we
+	// need to move reg2 into CL first.
+	case OP_SHL:
+	case OP_SHR: {
+		AsmOp op = instr->op == OP_SHL ? SHL : SHR;
 
+		AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
+		AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
+		u8 width = instr->type.u.bit_width;
+
+		AsmValue target = asm_vreg(next_vreg(builder), width);
+		emit_instr2(builder, MOV, target, arg1);
+		assign_vreg(builder, instr);
+
+		switch (arg2.t) {
+		case ASM_VALUE_CONST:
+			emit_instr2(builder, op, target, arg2);
+			break;
+		case ASM_VALUE_REGISTER: {
+			AsmValue reg_cl = pre_alloced_vreg(builder, REG_CLASS_C, 8);
+
+			Register arg2_low = arg2.u.reg;
+			arg2_low.width = 8;
+
+			emit_instr2(builder, MOV, reg_cl,
+					(AsmValue) {
+						.t = ASM_VALUE_REGISTER,
+						.u.reg = arg2_low,
+					});
+
+			emit_instr2(builder, op, target, reg_cl);
+			break;
+		}
+		default:
+			UNREACHABLE;
+		}
+
+		break;
+	}
 	case OP_ADD: asm_gen_binary_instr(builder, instr, ADD); break;
 	case OP_SUB: asm_gen_binary_instr(builder, instr, SUB); break;
 	case OP_MUL: {

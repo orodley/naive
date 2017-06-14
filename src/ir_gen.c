@@ -2787,6 +2787,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		};
 	}
 	case LEFT_SHIFT_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SHL);
+	// @TODO: Emit arithmetic shifts for signed LHS.
 	case RIGHT_SHIFT_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SHR);
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_DIV);

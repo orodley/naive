@@ -79,7 +79,11 @@ SETGE r/m8             =         [0F 9D] /0
 SETL r/m8              =         [0F 9C] /0
 SETLE r/m8             =         [0F 9E] /0
 
+SHL r/m32, imm8        =         C1 /4 ib
+SHL r/m32, CL          =         D3 /4
+
 SHR r/m32, imm8        =         C1 /5 ib
+SHR r/m32, CL          =         D3 /5
 
 SUB r/m32, r32         =         29 /r
 SUB r/m32, imm8        =         83 /5 ib

@@ -153,6 +153,26 @@ static void assemble_instr(Array(u8) *output, AsmModule *asm_module, AsmInstr *i
 def check_width(width):
     assert int(width) in [8, 16, 32, 64]
 
+REGISTER_MAP = {
+        "AL":   ("REG_CLASS_A",   8), "AX":   ("REG_CLASS_A",   16), "EAX":  ("REG_CLASS_A",   32), "RAX": ("REG_CLASS_A",   64),
+        "BL":   ("REG_CLASS_B",   8), "BX":   ("REG_CLASS_B",   16), "EBX":  ("REG_CLASS_B",   32), "RBX": ("REG_CLASS_B",   64),
+        "CL":   ("REG_CLASS_C",   8), "CX":   ("REG_CLASS_C",   16), "ECX":  ("REG_CLASS_C",   32), "RCX": ("REG_CLASS_C",   64),
+        "DL":   ("REG_CLASS_D",   8), "DX":   ("REG_CLASS_D",   16), "EDX":  ("REG_CLASS_D",   32), "RDX": ("REG_CLASS_D",   64),
+        "DIL":  ("REG_CLASS_DI",  8), "DI":   ("REG_CLASS_DI",  16), "EDI":  ("REG_CLASS_DI",  32), "RDI": ("REG_CLASS_DI",  64),
+        "SIL":  ("REG_CLASS_SI",  8), "SI":   ("REG_CLASS_SI",  16), "ESI":  ("REG_CLASS_SI",  32), "RSI": ("REG_CLASS_SI",  64),
+        "BPL":  ("REG_CLASS_BP",  8), "BP":   ("REG_CLASS_BP",  16), "EBP":  ("REG_CLASS_BP",  32), "RBP": ("REG_CLASS_BP",  64),
+        "SPL":  ("REG_CLASS_SP",  8), "SP":   ("REG_CLASS_SP",  16), "ESP":  ("REG_CLASS_SP",  32), "RSP": ("REG_CLASS_SP",  64),
+        "R8B":  ("REG_CLASS_R8",  8), "R8W":  ("REG_CLASS_R8",  16), "R8D":  ("REG_CLASS_R8",  32), "R8":  ("REG_CLASS_R8",  64),
+        "R9B":  ("REG_CLASS_R9",  8), "R9W":  ("REG_CLASS_R9",  16), "R9D":  ("REG_CLASS_R9",  32), "R9":  ("REG_CLASS_R9",  64),
+        "R10B": ("REG_CLASS_R10", 8), "R10W": ("REG_CLASS_R10", 16), "R10D": ("REG_CLASS_R10", 32), "R10": ("REG_CLASS_R10", 64),
+        "R11B": ("REG_CLASS_R11", 8), "R11W": ("REG_CLASS_R11", 16), "R11D": ("REG_CLASS_R11", 32), "R11": ("REG_CLASS_R11", 64),
+        "R12B": ("REG_CLASS_R12", 8), "R12W": ("REG_CLASS_R12", 16), "R12D": ("REG_CLASS_R12", 32), "R12": ("REG_CLASS_R12", 64),
+        "R13B": ("REG_CLASS_R13", 8), "R13W": ("REG_CLASS_R13", 16), "R13D": ("REG_CLASS_R13", 32), "R13": ("REG_CLASS_R13", 64),
+        "R14B": ("REG_CLASS_R14", 8), "R14W": ("REG_CLASS_R14", 16), "R14D": ("REG_CLASS_R14", 32), "R14": ("REG_CLASS_R14", 64),
+        "R15B": ("REG_CLASS_R15", 8), "R15W": ("REG_CLASS_R15", 16), "R15D": ("REG_CLASS_R15", 32), "R15": ("REG_CLASS_R15", 64),
+}
+
+
 def arg_conditions(args):
     conditions = []
     ext_width = 0
@@ -175,9 +195,9 @@ def arg_conditions(args):
             ext_width = width
 
             conditions.append((
-                '({0}.t == ASM_VALUE_REGISTER)'
+                '({0}.t == ASM_VALUE_REGISTER'
                 + ' && {0}.u.reg.width == {1}'
-                + ' && !{0}.is_deref').format(arg_str, width))
+                + ' && !{0}.is_deref)').format(arg_str, width))
         elif arg.startswith('imm'):
             width = arg[3:]
             check_width(width)
@@ -186,7 +206,13 @@ def arg_conditions(args):
                 + 'is_sign_extending_instr(instr)))')
                 .format(arg_str, ext_width, width))
         elif arg == 'rel':
-            conditions.append(('({0}.t == ASM_VALUE_CONST)').format(arg_str))
+            conditions.append('({0}.t == ASM_VALUE_CONST)'.format(arg_str))
+        elif arg in REGISTER_MAP:
+            reg_class, width = REGISTER_MAP[arg]
+            conditions.append((
+                '({0}.t == ASM_VALUE_REGISTER'
+                + ' && {0}.u.reg.u.class == {1}'
+                + ' && {0}.u.reg.width == {2})').format(arg_str, reg_class, width))
         else:
             print "Unknown arg type: '%s'" % arg
             assert False
