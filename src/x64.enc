@@ -8,7 +8,7 @@ ADD r/m64, r64         = REX.W + 01 /r
 AND r/m32, r32         =         21 /r
 AND r/m32, imm8        =         83 /4 ib
 AND r/m32, imm32       =         81 /4 iw
-AND r/m64, r32         = REX.W + 21 /r
+AND r/m64, r64         = REX.W + 21 /r
 
 CALL rel               =         E8 cd
 CALL r/m64             =         FF /2
@@ -64,7 +64,7 @@ NOT r/m64              = REX.W + F7 /2
 
 OR r/m32, r32          =         09 /r
 OR r/m32, imm8         =         83 /1 ib
-OR r/m64, r32          = REX.W + 09 /r
+OR r/m64, r64          = REX.W + 09 /r
 
 POP r64                =         58 +rd
 
