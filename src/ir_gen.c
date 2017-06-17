@@ -1531,9 +1531,13 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 		cdecl.type = function_type->u.function.arg_type_array[i];
 		cdecl_to_binding(builder, &cdecl, binding);
 
+		u32 ir_arg_index = i;
+		if (function_type->u.function.return_type->t == STRUCT_TYPE)
+			ir_arg_index++;
 		Term arg = {
 			.ctype = cdecl.type,
-			.value = value_arg(i, global->type.u.function.arg_types[i]),
+			.value = value_arg(ir_arg_index,
+					global->type.u.function.arg_types[ir_arg_index]),
 		};
 		ir_gen_assign_op(builder, env, binding->term, arg, OP_INVALID, NULL);
 	}
@@ -2876,16 +2880,20 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		IrValue *arg_array = pool_alloc(&builder->trans_unit->pool,
 				call_arity * sizeof(*arg_array));
 
-		u32 i = 0;
+		// If we have a struct return, then the IR parameters and the C
+		// parameters are off by one. So we track "out_index" and "i"
+		// separately here.
+		u32 out_index = 0;
 		IrValue local_for_ret_value;
 		if (struct_ret) {
 			local_for_ret_value =
 				build_local(builder, c_type_to_ir_type(return_type));
-			arg_array[i++] = local_for_ret_value;
+			arg_array[0] = local_for_ret_value;
+			out_index++;
 		}
 
 		arg = expr->u.function_call.arg_list;
-		for (; arg != NULL; i++, arg = arg->next) {
+		for (u32 i = 0; arg != NULL; i++, out_index++, arg = arg->next) {
 			Term arg_term = ir_gen_expr(builder, env, arg->expr, RVALUE_CONTEXT);
 
 			if (i < callee_arity) {
@@ -2893,7 +2901,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 				arg_term = convert_type(builder, arg_term, arg_type);
 			}
 
-			arg_array[i] = arg_term.value;
+			arg_array[out_index] = arg_term.value;
 		}
 
 		IrType return_ir_type = struct_ret
