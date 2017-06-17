@@ -1690,6 +1690,12 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 					declarator, NULL, &global_type);
 			global->linkage = linkage;
 
+			Binding *binding = ARRAY_APPEND(global_bindings, Binding);
+			binding->name = global->name;
+			binding->constant = false;
+			binding->term.ctype = global_type;
+			binding->term.value = value_global(global);
+
 			if (is_inline) {
 				*ARRAY_APPEND(&env.inline_functions, InlineFunction) =
 					(InlineFunction) {
@@ -1782,6 +1788,12 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 							declarator, init_declarator->initializer, &global_type);
 					bool is_extern = global_type->t == FUNCTION_TYPE;
 
+					Binding *binding = ARRAY_APPEND(global_bindings, Binding);
+					binding->name = global->name;
+					binding->constant = false;
+					binding->term.ctype = global_type;
+					binding->term.value = value_global(global);
+
 					global->linkage = IR_GLOBAL_LINKAGE;
 					while (decl_specifier_list != type_specs) {
 						assert(decl_specifier_list->t == STORAGE_CLASS_SPECIFIER);
@@ -1823,14 +1835,6 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
 			break;
 		}
-		}
-
-		if (global != NULL) {
-			Binding *binding = ARRAY_APPEND(global_bindings, Binding);
-			binding->name = global->name;
-			binding->constant = false;
-			binding->term.ctype = global_type;
-			binding->term.value = value_global(global);
 		}
 
 		toplevel = toplevel->next;
