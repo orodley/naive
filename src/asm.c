@@ -106,11 +106,15 @@ AsmValue asm_symbol(AsmSymbol *symbol)
 
 // Certain instructions sign-extend their immediates. We need to know which
 // ones so that we can correctly determine the width we need for the immediate.
-static bool is_sign_extending_instr(AsmInstr *instr)
+bool is_sign_extending_op(AsmOp op)
 {
-	AsmOp op = instr->op;
 	return op == ADD || op == AND || op == ADC || op == CMP || op == IMUL
 		|| op == OR || op == SBB || op == SUB || op == TEST;
+}
+
+static bool is_sign_extending_instr(AsmInstr *instr)
+{
+	return is_sign_extending_op(instr->op);
 }
 
 // We need to deal with negative numbers here. For example, -4 should fit into
@@ -134,16 +138,10 @@ static bool is_sign_extending_instr(AsmInstr *instr)
 // c = truncate a to imm_width
 // d = sign- or zero-extend c to ext_width
 // a fits iff d == b
-static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
-		u32 imm_width, bool sext)
+bool const_fits_width(AsmConst constant, u32 ext_width, u32 imm_width, bool sext)
 {
 	assert(ext_width >= imm_width);
 
-	if (asm_value.t != ASM_VALUE_CONST) {
-		return false;
-	}
-
-	AsmConst constant = asm_value.u.constant;
 	switch (constant.t) {
 	case ASM_CONST_IMMEDIATE: {
 		// Handle this case specially, as various bitwise calculations are
@@ -180,6 +178,16 @@ static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
 	case ASM_CONST_SYMBOL:
 		return imm_width == 64;
 	}
+}
+
+static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
+		u32 imm_width, bool sext)
+{
+	if (asm_value.t != ASM_VALUE_CONST) {
+		return false;
+	}
+
+	return const_fits_width(asm_value.u.constant, ext_width, imm_width, sext);
 }
 
 #define X(x) #x

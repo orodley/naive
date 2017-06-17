@@ -209,6 +209,25 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 	}
 }
 
+static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
+		AsmValue asm_value, u32 other_operand_width, bool sext)
+{
+	if (asm_value.t == ASM_VALUE_CONST
+			&& asm_value.u.constant.t == ASM_CONST_IMMEDIATE
+			&& !const_fits_width(asm_value.u.constant,
+				other_operand_width, 32, sext)) {
+		// Generally there's no imm64, so we have to spill the immediate
+		// to a register here.
+		AsmValue const_spill = asm_vreg(next_vreg(builder), 64);
+		append_vreg(builder);
+
+		emit_instr2(builder, MOV, const_spill, asm_value);
+		return const_spill;
+	}
+
+	return asm_value;
+}
+
 static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 {
 	assert(instr->type.t == IR_INT);
@@ -216,10 +235,13 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 
 	AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
 	AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
-	emit_instr2(builder, MOV, asm_vreg(next_vreg(builder), width), arg1);
-	emit_instr2(builder, op, asm_vreg(next_vreg(builder), width), arg2);
 
+	AsmValue target = asm_vreg(next_vreg(builder), width);
 	assign_vreg(builder, instr);
+
+	emit_instr2(builder, MOV, target, arg1);
+	emit_instr2(builder, op, target,
+			maybe_move_const_to_reg(builder, arg2, width, is_sign_extending_op(op)));
 }
 
 static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
@@ -252,11 +274,15 @@ static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp 
 	}
 
 	u32 vreg = next_vreg(builder);
-	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
-	emit_instr2(builder, CMP, arg1, arg2);
-	emit_instr1(builder, op, asm_vreg(vreg, 8));
-
 	assign_vreg(builder, instr);
+
+	assert(arg1.t == ASM_VALUE_REGISTER);
+	u32 width = arg1.u.reg.width;
+
+	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
+	emit_instr2(builder, CMP, arg1,
+			maybe_move_const_to_reg(builder, arg2, width, is_sign_extending_op(op)));
+	emit_instr1(builder, op, asm_vreg(vreg, 8));
 }
 
 static void handle_phi_nodes(AsmBuilder *builder, IrBlock *src_block,

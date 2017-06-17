@@ -250,6 +250,9 @@ AsmValue asm_const(u64 constant);
 AsmValue asm_symbol(AsmSymbol *symbol);
 AsmValue asm_deref(AsmValue asm_arg);
 
+bool is_sign_extending_op(AsmOp op);
+bool const_fits_width(AsmConst constant, u32 ext_width, u32 imm_width, bool sext);
+
 void dump_asm_instr(AsmInstr *instr);
 void dump_asm_module(AsmModule *asm_module);
 
