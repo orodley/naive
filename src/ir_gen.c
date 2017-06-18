@@ -435,6 +435,9 @@ typedef struct Env
 	IrFunction *scratch_function;
 } Env;
 
+// @TODO: Handle this in a more disciplined manner. We special case this
+// because we need it for self-hosting, but we shouldn't need to duplicate
+// the logic in ir_gen_expr or constant_fold_binary_op like this.
 static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 {
 	switch (expr->t) {
@@ -500,9 +503,6 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 
 		return add_global_const(builder, binding->term.value.u.global);
 	}
-	// @TODO: Handle this in a more disciplined manner. We special case this
-	// because we need it for self-hosting, but we shouldn't need to duplicate
-	// the logic in ir_gen_expr or constant_fold_binary_op like this.
 	case LEFT_SHIFT_EXPR: {
 		IrConst *lhs = eval_constant_expr(builder, env, expr->u.binary_op.arg1);
 		IrConst *rhs = eval_constant_expr(builder, env, expr->u.binary_op.arg2);
@@ -513,6 +513,13 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 		// @TODO: Determine type properly.
 		return add_int_const(builder, c_type_to_ir_type(&env->type_env.int_type),
 				lhs->u.integer << rhs->u.integer);
+	}
+	case UNARY_MINUS_EXPR: {
+		IrConst *inner = eval_constant_expr(builder, env, expr->u.unary_arg);
+
+		// @TODO: Determine type properly.
+		return add_int_const(builder,
+				c_type_to_ir_type(&env->type_env.int_type), -inner->u.integer);
 	}
 	default:
 		UNIMPLEMENTED;
