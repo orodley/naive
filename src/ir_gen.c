@@ -1267,36 +1267,29 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 		CInitializer *c_init)
 {
 	c_init->type = type;
-	bool string_init = init->t == EXPR_INITIALIZER
-		&& init->u.expr->t == STRING_LITERAL_EXPR;
 
-	if (init->t == BRACE_INITIALIZER || (string_init && type->t == ARRAY_TYPE)) {
-		assert(type->t == STRUCT_TYPE || type->t == ARRAY_TYPE);
-
+	if (type->t == ARRAY_TYPE
+			&& init->t == EXPR_INITIALIZER
+			&& init->u.expr->t == STRING_LITERAL_EXPR) {
 		c_init->t = C_INIT_COMPOUND;
 
-		// @TODO: Move out of this branch.
-		if (string_init) {
-			assert(type->t == ARRAY_TYPE);
-
-			char *str = init->u.expr->u.string_literal;
-			size_t len = strlen(str);
-			CInitializer *init_elems =
-				pool_alloc(pool, len * sizeof *init_elems);
-			for (u32 i = 0 ; i < len; i++) {
-				CType *char_type = &env->type_env.char_type;
-				init_elems[i] = (CInitializer) {
-					.t = C_INIT_LEAF,
+		char *str = init->u.expr->u.string_literal;
+		size_t len = strlen(str);
+		CInitializer *init_elems =
+			pool_alloc(pool, len * sizeof *init_elems);
+		for (u32 i = 0 ; i < len; i++) {
+			CType *char_type = &env->type_env.char_type;
+			init_elems[i] = (CInitializer) {
+				.t = C_INIT_LEAF,
 					.type = char_type,
 					.u.leaf_value =
 						value_const(c_type_to_ir_type(char_type), str[i]),
-				};
-			}
-
-			c_init->u.sub_elems = init_elems;
-
-			return;
+			};
 		}
+
+		c_init->u.sub_elems = init_elems;
+	} else if (init->t == BRACE_INITIALIZER) {
+		assert(type->t == STRUCT_TYPE || type->t == ARRAY_TYPE);
 
 		u32 num_fields = c_type_num_fields(type);
 
