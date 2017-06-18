@@ -155,15 +155,16 @@ bool const_fits_width(AsmConst constant, u32 ext_width, u32 imm_width, bool sext
 		if (ext_width == 64) {
 			canonical_value = imm;
 		} else {
-			// Sanity check the truncation - our canonical value should always
-			// fit into ext_width, e.g.: we shouldn't be trying to add 1<<63 to
-			// a 32-bit value. "fitting" here means either the bits we will
-			// truncate are all zero, or they are all one and the MSB is one,
-			// so sign-extension would produce the same value.
+			// If our canonical value doesn't fit into ext_width, then this
+			// constant doesn't fit. "fitting" here means either the bits we
+			// will truncate are all zero, or they are all one and the MSB is
+			// one, so sign-extension would produce the same value.
 			u64 ext_trunc_bits = imm >> ext_width;
-			assert(ext_trunc_bits == 0
-					|| (ext_trunc_bits == (1ULL << (64 - ext_width)) - 1)
-						&& ((imm >> (ext_width - 1)) & 1) == 1);
+			if (ext_trunc_bits != 0
+					&& !((ext_trunc_bits == (1ULL << (64 - ext_width)) - 1)
+						&& ((imm >> (ext_width - 1)) & 1) == 1)) {
+				return false;
+			}
 
 			canonical_value = imm & ((1ULL << ext_width) - 1);
 		}
