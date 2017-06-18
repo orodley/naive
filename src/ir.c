@@ -125,7 +125,7 @@ IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields)
 		// + 1 for the null terminator
 		u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
 		name = pool_alloc(&trans_unit->pool, name_max_length);
-		snprintf(name, name_max_length, fmt, trans_unit->globals.size);
+		snprintf(name, name_max_length, fmt, trans_unit->types.size);
 	}
 
 	new_type->t = IR_STRUCT;
