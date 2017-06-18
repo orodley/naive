@@ -1,5 +1,8 @@
 // Misc. utility functions
 
+#ifndef NAIVE_UTIL_H_
+#define NAIVE_UTIL_H_
+
 #include <assert.h>
 #include <string.h>
 #include <stdbool.h>
@@ -13,6 +16,13 @@ inline u32 max(u32 a, u32 b)
 {
 	return (a < b) ? b : a;
 }
+
+// @TODO: Maybe use this more widely.
+typedef struct String
+{
+	char *chars;
+	u32 len;
+} String;
 
 char *strndup(char *str, u32 length);
 char *strdup(char *str);
@@ -74,3 +84,5 @@ inline u32 align_to(u32 n, u32 align)
 	u32 x = align - 1;
 	return (n + x) & ~x;
 }
+
+#endif

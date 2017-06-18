@@ -4,6 +4,7 @@
 #include "array.h"
 #include "diagnostics.h"
 #include "misc.h"
+#include "util.h"
 
 #define TOKEN_TYPES \
 	X(TOK_INVALID), \
@@ -90,7 +91,7 @@ typedef struct Token
 	{
 		u64 int_literal;
 		char *symbol;
-		char *string_literal;
+		String string_literal;
 	} u;
 } Token;
 

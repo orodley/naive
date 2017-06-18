@@ -61,23 +61,23 @@ bool tokenise(Array(SourceToken) *tokens, Array(char) *text,
 		SourceToken *token = ARRAY_REF(tokens, SourceToken, i);
 		u32 j = i + 1;
 		if (token->token.t == TOK_STRING_LITERAL) {
-			char *str = token->token.u.string_literal;
-			u32 str_size = strlen(str) + 1;
+			String str = token->token.u.string_literal;
+			u32 str_size = str.len + 1;
 
 			while (j < tokens->size
 					&& ARRAY_REF(tokens, SourceToken, j)->token.t
 						== TOK_STRING_LITERAL) {
-				char *next_str =
+				String next_str =
 					ARRAY_REF(tokens, SourceToken, j)->token.u.string_literal;
-				u32 next_str_len = strlen(next_str);
-				u32 new_size = str_size + next_str_len;
-				str = realloc(str, new_size);
-				memcpy(str + str_size - 1, next_str, next_str_len + 1);
+				u32 new_size = str_size + next_str.len;
+				str.chars = realloc(str.chars, new_size);
+				memcpy(str.chars + str_size - 1, next_str.chars, next_str.len + 1);
 
 				str_size = new_size;
 				j++;
 			}
 
+			str.len = str_size - 1;
 			token->token.u.string_literal = str;
 		}
 
@@ -301,7 +301,10 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 
 			Token *token = append_token(
 					tokeniser, start_source_loc, TOK_STRING_LITERAL);
-			token->u.string_literal = (char *)string_literal_chars.elements;
+			token->u.string_literal = (String) {
+				.chars = (char *)string_literal_chars.elements,
+				.len = string_literal_chars.size - 1,
+			};
 
 			break;
 		}
@@ -516,7 +519,10 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 				Token *file_name =
 					append_token(tokeniser, start_source_loc, TOK_STRING_LITERAL);
 				assert(reader->source_loc.filename != NULL);
-				file_name->u.string_literal = reader->source_loc.filename;
+				file_name->u.string_literal = (String) {
+					.chars = reader->source_loc.filename,
+					.len = strlen(reader->source_loc.filename),
+				};
 			} else {
 				Token *token =
 					append_token(tokeniser, start_source_loc, TOK_SYMBOL);
@@ -550,7 +556,7 @@ void dump_token(Token *token)
 		break;
 	case TOK_STRING_LITERAL:
 		// @TODO: Escape the resulting string
-		printf("(\"%s\")", token->u.string_literal);
+		printf("(\"%s\")", token->u.string_literal.chars);
 		break;
 	case TOK_SYMBOL:
 		printf("(%s)", token->u.symbol);

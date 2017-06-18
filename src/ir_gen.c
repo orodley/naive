@@ -469,8 +469,8 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 		char *name = pool_alloc(&builder->trans_unit->pool, name_max_length);
 		snprintf(name, name_max_length, fmt, builder->trans_unit->globals.size);
 
-		char *string = expr->u.string_literal;
-		u32 length = strlen(string) + 1;
+		String string = expr->u.string_literal;
+		u32 length = string.len + 1;
 		CType *result_type =
 			array_type(builder, &env->type_env, &env->type_env.char_type);
 		set_array_type_length(result_type, length);
@@ -483,7 +483,7 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 		for (u32 i = 0; i < length; i++) {
 			konst->u.array_elems[i] = (IrConst) {
 				.type = ir_char_type,
-				.u.integer = string[i],
+				.u.integer = string.chars[i],
 			};
 		}
 
@@ -1103,7 +1103,7 @@ static void infer_array_size_from_initializer(IrBuilder *builder,
 		size = max_index + 1;
 	} else {
 		assert(init->u.expr->t == STRING_LITERAL_EXPR);
-		size = strlen(init->u.expr->u.string_literal);
+		size = init->u.expr->u.string_literal.len + 1;
 	}
 
 	set_array_type_length(type, size);
@@ -1273,17 +1273,16 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 			&& init->u.expr->t == STRING_LITERAL_EXPR) {
 		c_init->t = C_INIT_COMPOUND;
 
-		char *str = init->u.expr->u.string_literal;
-		size_t len = strlen(str);
+		String str = init->u.expr->u.string_literal;
 		CInitializer *init_elems =
-			pool_alloc(pool, len * sizeof *init_elems);
-		for (u32 i = 0 ; i < len; i++) {
+			pool_alloc(pool, (str.len + 1) * sizeof *init_elems);
+		for (u32 i = 0 ; i < str.len + 1; i++) {
 			CType *char_type = &env->type_env.char_type;
 			init_elems[i] = (CInitializer) {
 				.t = C_INIT_LEAF,
 					.type = char_type,
 					.u.leaf_value =
-						value_const(c_type_to_ir_type(char_type), str[i]),
+						value_const(c_type_to_ir_type(char_type), str.chars[i]),
 			};
 		}
 

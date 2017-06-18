@@ -5,6 +5,7 @@
 #include "misc.h"
 #include "tokenise.h"
 #include "pool.h"
+#include "util.h"
 
 typedef struct ParseError
 {
@@ -96,7 +97,7 @@ typedef struct ASTExpr
 	union
 	{
 		u64 int_literal;
-		char *string_literal;
+		String string_literal;
 		char *identifier;
 		struct ASTExpr *unary_arg;
 		struct ASTTypeName *type;

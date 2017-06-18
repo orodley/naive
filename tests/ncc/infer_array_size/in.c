@@ -9,7 +9,7 @@ int main()
 
 	assert(sizeof foo / sizeof *foo == 4);
 	assert(sizeof bar / sizeof *bar == 3);
-	assert(sizeof baz / sizeof *baz == 4);
+	assert(sizeof baz / sizeof *baz == 5);
 
 	assert(foo[0] == 1);
 	assert(foo[1] == 2);
@@ -24,6 +24,7 @@ int main()
 	assert(baz[1] == 'u');
 	assert(baz[2] == 'u');
 	assert(baz[3] == 'x');
+	assert(baz[4] == '\0');
 
 	return 0;
 }
