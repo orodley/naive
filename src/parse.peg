@@ -248,9 +248,9 @@ statement =
 	or(labeled_statement,
 		compound_statement,
 		jump_statement,
-		expr_statement,
 		selection_statement,
-		iteration_statement)
+		iteration_statement,
+		expr_statement)
 
 labeled_statement =
 	or(seq(build_labeled_statement, identifier, TOK_COLON, statement),
