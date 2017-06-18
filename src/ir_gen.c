@@ -2995,12 +2995,14 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		ASTExpr *then_expr = expr->u.ternary_op.arg2;
 		builder->current_block = then_block;
 		Term then_term = ir_gen_expr(builder, env, then_expr, RVALUE_CONTEXT);
+		then_term.ctype = decay_to_pointer(&env->type_env, then_term.ctype);
 		// ir_gen'ing the "then" expr may have changed the current block.
 		IrBlock *then_resultant_block = builder->current_block;
 
 		ASTExpr *else_expr = expr->u.ternary_op.arg3;
 		builder->current_block = else_block;
 		Term else_term = ir_gen_expr(builder, env, else_expr, RVALUE_CONTEXT);
+		else_term.ctype = decay_to_pointer(&env->type_env, else_term.ctype);
 		// ir_gen'ing the "else" expr may have changed the current block.
 		IrBlock *else_resultant_block = builder->current_block;
 
