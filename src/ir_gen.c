@@ -142,7 +142,6 @@ static IrType c_type_to_ir_type(CType *ctype)
 	case POINTER_TYPE:
 		return (IrType) { .t = IR_POINTER };
 	case ARRAY_TYPE:
-		assert(!ctype->u.array.incomplete);
 		return *ctype->u.array.ir_type;
 	case FUNCTION_TYPE:
 		return (IrType) { .t = FUNCTION_TYPE };
