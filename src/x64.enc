@@ -58,8 +58,10 @@ MOVSX r64, r/m32       = REX.W + 63 /r
 
 MOVZX r32, r/m8        =         [0F B6] /r
 MOVZX r32, r/m16       =         [0F B7] /r
+MOVZX r64, r/m16       = REX.W + [0F B7] /r
 
 NEG r/m32              =         F7 /3
+NEG r/m64              = REX.W + F7 /3
 
 NOP                    =         90
 
@@ -85,6 +87,7 @@ SETLE r/m8             =         [0F 9E] /0
 
 SHL r/m32, imm8        =         C1 /4 ib
 SHL r/m32, CL          =         D3 /4
+SHL r/m64, CL          = REX.W + D3 /4
 
 SHR r/m32, imm8        =         C1 /5 ib
 SHR r/m32, CL          =         D3 /5
