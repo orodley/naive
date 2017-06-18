@@ -1246,6 +1246,15 @@ typedef struct CInitializer
 	} u;
 } CInitializer;
 
+static u32 c_type_num_fields(CType *type)
+{
+	switch (type->t) {
+	case STRUCT_TYPE: return type->u.strukt.fields.size;
+	case ARRAY_TYPE: return type->u.array.size;
+	default: UNREACHABLE;
+	}
+}
+
 static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 		CType *type, ASTInitializer *init, bool const_context,
 		CInitializer *c_init)
@@ -1259,6 +1268,7 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 
 		c_init->t = C_INIT_COMPOUND;
 
+		// @TODO: Move out of this branch.
 		if (string_init) {
 			assert(type->t == ARRAY_TYPE);
 
@@ -1281,11 +1291,7 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 			return;
 		}
 
-		u32 num_fields;
-		if (type->t == STRUCT_TYPE)
-			num_fields = type->u.strukt.fields.size;
-		else
-			num_fields = type->u.array.size;
+		u32 num_fields = c_type_num_fields(type);
 
 		CInitializer *init_elems =
 			pool_alloc(pool, num_fields * sizeof *init_elems);
@@ -1341,9 +1347,10 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 
 				if (curr_elem->type->t == STRUCT_TYPE
 						|| curr_elem->type->t == ARRAY_TYPE) {
+					u32 inner_num_fields = c_type_num_fields(field_type);
 					CInitializer *sub_elems =
-						pool_alloc(pool, num_fields * sizeof *sub_elems);
-					memset(sub_elems, 0, num_fields * sizeof *sub_elems);
+						pool_alloc(pool, inner_num_fields * sizeof *sub_elems);
+					memset(sub_elems, 0, inner_num_fields * sizeof *sub_elems);
 					curr_elem->u.sub_elems = sub_elems;
 				}
 
