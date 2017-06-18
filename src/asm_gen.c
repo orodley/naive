@@ -477,7 +477,8 @@ static void asm_gen_instr(
 		IrType type = ir_value.type;
 
 		AsmValue pointer = asm_value(builder, ir_pointer);
-		AsmValue value = asm_value(builder, ir_value);
+		AsmValue value = maybe_move_const_to_reg(builder,
+				asm_value(builder, ir_value), false);
 
 		// Use offset_register directly where we can, to fold the addition into
 		// the MOV rather than having a separate instruction.
@@ -876,15 +877,15 @@ static void asm_gen_instr(
 		emit_instr2(builder, MOV, quotient, arg1);
 
 		AsmValue sign_extension = pre_alloced_vreg(builder, REG_CLASS_D, width);
+		AsmOp sign_extend_op;
 		switch (width) {
-		case 32: {
-			AsmInstr *cdq = emit_instr0(builder, CDQ);
-			add_dep(cdq, quotient);
-			add_dep(cdq, sign_extension);
-			break;
+		case 32: sign_extend_op = CDQ; break;
+		case 64: sign_extend_op = CQO; break;
 		}
-		default: UNIMPLEMENTED;
-		}
+
+		AsmInstr *sign_extend = emit_instr0(builder, sign_extend_op);
+		add_dep(sign_extend, quotient);
+		add_dep(sign_extend, sign_extension);
 
 		AsmInstr *idiv = emit_instr1(builder, IDIV, reg_arg2);
 		add_dep(idiv, sign_extension);

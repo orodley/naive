@@ -111,6 +111,7 @@ typedef struct AsmValue
 	X(IMUL), \
 	X(IDIV), \
 	X(CDQ), \
+	X(CQO), \
 	X(CMP), \
 	X(SETE), \
 	X(SETNE), \

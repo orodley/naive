@@ -16,6 +16,7 @@ CALL rel               =         E8 cd
 CALL r/m64             =         FF /2
 
 CDQ                    =         99
+CQO                    = REX.W + 99
 
 CMP r/m8, r8           =         38 /r
 CMP r/m8, imm8         =         80 /7 ib
@@ -31,6 +32,7 @@ IMUL r64, r/m64        = REX.W + [0F AF] /r
 IMUL r64, r/m64, imm32 = REX.W + 69 /r id
 
 IDIV r/m32             =         F7 /7
+IDIV r/m64             = REX.W + F7 /7
 
 JE  rel                =         [0F 84] cd
 
