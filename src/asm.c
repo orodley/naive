@@ -138,10 +138,16 @@ static bool is_sign_extending_instr(AsmInstr *instr)
 // c = truncate a to imm_width
 // d = sign- or zero-extend c to ext_width
 // a fits iff d == b
-bool const_fits_width(AsmConst constant, u32 ext_width, u32 imm_width, bool sext)
+static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
+		u32 imm_width, bool sext)
 {
 	assert(ext_width >= imm_width);
 
+	if (asm_value.t != ASM_VALUE_CONST) {
+		return false;
+	}
+
+	AsmConst constant = asm_value.u.constant;
 	switch (constant.t) {
 	case ASM_CONST_IMMEDIATE: {
 		// Handle this case specially, as various bitwise calculations are
@@ -179,16 +185,6 @@ bool const_fits_width(AsmConst constant, u32 ext_width, u32 imm_width, bool sext
 	case ASM_CONST_SYMBOL:
 		return imm_width == 64;
 	}
-}
-
-static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
-		u32 imm_width, bool sext)
-{
-	if (asm_value.t != ASM_VALUE_CONST) {
-		return false;
-	}
-
-	return const_fits_width(asm_value.u.constant, ext_width, imm_width, sext);
 }
 
 #define X(x) #x
