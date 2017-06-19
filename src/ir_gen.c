@@ -435,94 +435,46 @@ typedef struct Env
 	IrFunction *scratch_function;
 } Env;
 
-// @TODO: Handle this in a more disciplined manner. We special case this
-// because we need it for self-hosting, but we shouldn't need to duplicate
-// the logic in ir_gen_expr or constant_fold_binary_op like this.
+typedef enum ExprContext
+{
+	LVALUE_CONTEXT,
+	RVALUE_CONTEXT,
+	CONST_CONTEXT,
+} ExprContext;
+static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
+		ExprContext context);
+
 static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 {
-	switch (expr->t) {
-	case INT_LITERAL_EXPR:
-		// @TODO: Determine type properly.
-		return add_int_const(builder, c_type_to_ir_type(&env->type_env.int_type),
-				expr->u.int_literal);
-	case IDENTIFIER_EXPR: {
-		Binding *binding = binding_for_name(env->scope, expr->u.identifier);
-		assert(binding->constant);
+	u32 num_blocks, num_instrs;
+	if (builder->current_function != NULL) {
+		num_blocks = builder->current_function->blocks.size;
+	}
+	if (builder->current_block != NULL) {
+		num_instrs = builder->current_block->instrs.size;
+	}
 
-		Term *term = &binding->term;
+	Term term = ir_gen_expr(builder, env, expr, CONST_CONTEXT);
 
-		assert(term->ctype->t == INTEGER_TYPE);
-		assert(term->value.type.t == IR_INT);
-		assert(term->value.t == VALUE_CONST);
+	// Quick sanity check - this is a constant expression, so we shouldn't have
+	// added any instructions or blocks.
+	if (builder->current_function != NULL) {
+		assert(builder->current_function->blocks.size == num_blocks);
+	}
+	if (builder->current_block != NULL) {
+		assert(builder->current_block->instrs.size == num_instrs);
+	}
 
+	switch (term.value.t) {
+	case VALUE_CONST:
 		return add_int_const(builder,
-				c_type_to_ir_type(term->ctype), term->value.u.constant);
-	}
-	// @TODO: Deduplicate identical string literals
-	case STRING_LITERAL_EXPR: {
-		char fmt[] = "__string_literal_%x";
-
-		// - 2 adjusts down for the "%x" which isn't present in the output
-		// sizeof(u32) * 2 is the max length of globals.size in hex
-		// + 1 for the null terminator
-		u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
-		char *name = pool_alloc(&builder->trans_unit->pool, name_max_length);
-		snprintf(name, name_max_length, fmt, builder->trans_unit->globals.size);
-
-		String string = expr->u.string_literal;
-		u32 length = string.len + 1;
-		CType *result_type =
-			array_type(builder, &env->type_env, &env->type_env.char_type);
-		set_array_type_length(result_type, length);
-		IrType ir_type = c_type_to_ir_type(result_type);
-		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
-		global->linkage = IR_LOCAL_LINKAGE;
-
-		IrConst *konst = add_array_const(builder, ir_type);
-		IrType ir_char_type = c_type_to_ir_type(&env->type_env.char_type);
-		for (u32 i = 0; i < length; i++) {
-			konst->u.array_elems[i] = (IrConst) {
-				.type = ir_char_type,
-				.u.integer = string.chars[i],
-			};
-		}
-
-		konst->type = ir_type;
-		global->initializer = konst;
-
-		return add_global_const(builder, global);
-	}
-	case ADDRESS_OF_EXPR: {
-		ASTExpr *inner = expr->u.unary_arg;
-		assert(inner->t == IDENTIFIER_EXPR);
-		char *name = inner->u.identifier;
-
-		Binding *binding = binding_for_name(env->global_scope, name);
-		assert(binding != NULL);
-		assert(binding->term.value.t == VALUE_GLOBAL);
-
-		return add_global_const(builder, binding->term.value.u.global);
-	}
-	case LEFT_SHIFT_EXPR: {
-		IrConst *lhs = eval_constant_expr(builder, env, expr->u.binary_op.arg1);
-		IrConst *rhs = eval_constant_expr(builder, env, expr->u.binary_op.arg2);
-
-		assert(lhs->type.t == IR_INT);
-		assert(rhs->type.t == IR_INT);
-
-		// @TODO: Determine type properly.
-		return add_int_const(builder, c_type_to_ir_type(&env->type_env.int_type),
-				lhs->u.integer << rhs->u.integer);
-	}
-	case UNARY_MINUS_EXPR: {
-		IrConst *inner = eval_constant_expr(builder, env, expr->u.unary_arg);
-
-		// @TODO: Determine type properly.
-		return add_int_const(builder,
-				c_type_to_ir_type(&env->type_env.int_type), -inner->u.integer);
-	}
-	default:
-		UNIMPLEMENTED;
+				c_type_to_ir_type(term.ctype),
+				term.value.u.constant);
+	case VALUE_GLOBAL:
+		return add_global_const(builder, term.value.u.global);
+	case VALUE_ARG:
+	case VALUE_INSTR:
+		UNREACHABLE;
 	}
 }
 
@@ -1193,14 +1145,6 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 }
 
 static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *statement);
-
-typedef enum ExprContext
-{
-	LVALUE_CONTEXT,
-	RVALUE_CONTEXT,
-} ExprContext;
-static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
-		ExprContext context);
 
 static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 {
@@ -2676,21 +2620,40 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 {
 	IGNORE(builder);
 
+	ASTExprType t = expr->t;
 	if (context == LVALUE_CONTEXT) {
-		ASTExprType t = expr->t;
-		assert(t == IDENTIFIER_EXPR
-				|| t == STRUCT_DOT_FIELD_EXPR
-				|| t == STRUCT_ARROW_FIELD_EXPR
-				|| t == INDEX_EXPR
-				|| t == DEREF_EXPR);
+		switch(t) {
+		case IDENTIFIER_EXPR: case STRUCT_DOT_FIELD_EXPR:
+		case STRUCT_ARROW_FIELD_EXPR: case INDEX_EXPR: case DEREF_EXPR:
+			break;
+		default:
+			UNREACHABLE;
+		}
 	}
 
-	switch (expr->t) {
+	if (context == CONST_CONTEXT) {
+		switch (t) {
+		case ASSIGN_EXPR: case ADD_ASSIGN_EXPR: case MINUS_ASSIGN_EXPR:
+		case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR:
+		case PRE_DECREMENT_EXPR: case POST_DECREMENT_EXPR:
+		case BIT_XOR_ASSIGN_EXPR: case BIT_AND_ASSIGN_EXPR:
+		case BIT_OR_ASSIGN_EXPR: case RIGHT_SHIFT_ASSIGN_EXPR:
+		case MULTIPLY_ASSIGN_EXPR: case DIVIDE_ASSIGN_EXPR:
+		case FUNCTION_CALL_EXPR: case COMMA_EXPR:
+			UNREACHABLE;
+		default:
+			break;
+		}
+	}
+
+	switch (t) {
 	case IDENTIFIER_EXPR: {
 		Binding *binding = binding_for_name(env->scope, expr->u.identifier);
+
 		assert(binding != NULL);
-		IrValue value;
 		assert(binding->term.value.type.t == IR_POINTER || binding->constant);
+
+		IrValue value;
 
 		// Functions, arrays, and structs implicitly have their address taken.
 		if (context == LVALUE_CONTEXT
@@ -2700,10 +2663,10 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			assert(!binding->constant);
 			value = binding->term.value;
 		} else {
-			assert(context == RVALUE_CONTEXT);
 			if (binding->constant) {
 				value = binding->term.value;
 			} else {
+				assert(context != CONST_CONTEXT);
 				value = build_load(
 						builder,
 						binding->term.value,
@@ -2761,13 +2724,38 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return (Term) { .ctype = result_type, .value = value };
 	}
 	case STRING_LITERAL_EXPR: {
-		IrConst *string_literal_ptr = eval_constant_expr(builder, env, expr);
-		IrGlobal *global = string_literal_ptr->u.global_pointer;
-		CType *type = array_type(builder, &env->type_env, &env->type_env.char_type);
-		set_array_type_length(type, global->type.u.array.size);
+		char fmt[] = "__string_literal_%x";
+
+		// - 2 adjusts down for the "%x" which isn't present in the output
+		// sizeof(u32) * 2 is the max length of globals.size in hex
+		// + 1 for the null terminator
+		u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
+		char *name = pool_alloc(&builder->trans_unit->pool, name_max_length);
+		snprintf(name, name_max_length, fmt, builder->trans_unit->globals.size);
+
+		String string = expr->u.string_literal;
+		u32 length = string.len + 1;
+		CType *result_type =
+			array_type(builder, &env->type_env, &env->type_env.char_type);
+		set_array_type_length(result_type, length);
+		IrType ir_type = c_type_to_ir_type(result_type);
+		IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
+		global->linkage = IR_LOCAL_LINKAGE;
+
+		IrConst *konst = add_array_const(builder, ir_type);
+		IrType ir_char_type = c_type_to_ir_type(&env->type_env.char_type);
+		for (u32 i = 0; i < length; i++) {
+			konst->u.array_elems[i] = (IrConst) {
+				.type = ir_char_type,
+				.u.integer = string.chars[i],
+			};
+		}
+
+		konst->type = ir_type;
+		global->initializer = konst;
 
 		return (Term) {
-			.ctype = type,
+			.ctype = result_type,
 			.value = value_global(global)
 		};
 	}
@@ -2945,7 +2933,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return (Term) { .ctype = result_type, .value = value };
 	}
 	case LOGICAL_OR_EXPR: case LOGICAL_AND_EXPR: {
-		bool is_or = expr->t == LOGICAL_OR_EXPR;
+		bool is_or = t == LOGICAL_OR_EXPR;
 
 		IrBlock *rhs_block = add_block(builder, is_or ? "or.rhs" : "and.rhs");
 		IrBlock *after_block = add_block(builder, is_or ? "or.after" : "and.after");
@@ -3122,7 +3110,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		};
 	}
 	default:
-		printf("%d\n", expr->t);
+		printf("%d\n", t);
 		UNIMPLEMENTED;
 	}
 }
