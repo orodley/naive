@@ -2808,6 +2808,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case RIGHT_SHIFT_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SHR);
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_DIV);
+	case MODULO_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MOD);
 	case EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_EQ);
 	case NOT_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
 	case GREATER_THAN_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_GT);

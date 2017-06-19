@@ -858,7 +858,7 @@ static void asm_gen_instr(
 		assign_vreg(builder, instr);
 		break;
 	}
-	case OP_DIV: {
+	case OP_DIV: case OP_MOD: {
 		assert(instr->type.t == IR_INT);
 		u8 width = instr->type.u.bit_width;
 
@@ -873,10 +873,12 @@ static void asm_gen_instr(
 		}
 
 		AsmValue quotient = pre_alloced_vreg(builder, REG_CLASS_A, width);
-		instr->vreg_number = quotient.u.reg.u.vreg_number;
+		AsmValue remainder = pre_alloced_vreg(builder, REG_CLASS_D, width);
+
+		instr->vreg_number =
+			(instr->op == OP_DIV ? quotient : remainder).u.reg.u.vreg_number;
 		emit_instr2(builder, MOV, quotient, arg1);
 
-		AsmValue sign_extension = pre_alloced_vreg(builder, REG_CLASS_D, width);
 		AsmOp sign_extend_op;
 		switch (width) {
 		case 32: sign_extend_op = CDQ; break;
@@ -885,10 +887,11 @@ static void asm_gen_instr(
 
 		AsmInstr *sign_extend = emit_instr0(builder, sign_extend_op);
 		add_dep(sign_extend, quotient);
-		add_dep(sign_extend, sign_extension);
+		add_dep(sign_extend, remainder);
 
 		AsmInstr *idiv = emit_instr1(builder, IDIV, reg_arg2);
-		add_dep(idiv, sign_extension);
+		add_dep(idiv, quotient);
+		add_dep(idiv, remainder);
 		break;
 	}
 	case OP_EQ: asm_gen_relational_instr(builder, instr, SETE); break;
