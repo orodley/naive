@@ -2763,9 +2763,11 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case STRING_LITERAL_EXPR: {
 		IrConst *string_literal_ptr = eval_constant_expr(builder, env, expr);
 		IrGlobal *global = string_literal_ptr->u.global_pointer;
+		CType *type = array_type(builder, &env->type_env, &env->type_env.char_type);
+		set_array_type_length(type, global->type.u.array.size);
 
 		return (Term) {
-			.ctype = array_type(builder, &env->type_env, &env->type_env.char_type),
+			.ctype = type,
 			.value = value_global(global)
 		};
 	}
