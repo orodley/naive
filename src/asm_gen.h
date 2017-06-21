@@ -4,8 +4,7 @@
 #include "asm.h"
 #include "ir.h"
 
-// @TODO: Rename to VReg - the "Info" here adds no value.
-typedef struct VRegInfo
+typedef struct VReg
 {
 	enum
 	{
@@ -23,7 +22,7 @@ typedef struct VRegInfo
 		RegClass assigned_register;
 		u32 assigned_stack_slot;
 	} u;
-} VRegInfo;
+} VReg;
 
 typedef struct AsmBuilder
 {
@@ -32,7 +31,7 @@ typedef struct AsmBuilder
 	Array(AsmInstr) *current_block;
 	AsmSymbol *ret_label;
 
-	Array(VRegInfo) virtual_registers;
+	Array(VReg) virtual_registers;
 	u32 local_stack_usage;
 	u32 register_save_area_size;
 	u32 curr_sp_diff;

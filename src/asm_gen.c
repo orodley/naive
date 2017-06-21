@@ -101,20 +101,20 @@ static inline u32 next_vreg(AsmBuilder *builder)
 	return builder->virtual_registers.size;
 }
 
-static VRegInfo *append_vreg(AsmBuilder *builder)
+static VReg *append_vreg(AsmBuilder *builder)
 {
-	VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
-	vreg_info->t = UNASSIGNED;
-	vreg_info->live_range_start = vreg_info->live_range_end = -1;
-	vreg_info->pre_alloced = false;
+	VReg *vreg = ARRAY_APPEND(&builder->virtual_registers, VReg);
+	vreg->t = UNASSIGNED;
+	vreg->live_range_start = vreg->live_range_end = -1;
+	vreg->pre_alloced = false;
 
-	return vreg_info;
+	return vreg;
 }
 
-static VRegInfo *assign_vreg(AsmBuilder *builder, IrInstr *instr)
+static VReg *assign_vreg(AsmBuilder *builder, IrInstr *instr)
 {
 	u32 vreg_number = next_vreg(builder);
-	VRegInfo *vreg = append_vreg(builder);
+	VReg *vreg = append_vreg(builder);
 	instr->vreg_number = vreg_number;
 
 	return vreg;
@@ -124,10 +124,10 @@ static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 {
 	u32 vreg_number = next_vreg(builder);
 
-	VRegInfo *vreg_info = append_vreg(builder);
-	vreg_info->t = IN_REG;
-	vreg_info->u.assigned_register = class;
-	vreg_info->pre_alloced = true;
+	VReg *vreg = append_vreg(builder);
+	vreg->t = IN_REG;
+	vreg->u.assigned_register = class;
+	vreg->pre_alloced = true;
 
 	return asm_vreg(vreg_number, width);
 }
@@ -741,7 +741,7 @@ static void asm_gen_instr(
 		// registers used for arguments for any temporary registers used to
 		// copy structs to the stack.
 		for (u32 i = 0; i < arg_vregs.size; i++) {
-			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
+			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
 			vreg->live_range_end = builder->current_block->size;
 		}
 
@@ -1047,7 +1047,7 @@ typedef struct CallSite
 
 int compare_live_range_start(const void *a, const void *b)
 {
-	VRegInfo *live_range_a = *(VRegInfo **)a, *live_range_b = *(VRegInfo **)b;
+	VReg *live_range_a = *(VReg **)a, *live_range_b = *(VReg **)b;
 	int x = live_range_a->live_range_start, y = live_range_b->live_range_start;
 	if (x < y)
 		return -1;
@@ -1068,8 +1068,7 @@ static void allocate_registers(AsmBuilder *builder)
 			Register *reg = arg_reg(arg);
 			if (reg != NULL && reg->t == V_REG) {
 				u32 reg_num = reg->u.vreg_number;
-				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
-						VRegInfo, reg_num);
+				VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, reg_num);
 				if (vreg->live_range_start == -1) {
 					vreg->live_range_start = vreg->live_range_end = i;
 				} else {
@@ -1080,8 +1079,7 @@ static void allocate_registers(AsmBuilder *builder)
 
 		for (u32 j = 0; j < instr->num_deps; j++) {
 			u32 reg_num = instr->vreg_deps[j];
-			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
-					VRegInfo, reg_num);
+			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, reg_num);
 			if (vreg->live_range_start == -1) {
 				vreg->live_range_start = vreg->live_range_end = i;
 			} else {
@@ -1097,7 +1095,7 @@ static void allocate_registers(AsmBuilder *builder)
 		}
 
 		for (u32 i = 0; i < builder->virtual_registers.size; i++) {
-			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
+			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
 			printf("#%u: [%d, %d]", i, vreg->live_range_start, vreg->live_range_end);
 			switch (vreg->t) {
 			// @TODO: Move register dumping stuff we we can dump the name here
@@ -1122,10 +1120,10 @@ static void allocate_registers(AsmBuilder *builder)
 	// until later. Linear scan depends on this ordering, so we sort it first.
 	// We can't sort it in place because the indices are used to look vregs up
 	// by vreg number.
-	VRegInfo **live_ranges = malloc(builder->virtual_registers.size * sizeof *live_ranges);
+	VReg **live_ranges = malloc(builder->virtual_registers.size * sizeof *live_ranges);
 	u32 live_range_out_index = 0;
 	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
-		VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
+		VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
 		// This indicates that we assigned a vreg to something that wasn't
 		// used, e.g. a pre-alloced RAX for the return value of a function.
 		if (vreg->live_range_start == -1) {
@@ -1139,13 +1137,13 @@ static void allocate_registers(AsmBuilder *builder)
 	u32 num_live_ranges = live_range_out_index;
 	qsort(live_ranges, num_live_ranges, sizeof live_ranges[0], compare_live_range_start);
 
-	Array(VRegInfo *) active_vregs;
-	ARRAY_INIT(&active_vregs, VRegInfo *, 16);
+	Array(VReg *) active_vregs;
+	ARRAY_INIT(&active_vregs, VReg *, 16);
 	for (u32 i = 0; i < num_live_ranges; i++) {
-		VRegInfo *vreg = live_ranges[i];
+		VReg *vreg = live_ranges[i];
 
 		while (active_vregs.size != 0) {
-			VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, 0);
+			VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, 0);
 			if (active_vreg->live_range_end >= vreg->live_range_start)
 				break;
 
@@ -1164,7 +1162,7 @@ static void allocate_registers(AsmBuilder *builder)
 
 			// @TODO: Remove all the invalidated vregs at once instead of
 			// repeatedly shifting down.
-			ARRAY_REMOVE(&active_vregs, VRegInfo *, 0);
+			ARRAY_REMOVE(&active_vregs, VReg *, 0);
 		}
 
 		if (vreg->t == UNASSIGNED) {
@@ -1191,9 +1189,9 @@ static void allocate_registers(AsmBuilder *builder)
 				// existing value, because we're pre-alloced and we need this
 				// specific register.
 
-				VRegInfo *existing = NULL;
+				VReg *existing = NULL;
 				for (u32 i = 0; i < active_vregs.size; i++) {
-					VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, i);
+					VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, i);
 					if (active_vreg->t == IN_REG &&
 							active_vreg->u.assigned_register == vreg->u.assigned_register) {
 						existing = active_vreg;
@@ -1218,13 +1216,13 @@ static void allocate_registers(AsmBuilder *builder)
 
 		u32 insertion_point = active_vregs.size;
 		for (u32 j = 0; j < active_vregs.size; j++) {
-			VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, j);
+			VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, j);
 			if (active_vreg->live_range_end > vreg->live_range_end) {
 				insertion_point = j;
 				break;
 			}
 		}
-		*ARRAY_INSERT(&active_vregs, VRegInfo *, insertion_point) = vreg;
+		*ARRAY_INSERT(&active_vregs, VReg *, insertion_point) = vreg;
 	}
 	free(live_ranges);
 
@@ -1237,7 +1235,7 @@ static void allocate_registers(AsmBuilder *builder)
 
 	for (u32 i = 0; i < body->size; i++) {
 		while (active_vregs.size != 0) {
-			VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, 0);
+			VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, 0);
 			if (active_vreg->live_range_end == -1)
 				continue;
 			if ((u32)active_vreg->live_range_end >= i)
@@ -1247,18 +1245,18 @@ static void allocate_registers(AsmBuilder *builder)
 
 			// @TODO: Remove all the invalidated vregs at once instead of
 			// repeatedly shifting down.
-			ARRAY_REMOVE(&active_vregs, VRegInfo *, 0);
+			ARRAY_REMOVE(&active_vregs, VReg *, 0);
 		}
 		if (vreg_index != builder->virtual_registers.size) {
-			VRegInfo *next_vreg =
-				ARRAY_REF(&builder->virtual_registers, VRegInfo, vreg_index);
+			VReg *next_vreg =
+				ARRAY_REF(&builder->virtual_registers, VReg, vreg_index);
 			if ((u32)next_vreg->live_range_start == i) {
 				assert(next_vreg->t == IN_REG);
 				live_regs_bitset |= 1 << next_vreg->u.assigned_register;
 
 				u32 insertion_point = active_vregs.size;
 				for (u32 j = 0; j < active_vregs.size; j++) {
-					VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, j);
+					VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, j);
 					if (active_vreg->live_range_end == -1)
 						continue;
 					if ((u32)active_vreg->live_range_end < i) {
@@ -1266,7 +1264,7 @@ static void allocate_registers(AsmBuilder *builder)
 						break;
 					}
 				}
-				*ARRAY_INSERT(&active_vregs, VRegInfo *, insertion_point) = next_vreg;
+				*ARRAY_INSERT(&active_vregs, VReg *, insertion_point) = next_vreg;
 			}
 		}
 
@@ -1323,8 +1321,8 @@ static void allocate_registers(AsmBuilder *builder)
 
 			if (reg->t == V_REG) {
 				u32 vreg_number = reg->u.vreg_number;
-				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
-						VRegInfo, vreg_number);
+				VReg *vreg = ARRAY_REF(&builder->virtual_registers,
+						VReg, vreg_number);
 
 				switch (vreg->t) {
 				case IN_REG:
@@ -1394,7 +1392,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 	if (ARRAY_IS_VALID(&builder->virtual_registers))
 		array_free(&builder->virtual_registers);
-	ARRAY_INIT(&builder->virtual_registers, VRegInfo, 20);
+	ARRAY_INIT(&builder->virtual_registers, VReg, 20);
 	IrType return_type = *ir_global->type.u.function.return_type;
 	assert(return_type.t == IR_INT
 			|| return_type.t == IR_POINTER
