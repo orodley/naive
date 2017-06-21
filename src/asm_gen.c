@@ -213,7 +213,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 }
 
 static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
-		AsmValue asm_value, bool sext)
+		AsmValue asm_value, u32 other_operand_width, bool sext)
 {
 	if (asm_value.t == ASM_VALUE_CONST
 			&& asm_value.u.constant.t == ASM_CONST_IMMEDIATE) {
@@ -232,6 +232,8 @@ static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
 		append_vreg(builder);
 
 		emit_instr2(builder, MOV, const_spill, asm_value);
+
+		const_spill.u.reg.width = other_operand_width;
 		return const_spill;
 	}
 
@@ -249,8 +251,8 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 	assign_vreg(builder, instr);
 
 	emit_instr2(builder, MOV, target, arg1);
-	emit_instr2(builder, op, target,
-			maybe_move_const_to_reg(builder, arg2,  is_sign_extending_op(op)));
+	emit_instr2(builder, op, target, maybe_move_const_to_reg(builder,
+				arg2, instr->type.u.bit_width, is_sign_extending_op(op)));
 }
 
 static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
@@ -289,7 +291,7 @@ static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp 
 
 	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
 	emit_instr2(builder, CMP, arg1,
-			maybe_move_const_to_reg(builder, arg2,  true));
+			maybe_move_const_to_reg(builder, arg2, arg1.u.reg.width, true));
 	emit_instr1(builder, op, asm_vreg(vreg, 8));
 }
 
@@ -486,7 +488,7 @@ static void asm_gen_instr(
 
 		AsmValue pointer = asm_value(builder, ir_pointer);
 		AsmValue value = maybe_move_const_to_reg(builder,
-				asm_value(builder, ir_value), false);
+				asm_value(builder, ir_value), type.u.bit_width, false);
 
 		// Use offset_register directly where we can, to fold the addition into
 		// the MOV rather than having a separate instruction.
