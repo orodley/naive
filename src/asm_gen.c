@@ -1040,7 +1040,7 @@ typedef struct CallSite
 
 int compare_live_range_start(const void *a, const void *b)
 {
-	const VRegInfo *live_range_a = (VRegInfo *)a, *live_range_b = (VRegInfo *)b;
+	VRegInfo *live_range_a = *(VRegInfo **)a, *live_range_b = *(VRegInfo **)b;
 	int x = live_range_a->live_range_start, y = live_range_b->live_range_start;
 	if (x < y)
 		return -1;
