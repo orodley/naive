@@ -33,6 +33,8 @@ void array_clear(Array_ *array);
 	_array_init((array), sizeof(element_type), (initial_capacity))
 #define ARRAY_REF(array, element_type, i) \
 	((element_type *)&(array)->elements[(i) * sizeof(element_type)])
+#define ARRAY_LAST(array, element_type) \
+	ARRAY_REF((array), element_type, (array)->size - 1)
 #define ARRAY_APPEND(array, element_type) \
 	(ARRAY_ENSURE_ROOM(array, element_type, 1), \
 	 ARRAY_REF((array), element_type, (array)->size++))

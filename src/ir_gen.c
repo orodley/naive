@@ -3052,8 +3052,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		// @TODO: Maybe we should clear the function out after using it.
 		builder->current_function = env->scratch_function;
 		builder->current_block =
-			*ARRAY_REF(&builder->current_function->blocks, IrBlock *,
-					builder->current_function->blocks.size - 1);
+			*ARRAY_LAST(&builder->current_function->blocks, IrBlock *);
 
 		Term term = ir_gen_expr(builder, env, sizeof_expr, RVALUE_CONTEXT);
 

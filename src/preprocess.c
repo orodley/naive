@@ -93,8 +93,7 @@ static bool preprocess_aux(PP *pp);
 static void start_pp_if(PP *pp, bool condition)
 {
 	Array(PPCondScope) *stack = &pp->pp_scope_stack;
-	if (stack->size >= 1
-			&& !ARRAY_REF(stack, PPCondScope, stack->size - 1)->condition) {
+	if (stack->size >= 1 && !ARRAY_LAST(stack, PPCondScope)->condition) {
 		condition = false;
 	}
 
@@ -110,8 +109,7 @@ static inline bool ignoring_chars(PP *pp)
 	if (pp_scope_stack->size == 0)
 		return false;
 
-	return !ARRAY_REF(pp_scope_stack, PPCondScope, pp_scope_stack->size - 1)
-		->condition;
+	return !ARRAY_LAST(pp_scope_stack, PPCondScope)->condition;
 }
 
 static void add_adjustment_to(PP *pp, AdjustmentType type, SourceLoc source_loc)
@@ -143,8 +141,7 @@ static void add_adjustment_to(PP *pp, AdjustmentType type, SourceLoc source_loc)
 	if (pp->out_adjustments.size == 0) {
 		adjustment = ARRAY_APPEND(&pp->out_adjustments, Adjustment);
 	} else {
-		Adjustment *prev =
-			ARRAY_REF(&pp->out_adjustments, Adjustment, pp->out_adjustments.size - 1);
+		Adjustment *prev = ARRAY_LAST(&pp->out_adjustments, Adjustment);
 
 		// Again, we don't bother with any adjustments inside macros since
 		// everything is reported at the top-level macro location.
@@ -391,8 +388,7 @@ static bool handle_pp_directive(PP *pp)
 	} else if (strneq(directive.str, "elif", directive.length)) {
 		UNIMPLEMENTED;
 	} else if (strneq(directive.str, "else", directive.length)) {
-		PPCondScope *scope = ARRAY_REF(
-				&pp->pp_scope_stack, PPCondScope, pp->pp_scope_stack.size - 1);
+		PPCondScope *scope = ARRAY_LAST(&pp->pp_scope_stack, PPCondScope);
 		if (scope->position == ELSE) {
 			issue_error(&directive_start,
 					"Duplicate #else clause for preprocessor conditional");
@@ -813,8 +809,7 @@ static bool preprocess_aux(PP *pp)
 				// can't contain newlines, and skip_comments_and_whitespace
 				// will produce at most one space.
 				if (pp->out_chars.size >= 1) {
-					char prev_char =
-						*ARRAY_REF(&pp->out_chars, char, pp->out_chars.size - 1);
+					char prev_char = *ARRAY_LAST(&pp->out_chars, char);
 					if (prev_char == ' ') {
 						pp->out_chars.size--;
 					}
