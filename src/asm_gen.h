@@ -4,11 +4,25 @@
 #include "asm.h"
 #include "ir.h"
 
+// @TODO: Rename to VReg - the "Info" here adds no value.
 typedef struct VRegInfo
 {
-	RegClass assigned_register;
+	enum
+	{
+		UNASSIGNED,
+		IN_REG,
+		ON_STACK,
+	} t;
+
+	bool pre_alloced;
 	i32 live_range_start;
 	i32 live_range_end;
+
+	union
+	{
+		RegClass assigned_register;
+		u32 assigned_stack_slot;
+	} u;
 } VRegInfo;
 
 typedef struct AsmBuilder

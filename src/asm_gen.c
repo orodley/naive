@@ -104,8 +104,9 @@ static inline u32 next_vreg(AsmBuilder *builder)
 static VRegInfo *append_vreg(AsmBuilder *builder)
 {
 	VRegInfo *vreg_info = ARRAY_APPEND(&builder->virtual_registers, VRegInfo);
-	vreg_info->assigned_register = INVALID_REG_CLASS;
+	vreg_info->t = UNASSIGNED;
 	vreg_info->live_range_start = vreg_info->live_range_end = -1;
+	vreg_info->pre_alloced = false;
 
 	return vreg_info;
 }
@@ -124,7 +125,9 @@ static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 	u32 vreg_number = next_vreg(builder);
 
 	VRegInfo *vreg_info = append_vreg(builder);
-	vreg_info->assigned_register = class;
+	vreg_info->t = IN_REG;
+	vreg_info->u.assigned_register = class;
+	vreg_info->pre_alloced = true;
 
 	return asm_vreg(vreg_number, width);
 }
@@ -982,21 +985,23 @@ static Register *arg_reg(AsmValue *arg)
 	return NULL;
 }
 
+// Reserved for spills and fills.
+#define SPILL_REGISTER REG_CLASS_R12
+
 #define ALLOCATION_ORDER \
-	X(0, REG_CLASS_R12), \
-	X(1, REG_CLASS_R13), \
-	X(2, REG_CLASS_R14), \
-	X(3, REG_CLASS_R15), \
-	X(4, REG_CLASS_B), \
-	X(5, REG_CLASS_R11), \
-	X(6, REG_CLASS_R10), \
-	X(7, REG_CLASS_R9), \
-	X(8, REG_CLASS_R8), \
-	X(9, REG_CLASS_C), \
-	X(10, REG_CLASS_D), \
-	X(11, REG_CLASS_SI), \
-	X(12, REG_CLASS_DI), \
-	X(13, REG_CLASS_A),
+	X(0,  REG_CLASS_R13), \
+	X(1,  REG_CLASS_R14), \
+	X(2,  REG_CLASS_R15), \
+	X(3,  REG_CLASS_B), \
+	X(4,  REG_CLASS_R11), \
+	X(5,  REG_CLASS_R10), \
+	X(6,  REG_CLASS_R9), \
+	X(7,  REG_CLASS_R8), \
+	X(8,  REG_CLASS_C), \
+	X(9,  REG_CLASS_D), \
+	X(10, REG_CLASS_SI), \
+	X(11, REG_CLASS_DI), \
+	X(12, REG_CLASS_A),
 
 #define X(i, x) [i] = x
 static RegClass alloc_index_to_reg[] = {
@@ -1092,10 +1097,12 @@ static void allocate_registers(AsmBuilder *builder)
 		for (u32 i = 0; i < builder->virtual_registers.size; i++) {
 			VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers, VRegInfo, i);
 			printf("#%u: [%d, %d]", i, vreg->live_range_start, vreg->live_range_end);
-			if (vreg->assigned_register != INVALID_REG_CLASS) {
-				// @TODO: Move register dumping stuff we we can dump the name
-				// here rather than just a number
-				printf(" (%d)", vreg->assigned_register);
+			switch (vreg->t) {
+			// @TODO: Move register dumping stuff we we can dump the name here
+			// rather than just a number
+			case IN_REG: printf(" (%d)", vreg->u.assigned_register);
+			case ON_STACK: printf(" [%d]", vreg->u.assigned_stack_slot);
+			case UNASSIGNED: break;
 			}
 			putchar('\n');
 		}
@@ -1108,7 +1115,7 @@ static void allocate_registers(AsmBuilder *builder)
 	// Start with all regs free
 	free_regs_bitset = (1 << STATIC_ARRAY_LENGTH(alloc_index_to_reg)) - 1;
 
-	// virtual_regsiters isn't necessarily sorted by live range start.
+	// virtual_registers isn't necessarily sorted by live range start.
 	// i.e. if RAX is pre-allocated from a function call and we don't use it
 	// until later. Linear scan depends on this ordering, so we sort it first.
 	// We can't sort it in place because the indices are used to look vregs up
@@ -1139,27 +1146,72 @@ static void allocate_registers(AsmBuilder *builder)
 			VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, 0);
 			if (active_vreg->live_range_end >= vreg->live_range_start)
 				break;
-			u32 alloc_index = reg_to_alloc_index[active_vreg->assigned_register];
-			free_regs_bitset |= 1 << alloc_index;
+
+			switch (active_vreg->t) {
+			case UNASSIGNED: UNREACHABLE;
+			case IN_REG: {
+				u32 alloc_index =
+					reg_to_alloc_index[active_vreg->u.assigned_register];
+				free_regs_bitset |= 1 << alloc_index;
+				break;
+			}
+			case ON_STACK:
+				// @TODO: Reuse the spilled stack slot?
+				break;
+			}
 
 			// @TODO: Remove all the invalidated vregs at once instead of
 			// repeatedly shifting down.
 			ARRAY_REMOVE(&active_vregs, VRegInfo *, 0);
 		}
 
-		if (vreg->assigned_register == INVALID_REG_CLASS) {
-			// @TODO: Insert spills when there are no free registers to assign.
-			assert(free_regs_bitset != 0);
-			u32 first_free_alloc_index = lowest_set_bit(free_regs_bitset);
-			vreg->assigned_register = alloc_index_to_reg[first_free_alloc_index];
-			free_regs_bitset &= ~(1 << first_free_alloc_index);
+		if (vreg->t == UNASSIGNED) {
+			if (free_regs_bitset == 0) {
+				vreg->t = ON_STACK;
+				vreg->u.assigned_stack_slot = builder->local_stack_usage;
+				builder->local_stack_usage += 8;
+			} else {
+				u32 first_free_alloc_index = lowest_set_bit(free_regs_bitset);
+				vreg->t = IN_REG;
+				vreg->u.assigned_register = alloc_index_to_reg[first_free_alloc_index];
+				free_regs_bitset &= ~(1 << first_free_alloc_index);
+			}
 		} else {
 			// This register has already been assigned, e.g. part of a call
 			// sequence. We don't need to allocate it, but we do need to keep
 			// track of it so it doesn't get clobbered.
-			u32 alloc_index = reg_to_alloc_index[vreg->assigned_register];
-			assert((free_regs_bitset & (1 << alloc_index)) != 0);
-			free_regs_bitset &= ~(1 << alloc_index);
+			assert(vreg->t == IN_REG);
+			assert(vreg->pre_alloced);
+
+			u32 alloc_index = reg_to_alloc_index[vreg->u.assigned_register];
+			if ((free_regs_bitset & (1 << alloc_index)) == 0) {
+				// Already allocated to something else. We need to spill the
+				// existing value, because we're pre-alloced and we need this
+				// specific register.
+
+				VRegInfo *existing = NULL;
+				for (u32 i = 0; i < active_vregs.size; i++) {
+					VRegInfo *active_vreg = *ARRAY_REF(&active_vregs, VRegInfo *, i);
+					if (active_vreg->t == IN_REG &&
+							active_vreg->u.assigned_register == vreg->u.assigned_register) {
+						existing = active_vreg;
+						break;
+					}
+				}
+				assert(existing != NULL);
+
+				// If the existing register is also pre-alloced, we have two
+				// vregs with overlapping live ranges that need the same
+				// physical register. This should never happen.
+				assert(!existing->pre_alloced);
+
+				existing->t = ON_STACK;
+				// @TODO: Alignment
+				existing->u.assigned_stack_slot = builder->local_stack_usage;
+				builder->local_stack_usage += 8;
+			} else {
+				free_regs_bitset &= ~(1 << alloc_index);
+			}
 		}
 
 		u32 insertion_point = active_vregs.size;
@@ -1188,8 +1240,8 @@ static void allocate_registers(AsmBuilder *builder)
 				continue;
 			if ((u32)active_vreg->live_range_end >= i)
 				break;
-			assert(active_vreg->assigned_register != INVALID_REG_CLASS);
-			live_regs_bitset &= ~(1 << active_vreg->assigned_register);
+			assert(active_vreg->t == IN_REG);
+			live_regs_bitset &= ~(1 << active_vreg->u.assigned_register);
 
 			// @TODO: Remove all the invalidated vregs at once instead of
 			// repeatedly shifting down.
@@ -1199,8 +1251,8 @@ static void allocate_registers(AsmBuilder *builder)
 			VRegInfo *next_vreg =
 				ARRAY_REF(&builder->virtual_registers, VRegInfo, vreg_index);
 			if ((u32)next_vreg->live_range_start == i) {
-				assert(next_vreg->assigned_register != INVALID_REG_CLASS);
-				live_regs_bitset |= 1 << next_vreg->assigned_register;
+				assert(next_vreg->t == IN_REG);
+				live_regs_bitset |= 1 << next_vreg->u.assigned_register;
 
 				u32 insertion_point = active_vregs.size;
 				for (u32 j = 0; j < active_vregs.size; j++) {
@@ -1247,8 +1299,19 @@ static void allocate_registers(AsmBuilder *builder)
 
 	array_free(&callsites);
 
+	u32 curr_sp_diff = 0;
 	for (u32 i = 0; i < body->size; i++) {
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
+
+		if (instr->op == SUB && instr->args[0].t == ASM_VALUE_REGISTER
+				&& instr->args[0].u.reg.t == PHYS_REG
+				&& instr->args[0].u.reg.u.class == REG_CLASS_SP) {
+			assert(instr->args[1].t == ASM_VALUE_CONST);
+
+			AsmConst c = instr->args[1].u.constant;
+			assert(c.t == ASM_CONST_IMMEDIATE);
+			curr_sp_diff += c.u.immediate;
+		}
 
 		for (u32 j = 0; j < instr->arity; j++) {
 			AsmValue *arg = instr->args + j;
@@ -1260,10 +1323,39 @@ static void allocate_registers(AsmBuilder *builder)
 				u32 vreg_number = reg->u.vreg_number;
 				VRegInfo *vreg = ARRAY_REF(&builder->virtual_registers,
 						VRegInfo, vreg_number);
-				RegClass class = vreg->assigned_register;
 
-				reg->t = PHYS_REG;
-				reg->u.class = class;
+				switch (vreg->t) {
+				case IN_REG:
+					reg->t = PHYS_REG;
+					reg->u.class = vreg->u.assigned_register;
+					break;
+				case ON_STACK:
+					reg->t = PHYS_REG;
+					reg->u.class = SPILL_REGISTER;
+					// @TODO: Insert all at once, rather than shifting along
+					// every time.
+					// @TODO: Elide this when we just write to the register and
+					// don't use the previous value
+					*ARRAY_INSERT(body, AsmInstr, i) = (AsmInstr) {
+						.op = MOV,
+						.arity = 2,
+						.args[0] = asm_phys_reg(SPILL_REGISTER, 64),
+						.args[1] = asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
+								asm_const(vreg->u.assigned_stack_slot + curr_sp_diff).u.constant)),
+					};
+					// @TODO: Elide this when we just read the register and
+					// don't write anything back.
+					*ARRAY_INSERT(body, AsmInstr, i + 2) = (AsmInstr) {
+						.op = MOV,
+						.arity = 2,
+						.args[0] = asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
+								asm_const(vreg->u.assigned_stack_slot + curr_sp_diff).u.constant)),
+						.args[1] = asm_phys_reg(SPILL_REGISTER, 64),
+					};
+					break;
+				case UNASSIGNED:
+					UNREACHABLE;
+				}
 			}
 		}
 	}
