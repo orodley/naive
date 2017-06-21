@@ -68,8 +68,9 @@ NOP                    =         90
 NOT r/m32              =         F7 /2
 NOT r/m64              = REX.W + F7 /2
 
-OR r/m32, r32          =         09 /r
 OR r/m32, imm8         =         83 /1 ib
+OR r/m32, r32          =         09 /r
+OR r/m64, imm8         = REX.W + 83 /1 ib
 OR r/m64, r64          = REX.W + 09 /r
 
 POP r64                =         58 +rd
@@ -87,6 +88,7 @@ SETLE r/m8             =         [0F 9E] /0
 
 SHL r/m32, imm8        =         C1 /4 ib
 SHL r/m32, CL          =         D3 /4
+SHL r/m64, imm8        = REX.W + C1 /4 ib
 SHL r/m64, CL          = REX.W + D3 /4
 
 SHR r/m32, imm8        =         C1 /5 ib

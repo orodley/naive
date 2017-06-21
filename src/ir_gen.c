@@ -2814,6 +2814,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case BIT_AND_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_AND);
 	case BIT_OR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_OR);
 	case RIGHT_SHIFT_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SHR);
+	case LEFT_SHIFT_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SHL);
 	case MULTIPLY_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_DIV);
 	case FUNCTION_CALL_EXPR: {
