@@ -775,7 +775,8 @@ static void decl_to_cdecl_aux(IrBuilder *builder, Env *env,
 
 static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 		CType *decl_spec_type, ASTDirectDeclarator *direct_declarator,
-		CDeclAux *cdecl) {
+		CDeclAux *cdecl)
+{
 	TypeEnv *type_env = &env->type_env;
 
 	switch (direct_declarator->t) {
