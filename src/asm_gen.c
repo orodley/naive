@@ -218,18 +218,21 @@ static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
 	if (asm_value.t == ASM_VALUE_CONST
 			&& asm_value.u.constant.t == ASM_CONST_IMMEDIATE) {
 		u64 c = asm_value.u.constant.u.immediate;
-		if (!((c & 0xFFFFFFFF) == c
-				|| (sext
-					&& (c >> 32 == 0xFFFFFFFF)
-					&& ((c & (1 << 31)) != 0)))) {
-			// Generally there's no imm64, so we have to spill the immediate
-			// to a register here.
-			AsmValue const_spill = asm_vreg(next_vreg(builder), 64);
-			append_vreg(builder);
 
-			emit_instr2(builder, MOV, const_spill, asm_value);
-			return const_spill;
-		}
+		if (!sext && (c & 0xFFFFFFFF) == c)
+			return asm_value;
+		if (c >> 32 == 0xFFFFFFFF && ((c & (1 << 31)) != 0))
+			return asm_value;
+		if ((c & (1 << 31)) == 0)
+			return asm_value;
+
+		// Generally there's no imm64, so we have to spill the immediate
+		// to a register here.
+		AsmValue const_spill = asm_vreg(next_vreg(builder), 64);
+		append_vreg(builder);
+
+		emit_instr2(builder, MOV, const_spill, asm_value);
+		return const_spill;
 	}
 
 	return asm_value;

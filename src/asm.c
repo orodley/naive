@@ -109,7 +109,7 @@ AsmValue asm_symbol(AsmSymbol *symbol)
 bool is_sign_extending_op(AsmOp op)
 {
 	return op == ADD || op == AND || op == ADC || op == CMP || op == IMUL
-		|| op == OR || op == SBB || op == SUB || op == TEST;
+		|| op == MOV || op == OR || op == SBB || op == SUB || op == TEST;
 }
 
 static bool is_sign_extending_instr(AsmInstr *instr)
