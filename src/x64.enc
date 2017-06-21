@@ -93,6 +93,7 @@ SHL r/m64, CL          = REX.W + D3 /4
 
 SHR r/m32, imm8        =         C1 /5 ib
 SHR r/m32, CL          =         D3 /5
+SHR r/m64, imm8        = REX.W + C1 /5 ib
 SHR r/m64, CL          = REX.W + D3 /5
 
 SUB r/m32, r32         =         29 /r
