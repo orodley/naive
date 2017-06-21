@@ -94,6 +94,7 @@ IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global)
 	global->initializer = initializer;
 
 	ARRAY_INIT(&function->blocks, IrBlock *, 5);
+	function->curr_instr_id = 0;
 	add_block_to_function(trans_unit, function, "entry");
 
 	return initializer;
@@ -376,7 +377,7 @@ static void dump_const(IrConst *konst)
 				IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
 				putchar('\t');
 				if (instr->type.t != IR_VOID) {
-					printf("#%u = ", i);
+					printf("#%u = ", instr->id);
 				}
 				dump_instr(instr);
 			}
@@ -433,7 +434,7 @@ static inline IrInstr *append_instr(IrBuilder *builder)
 	IrBlock *block = builder->current_block;
 
 	IrInstr *instr = pool_alloc(&builder->trans_unit->pool, sizeof *instr);
-	instr->id = block->instrs.size;
+	instr->id = builder->current_function->curr_instr_id++;
 	instr->vreg_number = -1;
 	*ARRAY_APPEND(&block->instrs, IrInstr *) = instr;
 

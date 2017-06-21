@@ -72,6 +72,7 @@ typedef struct IrBlock
 typedef struct IrFunction
 {
 	Array(IrBlock *) blocks;
+	u32 curr_instr_id;
 } IrFunction;
 
 typedef struct IrConst
