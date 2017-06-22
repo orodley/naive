@@ -476,7 +476,7 @@ static bool handle_pp_directive(PP *pp)
 					char c = peek_char(reader);
 					if (c == '\n') {
 						issue_error(&reader->source_loc,
-								"Unexpected newline in macro argument list");
+								"Unexpected newline in macro definition argument list");
 						return false;
 					} else {
 						Symbol arg_name = read_symbol(reader);
