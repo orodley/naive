@@ -907,7 +907,8 @@ static bool preprocess_aux(PP *pp)
 
 						Array(Macro) old_params = pp->curr_macro_params;
 						add_adjustment_to(pp, BEGIN_MACRO_ADJUSTMENT, start_source_loc);
-						substitute_macro_params(pp, macro);
+						if (!substitute_macro_params(pp, macro))
+							return false;
 
 						if (!preprocess_string(pp, macro->value))
 							return false;
