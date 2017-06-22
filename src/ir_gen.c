@@ -1152,6 +1152,8 @@ static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 	switch (ctype->t) {
 	case INTEGER_TYPE:
 		return add_int_const(builder, c_type_to_ir_type(ctype), 0);
+	case POINTER_TYPE:
+		return add_global_const(builder, NULL);
 	case ARRAY_TYPE: {
 		assert(!ctype->u.array.incomplete);
 		// @TODO: This allocates unnecessarily by calling zero_initializer

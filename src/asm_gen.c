@@ -1584,16 +1584,19 @@ static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out)
 		}
 		break;
 	case IR_POINTER: {
-		Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
-		*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
-		*fixup = (Fixup) {
-			.type = FIXUP_ABSOLUTE,
-			.section = DATA_SECTION,
-			.offset = out->size,
-			// @PORT: Hardcoded pointer size.
-			.size_bytes = 8,
-			.symbol = konst->u.global_pointer->asm_symbol,
-		};
+		IrGlobal *global = konst->u.global_pointer;
+		if (global != NULL) {
+			Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
+			*ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
+			*fixup = (Fixup) {
+				.type = FIXUP_ABSOLUTE,
+				.section = DATA_SECTION,
+				.offset = out->size,
+				// @PORT: Hardcoded pointer size.
+				.size_bytes = 8,
+				.symbol = konst->u.global_pointer->asm_symbol,
+			};
+		}
 
 		// @PORT: Hardcoded pointer size.
 		for (u32 i = 0; i < 8; i++) {

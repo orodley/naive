@@ -335,9 +335,15 @@ static void dump_const(IrConst *konst)
 	case IR_INT:
 		printf("%lu", konst->u.integer);
 		break;
-	case IR_POINTER:
-		printf("$%s", konst->u.global_pointer->name);
+	case IR_POINTER: {
+		IrGlobal *global = konst->u.global_pointer;
+		if (global == NULL) {
+			fputs("null", stdout);
+		} else {
+			printf("$%s", konst->u.global_pointer->name);
+		}
 		break;
+	}
 	case IR_ARRAY: {
 		putchar('[');
 		u32 len = konst->type.u.array.size;
