@@ -68,12 +68,17 @@ void advance(Reader *reader)
 		}
 	}
 
-	Adjustment *prev_adjustment = reader->next_adjustment >= 1 ?
-		ARRAY_REF(&reader->adjustments, Adjustment, reader->next_adjustment - 1) :
-		NULL;
-	Adjustment *next_adjustment = reader->next_adjustment < reader->adjustments.size ?
-		ARRAY_REF(&reader->adjustments, Adjustment, reader->next_adjustment) :
-		NULL;
+	Adjustment *prev_adjustment = NULL;
+	if (reader->next_adjustment >= 1
+			&& reader->next_adjustment <= reader->adjustments.size) {
+		prev_adjustment = ARRAY_REF(&reader->adjustments,
+				Adjustment, reader->next_adjustment - 1);
+	}
+	Adjustment *next_adjustment = NULL;
+	if (reader->next_adjustment < reader->adjustments.size) {
+		next_adjustment = ARRAY_REF(&reader->adjustments,
+				Adjustment, reader->next_adjustment);
+	}
 
 	if (next_adjustment != NULL && next_adjustment->location == reader->position) {
 		reader->source_loc = next_adjustment->new_source_loc;
