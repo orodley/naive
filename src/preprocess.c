@@ -228,6 +228,33 @@ static void skip_whitespace_and_comments(PP *pp, bool skip_newline)
 	}
 }
 
+static bool append_string_or_char_literal(Reader *reader, char start_char,
+		Array(char) *out_chars)
+{
+	u32 literal_start = reader->position - 1;
+	SourceLoc literal_start_source_loc = reader->source_loc;
+	while (peek_char(reader) != start_char) {
+		if (at_end(reader)) {
+			issue_error(&literal_start_source_loc,
+					start_char == '"'
+						? "Unterminated string literal"
+						: "Unterminated character literal");
+			return false;
+		}
+		if (peek_char(reader) == '\\') {
+			advance(reader);
+		}
+
+		advance(reader);
+	}
+	advance(reader);
+
+	ARRAY_APPEND_ELEMS(out_chars, char,
+			reader->position - literal_start,
+			reader->buffer.chars + literal_start);
+	return true;
+}
+
 // @TODO: This is probably too conservative - fopen can fail for other reasons.
 static bool file_exists(char *path)
 {
@@ -593,7 +620,8 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 	u32 args_processed = 0;
 	for (;;) {
 		char c = read_char(reader);
-		if (c == '(') {
+		switch (c) {
+		case '(': {
 			u32 bracket_depth = 1;
 			*ARRAY_APPEND(&arg_chars, char) = c;
 
@@ -604,9 +632,17 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 				case ')': bracket_depth--; break;
 				}
 
+				// @TODO: Append all at once with ARRAY_APPEND_ELEMS instead.
 				*ARRAY_APPEND(&arg_chars, char) = c;
 			}
-		} else if (c == ')' || c == ',') {
+			break;
+		}
+		case '"': case '\'':
+			if (!append_string_or_char_literal(reader, c, &arg_chars))
+				return false;
+
+			break;
+		case ')': case ',': {
 			if (args_processed == macro->arg_names.size) {
 				issue_error(&reader->source_loc,
 						"Too many parameters to function-like macro"
@@ -646,7 +682,9 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 			} else {
 				skip_whitespace_and_comments(pp, false);
 			}
-		} else {
+			break;
+		}
+		default:
 			*ARRAY_APPEND(&arg_chars, char) = c;
 		}
 	}
@@ -761,28 +799,9 @@ static bool preprocess_aux(PP *pp)
 		case '\'': case '"': {
 			if (ignoring_chars(pp))
 				break;
+			if (!append_string_or_char_literal(reader, c, &pp->out_chars))
+				return false;
 
-			u32 literal_start = reader->position - 1;
-			SourceLoc literal_start_source_loc = reader->source_loc;
-			while (peek_char(reader) != c) {
-				if (at_end(reader)) {
-					issue_error(&literal_start_source_loc,
-							c == '"'
-								? "Unterminated string literal"
-								: "Unterminated character literal");
-					return false;
-				}
-				if (peek_char(reader) == '\\') {
-					advance(reader);
-				}
-
-				advance(reader);
-			}
-			advance(reader);
-
-			ARRAY_APPEND_ELEMS(&pp->out_chars, char,
-					reader->position - literal_start,
-					buffer->chars + literal_start);
 			break;
 		}
 		case '#':
