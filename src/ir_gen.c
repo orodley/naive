@@ -1963,6 +1963,18 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		ASTExpr *condition_expr = statement->u.if_statement.condition;
 		Term condition_term =
 			ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
+		switch (condition_term.ctype->t) {
+		case INTEGER_TYPE: break;
+		case POINTER_TYPE: {
+			CType *int_ptr_type = env->type_env.int_ptr_type;
+			condition_term.ctype = int_ptr_type;
+			condition_term.value = build_type_instr(builder,
+					OP_CAST, condition_term.value, c_type_to_ir_type(int_ptr_type));
+			break;
+		}
+		default:
+			UNIMPLEMENTED;
+		}
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 
 		IrBlock *then_block = add_block(builder, "if.then");
