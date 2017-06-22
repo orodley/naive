@@ -602,11 +602,6 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 				switch (c) {
 				case '(': bracket_depth++; break;
 				case ')': bracket_depth--; break;
-				case '\n':
-					issue_error(&reader->source_loc,
-							"Unexpected newline in macro argument list");
-					ret = false;
-					goto cleanup;
 				}
 
 				*ARRAY_APPEND(&arg_chars, char) = c;
