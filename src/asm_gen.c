@@ -517,6 +517,7 @@ static void asm_gen_instr(
 			AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
 			emit_instr2(builder, MOV, temp_vreg, value);
 			emit_instr2(builder, MOV, asm_deref(pointer), temp_vreg);
+			append_vreg(builder);
 		} else {
 			UNIMPLEMENTED;
 		}
