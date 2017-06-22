@@ -3036,7 +3036,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		build_branch(builder, after_block);
 
 		builder->current_block = after_block;
-		IrValue phi = build_phi(builder, c_type_to_ir_type(then_term.ctype), 2);
+		IrValue phi = build_phi(builder, then_term.value.type, 2);
 		phi_set_param(phi, 0, then_resultant_block, then_term.value);
 		phi_set_param(phi, 1, else_resultant_block, else_term.value);
 		return (Term) { .ctype = result_type, .value = phi };
