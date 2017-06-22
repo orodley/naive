@@ -21,5 +21,9 @@ int main()
 
 	free(d);
 
+	int *e = realloc(NULL, sizeof *e);
+	*e = 18962;
+	assert(*e == 18962);
+
 	return 0;
 }
