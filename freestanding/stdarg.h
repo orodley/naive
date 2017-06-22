@@ -13,14 +13,14 @@ typedef struct {
 #define va_arg(list, type) __builtin_va_arg(list, type)
 #define va_end(args) __builtin_va_end(list)
 
-static int __builtin_va_arg_int(va_list list)
+static unsigned long __builtin_va_arg_uint64(va_list list)
 {
-	int result;
+	unsigned long result;
 	if (list->next_int_reg_offset >= 48) {
-		result = (int)*(long *)list->next_stack_arg;
+		result = *(unsigned long *)list->next_stack_arg;
 		list->next_stack_arg = (char *)list->next_stack_arg + 8;
 	} else {
-		result = (int)*(long *)
+		result = *(unsigned long *)
 			((char *)list->register_save_area + list->next_int_reg_offset);
 		list->next_int_reg_offset += 8;
 	}

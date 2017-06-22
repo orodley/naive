@@ -3088,29 +3088,33 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		// @TODO: Search through the type env and asert that the elem type is
 		// the same as the type bound to "va_list".
 
-		assert(arg_type->t == INTEGER_TYPE);
+		assert(arg_type->t == INTEGER_TYPE || arg_type->t == POINTER_TYPE);
 
 		IrGlobal *global_builtin_va_arg_int = NULL;
 		for (u32 i = 0; i < builder->trans_unit->globals.size; i++) {
 			IrGlobal *global =
 				*ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, i);
-			if (streq(global->name, "__builtin_va_arg_int")) {
+			if (streq(global->name, "__builtin_va_arg_uint64")) {
 				global_builtin_va_arg_int = global;
 				break;
 			}
 		}
 		assert(global_builtin_va_arg_int != NULL);
 
-		IrType int_type = c_type_to_ir_type(&env->type_env.int_type);
+		// @PORT: We want "uint64_t" here.
+		IrType unsigned_long_type =
+			c_type_to_ir_type(&env->type_env.unsigned_long_type);
 
 		IrValue *args = malloc(sizeof *args * 1);
 		args[0] = va_list_term.value;
-		return (Term) {
-			.ctype = &env->type_env.int_type,
+		Term builtin_result = (Term) {
+			.ctype = &env->type_env.unsigned_long_type,
 			.value = build_call(builder,
-					value_global(global_builtin_va_arg_int), int_type,
-					1, args)
+					value_global(global_builtin_va_arg_int),
+					unsigned_long_type,
+					1, args),
 		};
+		return convert_type(builder, builtin_result, arg_type);
 	}
 	default:
 		printf("%d\n", t);
