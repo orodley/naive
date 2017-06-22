@@ -85,7 +85,7 @@ AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
 	return instr;
 }
 
-static inline void add_dep(AsmInstr *instr, AsmValue dep)
+static void add_dep(AsmInstr *instr, AsmValue dep)
 {
 	assert(instr->num_deps < STATIC_ARRAY_LENGTH(instr->vreg_deps));
 	assert(dep.t == ASM_VALUE_REGISTER);
@@ -96,7 +96,7 @@ static inline void add_dep(AsmInstr *instr, AsmValue dep)
 
 // @TODO: Rethink name? "next" kinda suggests side effects, i.e. "move to the
 // next vreg number".
-static inline u32 next_vreg(AsmBuilder *builder)
+static u32 next_vreg(AsmBuilder *builder)
 {
 	return builder->virtual_registers.size;
 }

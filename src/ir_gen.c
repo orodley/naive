@@ -1017,7 +1017,7 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 	};
 }
 
-static inline IrBlock *add_block(IrBuilder *builder, char *name)
+static IrBlock *add_block(IrBuilder *builder, char *name)
 {
 	return add_block_to_function(builder->trans_unit, builder->current_function, name);
 }

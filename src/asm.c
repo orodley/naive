@@ -337,12 +337,12 @@ void dump_asm_module(AsmModule *asm_module)
 	}
 }
 
-static inline void write_u8(Array(u8) *output, u8 x)
+static void write_u8(Array(u8) *output, u8 x)
 {
 	*ARRAY_APPEND(output, u8) = x;
 }
 
-static inline void write_int_at(Array(u8) *output, u32 offset, u64 x, u32 size)
+static void write_int_at(Array(u8) *output, u32 offset, u64 x, u32 size)
 {
 	ARRAY_ENSURE_ROOM(output, u8, offset + size);
 	for (u32 n = 0; n < size; n ++) {
@@ -353,12 +353,12 @@ static inline void write_int_at(Array(u8) *output, u32 offset, u64 x, u32 size)
 		output->size = offset + size;
 }
 
-static inline void write_int(Array(u8) *output, u64 x, u32 size)
+static void write_int(Array(u8) *output, u64 x, u32 size)
 {
 	write_int_at(output, output->size, x, size);
 }
 
-static inline RegClass get_reg_class(AsmValue *asm_value)
+static RegClass get_reg_class(AsmValue *asm_value)
 {
 	Register reg;
 	if (asm_value->t == ASM_VALUE_REGISTER) {
@@ -539,7 +539,7 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 
 typedef enum ArgOrder { INVALID, RM, MR } ArgOrder;
 
-static inline void write_bytes(Array(u8) *output, u32 size, u8 *bytes)
+static void write_bytes(Array(u8) *output, u32 size, u8 *bytes)
 {
 	ARRAY_APPEND_ELEMS(output, u8, size, bytes);
 }

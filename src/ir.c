@@ -435,7 +435,7 @@ void builder_init(IrBuilder *builder, TransUnit *trans_unit)
 	builder->trans_unit = trans_unit;
 }
 
-static inline IrInstr *append_instr(IrBuilder *builder)
+static IrInstr *append_instr(IrBuilder *builder)
 {
 	IrBlock *block = builder->current_block;
 

@@ -28,7 +28,7 @@ void pool_free(Pool *pool)
 
 #else
 
-static inline void block_init(PoolBlock *block, size_t size)
+static void block_init(PoolBlock *block, size_t size)
 {
 	block->used = 0;
 	block->memory = malloc(size);

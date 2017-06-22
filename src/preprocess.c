@@ -103,7 +103,7 @@ static void start_pp_if(PP *pp, bool condition)
 	};
 }
 
-static inline bool ignoring_chars(PP *pp)
+static bool ignoring_chars(PP *pp)
 {
 	Array(PPCondScope) *pp_scope_stack = &pp->pp_scope_stack;
 	if (pp_scope_stack->size == 0)
