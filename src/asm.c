@@ -304,6 +304,11 @@ void dump_asm_module(AsmModule *asm_module)
 	Array(u8) *data = &asm_module->data;
 	u32 next_symbol = 0;
 	for (u32 i = 0; i < data->size; i++) {
+		while (next_symbol < symbols->size
+				&& (*ARRAY_REF(symbols, AsmSymbol *, next_symbol))->section != DATA_SECTION) {
+			next_symbol++;
+		}
+
 		AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, next_symbol);
 		if (next_symbol < symbols->size
 				&& symbol->section == DATA_SECTION
