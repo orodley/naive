@@ -25,6 +25,11 @@
 #include "preprocess.h"
 #include "util.h"
 
+int __lsan_is_turned_off()
+{
+	return 1;
+}
+
 static bool flag_dump_tokens = false;
 static bool flag_dump_ast = false;
 static bool flag_dump_ir = false;
