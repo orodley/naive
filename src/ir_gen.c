@@ -1395,16 +1395,15 @@ static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
 	}
 	case STRUCT_TYPE:
 		switch (c_init->t) {
-		case C_INIT_COMPOUND:
+		case C_INIT_COMPOUND: {
+			IrStructField *fields = type->u.strukt.ir_type->u.strukt.fields;
 			for (u32 i = 0; i < type->u.strukt.fields.size; i++) {
+				u32 field_offset = current_offset + fields[i].offset;
 				ir_gen_c_init(builder, type_env, base_ptr,
-						c_init->u.sub_elems + i, current_offset);
-				CType *field_type =
-					ARRAY_REF(&type->u.strukt.fields, CDecl, i)->type;
-
-				current_offset += size_of_c_type(field_type);
+						c_init->u.sub_elems + i, field_offset);
 			}
 			break;
+		}
 		// Struct values can be initialized with expressions.
 		case C_INIT_LEAF: {
 			IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,
