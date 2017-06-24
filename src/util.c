@@ -4,7 +4,7 @@
 
 extern inline u32 max(u32 a, u32 b);
 
-char *strndup(char *str, u32 length)
+char *strndup(const char *str, size_t length)
 {
 	char *result = malloc(length + 1);
 	memcpy(result, str, length);
@@ -13,7 +13,7 @@ char *strndup(char *str, u32 length)
 	return result;
 }
 
-char *strdup(char *str)
+char *strdup(const char *str)
 {
 	return strndup(str, strlen(str));
 }

@@ -24,8 +24,8 @@ typedef struct String
 	u32 len;
 } String;
 
-char *strndup(char *str, u32 length);
-char *strdup(char *str);
+char *strndup(const char *str, size_t length);
+char *strdup(const char *str);
 
 inline bool streq(char *a, char *b)
 {
