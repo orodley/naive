@@ -431,8 +431,9 @@ void dump_trans_unit(TransUnit *trans_unit)
 
 void builder_init(IrBuilder *builder, TransUnit *trans_unit)
 {
-	builder->current_function = NULL;
 	builder->trans_unit = trans_unit;
+	builder->current_function = NULL;
+	builder->current_block = NULL;
 }
 
 static IrInstr *append_instr(IrBuilder *builder)
