@@ -1,6 +1,6 @@
 // @PORT
 #define _POSIX_SOURCE
-
+#define _DEFAULT_SOURCE
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
