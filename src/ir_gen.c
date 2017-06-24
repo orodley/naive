@@ -91,6 +91,10 @@ static bool c_type_eq(CType *a, CType *b)
 
 		return true;
 	case STRUCT_TYPE:
+		if (a->u.strukt.incomplete != b->u.strukt.incomplete)
+			return false;
+		if (a->u.strukt.incomplete)
+			return a == b;
 		return a->u.strukt.ir_type == b->u.strukt.ir_type;
 	case POINTER_TYPE:
 		assert(a != a->u.pointee_type);
