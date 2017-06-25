@@ -1980,24 +1980,35 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		}
 		assert(condition_term.ctype->t == INTEGER_TYPE);
 
-		IrBlock *then_block = add_block(builder, "if.then");
-		IrBlock *after_block = add_block(builder, "if.after");
-		IrBlock *else_block =
-			else_statement == NULL ? NULL : add_block(builder, "if.else");
+		IrBlock *before_block = builder->current_block;
 
+		IrBlock *then_block = add_block(builder, "if.then");
+		builder->current_block = then_block;
+		ir_gen_statement(builder, env, then_statement);
+		IrBlock *then_resultant_block = builder->current_block;
+
+		IrBlock *else_block = NULL;
+		IrBlock *else_resultant_block = NULL;
+		if (else_statement != NULL) {
+			else_block = add_block(builder, "if.else");
+			builder->current_block = else_block;
+			ir_gen_statement(builder, env, else_statement);
+			else_resultant_block = builder->current_block;
+		}
+
+		IrBlock *after_block = add_block(builder, "if.after");
+
+		builder->current_block = before_block;
 		if (else_statement == NULL) {
 			build_cond(builder, condition_term.value, then_block, after_block);
 		} else {
 			build_cond(builder, condition_term.value, then_block, else_block);
 		}
 
-		builder->current_block = then_block;
-		ir_gen_statement(builder, env, then_statement);
+		builder->current_block = then_resultant_block;
 		build_branch(builder, after_block);
-
 		if (else_statement != NULL) {
-			builder->current_block = else_block;
-			ir_gen_statement(builder, env, else_statement);
+			builder->current_block = else_resultant_block;
 			build_branch(builder, after_block);
 		}
 
@@ -2081,8 +2092,11 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 	}
 	case WHILE_STATEMENT: {
 		IrBlock *pre_header = add_block(builder, "while.ph");
-		IrBlock *body = add_block(builder, "while.body");
-		IrBlock *after = add_block(builder, "while.after");
+		// @NOTE: We allocate this now, but only add it to the function later.
+		// This is because we need it to exist as break_target while ir_gen'ing
+		// the body, but we want it to be after the body, so the blocks are
+		// laid out better.
+		IrBlock *after = pool_alloc(&builder->trans_unit->pool, sizeof *after);
 
 		ASTExpr *condition_expr = statement->u.expr_and_statement.expr;
 		ASTStatement *body_statement = statement->u.expr_and_statement.statement;
@@ -2091,8 +2105,9 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		builder->current_block = pre_header;
 		Term condition_term =
 			ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
-
 		assert(condition_term.ctype->t == INTEGER_TYPE);
+
+		IrBlock *body = add_block(builder, "while.body");
 		build_cond(builder, condition_term.value, body, after);
 
 		IrBlock *prev_break_target = env->break_target;
@@ -2107,6 +2122,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		env->break_target = prev_break_target;
 		env->continue_target = prev_continue_target;
 
+		*ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = after;
+		block_init(after, "while.after", builder->current_function->blocks.size - 1);
 		builder->current_block = after;
 
 		break;
@@ -2146,8 +2163,12 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 	case FOR_STATEMENT: {
 		IrBlock *pre_header = add_block(builder, "for.ph");
 		IrBlock *body = add_block(builder, "for.body");
-		IrBlock *update = add_block(builder, "for.update");
-		IrBlock *after = add_block(builder, "for.after");
+		// @NOTE: We allocate these now, but only add it to the function later.
+		// This is because we need them to exist as break_target and
+		// continue_target while ir_gen'ing the body, but we want them to be
+		// after the body so the blocks are laid out better.
+		IrBlock *update = pool_alloc(&builder->trans_unit->pool, sizeof *update);
+		IrBlock *after = pool_alloc(&builder->trans_unit->pool, sizeof *after);
 
 		Scope init_scope;
 		Scope *prev_scope = env->scope;
@@ -2193,6 +2214,9 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		build_branch(builder, update);
 		builder->current_block = update;
 
+		*ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = update;
+		block_init(update, "for.update", builder->current_function->blocks.size - 1);
+
 		env->break_target = prev_break_target;
 		env->continue_target = prev_continue_target;
 
@@ -2203,6 +2227,9 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
 		env->scope = prev_scope;
 		builder->current_block = after;
+
+		*ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = after;
+		block_init(after, "for.after", builder->current_function->blocks.size - 1);
 
 		break;
 	}

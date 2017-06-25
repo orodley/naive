@@ -254,6 +254,8 @@ IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
 IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type);
 IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields);
 
+void block_init(IrBlock *block, char *name, u32 id);
+
 IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global);
 IrBlock *add_block_to_function(
 		TransUnit *trans_unit, IrFunction *function, char *name);

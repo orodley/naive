@@ -9,7 +9,7 @@
 #include "misc.h"
 #include "util.h"
 
-static void block_init(IrBlock *block, char *name, u32 id)
+void block_init(IrBlock *block, char *name, u32 id)
 {
 	block->name = name;
 	block->id = id;
