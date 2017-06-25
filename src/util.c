@@ -18,6 +18,8 @@ char *strdup(const char *str)
 	return strndup(str, strlen(str));
 }
 
+extern inline bool is_valid(String str);
+
 extern inline bool streq(char *a, char *b);
 extern inline bool strneq(char *a, char *b, u32 length);
 

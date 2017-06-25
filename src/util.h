@@ -24,6 +24,14 @@ typedef struct String
 	u32 len;
 } String;
 
+#define INVALID_STRING ((String) { NULL, -1 })
+#define EMPTY_STRING ((String) { NULL, 0 })
+
+inline bool is_valid(String str)
+{
+	return !((str.chars == INVALID_STRING.chars) && (str.len == INVALID_STRING.len));
+}
+
 char *strndup(const char *str, size_t length);
 char *strdup(const char *str);
 

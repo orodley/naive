@@ -3,7 +3,7 @@
 #include "reader.h"
 #include "util.h"
 
-void reader_init(Reader *reader, InputBuffer buffer,
+void reader_init(Reader *reader, String buffer,
 		Array(Adjustment) adjustments, bool at_start_of_line,
 		char *source_filename)
 {
@@ -93,11 +93,11 @@ void advance(Reader *reader)
 }
 
 // @TODO: Handle backslash newline in the middle of a symbol.
-Symbol read_symbol(Reader *reader)
+String read_symbol(Reader *reader)
 {
 	u32 start_index = reader->position;
 	if (!initial_ident_char(peek_char(reader)))
-		return (Symbol) { .str = NULL, .length = 0 };
+		return INVALID_STRING;
 
 	while (!at_end(reader)) {
 		char c = peek_char(reader);
@@ -107,13 +107,12 @@ Symbol read_symbol(Reader *reader)
 		advance(reader);
 	}
 
-	return (Symbol) {
-		.str = reader->buffer.chars + start_index,
-		.length = reader->position - start_index,
+	return (String) {
+		.chars = reader->buffer.chars + start_index,
+		.len = reader->position - start_index,
 	};
 }
 
-extern inline bool is_valid(InputBuffer ib);
 extern inline bool at_end(Reader *reader);
 extern inline char peek_char(Reader *reader);
 extern inline char read_char(Reader *reader);

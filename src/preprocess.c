@@ -15,49 +15,49 @@
 #include "util.h"
 
 // @PORT
-static InputBuffer map_file_into_memory(char *filename)
+static String map_file_into_memory(char *filename)
 {
 	int fd = open(filename, O_RDONLY);
 	if (fd == -1)
-		return INVALID_INPUT_BUFFER;
+		return INVALID_STRING;
 
 	off_t file_size = lseek(fd, 0, SEEK_END);
 
 	if (file_size == -1)
-		return INVALID_INPUT_BUFFER;
+		return INVALID_STRING;
 
 	if (file_size == 0)
-		return (InputBuffer) { NULL, 0 };
+		return EMPTY_STRING;
 
 	char *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (buffer == MAP_FAILED)
-		return INVALID_INPUT_BUFFER;
+		return INVALID_STRING;
 
 	close(fd);
 
-	return (InputBuffer) { buffer, file_size };
+	return (String) { buffer, file_size };
 }
 
 // @PORT
-static void unmap_file(InputBuffer buffer)
+static void unmap_file(String buffer)
 {
-	int ret = munmap(buffer.chars, buffer.length);
+	int ret = munmap(buffer.chars, buffer.len);
 	assert(ret == 0);
 }
 
 typedef struct Macro
 {
-	Symbol name;
+	String name;
 	char *value;
-	Array(Symbol) arg_names;
+	Array(String) arg_names;
 } Macro;
 
-static Macro *look_up_macro(Array(Macro) *macro_env, Symbol symbol)
+static Macro *look_up_macro(Array(Macro) *macro_env, String name)
 {
 	for (u32 i = 0; i < macro_env->size; i++) {
 		Macro *m = ARRAY_REF(macro_env, Macro, i);
-		if (m->name.length == symbol.length
-				&& strneq(m->name.str, symbol.str, symbol.length)) {
+		if (m->name.len == name.len
+				&& strneq(m->name.chars, name.chars, name.len)) {
 			return m;
 		}
 	}
@@ -351,15 +351,15 @@ static bool handle_pp_directive(PP *pp)
 
 	SourceLoc directive_start = reader->source_loc;
 
-	Symbol directive = read_symbol(reader);
-	if (directive.str == NULL) {
+	String directive = read_symbol(reader);
+	if (!is_valid(directive)) {
 		// @TODO: Sync to the next newline?
 		issue_error(&reader->source_loc, "Expected preprocessor directive");
 		return false;
 	}
 
 	// Process #if and friends even if we're currently ignoring tokens.
-	if (strneq(directive.str, "if", directive.length)) {
+	if (strneq(directive.chars, "if", directive.len)) {
 		skip_whitespace_and_comments(pp, false);
 
 		Array(char) condition_chars;
@@ -392,29 +392,29 @@ static bool handle_pp_directive(PP *pp)
 		}
 
 		start_pp_if(pp, cond);
-	} else if (strneq(directive.str, "ifdef", directive.length)) {
+	} else if (strneq(directive.chars, "ifdef", directive.len)) {
 		skip_whitespace_and_comments(pp, false);
-		Symbol macro_name = read_symbol(reader);
-		if (macro_name.str == NULL) {
+		String macro_name = read_symbol(reader);
+		if (!is_valid(macro_name)) {
 			issue_error(&reader->source_loc, "Expected identifier after #ifdef");
 			return false;
 		}
 
 		bool condition = look_up_macro(&pp->macro_env, macro_name) != NULL;
 		start_pp_if(pp, condition);
-	} else if (strneq(directive.str, "ifndef", directive.length)) {
+	} else if (strneq(directive.chars, "ifndef", directive.len)) {
 		skip_whitespace_and_comments(pp, false);
-		Symbol macro_name = read_symbol(reader);
-		if (macro_name.str == NULL) {
+		String macro_name = read_symbol(reader);
+		if (!is_valid(macro_name)) {
 			issue_error(&reader->source_loc, "Expected identifier after #ifndef");
 			return false;
 		}
 
 		bool condition = look_up_macro(&pp->macro_env, macro_name) == NULL;
 		start_pp_if(pp, condition);
-	} else if (strneq(directive.str, "elif", directive.length)) {
+	} else if (strneq(directive.chars, "elif", directive.len)) {
 		UNIMPLEMENTED;
-	} else if (strneq(directive.str, "else", directive.length)) {
+	} else if (strneq(directive.chars, "else", directive.len)) {
 		PPCondScope *scope = ARRAY_LAST(&pp->pp_scope_stack, PPCondScope);
 		if (scope->position == ELSE) {
 			issue_error(&directive_start,
@@ -432,14 +432,14 @@ static bool handle_pp_directive(PP *pp)
 			if (!parent_scope->condition)
 				scope->condition = false;
 		}
-	} else if (strneq(directive.str, "endif", directive.length)) {
+	} else if (strneq(directive.chars, "endif", directive.len)) {
 		if (pp->pp_scope_stack.size == 0) {
 			issue_error(&directive_start, "Unmatched #endif");
 			return false;
 		}
 		pp->pp_scope_stack.size--;
 	} else if (!ignoring_chars(pp)) {
-		if (strneq(directive.str, "include", directive.length)) {
+		if (strneq(directive.chars, "include", directive.len)) {
 			skip_whitespace_and_comments(pp, false);
 			SourceLoc include_path_source_loc = reader->source_loc;
 
@@ -484,18 +484,18 @@ static bool handle_pp_directive(PP *pp)
 				return false;
 
 			skip_whitespace_and_comments(pp, false);
-		} else if (strneq(directive.str, "define", directive.length)) {
+		} else if (strneq(directive.chars, "define", directive.len)) {
 			skip_whitespace_and_comments(pp, false);
 
-			Symbol macro_name = read_symbol(reader);
-			if (macro_name.str == NULL) {
+			String macro_name = read_symbol(reader);
+			if (!is_valid(macro_name)) {
 				issue_error(&reader->source_loc,
 						"Expected identifier after #define");
 				return false;
 			}
 
-			Array(Symbol) arg_names;
-			ARRAY_INIT(&arg_names, Symbol, 0);
+			Array(String) arg_names;
+			ARRAY_INIT(&arg_names, String, 0);
 			if (peek_char(reader) == '(') {
 				advance(reader);
 				for (;;) {
@@ -506,15 +506,15 @@ static bool handle_pp_directive(PP *pp)
 								"Unexpected newline in macro definition argument list");
 						return false;
 					} else {
-						Symbol arg_name = read_symbol(reader);
-						if (arg_name.str == NULL) {
+						String arg_name = read_symbol(reader);
+						if (!is_valid(arg_name)) {
 							issue_error(&reader->source_loc,
 									"Unexpected charater while processing "
 									"macro argument list");
 							return false;
 						}
 
-						*ARRAY_APPEND(&arg_names, Symbol) = arg_name;
+						*ARRAY_APPEND(&arg_names, String) = arg_name;
 						skip_whitespace_and_comments(pp, false);
 						char next = read_char(reader);
 						if (next == ')') {
@@ -549,11 +549,11 @@ static bool handle_pp_directive(PP *pp)
 			macro->name = macro_name;
 			macro->value = macro_value;
 			macro->arg_names = arg_names;
-		} else if (strneq(directive.str, "undef", directive.length)) {
+		} else if (strneq(directive.chars, "undef", directive.len)) {
 			skip_whitespace_and_comments(pp, false);
 
-			Symbol macro_name = read_symbol(reader);
-			if (macro_name.str == NULL) {
+			String macro_name = read_symbol(reader);
+			if (!is_valid(macro_name)) {
 				issue_error(&reader->source_loc,
 						"Expected identifier after #undef");
 				return false;
@@ -562,17 +562,17 @@ static bool handle_pp_directive(PP *pp)
 			// @NOTE: #undef on an undefined macro is allowed (C99 6.10.3.5.2)
 			for (u32 i = 0; i < pp->macro_env.size; i++) {
 				Macro *m = ARRAY_REF(&pp->macro_env, Macro, i);
-				if (m->name.length == macro_name.length
-						&& strneq(m->name.str, macro_name.str, macro_name.length)) {
+				if (m->name.len == macro_name.len
+						&& strneq(m->name.chars, macro_name.chars, macro_name.len)) {
 					ARRAY_REMOVE(&pp->macro_env, Macro, i);
 					break;
 				}
 			}
 
 			skip_whitespace_and_comments(pp, false);
-		} else if (strneq(directive.str, "line", directive.length)) {
+		} else if (strneq(directive.chars, "line", directive.len)) {
 			UNIMPLEMENTED;
-		} else if (strneq(directive.str, "error", directive.length)) {
+		} else if (strneq(directive.chars, "error", directive.len)) {
 			advance(reader);
 
 			u32 start = reader->position;
@@ -583,7 +583,7 @@ static bool handle_pp_directive(PP *pp)
 			char *error = strndup(reader->buffer.chars + start, length);
 			issue_error(&directive_start, error);
 			return false;
-		} else if (strneq(directive.str, "pragma", directive.length)) {
+		} else if (strneq(directive.chars, "pragma", directive.len)) {
 			UNIMPLEMENTED;
 		} else {
 			issue_error(&reader->source_loc,
@@ -652,7 +652,7 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 				goto cleanup;
 			}
 			Macro *arg_macro = ARRAY_APPEND(&new_macro_params, Macro);
-			arg_macro->name = *ARRAY_REF(&macro->arg_names, Symbol, args_processed);
+			arg_macro->name = *ARRAY_REF(&macro->arg_names, String, args_processed);
 
 			char *macro_value = strndup((char *)arg_chars.elements, arg_chars.size); 
 			arg_macro->value = macroexpand(pp, macro_value);
@@ -700,7 +700,7 @@ cleanup:
 static bool preprocess_file(PP *pp, char *input_filename,
 		SourceLoc blame_source_loc)
 {
-	InputBuffer buffer = map_file_into_memory(input_filename);
+	String buffer = map_file_into_memory(input_filename);
 	if (!is_valid(buffer)) {
 		if (blame_source_loc.filename == NULL) {
 			fprintf(stderr, "Failed to open input file: '%s'\n", input_filename);
@@ -710,7 +710,7 @@ static bool preprocess_file(PP *pp, char *input_filename,
 
 		return false;
 	}
-	*ARRAY_APPEND(&pp->mapped_files, InputBuffer) = buffer;
+	*ARRAY_APPEND(&pp->mapped_files, String) = buffer;
 
 	Reader old_reader = pp->reader;
 
@@ -730,7 +730,7 @@ static bool preprocess_string(PP *pp, char *string)
 	pp->out_adjustments = EMPTY_ARRAY;
 
 	reader_init(&pp->reader,
-			(InputBuffer) { string, strlen(string) }, EMPTY_ARRAY, false, "??");
+			(String) { string, strlen(string) }, EMPTY_ARRAY, false, "??");
 
 	bool ret = preprocess_aux(pp);
 
@@ -764,9 +764,9 @@ static char *macroexpand(PP *pp, char *string)
 static bool preprocess_aux(PP *pp)
 {
 	Reader *reader = &pp->reader;
-	InputBuffer *buffer = &pp->reader.buffer;
+	String *buffer = &pp->reader.buffer;
 
-	ARRAY_ENSURE_ROOM(&pp->out_chars, char, buffer->length);
+	ARRAY_ENSURE_ROOM(&pp->out_chars, char, buffer->len);
 
 	while (!at_end(reader)) {
 		u32 start_input_position = reader->position;
@@ -845,9 +845,9 @@ static bool preprocess_aux(PP *pp)
 				skip_whitespace_and_comments(pp, false);
 
 				SourceLoc expected_arg_name_source_loc = reader->source_loc;
-				Symbol arg_name = read_symbol(reader);
+				String arg_name = read_symbol(reader);
 				
-				if (arg_name.str == NULL) {
+				if (!is_valid(arg_name)) {
 					issue_error(&expected_arg_name_source_loc,
 							"Expected identifier after '#' operator");
 					return false;
@@ -886,7 +886,7 @@ static bool preprocess_aux(PP *pp)
 				while (ident_char(peek_char(reader)))
 					read_char(reader);
 
-				Symbol symbol = (Symbol) {
+				String symbol = (String) {
 					buffer->chars + symbol_start,
 					reader->position - symbol_start,
 				};
@@ -897,7 +897,7 @@ static bool preprocess_aux(PP *pp)
 
 				if (macro == NULL) {
 					ARRAY_APPEND_ELEMS(&pp->out_chars, char,
-							symbol.length, symbol.str);
+							symbol.len, symbol.chars);
 				} else if (macro->arg_names.size == 0) {
 					Array(Macro) old_params = pp->curr_macro_params;
 					pp->curr_macro_params = EMPTY_ARRAY;
@@ -914,8 +914,7 @@ static bool preprocess_aux(PP *pp)
 						// This identifier names a function-like macro, but it
 						// appears here without arguments. Therefore, we leave
 						// it as is.
-						ARRAY_APPEND_ELEMS(&pp->out_chars, char,
-								symbol.length, symbol.str);
+						ARRAY_APPEND_ELEMS(&pp->out_chars, char, symbol.len, symbol.chars);
 					} else {
 						read_char(reader);
 
@@ -967,7 +966,7 @@ bool preprocess(char *input_filename, Array(char) *preprocessed,
 	bool ret = preprocess_file(&pp, input_filename, (SourceLoc) { NULL, 0, 0 });
 
 	for (u32 i = 0; i < pp.mapped_files.size; i++) {
-		InputBuffer *buffer = ARRAY_REF(&pp.mapped_files, InputBuffer, i);
+		String *buffer = ARRAY_REF(&pp.mapped_files, String, i);
 		unmap_file(*buffer);
 	}
 	array_free(&pp.mapped_files);

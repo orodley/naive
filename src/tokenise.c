@@ -37,7 +37,7 @@ bool tokenise(Array(SourceToken) *tokens, Array(char) *text,
 	Tokeniser tokeniser;
 	tokeniser.tokens = tokens;
 	reader_init(&tokeniser.reader,
-			(InputBuffer) { (char *)text->elements, text->size },
+			(String) { (char *)text->elements, text->size },
 			*adjustments, false, NULL);
 
 	// @TODO: It feels like there should be a nicer way of doing this such that
@@ -510,12 +510,13 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 
 		default: {
 			back_up(reader);
-			Symbol symbol = read_symbol(reader);
-			if (strneq(symbol.str, "__LINE__", symbol.length)) {
+			String symbol = read_symbol(reader);
+			assert(is_valid(symbol));
+			if (strneq(symbol.chars, "__LINE__", symbol.len)) {
 				Token *line_number =
 					append_token(tokeniser, start_source_loc, TOK_INT_LITERAL);
 				line_number->u.int_literal = reader->source_loc.line;
-			} else if (strneq(symbol.str, "__FILE__", symbol.length)) {
+			} else if (strneq(symbol.chars, "__FILE__", symbol.len)) {
 				Token *file_name =
 					append_token(tokeniser, start_source_loc, TOK_STRING_LITERAL);
 				assert(reader->source_loc.filename != NULL);
@@ -526,8 +527,8 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 			} else {
 				Token *token =
 					append_token(tokeniser, start_source_loc, TOK_SYMBOL);
-				assert(symbol.str != NULL);
-				token->u.symbol = strndup(symbol.str, symbol.length);
+				assert(symbol.chars != NULL);
+				token->u.symbol = strndup(symbol.chars, symbol.len);
 			}
 
 			break;
