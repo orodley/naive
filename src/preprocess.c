@@ -342,9 +342,8 @@ static bool handle_pp_directive(PP *pp)
 	Reader *reader = &pp->reader;
 
 	skip_whitespace_and_comments(pp, false);
-	char c = peek_char(&pp->reader);
 	// Empty directive
-	if (c == '\n') {
+	if (peek_char(reader) == '\n') {
 		advance(reader);
 		return true;
 	}
