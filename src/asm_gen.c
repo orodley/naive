@@ -136,7 +136,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
 	switch (value.t) {
 	case VALUE_CONST:
-		return asm_const(value.u.constant);
+		return asm_imm(value.u.constant);
 	case VALUE_INSTR: {
 		IrInstr *instr = value.u.instr;
 
@@ -150,7 +150,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 			emit_instr2(builder,
 					ADD,
 					asm_vreg(vreg, 64),
-					asm_const(instr->u.local.stack_offset + builder->curr_sp_diff));
+					asm_imm(instr->u.local.stack_offset + builder->curr_sp_diff));
 			append_vreg(builder);
 			return asm_vreg(vreg, 64);
 		}
@@ -182,7 +182,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 			// Arguments passed on the stack sit above the previous frame
 			// pointer and return address (hence 16 bytes).
 			// See the System V x86-64 ABI spec, figure 3.3
-			AsmValue bp_offset = asm_const(arg_class->u.mem.offset + 16);
+			AsmValue bp_offset = asm_imm(arg_class->u.mem.offset + 16);
 
 			u32 vreg = next_vreg(builder);
 			append_vreg(builder);
@@ -409,7 +409,7 @@ static void asm_gen_instr(
 		emit_instr2(builder,
 				ADD,
 				asm_vreg(next_vreg(builder), 64),
-				asm_const(field->offset));
+				asm_imm(field->offset));
 		assign_vreg(builder, instr);
 
 		break;
@@ -464,7 +464,7 @@ static void asm_gen_instr(
 			handle_phi_nodes(builder, curr_block, other_block);
 		} else {
 			handle_phi_nodes(builder, curr_block, instr->u.cond.else_block);
-			emit_instr2(builder, CMP, asm_value(builder, condition), asm_const(0));
+			emit_instr2(builder, CMP, asm_value(builder, condition), asm_imm(0));
 			emit_instr1(builder, JE, asm_symbol(instr->u.cond.else_block->label));
 			handle_phi_nodes(builder, curr_block, instr->u.cond.then_block);
 			emit_instr1(builder, JMP, asm_symbol(instr->u.cond.then_block->label));
@@ -499,17 +499,14 @@ static void asm_gen_instr(
 			u32 offset = ir_pointer.u.instr->u.local.stack_offset
 				+ builder->curr_sp_diff;
 			AsmValue stack_address =
-				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
+				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const_imm(offset)));
 			emit_instr2(builder, MOV, stack_address, value);
 		} else if (ir_pointer.t == VALUE_GLOBAL) {
 			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
 						64,
-						(AsmConst) {
-							.t = ASM_CONST_SYMBOL,
-							.u.symbol = ir_pointer.u.global->asm_symbol
-						});
+						asm_const_symbol(ir_pointer.u.global->asm_symbol));
 			emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
 		} else if (size_of_ir_type(type) < 8 || value.t != ASM_VALUE_CONST) {
 			emit_instr2(builder, MOV, asm_deref(pointer), value);
@@ -534,17 +531,14 @@ static void asm_gen_instr(
 			u32 offset = pointer.u.instr->u.local.stack_offset
 				+ builder->curr_sp_diff;
 			AsmValue stack_address =
-				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const(offset).u.constant));
+				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const_imm(offset)));
 			emit_instr2(builder, MOV, target, stack_address);
 		} else if (pointer.t == VALUE_GLOBAL) {
 			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
 						64,
-						(AsmConst) {
-							.t = ASM_CONST_SYMBOL,
-							.u.symbol = pointer.u.global->asm_symbol
-						});
+						asm_const_symbol(pointer.u.global->asm_symbol));
 			emit_instr2(builder,
 					MOV,
 					target,
@@ -663,7 +657,7 @@ static void asm_gen_instr(
 		u32 args_plus_padding = align_to(args_stack_space, 16);
 		if (args_plus_padding > 0) {
 			emit_instr2(builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
-					asm_const(args_plus_padding));
+					asm_imm(args_plus_padding));
 		}
 
 		builder->curr_sp_diff = args_plus_padding;
@@ -689,7 +683,7 @@ static void asm_gen_instr(
 				break;
 			}
 			case ARG_CLASS_MEM: {
-				AsmValue location = asm_const(arg_class->u.mem.offset);
+				AsmValue location = asm_imm(arg_class->u.mem.offset);
 				if (arg_class->u.mem.size <= 8) {
 					emit_instr2(builder,
 							MOV, 
@@ -704,7 +698,7 @@ static void asm_gen_instr(
 					emit_instr2(builder, MOV, asm_vreg(src_vreg, 64), arg);
 					for (u32 i = 0; i < arg_class->u.mem.size; i++) {
 						AsmConst offset =
-							asm_const(location.u.constant.u.immediate + i).u.constant;
+							asm_const_imm(location.u.constant.u.immediate + i);
 						emit_instr2(builder, MOV, asm_vreg(temp_vreg, 8),
 								asm_deref(asm_vreg(src_vreg, 64)));
 						emit_instr2(builder,
@@ -714,7 +708,7 @@ static void asm_gen_instr(
 						emit_instr2(builder,
 								ADD,
 								asm_vreg(src_vreg, 64),
-								asm_const(1));
+								asm_imm(1));
 					}
 				}
 				break;
@@ -735,7 +729,7 @@ static void asm_gen_instr(
 		// @TODO: Once we pass args in vector registers, set al appropriately.
 		if (gen_new_call_seq) {
 			emit_instr2(builder, MOV,
-					pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_const(0));
+					pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_imm(0));
 
 			// Done with call_seq now
 			free(call_seq.arg_classes);
@@ -755,7 +749,7 @@ static void asm_gen_instr(
 
 		if (args_plus_padding > 0) {
 			emit_instr2(builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
-					asm_const(args_plus_padding));
+					asm_imm(args_plus_padding));
 		}
 		builder->curr_sp_diff = 0;
 
@@ -926,7 +920,7 @@ static void asm_gen_instr(
 		// the size of the register save area, and subtract the same amount
 		// from register_save_area. This way we start out pointing at the
 		// correct place, but still end up at 48 when we're out of space.
-		AsmValue starting_offset = asm_const(48 - builder->register_save_area_size);
+		AsmValue starting_offset = asm_imm(48 - builder->register_save_area_size);
 
 		emit_instr2(builder, MOV,
 				asm_deref(va_list_ptr), starting_offset);
@@ -934,7 +928,7 @@ static void asm_gen_instr(
 		// Skip next_vector_reg_offset since we don't use vector registers for
 		// passing arguments yet.
 
-		emit_instr2(builder, ADD, va_list_ptr, asm_const(8));
+		emit_instr2(builder, ADD, va_list_ptr, asm_imm(8));
 
 		// Stack args start at the bottom of the previous stack frame, which is
 		// always rbp + 16
@@ -942,9 +936,9 @@ static void asm_gen_instr(
 				MOV,
 				asm_deref(va_list_ptr),
 				asm_phys_reg(REG_CLASS_BP, 64));
-		emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_const(16));
+		emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_imm(16));
 
-		emit_instr2(builder, ADD, va_list_ptr, asm_const(8));
+		emit_instr2(builder, ADD, va_list_ptr, asm_imm(8));
 
 		// The register save area is always at the bottom of our stack frame.
 		// However, as mentioned above, we need to offset this value for ABI
@@ -977,7 +971,7 @@ static void asm_gen_instr(
 
 		emit_instr2(builder, XOR, vreg_64, vreg_64);
 		emit_instr2(builder, MOV, vreg_32, asm_deref(va_list_ptr));
-		emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_const(size));
+		emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_imm(size));
 		emit_instr2(builder, ADD, vreg_64, asm_phys_reg(REG_CLASS_BP, 64));
 		break;
 	}
@@ -1347,7 +1341,7 @@ static void allocate_registers(AsmBuilder *builder)
 						.arity = 2,
 						.args[0] = asm_phys_reg(SPILL_REGISTER, 64),
 						.args[1] = asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
-								asm_const(vreg->u.assigned_stack_slot + curr_sp_diff).u.constant)),
+								asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
 					};
 					// @TODO: Elide this when we just read the register and
 					// don't write anything back.
@@ -1355,7 +1349,7 @@ static void allocate_registers(AsmBuilder *builder)
 						.op = MOV,
 						.arity = 2,
 						.args[0] = asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
-								asm_const(vreg->u.assigned_stack_slot + curr_sp_diff).u.constant)),
+								asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
 						.args[1] = asm_phys_reg(SPILL_REGISTER, 64),
 					};
 					break;
@@ -1515,7 +1509,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		emit_instr2(builder,
 				SUB,
 				asm_phys_reg(REG_CLASS_SP, 64),
-				asm_const(stack_adjustment));
+				asm_imm(stack_adjustment));
 	}
 
 	// Argument registers are stored in increasing order in the register save
@@ -1536,7 +1530,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		for (u32 i = num_reg_args;
 				i < STATIC_ARRAY_LENGTH(argument_registers);
 				i++) {
-			AsmConst offset = asm_const((i - num_reg_args) * 8).u.constant;
+			AsmConst offset = asm_const_imm((i - num_reg_args) * 8);
 			emit_instr2(builder,
 					MOV,
 					asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
@@ -1555,7 +1549,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		emit_instr2(builder,
 				ADD,
 				asm_phys_reg(REG_CLASS_SP, 64),
-				asm_const(stack_adjustment));
+				asm_imm(stack_adjustment));
 	}
 	temp_regs_bitset = used_callee_save_regs_bitset;
 	while (temp_regs_bitset != 0) {

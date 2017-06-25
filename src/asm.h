@@ -244,10 +244,13 @@ void init_asm_module(AsmModule *asm_module, char *input_file_name);
 
 void free_asm_module(AsmModule *asm_module);
 
+AsmConst asm_const_imm(u64 value);
+AsmConst asm_const_symbol(AsmSymbol *symbol);
+
 AsmValue asm_vreg(u32 vreg_number, u8 width);
 AsmValue asm_phys_reg(RegClass reg, u8 width);
 AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset);
-AsmValue asm_const(u64 constant);
+AsmValue asm_imm(u64 value);
 AsmValue asm_symbol(AsmSymbol *symbol);
 AsmValue asm_deref(AsmValue asm_arg);
 

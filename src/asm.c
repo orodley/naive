@@ -36,6 +36,22 @@ void free_asm_module(AsmModule *asm_module)
 	array_free(&asm_module->fixups);
 }
 
+AsmConst asm_const_imm(u64 value)
+{
+	return (AsmConst) {
+		.t = ASM_CONST_IMMEDIATE,
+		.u.immediate = value,
+	};
+}
+
+AsmConst asm_const_symbol(AsmSymbol *symbol)
+{
+	return (AsmConst) {
+		.t = ASM_CONST_SYMBOL,
+		.u.symbol = symbol,
+	};
+}
+
 AsmValue asm_vreg(u32 vreg_number, u8 width)
 {
 	return (AsmValue) {
@@ -80,15 +96,12 @@ AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset)
 	}
 }
 
-AsmValue asm_const(u64 constant)
+AsmValue asm_imm(u64 value)
 {
 	return (AsmValue) {
 		.is_deref = false,
 		.t = ASM_VALUE_CONST,
-		.u.constant = (AsmConst) {
-			.t = ASM_CONST_IMMEDIATE,
-			.u.immediate = constant,
-		},
+		.u.constant = asm_const_imm(value),
 	};
 }
 
