@@ -57,7 +57,7 @@ def generate_encoder(input_filename, output_filename):
                     r'(?P<opcode>([0-9a-fA-F]+|\[[0-9a-fA-F ]+\])) *' +
                     r'(?P<slash>/.)? *' +
                     r'(?P<reg_in_opcode>\+r[bwdo])? *' +
-                    r'(?P<immediate>[ic][bdo])? *',
+                    r'(?P<immediate>[ic][bwdo])? *',
                     encoding)
 
             use_rex_w = bool(match.group('use_rex_w'))
@@ -82,6 +82,7 @@ def generate_encoder(input_filename, output_filename):
             if immediate:
                 immediate_size = {
                     'b': 1,
+                    'w': 2,
                     'd': 4,
                     'o': 8,
                 }[immediate[1]]

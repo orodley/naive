@@ -40,9 +40,11 @@ JMP rel                =         E9 cd
 
 MOV r/m8, r8           =         88 /r
 MOV r8, r/m8           =         8A /r
+MOV r/m8, imm8         =         C6 /0 ib
 MOV r8, imm8           =         B0 +rb ib
 MOV r/m16, r16         =   OSO + 89 /r
 MOV r16, r/m16         =   OSO + 8B /r
+MOV r/m16, imm16       =   OSO + C7 /0 iw
 MOV r/m32, r32         =         89 /r
 MOV r32, r/m32         =         8B /r
 MOV r/m32, imm32       =         C7 /0 id

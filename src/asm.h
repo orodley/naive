@@ -55,12 +55,18 @@ typedef struct AsmConst
 	enum
 	{
 		ASM_CONST_IMMEDIATE,
+		ASM_CONST_FIXED_IMMEDIATE,
 		ASM_CONST_SYMBOL,
 	} t;
 
 	union
 	{
 		u64 immediate;
+		struct
+		{
+			u64 value;
+			u32 width;
+		} fixed_immediate;
 		struct AsmSymbol *symbol;
 	} u;
 } AsmConst;
@@ -245,6 +251,7 @@ void init_asm_module(AsmModule *asm_module, char *input_file_name);
 void free_asm_module(AsmModule *asm_module);
 
 AsmConst asm_const_imm(u64 value);
+AsmConst asm_const_fixed_imm(u64 value, u32 width);
 AsmConst asm_const_symbol(AsmSymbol *symbol);
 
 AsmValue asm_vreg(u32 vreg_number, u8 width);

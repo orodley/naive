@@ -485,15 +485,47 @@ static void asm_gen_instr(
 		IrValue ir_pointer = instr->u.binary_op.arg1;
 		IrValue ir_value = instr->u.binary_op.arg2;
 		IrType type = ir_value.type;
+		u32 bit_width = size_of_ir_type(type) * 8;
 
 		AsmValue pointer = asm_value(builder, ir_pointer);
-		AsmValue value = maybe_move_const_to_reg(builder,
-				asm_value(builder, ir_value), type.u.bit_width, false);
+		AsmValue value = asm_value(builder, ir_value);
+		switch (value.t) {
+		case ASM_VALUE_REGISTER:
+			value.u.reg.width = bit_width;
+			break;
+		case ASM_VALUE_CONST: {
+			if (size_of_ir_type(type) == 8) {
+				AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
+				emit_instr2(builder, MOV, temp_vreg, value);
+				emit_instr2(builder, MOV, asm_deref(pointer), temp_vreg);
+				append_vreg(builder);
+				value = temp_vreg;
+
+				break;
+			}
+
+			AsmConst konst = value.u.constant;
+			switch (konst.t) {
+			case ASM_CONST_SYMBOL: break;
+			case ASM_CONST_FIXED_IMMEDIATE:
+				assert(konst.u.fixed_immediate.width == bit_width);
+				break;
+			case ASM_CONST_IMMEDIATE:
+				value.u.constant = asm_const_fixed_imm(konst.u.immediate, bit_width);
+				break;
+			}
+			}
+			break;
+		case ASM_VALUE_OFFSET_REGISTER:
+			UNREACHABLE;
+		}
 
 		// Use offset_register directly where we can, to fold the addition into
 		// the MOV rather than having a separate instruction.
 		bool directly_storeable = value.t == ASM_VALUE_REGISTER ||
-			(value.t == ASM_VALUE_CONST && value.u.constant.t == ASM_CONST_IMMEDIATE);
+			(value.t == ASM_VALUE_CONST
+			 && (value.u.constant.t == ASM_CONST_IMMEDIATE
+				 || value.u.constant.t == ASM_CONST_FIXED_IMMEDIATE));
 		if (ir_pointer.t == VALUE_INSTR && ir_pointer.u.instr->op == OP_LOCAL
 				&& directly_storeable) {
 			u32 offset = ir_pointer.u.instr->u.local.stack_offset
@@ -508,15 +540,8 @@ static void asm_gen_instr(
 						64,
 						asm_const_symbol(ir_pointer.u.global->asm_symbol));
 			emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
-		} else if (size_of_ir_type(type) < 8 || value.t != ASM_VALUE_CONST) {
-			emit_instr2(builder, MOV, asm_deref(pointer), value);
-		} else if (size_of_ir_type(type) == 8 && value.t == ASM_VALUE_CONST) {
-			AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
-			emit_instr2(builder, MOV, temp_vreg, value);
-			emit_instr2(builder, MOV, asm_deref(pointer), temp_vreg);
-			append_vreg(builder);
 		} else {
-			UNIMPLEMENTED;
+			emit_instr2(builder, MOV, asm_deref(pointer), value);
 		}
 
 		break;

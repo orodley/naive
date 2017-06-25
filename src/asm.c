@@ -44,6 +44,15 @@ AsmConst asm_const_imm(u64 value)
 	};
 }
 
+AsmConst asm_const_fixed_imm(u64 value, u32 width)
+{
+	return (AsmConst) {
+		.t = ASM_CONST_FIXED_IMMEDIATE,
+		.u.fixed_immediate.value = value,
+		.u.fixed_immediate.width = width,
+	};
+}
+
 AsmConst asm_const_symbol(AsmSymbol *symbol)
 {
 	return (AsmConst) {
@@ -195,6 +204,8 @@ static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
 		}
 		return canonical_value == extended;
 	}
+	case ASM_CONST_FIXED_IMMEDIATE:
+		return imm_width == constant.u.fixed_immediate.width;
 	case ASM_CONST_SYMBOL:
 		return imm_width == 64;
 	}
@@ -229,22 +240,37 @@ static void dump_register(Register reg)
 	}
 }
 
+static void dump_immediate(u64 x)
+{
+	if ((i64)x < 0)
+		printf("%" PRId64, (i64)x);
+	else
+		printf("%" PRIu64, (i64)x);
+}
+
 static void dump_asm_const(AsmConst constant)
 {
 	switch (constant.t) {
-	case ASM_CONST_IMMEDIATE: {
-		u64 x = constant.u.immediate;
-		if ((i64)x < 0)
-			printf("%" PRId64, (i64)x);
-		else
-			printf("%" PRIu64, (i64)x);
+	case ASM_CONST_IMMEDIATE:
+		dump_immediate(constant.u.immediate);
+		break;
+	case ASM_CONST_FIXED_IMMEDIATE: {
+		char *size_name;
+		switch (constant.u.fixed_immediate.width) {
+		case 8: size_name = "byte"; break;
+		case 16: size_name = "word"; break;
+		case 32: size_name = "dword"; break;
+		case 64: size_name = "qword"; break;
+		default: UNREACHABLE;
+		}
+		printf("%s ", size_name);
+
+		dump_immediate(constant.u.immediate);
 		break;
 	}
 	case ASM_CONST_SYMBOL:
 		printf("%s", constant.u.symbol->name);
 		break;
-	default:
-		UNREACHABLE;
 	}
 }
 
@@ -658,6 +684,8 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 			case ASM_CONST_IMMEDIATE:
 				encoded_instr.immediate = constant.u.immediate;
 				break;
+			case ASM_CONST_FIXED_IMMEDIATE:
+				encoded_instr.immediate = constant.u.fixed_immediate.value;
 			}
 
 		} else {
