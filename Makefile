@@ -52,7 +52,9 @@ tags: ncc
 	@echo 'ctags'
 	@ctags -R --fields=+Sl --langmap=c:+.h
 
-ncc: $(call objs_for_dir,src)
+ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/diagnostics.o \
+		src/elf.o src/file.o src/ir.o src/ir_gen.o src/parse.o src/pool.o \
+		src/preprocess.o src/reader.o src/tokenise.o src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NCC_CFLAGS) $^ -o $@
 
