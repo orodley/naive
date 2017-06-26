@@ -1016,17 +1016,6 @@ cleanup1:
 	return ret;
 }
 
-typedef struct ArFileHeader
-{
-	char name[16];
-	char modification_timestamp_decimal[12];
-	char owner_id_decimal[6];
-	char group_id_decimal[6];
-	char mode_octal[8];
-	char size_bytes_decimal[10];
-	char magic[2];
-} __attribute__((packed)) ArFileHeader;
-
 // @TODO: Add .note.GNU-STACK section header to prevent executable stack.
 bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input_filenames)
 {

@@ -16,6 +16,17 @@ typedef enum FileType
 FileType file_type_of_bytes(u8 *bytes, u32 length);
 FileType file_type(FILE *file);
 
+typedef struct ArFileHeader
+{
+	char name[16];
+	char modification_timestamp_decimal[12];
+	char owner_id_decimal[6];
+	char group_id_decimal[6];
+	char mode_octal[8];
+	char size_bytes_decimal[10];
+	char magic[2];
+} __attribute__((packed)) ArFileHeader;
+
 inline long checked_ftell(FILE *file)
 {
 	long ret = ftell(file);
