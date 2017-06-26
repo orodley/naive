@@ -1069,10 +1069,11 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 
 				assert(header.magic[0] == 0x60 && header.magic[1] == 0x0A);
 
-				// Filenames are terminated with '/'
+				char filename[sizeof header.name + 1];
+				memcpy(filename, header.name, sizeof header.name);
 				for (i32 i = sizeof header.name - 1; i >= 0; i--) {
-					if (header.name[i] == '/') {
-						header.name[i] = '\0';
+					if (header.name[i] != ' ') {
+						filename[i + 1] = '\0';
 						break;
 					}
 				}
@@ -1083,10 +1084,14 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 				file_size_bytes_decimal[sizeof file_size_bytes_decimal - 1] = '\0';
 				long file_size_bytes = atol(file_size_bytes_decimal);
 
-				// The file with an empty name is a special file, used to store
-				// a symbol index in System V ar. We don't care about it for
-				// now.
-				if (!streq(header.name, "") &&
+				// The file named "/" is a special file, used to store a symbol
+				// index in System V ar. We don't care about it for now.
+				//
+				// The file named "//" is used to store filenames longer than
+				// 16 bytes. We only care about the name so that we can avoid
+				// reading special files, so we don't care about it.
+				if (!streq(filename, "/") &&
+						!streq(filename, "//") &&
 						!process_elf_file(input_file, &asm_module, &symbol_table)) {
 					ret = false;
 					goto cleanup;
