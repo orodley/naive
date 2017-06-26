@@ -8,6 +8,7 @@ ENC ?= meta/enc.py
 COMMON_CFLAGS := $(CFLAGS) -std=c99 -Werror -Wall -Wextra -Wstrict-prototypes \
 	-Wformat
 NCC_CFLAGS := -Isrc
+NAR_CFLAGS := $(NCC_CFLAGS)
 LIBC_CFLAGS := -fno-asynchronous-unwind-tables -ffreestanding -fno-common \
 	-I libc -I libc/include
 
@@ -34,7 +35,7 @@ objs_for_dir = $(patsubst %.c, %.o, $(shell find $(1) -name '*.c')) \
 .SECONDARY: $(GEN_FILES)
 
 .PHONY: all
-all: ncc libc.a tags
+all: ncc nar libc.a tags
 
 .PHONY: asan
 asan: NCC_CFLAGS += -fsanitize=address
@@ -57,6 +58,10 @@ ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/diagnostics.o \
 		src/preprocess.o src/reader.o src/tokenise.o src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NCC_CFLAGS) $^ -o $@
+
+nar: src/bin/nar.o
+	@echo 'CC $@'
+	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
 
 libc.a: $(call objs_for_dir,libc) $(HEADERS)
 	@echo 'AR $@'
