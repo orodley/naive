@@ -18,9 +18,9 @@ struct stat
 	blksize_t st_blksize;
 	blkcnt_t st_blocks;
 
-	struct timespec st_atim;
-	struct timespec st_mtim;
-	struct timespec st_ctim;
+	struct timespec st_atime;
+	struct timespec st_mtime;
+	struct timespec st_ctime;
 
 	long __reserved[3];
 };
