@@ -1051,7 +1051,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 			}
 			break;
 		case AR_FILE_TYPE: {
-			u32 global_header_length = sizeof "!<arch>\n" - 1;
+			u32 global_header_length = sizeof AR_GLOBAL_HEADER - 1;
 			checked_fseek(input_file, global_header_length, SEEK_SET);
 
 			for (;;) {

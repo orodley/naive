@@ -9,7 +9,8 @@ FileType file_type_of_bytes(u8 *bytes, u32 length)
 	if (length >= 4 && strneq((char *)bytes, "\x7F" "ELF", 4)) {
 		return ELF_FILE_TYPE;
 	}
-	if (length >= 8 && strneq((char *)bytes, "!<arch>\n", 8)) {
+	if (length >= sizeof AR_GLOBAL_HEADER - 1 && strneq((char *)bytes,
+				AR_GLOBAL_HEADER, sizeof AR_GLOBAL_HEADER - 1)) {
 		return AR_FILE_TYPE;
 	}
 
