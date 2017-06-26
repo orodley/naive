@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
 		long bytes_left = file_size;
 		while (bytes_left != 0) {
 			long bytes_read = fread(read_buf, 1, sizeof read_buf, input_file);
-			if (ferror(input_file)) {
+			if (bytes_read != sizeof read_buf && !feof(input_file)) {
 				perror("Error reading from input file");
 				return 7;
 			}
