@@ -233,6 +233,8 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 	while (!at_end(reader)) {
 		SourceLoc start_source_loc = reader->source_loc;
 
+#define ADD_TOK(t) (append_token(tokeniser, start_source_loc, t))
+
 		switch (read_char(reader)) {
 		case '0': {
 			u64 value;
@@ -253,8 +255,7 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 				read_int_literal_suffix(reader);
 			}
 
-			Token *token = append_token(
-					tokeniser, start_source_loc, TOK_INT_LITERAL);
+			Token *token = ADD_TOK(TOK_INT_LITERAL);
 			token->u.int_literal = value;
 			break;
 		}
@@ -275,8 +276,7 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 
 			read_int_literal_suffix(reader);
 
-			Token *token = append_token(
-					tokeniser, start_source_loc, TOK_INT_LITERAL);
+			Token *token = ADD_TOK(TOK_INT_LITERAL);
 			token->u.int_literal = value;
 
 			break;
@@ -299,8 +299,7 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 
 			*ARRAY_APPEND(&string_literal_chars, char) = '\0';
 
-			Token *token = append_token(
-					tokeniser, start_source_loc, TOK_STRING_LITERAL);
+			Token *token = ADD_TOK(TOK_STRING_LITERAL);
 			token->u.string_literal = (String) {
 				.chars = (char *)string_literal_chars.elements,
 				.len = string_literal_chars.size - 1,
@@ -318,192 +317,114 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 				return false;
 			}
 
-			Token *token = append_token(
-					tokeniser, start_source_loc, TOK_INT_LITERAL);
+			Token *token = ADD_TOK(TOK_INT_LITERAL);
 			token->u.int_literal = value;
 			break;
 		}
 		case '+':
 			switch (read_char(reader)) {
-			case '+':
-				append_token(tokeniser, start_source_loc, TOK_INCREMENT);
-				break;
-			case '=':
-				append_token(tokeniser, start_source_loc, TOK_PLUS_ASSIGN);
-				break;
-			default:
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_PLUS);
+			case '+': ADD_TOK(TOK_INCREMENT); break;
+			case '=': ADD_TOK(TOK_PLUS_ASSIGN); break;
+			default: back_up(reader); ADD_TOK(TOK_PLUS); break;
 			}
 
 			break;
 		case '-':
 			switch (read_char(reader)) {
-			case '-':
-				append_token(tokeniser, start_source_loc, TOK_DECREMENT);
-				break;
-			case '=':
-				append_token(tokeniser, start_source_loc, TOK_MINUS_ASSIGN);
-				break;
-			case '>':
-				append_token(tokeniser, start_source_loc, TOK_ARROW);
-				break;
-			default:
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_MINUS);
+			case '-': ADD_TOK(TOK_DECREMENT); break;
+			case '=': ADD_TOK(TOK_MINUS_ASSIGN); break;
+			case '>': ADD_TOK(TOK_ARROW); break;
+			default: back_up(reader); ADD_TOK(TOK_MINUS); break;
 			}
 
 			break;
 		case '*':
-			if (read_char(reader) == '=') {
-				append_token(tokeniser, start_source_loc, TOK_MULTIPLY_ASSIGN);
-			} else {
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_ASTERISK);
-			}
+			if (read_char(reader) == '=') ADD_TOK(TOK_MULTIPLY_ASSIGN);
+			else { back_up(reader); ADD_TOK(TOK_ASTERISK); }
 
 			break;
 		case '/':
-			if (read_char(reader) == '=') {
-				append_token(tokeniser, start_source_loc, TOK_DIVIDE_ASSIGN);
-			} else {
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_DIVIDE);
-			}
+			if (read_char(reader) == '=') ADD_TOK(TOK_DIVIDE_ASSIGN);
+			else { back_up(reader); ADD_TOK(TOK_DIVIDE); }
 
 			break;
 		case '%':
-			if (read_char(reader) == '=') {
-				append_token(tokeniser, start_source_loc, TOK_MODULO_ASSIGN);
-			} else {
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_MODULO);
-			}
+			if (read_char(reader) == '=') ADD_TOK(TOK_MODULO_ASSIGN);
+			else { back_up(reader); ADD_TOK(TOK_MODULO); }
 
 			break;
 		case '&':
 			switch (read_char(reader)) {
-			case '&':
-				append_token(tokeniser, start_source_loc, TOK_LOGICAL_AND);
-				break;
-			case '=':
-				append_token(tokeniser, start_source_loc, TOK_BIT_AND_ASSIGN);
-				break;
-			default:
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_AMPERSAND);
+			case '&': ADD_TOK(TOK_LOGICAL_AND); break;
+			case '=': ADD_TOK(TOK_BIT_AND_ASSIGN); break;
+			default: back_up(reader); ADD_TOK(TOK_AMPERSAND); break;
 			}
 
 			break;
 		case '|':
 			switch (read_char(reader)) {
-			case '|':
-				append_token(tokeniser, start_source_loc, TOK_LOGICAL_OR);
-				break;
-			case '=':
-				append_token(tokeniser, start_source_loc, TOK_BIT_OR_ASSIGN);
-				break;
-			default:
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_BIT_OR);
+			case '|': ADD_TOK(TOK_LOGICAL_OR); break;
+			case '=': ADD_TOK(TOK_BIT_OR_ASSIGN); break;
+			default: back_up(reader); ADD_TOK(TOK_BIT_OR); break;
 			}
 
 			break;
 		case '^':
-			if (read_char(reader) == '=') {
-				append_token(tokeniser, start_source_loc, TOK_BIT_XOR_ASSIGN);
-			} else {
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_BIT_XOR);
-			}
+			if (read_char(reader) == '=') ADD_TOK(TOK_BIT_XOR_ASSIGN);
+			else { back_up(reader); ADD_TOK(TOK_BIT_XOR); }
 
 			break;
 		case '=':
-			if (read_char(reader) == '=') {
-				append_token(tokeniser, start_source_loc, TOK_EQUAL);
-			} else {
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_ASSIGN);
-			}
+			if (read_char(reader) == '=') ADD_TOK(TOK_EQUAL);
+			else { back_up(reader); ADD_TOK(TOK_ASSIGN); }
 
 			break;
 		case '!':
-			if (read_char(reader) == '=') {
-				append_token(tokeniser, start_source_loc, TOK_NOT_EQUAL);
-			} else {
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_LOGICAL_NOT);
-			}
+			if (read_char(reader) == '=') ADD_TOK(TOK_NOT_EQUAL);
+			else { back_up(reader); ADD_TOK(TOK_LOGICAL_NOT); }
 
 			break;
 		case '<':
 			switch (read_char(reader)) {
-			case '=':
-				append_token(tokeniser, start_source_loc, TOK_LESS_THAN_OR_EQUAL);
-				break;
+			case '=': ADD_TOK(TOK_LESS_THAN_OR_EQUAL); break;
 			case '<':
-				if (read_char(reader) == '=') {
-					append_token(tokeniser,
-							start_source_loc, TOK_LEFT_SHIFT_ASSIGN);
-				} else {
-					back_up(reader);
-					append_token(
-							tokeniser, start_source_loc, TOK_LEFT_SHIFT);
-				}
+				if (read_char(reader) == '=') ADD_TOK(TOK_LEFT_SHIFT_ASSIGN);
+				else { back_up(reader); ADD_TOK(TOK_LEFT_SHIFT); }
 				break;
-			default:
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_LESS_THAN);
+			default: back_up(reader); ADD_TOK(TOK_LESS_THAN); break;
 			}
 
 			break;
 		case '>':
 			switch (read_char(reader)) {
-			case '=':
-				append_token(tokeniser, start_source_loc, TOK_GREATER_THAN_OR_EQUAL);
-				break;
+			case '=': ADD_TOK(TOK_GREATER_THAN_OR_EQUAL); break;
 			case '>':
-				if (read_char(reader) == '=') {
-					append_token(tokeniser,
-							start_source_loc, TOK_RIGHT_SHIFT_ASSIGN);
-				} else {
-					back_up(reader);
-					append_token(tokeniser, start_source_loc, TOK_RIGHT_SHIFT);
-				}
+				if (read_char(reader) == '=') ADD_TOK(TOK_RIGHT_SHIFT_ASSIGN);
+				else { back_up(reader); ADD_TOK(TOK_RIGHT_SHIFT); }
 				break;
-			default:
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_GREATER_THAN);
+			default: back_up(reader); ADD_TOK(TOK_GREATER_THAN); break;
 			}
 
 			break;
 		case '.':
 			if (read_char(reader) == '.') {
-				if (read_char(reader) == '.') {
-					append_token(tokeniser, start_source_loc, TOK_ELLIPSIS);
-				} else {
-					back_up(reader);
-					back_up(reader);
-					append_token(tokeniser, start_source_loc, TOK_DOT);
-				}
-			} else {
-				back_up(reader);
-				append_token(tokeniser, start_source_loc, TOK_DOT);
-			}
+				if (read_char(reader) == '.') ADD_TOK(TOK_ELLIPSIS);
+				else { back_up(reader); back_up(reader); ADD_TOK(TOK_DOT); }
+			} else { back_up(reader); ADD_TOK(TOK_DOT); }
 
 			break;
-		case '~': append_token(tokeniser, start_source_loc, TOK_BIT_NOT); break;
-		case '?': append_token(tokeniser, start_source_loc, TOK_QUESTION_MARK); break;
-		case ':': append_token(tokeniser, start_source_loc, TOK_COLON); break;
-		case ';': append_token(tokeniser, start_source_loc, TOK_SEMICOLON); break;
-		case ',': append_token(tokeniser, start_source_loc, TOK_COMMA); break;
+		case '~': ADD_TOK(TOK_BIT_NOT); break;
+		case '?': ADD_TOK(TOK_QUESTION_MARK); break;
+		case ':': ADD_TOK(TOK_COLON); break;
+		case ';': ADD_TOK(TOK_SEMICOLON); break;
+		case ',': ADD_TOK(TOK_COMMA); break;
 
-		case '{': append_token(tokeniser, start_source_loc, TOK_LCURLY); break;
-		case '}': append_token(tokeniser, start_source_loc, TOK_RCURLY); break;
-		case '(': append_token(tokeniser, start_source_loc, TOK_LROUND); break;
-		case ')': append_token(tokeniser, start_source_loc, TOK_RROUND); break;
-		case '[': append_token(tokeniser, start_source_loc, TOK_LSQUARE); break;
-		case ']': append_token(tokeniser, start_source_loc, TOK_RSQUARE); break;
+		case '{': ADD_TOK(TOK_LCURLY); break;
+		case '}': ADD_TOK(TOK_RCURLY); break;
+		case '(': ADD_TOK(TOK_LROUND); break;
+		case ')': ADD_TOK(TOK_RROUND); break;
+		case '[': ADD_TOK(TOK_LSQUARE); break;
+		case ']': ADD_TOK(TOK_RSQUARE); break;
 
 		case ' ': case '\n':
 			break;
@@ -512,21 +433,19 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 			back_up(reader);
 			String symbol = read_symbol(reader);
 			assert(is_valid(symbol));
+			// @TODO: These two should be handled in the preprocessor.
 			if (strneq(symbol.chars, "__LINE__", symbol.len)) {
-				Token *line_number =
-					append_token(tokeniser, start_source_loc, TOK_INT_LITERAL);
+				Token *line_number = ADD_TOK(TOK_INT_LITERAL);
 				line_number->u.int_literal = reader->source_loc.line;
 			} else if (strneq(symbol.chars, "__FILE__", symbol.len)) {
-				Token *file_name =
-					append_token(tokeniser, start_source_loc, TOK_STRING_LITERAL);
+				Token *file_name = ADD_TOK(TOK_STRING_LITERAL);
 				assert(reader->source_loc.filename != NULL);
 				file_name->u.string_literal = (String) {
 					.chars = reader->source_loc.filename,
 					.len = strlen(reader->source_loc.filename),
 				};
 			} else {
-				Token *token =
-					append_token(tokeniser, start_source_loc, TOK_SYMBOL);
+				Token *token = ADD_TOK(TOK_SYMBOL);
 				assert(symbol.chars != NULL);
 				token->u.symbol = strndup(symbol.chars, symbol.len);
 			}
