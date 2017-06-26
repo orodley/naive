@@ -59,7 +59,7 @@ ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/diagnostics.o \
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NCC_CFLAGS) $^ -o $@
 
-nar: src/bin/nar.o
+nar: src/bin/nar.o src/array.o src/file.o src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
 
