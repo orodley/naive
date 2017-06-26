@@ -81,6 +81,7 @@ typedef struct PP
 
 	Array(InputBuffer) mapped_files;
 
+	Array(char *) *include_dirs;
 	Array(PPCondScope) pp_scope_stack;
 	Array(Macro) macro_env;
 	Array(Macro) curr_macro_params;
@@ -276,7 +277,8 @@ static char *concat(char *str_a, u32 len_a, char *str_b, u32 len_b)
 	return result;
 }
 
-static char *look_up_include_path(char *including_file, char *include_path)
+static char *look_up_include_path(Array(char *) *include_dirs,
+		char *including_file, char *include_path)
 {
 	// If absolute, just try the exact path.
 	if (include_path[0] == '/') {
@@ -310,15 +312,9 @@ static char *look_up_include_path(char *including_file, char *include_path)
 		return potential_path;
 	free(potential_path);
 
-	// Try system headers
-
-	char *system_paths[] = {
-		"/opt/naive/freestanding/",
-		"/opt/naive/include/",
-	};
-
-	for (u32 i = 0; i < STATIC_ARRAY_LENGTH(system_paths); i++) {
-		base_path = system_paths[i];
+	// Try include dirs
+	for (u32 i = 0; i < include_dirs->size; i++) {
+		base_path = *ARRAY_REF(include_dirs, char *, i);
 		base_length = strlen(base_path);
 
 		include_path_length = strlen(include_path);
@@ -459,8 +455,8 @@ static bool handle_pp_directive(PP *pp)
 
 			char *include_path =
 				strndup(reader->buffer.chars + start_index, length);
-			char *includee_path =
-				look_up_include_path(reader->source_loc.filename, include_path);
+			char *includee_path = look_up_include_path(pp->include_dirs,
+					reader->source_loc.filename, include_path);
 
 			if (includee_path == NULL) {
 				issue_error(&include_path_source_loc,
@@ -949,14 +945,15 @@ static bool preprocess_aux(PP *pp)
 	return true;
 }
 
-bool preprocess(char *input_filename, Array(char) *preprocessed,
-		Array(Adjustment) *adjustments)
+bool preprocess(char *input_filename, Array(char *) *include_dirs,
+		Array(char) *preprocessed, Array(Adjustment) *adjustments)
 {
 	PP pp = {
 		.out_chars = EMPTY_ARRAY,
 		.out_adjustments = EMPTY_ARRAY,
 		.macro_depth = 0,
 		.mapped_files = EMPTY_ARRAY,
+		.include_dirs = include_dirs,
 		.pp_scope_stack = EMPTY_ARRAY,
 		.macro_env = EMPTY_ARRAY,
 		.curr_macro_params = EMPTY_ARRAY,

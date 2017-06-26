@@ -38,7 +38,7 @@ bool flag_dump_live_ranges = false;
 
 static char *make_temp_file(void);
 static int compile_file(char *input_filename, char *output_filename,
-		bool syntax_only, bool preprocess_only);
+		Array(char *) *include_dirs, bool syntax_only, bool preprocess_only);
 static int make_file_executable(char *filename);
 
 int main(int argc, char *argv[])
@@ -52,6 +52,10 @@ int main(int argc, char *argv[])
 	Array(char *) linker_input_filenames;
 	ARRAY_INIT(&source_input_filenames, char *, 10);
 	ARRAY_INIT(&linker_input_filenames, char *, 10);
+
+	Array(char *) include_dirs = EMPTY_ARRAY;
+	*ARRAY_APPEND(&include_dirs, char *) = "/opt/naive/freestanding/";
+	*ARRAY_APPEND(&include_dirs, char *) = "/opt/naive/include/";
 
 	bool do_link = true;
 	bool syntax_only = false;
@@ -77,6 +81,21 @@ int main(int argc, char *argv[])
 				syntax_only = true;
 			} else if (streq(arg, "-c")) {
 				do_link = false;
+			} else if (strneq(arg, "-I", 2)) {
+				char *include_dir = arg + 2;
+
+				u32 len = strlen(include_dir);
+				if (include_dir[len - 1] != '/') {
+					// @LEAK
+					char *with_slash = malloc(len + 2);
+					memcpy(with_slash, include_dir, len);
+					with_slash[len] = '/';
+					with_slash[len + 1] = '\0';
+
+					include_dir = with_slash;
+				}
+
+				*ARRAY_APPEND(&include_dirs, char *) = include_dir;
 			} else if (streq(arg, "-o")) {
 				if (i == argc - 1) {
 					fputs("Error: No filename after '-o'", stderr);
@@ -161,7 +180,7 @@ int main(int argc, char *argv[])
 		}
 
 		int result = compile_file(source_input_filename, object_filename,
-				syntax_only, preprocess_only);
+				&include_dirs, syntax_only, preprocess_only);
 		if (result != 0)
 			return result;
 	}
@@ -210,11 +229,11 @@ int main(int argc, char *argv[])
 }
 
 static int compile_file(char *input_filename, char *output_filename,
-		bool syntax_only, bool preprocess_only)
+		Array(char *) *include_dirs, bool syntax_only, bool preprocess_only)
 {
 	Array(char) preprocessed;
 	Array(Adjustment) adjustments;
-	if (!preprocess(input_filename, &preprocessed, &adjustments))
+	if (!preprocess(input_filename, include_dirs, &preprocessed, &adjustments))
 		return 13;
 
 	if (preprocess_only) {
