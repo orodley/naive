@@ -1054,7 +1054,6 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 		}
 
 		FileType type = file_type(input_file);
-		checked_fseek(input_file, 0, SEEK_SET);
 		switch (type) {
 		case ELF_FILE_TYPE:
 			if (!process_elf_file(input_file, &asm_module, &symbol_table)) {

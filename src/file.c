@@ -18,9 +18,14 @@ FileType file_type_of_bytes(u8 *bytes, u32 length)
 
 FileType file_type(FILE *file)
 {
+	long initial_pos = checked_ftell(file);
+
 	u8 magic[8];
 	size_t items_read = fread(magic, 1, sizeof magic, file);
-	return file_type_of_bytes(magic, items_read);
+	FileType type = file_type_of_bytes(magic, items_read);
+
+	checked_fseek(file, initial_pos, SEEK_SET);
+	return type;
 }
 
 extern inline long checked_ftell(FILE *file);
