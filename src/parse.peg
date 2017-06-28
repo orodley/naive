@@ -150,12 +150,9 @@ build_pointer =
 		u.pointer_declarator.decl_specifier_list, #1,
 		u.pointer_declarator.pointee, NULL)
 
-direct_declarator =
-	fold(build_sub_declarator,
-		or(seq(build_ident_declarator, TOK_SYMBOL),
-			seq(build_declarator, TOK_LROUND, declarator, TOK_RROUND)),
-		which(seq(middle, TOK_LSQUARE, opt(expr), TOK_RSQUARE),
-			seq(middle, TOK_LROUND, parameter_list, TOK_RROUND)))
+direct_declarator_head =
+	or(seq(build_ident_declarator, TOK_SYMBOL),
+		seq(build_declarator, TOK_LROUND, declarator, TOK_RROUND))
 
 build_ident_declarator =
 	build(ASTDirectDeclarator, 1,
@@ -188,12 +185,9 @@ abstract_declarator =
 	or(seq(build_pointee_declarator, opt(pointer), direct_abstract_declarator),
 		seq(build_terminal_pointer, pointer))
 
-direct_abstract_declarator =
-	fold(build_sub_declarator,
-		seq(optional_declarator,
-			opt(seq(build_declarator, TOK_LROUND, abstract_declarator, TOK_RROUND))),
-		which(seq(middle, TOK_LSQUARE, opt(expr), TOK_RSQUARE),
-			seq(middle, TOK_LROUND, parameter_list, TOK_RROUND)))
+direct_abstract_declarator_head =
+	seq(optional_declarator,
+		opt(seq(build_declarator, TOK_LROUND, abstract_declarator, TOK_RROUND)))
 
 build_type_name =
 	build(ASTTypeName, 2,

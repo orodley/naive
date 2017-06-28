@@ -346,8 +346,9 @@ static void set_array_type_length(CType *array_type, u64 size)
 
 	array_type->u.array.size = size;
 
-	if (array_type->u.array.elem_type->t == ARRAY_TYPE) {
-		size *= array_type->u.array.elem_type->u.array.size;
+	CType *elem_type = array_type->u.array.elem_type;
+	if (elem_type->t == ARRAY_TYPE) {
+		size *= elem_type->u.array.ir_type->u.array.size;
 	}
 	array_type->u.array.ir_type->u.array.size = size;
 	array_type->u.array.incomplete = false;
@@ -370,6 +371,7 @@ static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
 
 	if (elem_type.t == IR_ARRAY) {
 		ir_elem_type = elem_type.u.array.elem_type;
+		ir_array_type->u.array.size = elem_type.u.array.size;
 	} else {
 		ir_elem_type =
 			pool_alloc(&builder->trans_unit->pool, sizeof *ir_elem_type);
@@ -482,9 +484,6 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 	}
 }
 
-static void decl_to_cdecl(IrBuilder *builder, Env *env,
-		CType *decl_spec_type, ASTDeclarator *declarator, CDecl *cdecl);
-
 static bool matches_sequence(ASTDeclSpecifier *decl_specifier_list, int length, ...)
 {
 	va_list args;
@@ -516,6 +515,9 @@ static bool matches_sequence(ASTDeclSpecifier *decl_specifier_list, int length, 
 	// sequences are prefixes of other sequences.
 	return decl_specifier_list == NULL;
 }
+
+static void decl_to_cdecl(IrBuilder *builder, Env *env, CType *ident_type,
+		ASTDeclarator *declarator, CDecl *cdecl);
 
 static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 		ASTDeclSpecifier *decl_specifier_list)
@@ -767,37 +769,46 @@ static ASTParameterDecl *params_for_function_declarator(ASTDeclarator *declarato
 	return direct_declarator->u.function_declarator.parameters;
 }
 
-typedef struct CDeclAux
-{
-	CType *type;
-	CType **ident_type;
-	char *name;
-} CDeclAux;
-
-static void decl_to_cdecl_aux(IrBuilder *builder, Env *env,
-		CType *decl_spec_type, ASTDeclarator *declarator, CDeclAux *cdecl);
-
 static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
-		CType *decl_spec_type, ASTDirectDeclarator *direct_declarator,
-		CDeclAux *cdecl)
+		CType *ident_type, ASTDirectDeclarator *declarator, CDecl *cdecl)
 {
-	TypeEnv *type_env = &env->type_env;
+	switch (declarator->t) {
+	case DECLARATOR:
+		decl_to_cdecl(builder, env, ident_type, declarator->u.declarator, cdecl);
+		break;
+	case IDENTIFIER_DECLARATOR:
+		*cdecl = (CDecl) { declarator->u.name, ident_type };
+		break;
+	case ARRAY_DECLARATOR: {
+		ASTDirectDeclarator *elem_declarator =
+			declarator->u.array_declarator.element_declarator;
+		direct_declarator_to_cdecl(builder, env, ident_type,
+				elem_declarator, cdecl);
 
-	switch (direct_declarator->t) {
+		CType *array = array_type(builder, &env->type_env, cdecl->type);
+		cdecl->type = array;
+		ASTExpr *array_length_expr = declarator->u.array_declarator.array_length;
+		if (array_length_expr != NULL) {
+			IrConst *length_const =
+				eval_constant_expr(builder, env, array_length_expr);
+			assert(length_const->type.t == IR_INT);
+			u64 length = length_const->u.integer;
+
+			set_array_type_length(array, length);
+		}
+
+		break;
+	}
 	case FUNCTION_DECLARATOR: {
 		ASTParameterDecl *first_param =
-			direct_declarator->u.function_declarator.parameters;
+			declarator->u.function_declarator.parameters;
 		ASTParameterDecl *params = first_param;
 
 		u32 arity = 0;
 		while (params != NULL) {
 			switch (params->t) {
-			case PARAMETER_DECL:
-				arity++;
-				break;
-			case ELLIPSIS_DECL:
-				assert(params->next == NULL);
-				break;
+			case PARAMETER_DECL: arity++; break;
+			case ELLIPSIS_DECL: assert(params->next == NULL); break;
 			}
 			params = params->next;
 		}
@@ -812,22 +823,22 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 		for (u32 i = 0; params != NULL; i++) {
 			switch (params->t) {
 			case PARAMETER_DECL: {
-				CType *decl_spec_type = decl_specifier_list_to_c_type(
+				CType *param_ident_type = decl_specifier_list_to_c_type(
 						builder, env, params->decl_specifier_list);
-				CDecl cdecl;
-				decl_to_cdecl(
-						builder, env, decl_spec_type, params->declarator, &cdecl);
+				CDecl param_cdecl;
+				decl_to_cdecl(builder, env,
+						param_ident_type, params->declarator, &param_cdecl);
 
-				if (cdecl.type->t == VOID_TYPE) {
+				if (param_cdecl.type->t == VOID_TYPE) {
 					assert(i == 0);
-					assert(cdecl.name == NULL);
+					assert(param_cdecl.name == NULL);
 				}
 
 				// As per 6.7.5.3.7, parameters of array type are adjusted to
 				// pointers to the element type.
-				cdecl.type = decay_to_pointer(type_env, cdecl.type);
+				param_cdecl.type = decay_to_pointer(&env->type_env, param_cdecl.type);
 
-				arg_c_types[i] = cdecl.type;
+				arg_c_types[i] = param_cdecl.type;
 				break;
 			}
 			case ELLIPSIS_DECL:
@@ -848,99 +859,42 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 			arity = 0;
 		}
 
-		ASTDirectDeclarator *function_declarator =
-			direct_declarator->u.function_declarator.declarator;
-		CDeclAux func_name_cdecl;
-		direct_declarator_to_cdecl(builder, env, decl_spec_type,
-				function_declarator, &func_name_cdecl);
-
 		CType *ctype = pool_alloc(&builder->trans_unit->pool, sizeof *ctype);
 		ctype->t = FUNCTION_TYPE;
 		ctype->u.function.arity = arity;
 		ctype->u.function.variable_arity = variable_arity;
 		ctype->u.function.arg_type_array = arg_c_types;
-		ctype->u.function.return_type = *func_name_cdecl.ident_type;
+		ctype->u.function.return_type = ident_type;
 
-		*func_name_cdecl.ident_type = ctype;
-		cdecl->name = func_name_cdecl.name;
-		cdecl->type = func_name_cdecl.type;
-		cdecl->ident_type = &ctype->u.function.return_type;
-		break;
-	}
-	case IDENTIFIER_DECLARATOR: {
-		cdecl->name = direct_declarator->u.name;
-		cdecl->type = decl_spec_type;
-		cdecl->ident_type = &cdecl->type;
-		break;
-	}
-	case ARRAY_DECLARATOR: {
-		ASTDirectDeclarator *elem_declarator =
-			direct_declarator->u.array_declarator.element_declarator;
-
-		CDeclAux elem_cdecl;
-		direct_declarator_to_cdecl(builder, env, decl_spec_type,
-				elem_declarator, &elem_cdecl);
-
-		CType *array = array_type(builder, type_env, *elem_cdecl.ident_type);
-		*elem_cdecl.ident_type = array;
-		cdecl->name = elem_cdecl.name;
-		cdecl->type = elem_cdecl.type;
-		cdecl->ident_type = &array->u.array.elem_type;
-
-		ASTExpr *array_length_expr =
-			direct_declarator->u.array_declarator.array_length;
-		if (array_length_expr != NULL) {
-			IrConst *length_const =
-				eval_constant_expr(builder, env, array_length_expr);
-			assert(length_const->type.t == IR_INT);
-			u64 length = length_const->u.integer;
-
-			set_array_type_length(array, length);
-		}
+		ASTDirectDeclarator *function_declarator =
+			declarator->u.function_declarator.declarator;
+		direct_declarator_to_cdecl(builder, env, ctype,
+				function_declarator, cdecl);
 
 		break;
 	}
-	case DECLARATOR:
-		decl_to_cdecl_aux(builder, env,
-				decl_spec_type, direct_declarator->u.declarator, cdecl);
-		break;
 	}
 }
 
-static void decl_to_cdecl_aux(IrBuilder *builder, Env *env,
-		CType *decl_spec_type, ASTDeclarator *declarator, CDeclAux *cdecl)
+static void decl_to_cdecl(IrBuilder *builder, Env *env, CType *ident_type,
+		ASTDeclarator *declarator, CDecl *cdecl)
 {
 	if (declarator == NULL) {
-		cdecl->name = NULL;
-		cdecl->type = decl_spec_type;
-		cdecl->ident_type = &cdecl->type;
-	} else if (declarator->t == POINTER_DECLARATOR) {
-		assert(declarator->u.pointer_declarator.decl_specifier_list == NULL);
-
-		decl_spec_type = pointer_type(&env->type_env, decl_spec_type);
-
-		CDeclAux pointee_cdecl;
-		decl_to_cdecl_aux(builder, env, decl_spec_type,
-				declarator->u.pointer_declarator.pointee, &pointee_cdecl);
-		cdecl->name = pointee_cdecl.name;
-		cdecl->ident_type = &decl_spec_type->u.pointee_type;
-		cdecl->type = pointee_cdecl.type;
-	} else {
-		assert(declarator->t == DIRECT_DECLARATOR);
-		ASTDirectDeclarator *direct_declarator = declarator->u.direct_declarator;
-
-		direct_declarator_to_cdecl(builder, env, decl_spec_type,
-				direct_declarator, cdecl);
+		*cdecl = (CDecl) { NULL, ident_type };
+		return;
 	}
-}
 
-static void decl_to_cdecl(IrBuilder *builder, Env *env,
-		CType *decl_spec_type, ASTDeclarator *declarator, CDecl *cdecl)
-{
-	CDeclAux cdecl_aux;
-	decl_to_cdecl_aux(builder, env, decl_spec_type, declarator, &cdecl_aux);
-	cdecl->name = cdecl_aux.name;
-	cdecl->type = cdecl_aux.type;
+	switch (declarator->t) {
+	case POINTER_DECLARATOR:
+		decl_to_cdecl(builder, env,
+				pointer_type(&env->type_env, ident_type),
+				declarator->u.pointer_declarator.pointee, cdecl);
+		break;
+	case DIRECT_DECLARATOR:
+		direct_declarator_to_cdecl(builder, env, ident_type,
+				declarator->u.direct_declarator, cdecl);
+		break;
+	}
 }
 
 static CType *type_name_to_c_type(

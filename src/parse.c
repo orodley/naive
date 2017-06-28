@@ -554,28 +554,6 @@ ASTDeclarator *build_terminal_pointer(Parser *parser, PointerResult *pointer_res
 	return pointer_result->first;
 }
 
-ASTDirectDeclarator *build_sub_declarator(Parser *parser,
-		ASTDirectDeclarator *declarator,
-		WhichResult *function_or_array_declarator)
-{
-	ASTDirectDeclarator *result = pool_alloc(parser->pool, sizeof *result);
-	switch (function_or_array_declarator->which) {
-	case 0:
-		result->t = ARRAY_DECLARATOR;
-		result->u.array_declarator.element_declarator = declarator;
-		result->u.array_declarator.array_length = function_or_array_declarator->result;
-		break;
-	case 1:
-		result->t = FUNCTION_DECLARATOR;
-		result->u.function_declarator.declarator = declarator;
-		result->u.function_declarator.parameters = function_or_array_declarator->result;
-		break;
-	default: UNREACHABLE;
-	}
-
-	return result;
-}
-
 ASTDirectDeclarator *optional_declarator(Parser *parser,
 		ASTDirectDeclarator *declarator)
 {
@@ -592,6 +570,8 @@ ASTDirectDeclarator *optional_declarator(Parser *parser,
 }
 
 static ParserResult identifier(Parser *parser);
+static ParserResult direct_declarator(Parser *parser);
+static ParserResult direct_abstract_declarator(Parser *parser);
 
 #include "parse.inc"
 
@@ -628,6 +608,79 @@ static ParserResult identifier(Parser *parser)
 	ident_expr->u.identifier = name;
 
 	return success(ident_expr);
+}
+
+static ParserResult direct_declarator_tail(Parser *parser,
+		ASTDirectDeclarator *head)
+{
+	u32 start = parser->position;
+
+	switch (read_token(parser)->t) {
+	case TOK_LSQUARE: {
+		ASTDirectDeclarator *declarator = head;
+		ASTDirectDeclarator **next = &declarator;
+
+		back_up(parser);
+		while (current_token(parser)->t == TOK_LSQUARE) {
+			read_token(parser);
+
+			ParserResult opt_expr = expr(parser);
+			ASTExpr *length_expr = NULL;
+			if (opt_expr.success) {
+				length_expr = opt_expr.result;
+			}
+			if (read_token(parser)->t != TOK_RSQUARE) {
+				parser->position = start;
+				return failure;
+			}
+
+			ASTDirectDeclarator *array = pool_alloc(parser->pool, sizeof *array);
+			array->t = ARRAY_DECLARATOR;
+			array->u.array_declarator.element_declarator = head;
+			array->u.array_declarator.array_length = length_expr;
+
+			*next = array;
+			next = &array->u.array_declarator.element_declarator;
+		}
+
+		return success(declarator);
+	}
+	case TOK_LROUND: {
+		ParserResult params = parameter_list(parser);
+		if (!params.success || read_token(parser)->t != TOK_RROUND) {
+			parser->position = start;
+			return failure;
+		}
+
+		ASTDirectDeclarator *func = pool_alloc(parser->pool, sizeof *func);
+		func->t = FUNCTION_DECLARATOR;
+		func->u.function_declarator.declarator = head;
+		func->u.function_declarator.parameters = params.result;
+
+		return success(func);
+	}
+	default:
+		back_up(parser);
+		return success(head);
+	}
+}
+
+static ParserResult direct_declarator(Parser *parser)
+{
+	ParserResult head_result = direct_declarator_head(parser);
+	if (!head_result.success)
+		return head_result;
+
+	return direct_declarator_tail(parser, head_result.result);
+}
+
+static ParserResult direct_abstract_declarator(Parser *parser)
+{
+	ParserResult head_result = direct_abstract_declarator_head(parser);
+	if (!head_result.success)
+		return head_result;
+
+	return direct_declarator_tail(parser, head_result.result);
 }
 
 
