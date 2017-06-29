@@ -118,6 +118,15 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
 					chars_printed += ret;
 					break;
 				}
+				case 'd': {
+					long x = va_arg(ap, long);
+					int ret = print_integer(sink, sink_arg, x, 10);
+					if (ret < 0)
+						return ret;
+
+					chars_printed += ret;
+					break;
+				}
 				default:
 					assert(!"Unimplemented");
 				}
