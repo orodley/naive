@@ -761,7 +761,6 @@ void assemble(AsmModule *asm_module)
 	// air here).
 	ARRAY_INIT(&asm_module->text.bytes, u8, asm_module->text.instrs.size * 3);
 
-	AsmSymbol *prev_symbol = NULL;
 	Array(AsmInstr) *instrs = &asm_module->text.instrs;
 	for (u32 i = 0; i < instrs->size; i++) {
 		AsmInstr *instr = ARRAY_REF(instrs, AsmInstr, i);
@@ -775,18 +774,7 @@ void assemble(AsmModule *asm_module)
 			assert(symbol->defined);
 
 			symbol->offset = instr_start;
-
-			if (symbol->linkage == ASM_GLOBAL_LINKAGE) {
-				if (prev_symbol != NULL) {
-					prev_symbol->size = instr_start - prev_symbol->offset;
-				}
-
-				prev_symbol = symbol;
-			}
 		}
-	}
-	if (prev_symbol != NULL) {
-		prev_symbol->size = asm_module->text.bytes.size - prev_symbol->offset;
 	}
 
 	array_free(&asm_module->text.instrs);

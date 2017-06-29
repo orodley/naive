@@ -1685,6 +1685,7 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 		}
 
 		AsmSymbol *asm_symbol = pool_alloc(&asm_module->pool, sizeof *asm_symbol);
+		ZERO_STRUCT(asm_symbol);
 		*ARRAY_APPEND(symbols, AsmSymbol *) = asm_symbol;
 		ir_global->asm_symbol = asm_symbol;
 
