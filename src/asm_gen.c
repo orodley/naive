@@ -219,12 +219,12 @@ static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
 			&& asm_value.u.constant.t == ASM_CONST_IMMEDIATE) {
 		u64 c = asm_value.u.constant.u.immediate;
 
-		if (!sext && (c & 0xFFFFFFFF) == c)
+		if (!sext) {
+			if ((u32)c == c)
+				return asm_value;
+		} else if ((i32)c == (i64)c) {
 			return asm_value;
-		if (c >> 32 == 0xFFFFFFFF && ((c & (1 << 31)) != 0))
-			return asm_value;
-		if ((c & (1 << 31)) == 0)
-			return asm_value;
+		}
 
 		// Generally there's no imm64, so we have to spill the immediate
 		// to a register here.
