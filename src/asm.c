@@ -529,8 +529,7 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 			assert(asm_const.t == ASM_CONST_IMMEDIATE);
 			offset = asm_const.u.immediate;
 			encoded_instr->displacement = offset;
-			// @TODO: Negative numbers
-			if ((offset & 0xFF) == offset) {
+			if ((i8)offset == (i64)offset) {
 				encoded_instr->mod = 1;
 				encoded_instr->displacement_size = 1;
 			} else if ((offset & 0xFFFFFFFF) == offset) {
