@@ -101,11 +101,15 @@ void *realloc(void *ptr, size_t size)
 		return NULL;
 
 	HeapEntryHeader *header = header_for_ptr(ptr);
-	if (header->size >= size)
+	size_t old_size = header->size;
+	if (old_size >= size)
 		return ptr;
 
 	void *new_ptr = malloc(size);
-	memcpy(new_ptr, ptr, size);
+	if (new_ptr == NULL)
+		return NULL;
+
+	memcpy(new_ptr, ptr, old_size);
 	free(ptr);
 
 	return new_ptr;
