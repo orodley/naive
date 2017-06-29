@@ -19,17 +19,18 @@ typedef struct HeapEntryHeader
 
 static HeapEntryHeader *heap_free_list = NULL;
 
-static uint8_t *heap_start = NULL;
-static size_t heap_size = 0;
+static uint8_t *heap_block = NULL;
+static size_t heap_block_used = 0;
+static size_t heap_block_size = 0;
 
-uint8_t *ptr_for_header(HeapEntryHeader *header)
+static uint8_t *ptr_for_header(HeapEntryHeader *header)
 {
 	return (uint8_t *)header + sizeof(HeapEntryHeader);
 }
 
-HeapEntryHeader *header_for_ptr(void *ptr)
+static HeapEntryHeader *header_for_ptr(void *ptr)
 {
-	return (HeapEntryHeader *)((uint8_t *)ptr - sizeof(HeapEntryHeader));
+	return (HeapEntryHeader *)((uintptr_t)ptr - sizeof(HeapEntryHeader));
 }
 
 void *malloc(size_t size)
@@ -54,25 +55,27 @@ void *malloc(size_t size)
 		curr_entry = curr_entry->next;
 	}
 
-	size_t old_size = heap_size;
-	heap_size += align_to(sizeof(HeapEntryHeader) + size, 8);
+	size_t extra = align_to(sizeof(HeapEntryHeader) + size, 8);
+	if (heap_block_used + extra > heap_block_size) {
+		if (heap_block_size == 0)
+			heap_block_size = 32768;
+		while (extra > heap_block_size)
+			heap_block_size *= 2;
 
-	if (heap_start == NULL) {
-		heap_start = mmap(NULL, heap_size,
+		heap_block_used = 0;
+		heap_block = mmap(NULL, heap_block_size,
 				PROT_READ | PROT_WRITE,
 				MAP_PRIVATE | MAP_ANONYMOUS,
 				-1, 0);
 
-		if (heap_start == MAP_FAILED) {
-			return NULL;
-		}
-	} else {
-		if (mremap(heap_start, old_size, heap_size, 0) == MAP_FAILED) {
+		if (heap_block == MAP_FAILED) {
 			return NULL;
 		}
 	}
 
-	HeapEntryHeader *new_header = (HeapEntryHeader *)(heap_start + old_size);
+	HeapEntryHeader *new_header = (HeapEntryHeader *)(heap_block + heap_block_used);
+	heap_block_used += extra;
+
 	new_header->next = NULL;
 	new_header->size = size;
 
