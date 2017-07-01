@@ -1974,6 +1974,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		env->case_labels = EMPTY_ARRAY;
 
 		IrBlock *switch_entry = builder->current_block;
+		u32 before_body = builder->current_function->blocks.size;
 		IrBlock *after = add_block(builder, "switch.after");
 		IrBlock *prev_break_target = env->break_target;
 		env->break_target = after;
@@ -1991,7 +1992,11 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 			if (label->is_default) {
 				build_branch(builder, label->block);
 			} else {
-				IrBlock *next = add_block(builder, "switch.cmp");
+				IrBlock *next =
+					pool_alloc(&builder->trans_unit->pool, sizeof *next);
+				block_init(next, "switch.cmp",
+						builder->current_function->blocks.size);
+
 				IrValue cmp = build_binary_instr(builder,
 						OP_EQ,
 						switch_value.value,
@@ -1999,6 +2004,11 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 							label->value->u.integer));
 				build_cond(builder, cmp, label->block, next);
 				builder->current_block = next;
+
+				// @TODO: Shift them all down at once rather than one-by-one.
+				*ARRAY_INSERT(&builder->current_function->blocks,
+						IrBlock *, before_body) = next;
+				before_body++;
 			}
 		}
 
