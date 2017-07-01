@@ -174,6 +174,7 @@ typedef struct ArgClass
 	} u;
 } ArgClass;
 
+// @TODO: Should this be in asm_gen.h instead?
 typedef struct CallSeq
 {
 	u32 stack_space;

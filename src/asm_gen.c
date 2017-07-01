@@ -708,22 +708,32 @@ static void asm_gen_instr(
 				break;
 			}
 			case ARG_CLASS_MEM: {
-				AsmValue location = asm_imm(arg_class->u.mem.offset);
-				if (arg_class->u.mem.size <= 8) {
+				AsmConst location = asm_const_imm(arg_class->u.mem.offset);
+				// @TODO: "remains_in_memory" is kind of a proxy for what we
+				// care about here, which is whether the original is in memory.
+				// This is the case for structs, which are always pointers in
+				// the IR. Maybe we should have a field which sets this
+				// explicitly? We should probably just clean up the frontend
+				// codegen for struct calls instead.
+				if (!arg_class->u.mem.remains_in_memory) {
 					emit_instr2(builder,
 							MOV, 
-							asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
-									location.u.constant)),
+							asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)),
 							arg);
 				} else {
+					// @TODO: This is essentially a really bad open-coding of
+					// memcpy. Adding a call to memcpy would be really awkward
+					// since we're in the middle of a call sequence. We should
+					// either make this smarter or somehow make it go through
+					// the regular memcpy code in IR, which we can optimise
+					// along with other uses of memcpy.
 					u32 src_vreg = next_vreg(builder);
 					append_vreg(builder);
 					u32 temp_vreg = next_vreg(builder);
 					append_vreg(builder);
 					emit_instr2(builder, MOV, asm_vreg(src_vreg, 64), arg);
 					for (u32 i = 0; i < arg_class->u.mem.size; i++) {
-						AsmConst offset =
-							asm_const_imm(location.u.constant.u.immediate + i);
+						AsmConst offset = asm_const_imm(location.u.immediate + i);
 						emit_instr2(builder, MOV, asm_vreg(temp_vreg, 8),
 								asm_deref(asm_vreg(src_vreg, 64)));
 						emit_instr2(builder,

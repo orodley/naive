@@ -2909,6 +2909,11 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 				arg_term = convert_type(builder, arg_term, arg_type);
 			}
 
+			// @TODO: For structs we have a type mismatch in the IR here. We
+			// always handle structs as pointers, so we pass a pointer even
+			// though the type of the argument is $SomeStruct. This all works
+			// because asm_gen expects it, but it's really messy, and should
+			// be cleaned up.
 			arg_array[out_index] = arg_term.value;
 		}
 
