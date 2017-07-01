@@ -71,6 +71,12 @@ typedef struct IrBlock
 
 typedef struct IrFunction
 {
+	// @TODO: Do we even need this? We could just store the entry block, since
+	// the 'cond' and 'branch' instrs at the end of each block form a CFG of
+	// all the blocks that would be in this Array. Then we wouldn't have to do
+	// fiddly stuff to make sure we emit the blocks in the right order, asm_gen
+	// could just do the linearisation itself, in depth-first order or whatever
+	// else it wants.
 	Array(IrBlock *) blocks;
 	u32 curr_instr_id;
 } IrFunction;
