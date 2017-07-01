@@ -139,6 +139,7 @@ static Token _unexpected_token;
             signature = 'static ParserResult %s(Parser *parser)' % name
         self.definitions.append(signature +
                 '\n{' +
+                #('\tprintf("%%u, %s\\n", parser->position);\n' % name) +
                 '\t' + '\n\t'.join(body.split('\n')) +
                 '\n}')
 
