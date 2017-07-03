@@ -1124,6 +1124,7 @@ static void allocate_registers(AsmBuilder *builder)
 	}
 
 	if (flag_dump_live_ranges) {
+		printf("%s:\n", builder->current_function->name);
 		for (u32 i = 0; i < body->size; i++) {
 			AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 			dump_asm_instr(instr);
