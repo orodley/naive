@@ -415,7 +415,6 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_RET_VOID:
-		assert(ir_global->type.u.function.return_type->t == IR_VOID);
 		emit_instr1(builder, JMP, asm_symbol(builder->ret_label));
 
 		break;
