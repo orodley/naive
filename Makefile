@@ -8,7 +8,7 @@ ENC ?= meta/enc.py
 COMMON_CFLAGS := $(CFLAGS) -std=c99 -Werror -Wall -Wextra -Wstrict-prototypes \
 	-Wformat
 NCC_CFLAGS := -Isrc
-NAR_CFLAGS := $(NCC_CFLAGS)
+NAR_CFLAGS = $(NCC_CFLAGS)
 LIBC_CFLAGS := -fno-asynchronous-unwind-tables -ffreestanding -fno-common \
 	-I libc -I libc/include
 
