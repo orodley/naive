@@ -775,7 +775,8 @@ static void asm_gen_instr(
 		// registers used for arguments for any temporary registers used to
 		// copy structs to the stack.
 		for (u32 i = 0; i < arg_vregs.size; i++) {
-			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
+			u32 arg_vreg = *ARRAY_REF(&arg_vregs, u32, i);
+			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, arg_vreg);
 			vreg->live_range_end = builder->current_block->size;
 		}
 
