@@ -777,7 +777,7 @@ static void asm_gen_instr(
 		for (u32 i = 0; i < arg_vregs.size; i++) {
 			u32 arg_vreg = *ARRAY_REF(&arg_vregs, u32, i);
 			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, arg_vreg);
-			vreg->live_range_end = builder->current_block->size;
+			vreg->live_range_end = builder->current_block->size - 1;
 		}
 
 		array_free(&arg_vregs);
