@@ -101,6 +101,9 @@ static u32 next_vreg(AsmBuilder *builder)
 	return builder->virtual_registers.size;
 }
 
+// @TODO: The fact that you have to remember to call this after next_vreg is
+// very error-prone. We should replace the two with a better API, where getting
+// the next vreg automatically appends a vreg.
 static VReg *append_vreg(AsmBuilder *builder)
 {
 	VReg *vreg = ARRAY_APPEND(&builder->virtual_registers, VReg);
@@ -400,17 +403,14 @@ static void asm_gen_instr(
 		IrType struct_type = instr->u.field.struct_type;
 		assert(struct_ptr.type.t == IR_POINTER);
 		assert(struct_type.t == IR_STRUCT);
+
+		AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
+		assign_vreg(builder, instr);
+
 		IrStructField *field =
 			struct_type.u.strukt.fields + instr->u.field.field_number;
-		emit_instr2(builder,
-				MOV,
-				asm_vreg(next_vreg(builder), 64),
-				asm_value(builder, struct_ptr));
-		emit_instr2(builder,
-				ADD,
-				asm_vreg(next_vreg(builder), 64),
-				asm_imm(field->offset));
-		assign_vreg(builder, instr);
+		emit_instr2(builder, MOV, temp_vreg, asm_value(builder, struct_ptr));
+		emit_instr2(builder, ADD, temp_vreg, asm_imm(field->offset));
 
 		break;
 	}
