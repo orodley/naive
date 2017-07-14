@@ -206,6 +206,10 @@ typedef struct AsmSymbol
 	// symbol array plus one, maybe we can compute it in elf.c on Symbol
 	// instead?
 	u32 symtab_index;
+	// @NOTE: This does double duty. During asm_gen it stores the offset from
+	// the start of the function in number of instructions, to be used for
+	// asm-level analysis. After assembly it stores the offset in number of
+	// bytes, for object file emission.
 	u32 offset;
 	u32 size;
 } AsmSymbol;

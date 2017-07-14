@@ -1490,6 +1490,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
 		u32 first_instr_of_block_index = block_index == 0
 			? 0 : builder->current_block->size;
+		block->label->offset = first_instr_of_block_index;
+
 		Array(IrInstr *) *instrs = &block->instrs;
 		for (u32 i = 0; i < instrs->size; i++) {
 			IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
