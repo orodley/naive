@@ -1127,6 +1127,7 @@ static void allocate_registers(AsmBuilder *builder)
 		printf("%s:\n", builder->current_function->name);
 		for (u32 i = 0; i < body->size; i++) {
 			AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
+			printf("%u ", i);
 			dump_asm_instr(instr);
 		}
 
