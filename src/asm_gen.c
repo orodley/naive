@@ -1286,7 +1286,12 @@ static void allocate_registers(AsmBuilder *builder)
 		if (vreg_index != builder->virtual_registers.size) {
 			VReg *next_vreg =
 				ARRAY_REF(&builder->virtual_registers, VReg, vreg_index);
-			if ((u32)next_vreg->live_range_start == i) {
+			// Pre-alloced vregs aren't counted. Otherwise we'd think we need
+			// to spill registers we just used to pass arguments.
+			// @TODO: Perhaps this is too weak of a condition? It'd be nice if
+			// we could still catch errors, where we accidentally pre-allocated
+			// a caller-save register across a callsite.
+			if (!next_vreg->pre_alloced && (u32)next_vreg->live_range_start == i) {
 				assert(next_vreg->t == IN_REG);
 				live_regs_bitset |= 1 << next_vreg->u.assigned_register;
 
