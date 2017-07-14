@@ -16,7 +16,6 @@ typedef struct BitSet
 
 void bit_set_init(BitSet *bit_set, u32 size_in_bits);
 void bit_set_free(BitSet *bit_set);
-void bit_set_copy(BitSet *copy, BitSet *original);
 void bit_set_set_all(BitSet *bit_set);
 void bit_set_clear_all(BitSet *bit_set);
 
@@ -32,16 +31,6 @@ inline void bit_set_set_bit(BitSet *bit_set, u32 index, bool value)
 	} else {
 		bit_set->bits[index / 64] &= ~(1UL << (index % 64));
 	}
-}
-
-inline u32 bit_set_bit_count(BitSet *bit_set)
-{
-	u32 total = 0;
-	for (u32 i = 0; i < SIZE_IN_U64S(bit_set); i++) {
-		total += bit_count(bit_set->bits[i]);
-	}
-
-	return total;
 }
 
 inline i32 bit_set_lowest_set_bit(BitSet *bit_set)
