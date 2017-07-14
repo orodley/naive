@@ -1075,12 +1075,6 @@ static bool is_callee_save(RegClass reg)
 	 (1 << REG_CLASS_D) | (1 << REG_CLASS_C) | (1 << REG_CLASS_R8) | \
 	 (1 << REG_CLASS_R9) | (1 << REG_CLASS_R10) | (1 << REG_CLASS_R11))
 
-typedef struct CallSite
-{
-	u32 instr_index;
-	u32 active_caller_save_regs_bitset;
-} CallSite;
-
 typedef struct Pred
 {
 	u32 dest_offset;
@@ -1528,24 +1522,7 @@ static void allocate_registers(AsmBuilder *builder)
 	free(live_ranges);
 
 	array_clear(&active_vregs);
-	Array(CallSite) callsites;
-	ARRAY_INIT(&callsites, CallSite, 5);
-	u32 live_regs_bitset = 0;
-	u32 total_regs_to_save = 0;
 	u32 vreg_index = 0;
-
-#if 0
-	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
-		VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
-		printf("#%u =", i);
-		switch (vreg->t) {
-		case IN_REG: printf(" (%d)\n", vreg->u.assigned_register); break;
-		case ON_STACK: printf(" [%d]\n", vreg->u.assigned_stack_slot); break;
-		case UNASSIGNED: UNREACHABLE;
-		}
-	}
-#endif
-
 	for (u32 i = 0; i < body->size; i++) {
 		while (active_vregs.size != 0) {
 			VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, 0);
@@ -1554,7 +1531,6 @@ static void allocate_registers(AsmBuilder *builder)
 			if ((u32)active_vreg->live_range_end >= i)
 				break;
 			assert(active_vreg->t == IN_REG);
-			live_regs_bitset &= ~(1 << active_vreg->u.assigned_register);
 
 			// @TODO: Remove all the invalidated vregs at once instead of
 			// repeatedly shifting down.
@@ -1570,7 +1546,6 @@ static void allocate_registers(AsmBuilder *builder)
 			// a caller-save register across a callsite.
 			if (!next_vreg->pre_alloced && (u32)next_vreg->live_range_start == i) {
 				assert(next_vreg->t == IN_REG);
-				live_regs_bitset |= 1 << next_vreg->u.assigned_register;
 
 				u32 insertion_point = active_vregs.size;
 				for (u32 j = 0; j < active_vregs.size; j++) {
@@ -1590,34 +1565,38 @@ static void allocate_registers(AsmBuilder *builder)
 
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 		if (instr->op == CALL) {
-			CallSite *callsite = ARRAY_APPEND(&callsites, CallSite);
-			callsite->instr_index = i;
-			callsite->active_caller_save_regs_bitset =
-				live_regs_bitset & CALLER_SAVE_REGS_BITMASK;
-			total_regs_to_save += bit_count(callsite->active_caller_save_regs_bitset);
+			for (u32 j = 0; j < active_vregs.size; j++) {
+				VReg *vreg = *ARRAY_REF(&active_vregs, VReg *, j);
+				if (vreg->t == IN_REG) {
+					RegClass reg = vreg->u.assigned_register;
+					if (((1 << reg) & CALLER_SAVE_REGS_BITMASK) == 0)
+						continue;
+
+					vreg->t = ON_STACK;
+					vreg->u.assigned_stack_slot = builder->local_stack_usage;
+					builder->local_stack_usage += 8;
+
+					// @TODO: Remove all the spilled vregs at once instead of
+					// repeatedly shifting down.
+					ARRAY_REMOVE(&active_vregs, VReg *, j);
+					j--;
+				}
+			}
 		}
 	}
 	array_free(&active_vregs);
 
 #if 0
-	printf("Total regs to save: %u\n", total_regs_to_save);
-	puts("Callsites:");
-	for (u32 i = 0; i < callsites.size; i++) {
-		CallSite *callsite = ARRAY_REF(&callsites, CallSite, i);
-		printf("%d: [", callsite->instr_index);
-		u32 active_regs = callsite->active_caller_save_regs_bitset;
-		while (active_regs != 0) {
-			u32 lowest_bit = lowest_set_bit(active_regs);
-			printf("%d ", lowest_bit);
-			active_regs &= ~(1 << lowest_bit);
+	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
+		VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
+		printf("#%u =", i);
+		switch (vreg->t) {
+		case IN_REG: printf(" (%d)\n", vreg->u.assigned_register); break;
+		case ON_STACK: printf(" [%d]\n", vreg->u.assigned_stack_slot); break;
+		case UNASSIGNED: UNREACHABLE;
 		}
-		puts("]");
 	}
 #endif
-	// @TODO: Actually write the code to save registers across callsites.
-	assert(total_regs_to_save == 0);
-
-	array_free(&callsites);
 
 	u32 curr_sp_diff = 0;
 	for (u32 i = 0; i < body->size; i++) {
