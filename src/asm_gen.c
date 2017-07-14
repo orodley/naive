@@ -1137,8 +1137,8 @@ static void allocate_registers(AsmBuilder *builder)
 			switch (vreg->t) {
 			// @TODO: Move register dumping stuff we we can dump the name here
 			// rather than just a number
-			case IN_REG: printf(" (%d)", vreg->u.assigned_register);
-			case ON_STACK: printf(" [%d]", vreg->u.assigned_stack_slot);
+			case IN_REG: printf(" (%d)", vreg->u.assigned_register); break;
+			case ON_STACK: printf(" [%d]", vreg->u.assigned_stack_slot); break;
 			case UNASSIGNED: break;
 			}
 			putchar('\n');
