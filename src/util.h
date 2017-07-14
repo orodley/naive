@@ -45,12 +45,12 @@ inline bool strneq(char *a, char *b, u32 length)
 	return strncmp(a, b, length) == 0;
 }
 
-inline u32 lowest_set_bit(u32 x)
+inline u32 lowest_set_bit(u64 x)
 {
 	assert(x != 0);
 
 	u32 i = 0;
-	while ((x & 1) != 1) {
+	while ((x & 1UL) != 1) {
 		x >>= 1;
 		i++;
 	}
@@ -58,14 +58,14 @@ inline u32 lowest_set_bit(u32 x)
 	return i;
 }
 
-inline u32 highest_set_bit(u32 x)
+inline u32 highest_set_bit(u64 x)
 {
 	assert(x != 0);
 
 	u32 n;
 	u32 i = 0;
 	while (x != 0) {
-		if ((x & 1) == 1)
+		if ((x & 1UL) == 1)
 			n = i;
 
 		i++;
