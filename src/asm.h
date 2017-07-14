@@ -96,6 +96,8 @@ typedef struct AsmValue
 	} u;
 } AsmValue;
 
+// @NOTE: Be sure to update compute_live_ranges and allocate_registers if more
+// Jcc instructions are added.
 #define ASM_OPS \
 	X(NOP), \
 	X(MOV), \

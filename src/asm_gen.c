@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "array.h"
+#include "bit_set.h"
 #include "asm.h"
 #include "asm_gen.h"
 #include "flags.h"
@@ -1080,48 +1081,294 @@ typedef struct CallSite
 	u32 active_caller_save_regs_bitset;
 } CallSite;
 
-int compare_live_range_start(const void *a, const void *b)
+typedef struct Pred
 {
-	VReg *live_range_a = *(VReg **)a, *live_range_b = *(VReg **)b;
-	int x = live_range_a->live_range_start, y = live_range_b->live_range_start;
-	if (x < y)
-		return -1;
-	if (x == y)
-		return 0;
+	u32 dest_offset;
+	u32 src_offset;
+} Pred;
+
+int compare_pred_dest(const void *a, const void *b)
+{
+	Pred *pred_a = (Pred *)a, *pred_b = (Pred *)b;
+	if (pred_a->dest_offset < pred_b->dest_offset) return -1;
+	if (pred_a->dest_offset == pred_b->dest_offset) return 0;
 	return 1;
 }
 
-// @TODO: Save all caller save registers that are live across calls.
-// @TODO: Do proper liveness analysis - right now we do nothing about jumps.
-static void allocate_registers(AsmBuilder *builder)
+bool references_vreg(AsmValue value, u32 vreg)
+{
+	Register reg;
+	switch (value.t) {
+	case ASM_VALUE_REGISTER: reg = value.u.reg; break;
+	case ASM_VALUE_OFFSET_REGISTER: reg = value.u.offset_register.reg; break;
+	default: return false;
+	}
+
+	return reg.t == V_REG && reg.u.vreg_number == vreg;
+}
+
+bool is_use(AsmInstr *instr, u32 vreg)
+{
+	for (u32 i = 0; i < instr->arity; i++) {
+		if (references_vreg(instr->args[i], vreg)) {
+			return true;
+		}
+	}
+	for (u32 i = 0; i < instr->num_deps; i++) {
+		if (instr->vreg_deps[i] == vreg) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool is_def(AsmInstr *instr, u32 vreg_num, VReg *vreg)
+{
+	switch (instr->op) {
+	// Special case for pre-allocated return value vregs.
+	case CALL: return vreg->pre_alloced && vreg->u.assigned_register == REG_CLASS_A;
+
+	case CDQ: case CQO:
+		return vreg->pre_alloced && vreg->u.assigned_register == REG_CLASS_D
+			// We're using "is_use" just to check that we're in the vreg_deps
+			// for this instr - we don't want to return true for some random
+			// register that is also pre-allocated to REG_CLASS_D.
+			&& is_use(instr, vreg_num);
+
+	// Special case for zeroing a register by XOR'ing with itself
+	case XOR:
+		return references_vreg(instr->args[0], vreg_num)
+			&& references_vreg(instr->args[1], vreg_num);
+
+	case MOV: case MOVSX: case MOVZX:
+	case POP:
+	case SETE: case SETNE: case SETG: case SETGE: case SETL: case SETLE:
+		return references_vreg(instr->args[0], vreg_num);
+
+	default: return false;
+	}
+}
+
+static void compute_live_ranges(AsmBuilder *builder)
 {
 	Array(AsmInstr) *body = builder->current_block;
+
+	// Liveness is a backwards analysis, so we need access to predecessors for
+	// each instruction. Ordinarily this is something we'd store invasively
+	// rather than in a side table. But in this case that would be awkward
+	// since a) we don't want to increase the size of AsmInstr too much, and b)
+	// an instruction can have arbitrarily many predecessors, so there's no
+	// nice way to store it on AsmInstr.
+	//
+	// Instead we compute a flat table, containing an entry for every jump,
+	// ordered by the destination of the jump. We can look up the predecessors
+	// for the new block we're in once after doing a jump, and multiple
+	// predecessors are stored alongside eachother.
+	//
+	// @NOTE: I'm not sure if this will still work correctly if we add
+	// fallthrough, i.e.: eliminating redundant jumps like:
+	//     jmp a
+	// a:  ...
+	Array(Pred) preds;
+	ARRAY_INIT(&preds, Pred, 20);
 	for (u32 i = 0; i < body->size; i++) {
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
-		for (u32 j = 0; j < instr->arity; j++) {
-			AsmValue *arg = instr->args + j;
-			Register *reg = arg_reg(arg);
-			if (reg != NULL && reg->t == V_REG) {
-				u32 reg_num = reg->u.vreg_number;
-				VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, reg_num);
-				if (vreg->live_range_start == -1) {
-					vreg->live_range_start = vreg->live_range_end = i;
-				} else {
-					vreg->live_range_end = i;
+		switch (instr->op) {
+		case JMP: case JE: break;
+		default: continue;
+		}
+
+		assert(instr->args[0].t == ASM_VALUE_CONST);
+		AsmConst c = instr->args[0].u.constant;
+		assert(c.t == ASM_CONST_SYMBOL);
+		AsmSymbol *target = c.u.symbol;
+
+		if (target != builder->ret_label) {
+			assert(target->offset < body->size);
+
+			Pred *pred = ARRAY_APPEND(&preds, Pred);
+			pred->src_offset = i;
+			pred->dest_offset = target->offset;
+		}
+	}
+	qsort(preds.elements, preds.size, sizeof(Pred), compare_pred_dest);
+
+#if 0
+	for (u32 i = 0; i < preds.size; i++) {
+		Pred *pred = ARRAY_REF(&preds, Pred, i);
+		printf("%u <- %u\n", pred->dest_offset, pred->src_offset);
+	}
+#endif
+
+	// This implements the algorithm described in Mohnen 2002, "A Graph-Free
+	// Approach to Data-Flow Analysis". As the name suggests, we do without
+	// constructing an explicit CFG. See Section 4 in the paper for details.
+	// Note the paragraph at the end of Section 4 - in this case the analysis
+	// is backwards and existential, so both of the adaptations in this
+	// paragraph are applied to the algorithm in Figure 5. The preprocessing to
+	// connect jumps to jump targets is done just above.
+
+	BitSet liveness;
+	bit_set_init(&liveness, body->size);
+	BitSet working_set;
+	bit_set_init(&working_set, body->size);
+
+	for (u32 vreg_num = 0;
+			vreg_num < builder->virtual_registers.size;
+			vreg_num++) {
+		VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, vreg_num);
+
+		bit_set_clear_all(&liveness);
+		bit_set_set_all(&working_set);
+
+		bool recompute_pred_index = true;
+
+		while (!bit_set_is_empty(&working_set)) {
+			u32 pc = bit_set_highest_set_bit(&working_set);
+
+			u32 preds_index = 0;
+			Pred *first_pred = NULL;
+
+			for (;;) {
+				bit_set_set_bit(&working_set, pc, false);
+
+				// This is set the first time through the loop, and any time we
+				// jump. In this case we need to recompute it from scratch.
+				if (recompute_pred_index) {
+					// @TODO: binary search this?
+					for (preds_index = 0; preds_index < preds.size; preds_index++) {
+						first_pred = ARRAY_REF(&preds, Pred, preds_index);
+						if ((u32)pc == first_pred->dest_offset) {
+							break;
+						}
+						if (first_pred->dest_offset > pc) {
+							if (preds_index != 0) {
+								preds_index--;
+								first_pred = ARRAY_REF(&preds, Pred, preds_index);
+							}
+							break;
+						}
+					}
+				} else if (first_pred->dest_offset > pc && preds_index != 0) {
+					// ...otherwise we just need to decrement our index, and
+					// then find the first Pred of the group.
+					u32 dest =
+						ARRAY_REF(&preds, Pred, preds_index - 1)->dest_offset;
+					assert(dest <= pc);
+					while (preds_index != 0
+							&& ARRAY_REF(&preds, Pred, preds_index - 1)->dest_offset == dest) {
+						preds_index--;
+					}
+
+					first_pred = ARRAY_REF(&preds, Pred, preds_index);
 				}
+
+				// We shouldn't be re-examining points that are already live.
+				// If we've shown a vreg to be live at pc the analysis below
+				// will add nothing.
+				assert(!bit_set_get_bit(&liveness, pc));
+
+				// @TODO: We might be able to simplify this somewhat based on
+				// the fact that (I think) our instruction selection always
+				// produces SSA form for vregs.
+
+				AsmInstr *instr = ARRAY_REF(body, AsmInstr, pc);
+				i32 succ0 = -1, succ1 = -1;
+				switch (instr->op) {
+				case JE: {
+					succ1 = pc + 1;
+					// @NOTE: Deliberate fallthrough.
+				}
+				case JMP: {
+					assert(instr->args[0].t == ASM_VALUE_CONST);
+					AsmConst c = instr->args[0].u.constant;
+					assert(c.t == ASM_CONST_SYMBOL);
+					AsmSymbol *target = c.u.symbol;
+
+					if (target != builder->ret_label) {
+						assert(target->offset < body->size);
+						succ0 = target->offset;
+					}
+					break;
+				}
+				default:
+					if (pc != body->size - 1)
+						succ0 = pc + 1;
+					break;
+				}
+
+				bool new;
+				if (is_use(instr, vreg_num)) {
+					new = true;
+				} else if (!((succ0 != -1 && (
+									bit_set_get_bit(&liveness, succ0) && !is_def(
+										ARRAY_REF(body, AsmInstr, succ0), vreg_num, vreg)))
+							|| (succ1 != -1 && (
+									bit_set_get_bit(&liveness, succ1) && !is_def(
+										ARRAY_REF(body, AsmInstr, succ1), vreg_num, vreg))))) {
+					// The big hairy condition above checks if all of our
+					// successors are either not live or a def. If so then
+					// we're not live.
+					new = false;
+				} else {
+					// Otherwise, we have a successor that is live and not a
+					// def, hence we're live.
+					new = true;
+				}
+				bit_set_set_bit(&liveness, pc, new);
+
+				u32 prev;
+				if (first_pred != NULL && first_pred->dest_offset == pc) {
+					prev = first_pred->src_offset;
+				} else if (pc == 0) {
+					break;
+				} else {
+					prev = pc - 1;
+				}
+
+				// Check if we need to add stuff to the working set to deal
+				// with multiple predecessors. We only bother adding
+				// predecessors to the working set if we've refined. If !new
+				// then we definitely haven't, and we can skip the whole loop.
+				// The second half of the refinement check is the liveness
+				// check before adding to working_set below.
+				if (new && first_pred != NULL && first_pred->dest_offset == pc) {
+					for (u32 j = preds_index; j < preds.size; j++) {
+						Pred *pred = ARRAY_REF(&preds, Pred, j);
+						u32 src = pred->src_offset;
+						u32 dest = pred->dest_offset;
+
+						if (dest != pc)
+							break;
+
+						if (!bit_set_get_bit(&liveness, src)) {
+							bit_set_set_bit(&working_set, src, true);
+						}
+					}
+				}
+
+				if (!(new && !bit_set_get_bit(&liveness, prev)))
+					break;
+
+				if (prev != pc - 1)
+					recompute_pred_index = true;
+
+				pc = prev;
 			}
 		}
 
-		for (u32 j = 0; j < instr->num_deps; j++) {
-			u32 reg_num = instr->vreg_deps[j];
-			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, reg_num);
-			if (vreg->live_range_start == -1) {
-				vreg->live_range_start = vreg->live_range_end = i;
-			} else {
-				vreg->live_range_end = i;
-			}
-		}
+		i32 lowest = bit_set_lowest_set_bit(&liveness);
+		if (vreg->live_range_start == -1 || vreg->live_range_start > lowest)
+			vreg->live_range_start = lowest;
+
+		i32 highest = bit_set_highest_set_bit(&liveness);
+		if (vreg->live_range_end == -1 || (highest != -1 && vreg->live_range_end < highest))
+			vreg->live_range_end = highest;
 	}
+
+	bit_set_free(&liveness);
+	bit_set_free(&working_set);
 
 	if (flag_dump_live_ranges) {
 		printf("%s:\n", builder->current_function->name);
@@ -1145,6 +1392,23 @@ static void allocate_registers(AsmBuilder *builder)
 		}
 		putchar('\n');
 	}
+}
+
+int compare_live_range_start(const void *a, const void *b)
+{
+	VReg *live_range_a = *(VReg **)a, *live_range_b = *(VReg **)b;
+	int x = live_range_a->live_range_start, y = live_range_b->live_range_start;
+	if (x < y) return -1;
+	if (x == y) return 0;
+	return 1;
+}
+
+// @TODO: Save all caller save registers that are live across calls.
+static void allocate_registers(AsmBuilder *builder)
+{
+	compute_live_ranges(builder);
+
+	Array(AsmInstr) *body = builder->current_block;
 
 	u32 free_regs_bitset;
 	assert(STATIC_ARRAY_LENGTH(alloc_index_to_reg) < 8 * sizeof free_regs_bitset);
@@ -1172,7 +1436,7 @@ static void allocate_registers(AsmBuilder *builder)
 		live_range_out_index++;
 	}
 	u32 num_live_ranges = live_range_out_index;
-	qsort(live_ranges, num_live_ranges, sizeof live_ranges[0], compare_live_range_start);
+	qsort(live_ranges, num_live_ranges, sizeof *live_ranges, compare_live_range_start);
 
 	Array(VReg *) active_vregs;
 	ARRAY_INIT(&active_vregs, VReg *, 16);
@@ -1269,6 +1533,18 @@ static void allocate_registers(AsmBuilder *builder)
 	u32 live_regs_bitset = 0;
 	u32 total_regs_to_save = 0;
 	u32 vreg_index = 0;
+
+#if 0
+	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
+		VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
+		printf("#%u =", i);
+		switch (vreg->t) {
+		case IN_REG: printf(" (%d)\n", vreg->u.assigned_register); break;
+		case ON_STACK: printf(" [%d]\n", vreg->u.assigned_stack_slot); break;
+		case UNASSIGNED: UNREACHABLE;
+		}
+	}
+#endif
 
 	for (u32 i = 0; i < body->size; i++) {
 		while (active_vregs.size != 0) {
