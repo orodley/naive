@@ -1306,6 +1306,8 @@ static void allocate_registers(AsmBuilder *builder)
 					}
 				}
 				*ARRAY_INSERT(&active_vregs, VReg *, insertion_point) = next_vreg;
+
+				vreg_index++;
 			}
 		}
 
