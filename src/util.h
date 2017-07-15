@@ -58,22 +58,41 @@ inline u32 lowest_set_bit(u64 x)
 	return i;
 }
 
+#define HAS_CLZL 0
+#ifdef __has_builtin
+#if __has_builtin(__builtin_clzl)
+#undef HAS_CLZL
+#define HAS_CLZL 1
+#endif
+#endif
 inline u32 highest_set_bit(u64 x)
 {
 	assert(x != 0);
 
-	u32 n;
-	u32 i = 0;
-	while (x != 0) {
-		if ((x & 1UL) == 1)
-			n = i;
+#if HAS_CLZL
+	return 63 - __builtin_clzl(x);
+#else
+	// The following code is adapted from the section "Find the log base 2 of
+	// an N-bit integer in O(lg(N)) operations" from the famous "Bit Twiddling
+	// Hacks" page:
+	// https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
+	const uint64_t b[] = {
+		0x2, 0xC, 0xF0, 0xFF00, 0xFFFF0000, 0xFFFFFFFF00000000ULL
+	};
+	const unsigned s[] = {1, 2, 4, 8, 16, 32};
 
-		i++;
-		x >>= 1;
+	uint64_t r = 0;
+	for (int i = 5; i >= 0; i--) {
+		if ((x & b[i]) != 0) {
+			x >>= s[i];
+			r |= s[i];
+		}
 	}
 
-	return n;
+	return r;
+#endif
 }
+#undef HAS_CLZL
 
 inline u32 bit_count(u32 x)
 {
