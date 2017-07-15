@@ -1210,12 +1210,23 @@ static void compute_live_ranges(AsmBuilder *builder)
 
 		bit_set_clear_all(&liveness);
 		bit_set_set_all(&working_set);
+		u32 largest_working_set_elem = body->size - 1;
 
 		while (!bit_set_is_empty(&working_set)) {
-			u32 pc = bit_set_highest_set_bit(&working_set);
+			u32 pc = largest_working_set_elem;
 
 			for (;;) {
 				bit_set_set_bit(&working_set, pc, false);
+				if (pc == largest_working_set_elem) {
+					for (i32 i = pc / 64; i >= 0; i--) {
+						u64 bits = working_set.bits[i];
+						if (bits != 0) {
+							largest_working_set_elem =
+								64 * i + highest_set_bit(bits);
+							break;
+						}
+					}
+				}
 
 				// We shouldn't be re-examining points that are already live.
 				// If we've shown a vreg to be live at pc the analysis below
@@ -1301,6 +1312,8 @@ static void compute_live_ranges(AsmBuilder *builder)
 
 						if (!bit_set_get_bit(&liveness, src)) {
 							bit_set_set_bit(&working_set, src, true);
+							if (src > largest_working_set_elem)
+								largest_working_set_elem = src;
 						}
 					}
 				}
