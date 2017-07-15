@@ -1079,6 +1079,8 @@ typedef struct Pred
 {
 	u32 dest_offset;
 	u32 src_offset;
+
+	struct Pred *next;
 } Pred;
 
 int compare_pred_dest(const void *a, const void *b)
@@ -1149,23 +1151,14 @@ static void compute_live_ranges(AsmBuilder *builder)
 	Array(AsmInstr) *body = builder->current_block;
 
 	// Liveness is a backwards analysis, so we need access to predecessors for
-	// each instruction. Ordinarily this is something we'd store invasively
-	// rather than in a side table. But in this case that would be awkward
-	// since a) we don't want to increase the size of AsmInstr too much, and b)
-	// an instruction can have arbitrarily many predecessors, so there's no
-	// nice way to store it on AsmInstr.
-	//
-	// Instead we compute a flat table, containing an entry for every jump,
-	// ordered by the destination of the jump. We can look up the predecessors
-	// for the new block we're in once after doing a jump, and multiple
-	// predecessors are stored alongside eachother.
+	// each instruction. These are stored intrusively on AsmSymbol.
 	//
 	// @NOTE: I'm not sure if this will still work correctly if we add
 	// fallthrough, i.e.: eliminating redundant jumps like:
 	//     jmp a
 	// a:  ...
-	Array(Pred) preds;
-	ARRAY_INIT(&preds, Pred, 20);
+	Pool preds_pool;
+	pool_init(&preds_pool, 512);
 	for (u32 i = 0; i < body->size; i++) {
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 		switch (instr->op) {
@@ -1181,19 +1174,21 @@ static void compute_live_ranges(AsmBuilder *builder)
 		if (target != builder->ret_label) {
 			assert(target->offset < body->size);
 
-			Pred *pred = ARRAY_APPEND(&preds, Pred);
-			pred->src_offset = i;
-			pred->dest_offset = target->offset;
+			Pred **location = &target->pred;
+			Pred *pred = target->pred;
+			while (pred != NULL && pred->next != NULL) {
+				pred = pred->next;
+				location = &pred->next;
+			}
+
+			Pred *new_pred = pool_alloc(&preds_pool, sizeof *pred);
+			new_pred->src_offset = i;
+			new_pred->dest_offset = target->offset;
+			new_pred->next = NULL;
+
+			*location = new_pred;
 		}
 	}
-	qsort(preds.elements, preds.size, sizeof(Pred), compare_pred_dest);
-
-#if 0
-	for (u32 i = 0; i < preds.size; i++) {
-		Pred *pred = ARRAY_REF(&preds, Pred, i);
-		printf("%u <- %u\n", pred->dest_offset, pred->src_offset);
-	}
-#endif
 
 	// This implements the algorithm described in Mohnen 2002, "A Graph-Free
 	// Approach to Data-Flow Analysis". As the name suggests, we do without
@@ -1216,47 +1211,11 @@ static void compute_live_ranges(AsmBuilder *builder)
 		bit_set_clear_all(&liveness);
 		bit_set_set_all(&working_set);
 
-		bool recompute_pred_index = true;
-
 		while (!bit_set_is_empty(&working_set)) {
 			u32 pc = bit_set_highest_set_bit(&working_set);
 
-			u32 preds_index = 0;
-			Pred *first_pred = NULL;
-
 			for (;;) {
 				bit_set_set_bit(&working_set, pc, false);
-
-				// This is set the first time through the loop, and any time we
-				// jump. In this case we need to recompute it from scratch.
-				if (recompute_pred_index) {
-					// @TODO: binary search this?
-					for (preds_index = 0; preds_index < preds.size; preds_index++) {
-						first_pred = ARRAY_REF(&preds, Pred, preds_index);
-						if ((u32)pc == first_pred->dest_offset) {
-							break;
-						}
-						if (first_pred->dest_offset > pc) {
-							if (preds_index != 0) {
-								preds_index--;
-								first_pred = ARRAY_REF(&preds, Pred, preds_index);
-							}
-							break;
-						}
-					}
-				} else if (first_pred->dest_offset > pc && preds_index != 0) {
-					// ...otherwise we just need to decrement our index, and
-					// then find the first Pred of the group.
-					u32 dest =
-						ARRAY_REF(&preds, Pred, preds_index - 1)->dest_offset;
-					assert(dest <= pc);
-					while (preds_index != 0
-							&& ARRAY_REF(&preds, Pred, preds_index - 1)->dest_offset == dest) {
-						preds_index--;
-					}
-
-					first_pred = ARRAY_REF(&preds, Pred, preds_index);
-				}
 
 				// We shouldn't be re-examining points that are already live.
 				// If we've shown a vreg to be live at pc the analysis below
@@ -1313,8 +1272,12 @@ static void compute_live_ranges(AsmBuilder *builder)
 				bit_set_set_bit(&liveness, pc, new);
 
 				u32 prev;
-				if (first_pred != NULL && first_pred->dest_offset == pc) {
-					prev = first_pred->src_offset;
+				Pred *pred = NULL;
+				if (instr->label != NULL)
+					pred = instr->label->pred;
+
+				if (pred != NULL && pred->dest_offset == pc) {
+					prev = pred->src_offset;
 				} else if (pc == 0) {
 					break;
 				} else {
@@ -1327,9 +1290,9 @@ static void compute_live_ranges(AsmBuilder *builder)
 				// then we definitely haven't, and we can skip the whole loop.
 				// The second half of the refinement check is the liveness
 				// check before adding to working_set below.
-				if (new && first_pred != NULL && first_pred->dest_offset == pc) {
-					for (u32 j = preds_index; j < preds.size; j++) {
-						Pred *pred = ARRAY_REF(&preds, Pred, j);
+				if (new && pred != NULL) {
+					pred = pred->next;
+					while (pred != NULL) {
 						u32 src = pred->src_offset;
 						u32 dest = pred->dest_offset;
 
@@ -1345,9 +1308,6 @@ static void compute_live_ranges(AsmBuilder *builder)
 				if (!(new && !bit_set_get_bit(&liveness, prev)))
 					break;
 
-				if (prev != pc - 1)
-					recompute_pred_index = true;
-
 				pc = prev;
 			}
 		}
@@ -1361,6 +1321,7 @@ static void compute_live_ranges(AsmBuilder *builder)
 			vreg->live_range_end = highest;
 	}
 
+	pool_free(&preds_pool);
 	bit_set_free(&liveness);
 	bit_set_free(&working_set);
 
@@ -1686,6 +1647,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		.section = TEXT_SECTION,
 		.defined = true,
 		.linkage = ASM_LOCAL_LINKAGE,
+		.pred = NULL,
 	};
 	builder->ret_label = ret_label;
 
@@ -1707,6 +1669,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 			.section = TEXT_SECTION,
 			.defined = true,
 			.linkage = ASM_LOCAL_LINKAGE,
+			.pred = NULL,
 		};
 	}
 
@@ -1974,6 +1937,7 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
 		asm_symbol->defined = ir_global->initializer != NULL;
 		asm_symbol->section = section;
 		asm_symbol->offset = 0;
+		asm_symbol->pred = NULL;
 
 		switch (ir_global->linkage) {
 		case IR_GLOBAL_LINKAGE: asm_symbol->linkage = ASM_GLOBAL_LINKAGE; break;

@@ -214,6 +214,9 @@ typedef struct AsmSymbol
 	// bytes, for object file emission.
 	u32 offset;
 	u32 size;
+
+	// Used for asm_gen
+	struct Pred *pred;
 } AsmSymbol;
 
 typedef enum FixupType
