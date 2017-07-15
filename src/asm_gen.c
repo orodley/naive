@@ -1544,9 +1544,9 @@ static void allocate_registers(AsmBuilder *builder)
 			// @TODO: Perhaps this is too weak of a condition? It'd be nice if
 			// we could still catch errors, where we accidentally pre-allocated
 			// a caller-save register across a callsite.
-			if (!next_vreg->pre_alloced && (u32)next_vreg->live_range_start == i) {
-				assert(next_vreg->t == IN_REG);
-
+			if (next_vreg->t == IN_REG
+					&& !next_vreg->pre_alloced
+					&& (u32)next_vreg->live_range_start == i) {
 				u32 insertion_point = active_vregs.size;
 				for (u32 j = 0; j < active_vregs.size; j++) {
 					VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, j);
