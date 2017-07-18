@@ -487,7 +487,6 @@ static void asm_gen_instr(
 		IrType type = ir_value.type;
 		u32 bit_width = size_of_ir_type(type) * 8;
 
-		AsmValue pointer = asm_value(builder, ir_pointer);
 		AsmValue value = asm_value(builder, ir_value);
 		switch (value.t) {
 		case ASM_VALUE_REGISTER:
@@ -497,7 +496,6 @@ static void asm_gen_instr(
 			if (size_of_ir_type(type) == 8) {
 				AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
 				emit_instr2(builder, MOV, temp_vreg, value);
-				emit_instr2(builder, MOV, asm_deref(pointer), temp_vreg);
 				append_vreg(builder);
 				value = temp_vreg;
 
@@ -541,6 +539,7 @@ static void asm_gen_instr(
 						asm_const_symbol(ir_pointer.u.global->asm_symbol));
 			emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
 		} else {
+			AsmValue pointer = asm_value(builder, ir_pointer);
 			emit_instr2(builder, MOV, asm_deref(pointer), value);
 		}
 
