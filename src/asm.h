@@ -130,6 +130,11 @@ typedef struct AsmValue
 	X(TEST), \
 	X(JMP), \
 	X(JE), \
+	X(JNE), \
+	X(JG), \
+	X(JGE), \
+	X(JL), \
+	X(JLE), \
 	X(ADC), \
 	X(SBB)
 

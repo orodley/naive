@@ -136,6 +136,8 @@ static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 	return asm_vreg(vreg_number, width);
 }
 
+static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr);
+
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
 	switch (value.t) {
@@ -187,6 +189,12 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 
 			return temp_vreg;
 		}
+		// @NOTE: Handled specially for a similar reason to OP_FIELD and
+		// OP_LOCAL above. These instructions are mostly used as the argument
+		// to OP_COND, so we let OP_COND match them itself in those cases.
+		case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT:
+		case OP_LTE:
+			return asm_gen_relational_instr(builder, instr);
 		case OP_CAST: {
 			AsmValue cast_value = asm_value(builder, instr->u.arg);
 			if (cast_value.t == ASM_VALUE_REGISTER)
@@ -236,6 +244,8 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 			}
 		}
 		}
+
+		UNREACHABLE;
 	}
 	case VALUE_GLOBAL: {
 		AsmSymbol *symbol = value.u.global->asm_symbol;
@@ -273,6 +283,67 @@ static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
 	return asm_value;
 }
 
+static IrOp maybe_flip_conditional(IrOp op, IrValue *arg1, IrValue *arg2)
+{
+	if (arg1->t != VALUE_CONST)
+		return op;
+
+	// The only form of comparison between a register and an immediate has the
+	// immediate on the RHS. So we need to swap the LHS and RHS if the
+	// immediate is on the LHS.
+	IrOp flipped;
+	switch (op) {
+	// Antisymmetric relations.
+	case OP_GT: flipped = OP_LT; break;
+	case OP_LT: flipped = OP_GT; break;
+	case OP_GTE: flipped = OP_LTE; break;
+	case OP_LTE: flipped = OP_GTE; break;
+	// Symmetric relations.
+	case OP_EQ: flipped = OP_EQ; break;
+	case OP_NEQ: flipped = OP_NEQ; break;
+	default: UNREACHABLE;
+	}
+
+	IrValue temp = *arg1;
+	*arg1 = *arg2;
+	*arg2 = temp;
+
+	return flipped;
+}
+
+static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
+{
+	IrValue arg1 = instr->u.binary_op.arg1;
+	IrValue arg2 = instr->u.binary_op.arg2;
+	IrOp ir_op = maybe_flip_conditional(instr->op, &arg1, &arg2);
+
+	AsmOp op;
+	switch (ir_op) {
+	case OP_EQ: op = SETE; break;
+	case OP_NEQ: op = SETNE; break;
+	case OP_GT: op = SETG; break;
+	case OP_GTE: op = SETGE; break;
+	case OP_LT: op = SETL; break;
+	case OP_LTE: op = SETLE; break;
+	default: UNREACHABLE;
+	}
+
+	AsmValue asm_arg1 = asm_value(builder, arg1);
+	AsmValue asm_arg2 = asm_value(builder, arg2);
+
+	u32 vreg = next_vreg(builder);
+	append_vreg(builder);
+
+	assert(asm_arg1.t == ASM_VALUE_REGISTER);
+
+	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
+	emit_instr2(builder, CMP, asm_arg1,
+			maybe_move_const_to_reg(builder, asm_arg2, asm_arg1.u.reg.width, true));
+	emit_instr1(builder, op, asm_vreg(vreg, 8));
+
+	return asm_vreg(vreg, 32);
+}
+
 static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 {
 	assert(instr->type.t == IR_INT);
@@ -286,46 +357,6 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 	emit_instr2(builder, MOV, target, arg1);
 	emit_instr2(builder, op, target, maybe_move_const_to_reg(builder,
 				arg2, instr->type.u.bit_width, is_sign_extending_op(op)));
-}
-
-static void asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
-{
-	AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
-	AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
-
-	// The only form of comparison between a register and an immediate has the
-	// immediate on the RHS. So we need to swap the LHS and RHS if the
-	// immediate is on the LHS.
-	if (arg1.t == ASM_VALUE_CONST) {
-		AsmOp flipped;
-		switch (op) {
-		case SETG: flipped = SETL; break;
-		case SETL: flipped = SETG; break;
-		case SETGE: flipped = SETLE; break;
-		case SETLE: flipped = SETGE; break;
-
-		case SETE: flipped = SETE; break;
-		case SETNE: flipped = SETNE; break;
-
-		default: UNREACHABLE;
-		}
-
-		AsmValue temp = arg1;
-		arg1 = arg2;
-		arg2 = temp;
-
-		op = flipped;
-	}
-
-	u32 vreg = next_vreg(builder);
-	assign_vreg(builder, instr);
-
-	assert(arg1.t == ASM_VALUE_REGISTER);
-
-	emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
-	emit_instr2(builder, CMP, arg1,
-			maybe_move_const_to_reg(builder, arg2, arg1.u.reg.width, true));
-	emit_instr1(builder, op, asm_vreg(vreg, 8));
 }
 
 static void handle_phi_nodes(AsmBuilder *builder, IrBlock *src_block,
@@ -502,6 +533,38 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 	}
 }
 
+static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
+{
+	assert(cond->op == OP_COND);
+	IrValue condition = cond->u.cond.condition;
+
+	if (condition.t != VALUE_INSTR)
+		return false;
+
+	IrInstr *cond_instr = condition.u.instr;
+
+	IrValue arg1 = cond_instr->u.binary_op.arg1;
+	IrValue arg2 = cond_instr->u.binary_op.arg2;
+	IrOp ir_op = maybe_flip_conditional(cond_instr->op, &arg1, &arg2);
+
+	AsmOp jcc;
+	switch (ir_op) {
+	case OP_EQ: jcc = JE; break;
+	case OP_NEQ: jcc = JNE; break;
+	case OP_GT: jcc = JG; break;
+	case OP_GTE: jcc = JGE; break;
+	case OP_LT: jcc = JL; break;
+	case OP_LTE: jcc = JLE; break;
+	default: return false;
+	}
+
+	emit_instr2(builder, CMP, asm_value(builder, arg1), asm_value(builder, arg2));
+	emit_instr1(builder, jcc, asm_symbol(cond->u.cond.then_block->label));
+	// The "else" case is handled by the caller.
+
+	return true;
+}
+
 static void asm_gen_instr(
 		AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block, IrInstr *instr)
 {
@@ -515,11 +578,10 @@ static void asm_gen_instr(
 
 		break;
 	}
-	case OP_FIELD: {
+	case OP_FIELD:
 		// Don't do anything. OP_STORE and OP_LOAD handle args of type OP_FIELD
 		// directly, and others uses are handled by asm_value.
 		break;
-	}
 	case OP_RET_VOID:
 		emit_instr1(builder, JMP, asm_symbol(builder->ret_label));
 
@@ -568,11 +630,16 @@ static void asm_gen_instr(
 			// still compile the resulting IR correctly even if it's suboptimal.
 			handle_phi_nodes(builder, curr_block, other_block);
 		} else {
-			handle_phi_nodes(builder, curr_block, instr->u.cond.else_block);
-			emit_instr2(builder, CMP, asm_value(builder, condition), asm_imm(0));
-			emit_instr1(builder, JE, asm_symbol(instr->u.cond.else_block->label));
 			handle_phi_nodes(builder, curr_block, instr->u.cond.then_block);
-			emit_instr1(builder, JMP, asm_symbol(instr->u.cond.then_block->label));
+
+			// @TODO: Special case isel for OP_NOT as well.
+			if (!asm_gen_cond_of_cmp(builder, instr)) {
+				emit_instr2(builder, CMP, asm_value(builder, condition), asm_imm(0));
+				emit_instr1(builder, JNE, asm_symbol(instr->u.cond.then_block->label));
+			}
+
+			handle_phi_nodes(builder, curr_block, instr->u.cond.else_block);
+			emit_instr1(builder, JMP, asm_symbol(instr->u.cond.else_block->label));
 		}
 		break;
 	}
@@ -1023,12 +1090,10 @@ static void asm_gen_instr(
 		add_dep(idiv, remainder);
 		break;
 	}
-	case OP_EQ: asm_gen_relational_instr(builder, instr, SETE); break;
-	case OP_NEQ: asm_gen_relational_instr(builder, instr, SETNE); break;
-	case OP_GT: asm_gen_relational_instr(builder, instr, SETG); break;
-	case OP_GTE: asm_gen_relational_instr(builder, instr, SETGE); break;
-	case OP_LT: asm_gen_relational_instr(builder, instr, SETL); break;
-	case OP_LTE: asm_gen_relational_instr(builder, instr, SETLE); break;
+	// @NOTE: Handled specially for a similar reason to OP_FIELD and OP_LOCAL
+	// above. These instructions are mostly used as the argument to OP_COND, so
+	// we let OP_COND match them itself in those cases.
+	case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE: break;
 	case OP_BUILTIN_VA_START: {
 		AsmValue va_list_ptr = asm_vreg(next_vreg(builder), 64);
 		append_vreg(builder);
@@ -1250,7 +1315,8 @@ static void compute_live_ranges(AsmBuilder *builder)
 	for (u32 i = 0; i < body->size; i++) {
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 		switch (instr->op) {
-		case JMP: case JE: break;
+		case JMP: case JE: case JNE: case JG: case JGE: case JL: case JLE:
+			break;
 		default: continue;
 		}
 
@@ -1328,10 +1394,9 @@ static void compute_live_ranges(AsmBuilder *builder)
 				AsmInstr *instr = ARRAY_REF(body, AsmInstr, pc);
 				i32 succ0 = -1, succ1 = -1;
 				switch (instr->op) {
-				case JE: {
+				case JE: case JNE: case JG: case JGE: case JL: case JLE:
 					succ1 = pc + 1;
 					// @NOTE: Deliberate fallthrough.
-				}
 				case JMP: {
 					assert(instr->args[0].t == ASM_VALUE_CONST);
 					AsmConst c = instr->args[0].u.constant;

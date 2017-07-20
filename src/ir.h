@@ -147,6 +147,9 @@ typedef struct IrValue
 	} u;
 } IrValue;
 
+// @TODO: Maybe all the relational operations should be folded into OP_CMP with
+// an enum arg that determines the type of comparision? They are all handled
+// the same way besides the particular comparision op anyway.
 #define IR_OPS \
 	X(OP_INVALID), \
 \
