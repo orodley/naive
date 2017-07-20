@@ -383,7 +383,9 @@ static void dump_const(IrConst *konst)
 				IrInstr *instr = *ARRAY_REF(instrs, IrInstr *, i);
 				putchar('\t');
 				if (instr->type.t != IR_VOID) {
-					printf("#%u = ", instr->id);
+					printf("#%u ", instr->id);
+					dump_ir_type(instr->type);
+					fputs(" = ", stdout);
 				}
 				dump_instr(instr);
 			}
