@@ -542,13 +542,16 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 
 		switch (reg) {
 		case REG_CLASS_A: case REG_CLASS_C: case REG_CLASS_D: case REG_CLASS_B:
-		case REG_CLASS_BP: case REG_CLASS_SI: case REG_CLASS_DI: {
+		case REG_CLASS_BP: case REG_CLASS_SI: case REG_CLASS_DI:
+		case REG_CLASS_R8: case REG_CLASS_R9: case REG_CLASS_R10:
+		case REG_CLASS_R11: case REG_CLASS_R13: case REG_CLASS_R14:
+		case REG_CLASS_R15: {
 			encoded_instr->rm = encoded_register_number(reg);
 			break;
 		}
-		case REG_CLASS_SP:
+		case REG_CLASS_R12: case REG_CLASS_SP:
 			// Same as above: SIB addressing
-			encoded_instr->rm = 4;
+			encoded_instr->rm = encoded_register_number(reg);
 			encoded_instr->has_sib = true;
 			encoded_instr->scale = 0;
 			encoded_instr->index = 4;

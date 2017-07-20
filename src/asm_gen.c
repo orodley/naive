@@ -145,6 +145,18 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 		IrInstr *instr = value.u.instr;
 
 		switch (instr->op) {
+		// Most of the time OP_LOCAL and OP_FIELD are used only for OP_STORE
+		// and OP_LOAD. In those cases we can usually fold the offset into the
+		// MOV. If we use it for something else, we hit the cases below as a
+		// fallback.
+		// @TODO: The code below for OP_LOCAL and OP_FIELD always adds
+		// instructions, even if it's called multiple times. We could check if
+		// we've already asm_gen'ed these instructions and use the same vregs
+		// we used last time, but it's not clear that rematerializing the value
+		// is actually more expensive than introducing potentially very large
+		// live ranges and hurting register allocation. It's a moot point for
+		// now anyway, since our ISel generally won't produce multiple uses of
+		// OP_FIELD instrs.
 		case OP_LOCAL: {
 			u32 vreg = next_vreg(builder);
 			emit_instr2(builder,
@@ -157,6 +169,23 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 					asm_imm(instr->u.local.stack_offset + builder->curr_sp_diff));
 			append_vreg(builder);
 			return asm_vreg(vreg, 64);
+		}
+		// @TODO: Call asm_gen_pointer_instr and use LEA.
+		case OP_FIELD: {
+			IrValue struct_ptr = instr->u.field.struct_ptr;
+			IrType struct_type = instr->u.field.struct_type;
+			assert(struct_ptr.type.t == IR_POINTER);
+			assert(struct_type.t == IR_STRUCT);
+
+			AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
+			assign_vreg(builder, instr);
+
+			IrStructField *field =
+				struct_type.u.strukt.fields + instr->u.field.field_number;
+			emit_instr2(builder, MOV, temp_vreg, asm_value(builder, struct_ptr));
+			emit_instr2(builder, ADD, temp_vreg, asm_imm(field->offset));
+
+			return temp_vreg;
 		}
 		case OP_CAST: {
 			AsmValue cast_value = asm_value(builder, instr->u.arg);
@@ -386,6 +415,93 @@ static CallSeq classify_arguments(u32 arity, IrType *arg_types)
 	};
 }
 
+static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
+{
+	switch (pointer.t) {
+	case VALUE_INSTR: {
+		IrInstr *instr = pointer.u.instr;
+		switch (instr->op) {
+		case OP_LOCAL: {
+			u32 offset = instr->u.local.stack_offset + builder->curr_sp_diff;
+			return asm_offset_reg(REG_CLASS_SP, 64, asm_const_imm(offset));
+		}
+		case OP_FIELD: {
+			AsmValue inner =
+				asm_gen_pointer_instr(builder, instr->u.field.struct_ptr);
+			IrType struct_type = instr->u.field.struct_type;
+			IrStructField *field =
+				struct_type.u.strukt.fields + instr->u.field.field_number;
+
+			if (field->offset == 0)
+				return inner;
+
+			switch (inner.t) {
+			case ASM_VALUE_REGISTER:
+				return (AsmValue) {
+					.t = ASM_VALUE_OFFSET_REGISTER,
+					.u.offset_register.reg = inner.u.reg,
+					.u.offset_register.offset = asm_const_imm(field->offset),
+				};
+			case ASM_VALUE_OFFSET_REGISTER: {
+				AsmConst offset = inner.u.offset_register.offset;
+				switch (offset.t) {
+				case ASM_CONST_IMMEDIATE:
+					return (AsmValue) {
+						.t = ASM_VALUE_OFFSET_REGISTER,
+						.u.offset_register.reg = inner.u.offset_register.reg,
+						.u.offset_register.offset = asm_const_imm(
+								offset.u.immediate + field->offset),
+					};
+				case ASM_CONST_SYMBOL: {
+					// @TODO: In this case we should still be able to use an
+					// offset register, but we'd need to use a .rela relocation
+					// with an additional offset, which we currently don't
+					// support. Until then we just use an ADD. Since this
+					// returns a vreg we can at least fold any additional
+					// offsets into an offset_register.
+					AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
+					assign_vreg(builder, instr);
+
+					emit_instr2(builder, MOV, temp_vreg, asm_symbol(offset.u.symbol));
+
+					return temp_vreg;
+				}
+				case ASM_CONST_FIXED_IMMEDIATE:
+					UNREACHABLE;
+				}
+				break;
+			}
+			default:
+				break;
+			}
+
+			// Fall back to computing the offset using ADD in cases where we
+			// can't use an offset register.
+			AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
+			assign_vreg(builder, instr);
+
+			emit_instr2(builder, MOV, temp_vreg, inner);
+			emit_instr2(builder, ADD, temp_vreg, asm_imm(field->offset));
+
+			return asm_value(builder, pointer);
+		}
+		// @TODO: Handle OP_ADD and OP_SUB. This is a bit trickier because I
+		// think we have to reach through casts?
+		default:
+			return asm_value(builder, pointer);
+		}
+	}
+	case VALUE_GLOBAL: {
+		return asm_offset_reg(REG_CLASS_IP, 64,
+				asm_const_symbol(pointer.u.global->asm_symbol));
+	}
+	// @TODO: Handle globals. This is essentially the same as OP_LOCAL, but
+	// RIP-relative rather than RSP-relative.
+	default:
+		return asm_value(builder, pointer);
+	}
+}
+
 static void asm_gen_instr(
 		AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block, IrInstr *instr)
 {
@@ -400,19 +516,8 @@ static void asm_gen_instr(
 		break;
 	}
 	case OP_FIELD: {
-		IrValue struct_ptr = instr->u.field.struct_ptr;
-		IrType struct_type = instr->u.field.struct_type;
-		assert(struct_ptr.type.t == IR_POINTER);
-		assert(struct_type.t == IR_STRUCT);
-
-		AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
-		assign_vreg(builder, instr);
-
-		IrStructField *field =
-			struct_type.u.strukt.fields + instr->u.field.field_number;
-		emit_instr2(builder, MOV, temp_vreg, asm_value(builder, struct_ptr));
-		emit_instr2(builder, ADD, temp_vreg, asm_imm(field->offset));
-
+		// Don't do anything. OP_STORE and OP_LOAD handle args of type OP_FIELD
+		// directly, and others uses are handled by asm_value.
 		break;
 	}
 	case OP_RET_VOID:
@@ -518,20 +623,9 @@ static void asm_gen_instr(
 			UNREACHABLE;
 		}
 
-		// Use offset_register directly where we can, to fold the addition into
-		// the MOV rather than having a separate instruction.
-		bool directly_storeable = value.t == ASM_VALUE_REGISTER ||
-			(value.t == ASM_VALUE_CONST
-			 && (value.u.constant.t == ASM_CONST_IMMEDIATE
-				 || value.u.constant.t == ASM_CONST_FIXED_IMMEDIATE));
-		if (ir_pointer.t == VALUE_INSTR && ir_pointer.u.instr->op == OP_LOCAL
-				&& directly_storeable) {
-			u32 offset = ir_pointer.u.instr->u.local.stack_offset
-				+ builder->curr_sp_diff;
-			AsmValue stack_address =
-				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const_imm(offset)));
-			emit_instr2(builder, MOV, stack_address, value);
-		} else if (ir_pointer.t == VALUE_GLOBAL) {
+		AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
+
+		if (ir_pointer.t == VALUE_GLOBAL) {
 			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
@@ -539,36 +633,31 @@ static void asm_gen_instr(
 						asm_const_symbol(ir_pointer.u.global->asm_symbol));
 			emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
 		} else {
-			AsmValue pointer = asm_value(builder, ir_pointer);
 			emit_instr2(builder, MOV, asm_deref(pointer), value);
 		}
 
 		break;
 	}
 	case OP_LOAD: {
-		IrValue pointer = instr->u.load.pointer;
+		IrValue ir_pointer = instr->u.load.pointer;
 		IrType type = instr->u.load.type;
 		AsmValue target = asm_vreg(next_vreg(builder), size_of_ir_type(type) * 8);
 		assign_vreg(builder, instr);
 
-		if (pointer.t == VALUE_INSTR && pointer.u.instr->op == OP_LOCAL) {
-			u32 offset = pointer.u.instr->u.local.stack_offset
-				+ builder->curr_sp_diff;
-			AsmValue stack_address =
-				asm_deref(asm_offset_reg(REG_CLASS_SP, 64, asm_const_imm(offset)));
-			emit_instr2(builder, MOV, target, stack_address);
-		} else if (pointer.t == VALUE_GLOBAL) {
+		AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
+
+		if (pointer.t == VALUE_GLOBAL) {
 			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
 						64,
-						asm_const_symbol(pointer.u.global->asm_symbol));
+						asm_const_symbol(ir_pointer.u.global->asm_symbol));
 			emit_instr2(builder,
 					MOV,
 					target,
 					asm_deref(rip_relative_addr));
 		} else {
-			emit_instr2(builder, MOV, target, asm_deref(asm_value(builder, pointer)));
+			emit_instr2(builder, MOV, target, asm_deref(pointer));
 		}
 
 		break;
