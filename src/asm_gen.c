@@ -1733,6 +1733,11 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 		first_instr_of_block->label = block->label;
 	}
 
+	if (flag_print_pre_regalloc_stats) {
+		printf("%s: %u instrs, %u vregs\n",
+				ir_global->name, body.size, builder->virtual_registers.size);
+	}
+
 	allocate_registers(builder);
 
 	u32 used_callee_save_regs_bitset = 0;

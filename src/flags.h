@@ -4,5 +4,6 @@
 #include "misc.h"
 
 extern bool flag_dump_live_ranges;
+extern bool flag_print_pre_regalloc_stats;
 
 #endif
