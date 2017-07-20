@@ -243,7 +243,7 @@ typedef struct IrInstr
 		struct
 		{
 			IrType type;
-			u32 stack_offset;
+			u32 stack_offset; // used by asm_gen
 		} local;
 		struct
 		{
