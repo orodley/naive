@@ -1435,6 +1435,7 @@ bool is_def(AsmInstr *instr, u32 vreg_num, VReg *vreg)
 
 	case MOV: case MOVSX: case MOVZX:
 	case POP:
+	case IMUL:
 	case SETE: case SETNE: case SETG: case SETGE: case SETL: case SETLE:
 		return references_vreg(instr->args[0], vreg_num);
 
