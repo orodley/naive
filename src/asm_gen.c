@@ -174,18 +174,27 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 		}
 		// @TODO: Call asm_gen_pointer_instr and use LEA.
 		case OP_FIELD: {
-			IrValue struct_ptr = instr->u.field.struct_ptr;
-			IrType struct_type = instr->u.field.struct_type;
-			assert(struct_ptr.type.t == IR_POINTER);
-			assert(struct_type.t == IR_STRUCT);
+			IrValue ptr = instr->u.field.ptr;
+			IrType type = instr->u.field.type;
+			u32 field_num = instr->u.field.field_number;
+			assert(ptr.type.t == IR_POINTER);
 
 			AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
 			assign_vreg(builder, instr);
 
-			IrStructField *field =
-				struct_type.u.strukt.fields + instr->u.field.field_number;
-			emit_instr2(builder, MOV, temp_vreg, asm_value(builder, struct_ptr));
-			emit_instr2(builder, ADD, temp_vreg, asm_imm(field->offset));
+			u32 offset;
+			switch (type.t) {
+			case IR_STRUCT:
+				offset = type.u.strukt.fields[field_num].offset;
+				break;
+			case IR_ARRAY:
+				offset = size_of_ir_type(*type.u.array.elem_type) * field_num;
+				break;
+			default:
+				UNREACHABLE;
+			}
+			emit_instr2(builder, MOV, temp_vreg, asm_value(builder, ptr));
+			emit_instr2(builder, ADD, temp_vreg, asm_imm(offset));
 
 			return temp_vreg;
 		}
@@ -458,12 +467,23 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 		}
 		case OP_FIELD: {
 			AsmValue inner =
-				asm_gen_pointer_instr(builder, instr->u.field.struct_ptr);
-			IrType struct_type = instr->u.field.struct_type;
-			IrStructField *field =
-				struct_type.u.strukt.fields + instr->u.field.field_number;
+				asm_gen_pointer_instr(builder, instr->u.field.ptr);
+			IrType type = instr->u.field.type;
+			u32 field_num = instr->u.field.field_number;
 
-			if (field->offset == 0)
+			u32 offset;
+			switch (type.t) {
+			case IR_STRUCT:
+				offset = type.u.strukt.fields[field_num].offset;
+				break;
+			case IR_ARRAY:
+				offset = size_of_ir_type(*type.u.array.elem_type) * field_num;
+				break;
+			default:
+				UNREACHABLE;
+			}
+
+			if (offset == 0)
 				return inner;
 
 			switch (inner.t) {
@@ -471,17 +491,17 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 				return (AsmValue) {
 					.t = ASM_VALUE_OFFSET_REGISTER,
 					.u.offset_register.reg = inner.u.reg,
-					.u.offset_register.offset = asm_const_imm(field->offset),
+					.u.offset_register.offset = asm_const_imm(offset),
 				};
 			case ASM_VALUE_OFFSET_REGISTER: {
-				AsmConst offset = inner.u.offset_register.offset;
-				switch (offset.t) {
+				AsmConst reg_offset = inner.u.offset_register.offset;
+				switch (reg_offset.t) {
 				case ASM_CONST_IMMEDIATE:
 					return (AsmValue) {
 						.t = ASM_VALUE_OFFSET_REGISTER,
 						.u.offset_register.reg = inner.u.offset_register.reg,
 						.u.offset_register.offset = asm_const_imm(
-								offset.u.immediate + field->offset),
+								reg_offset.u.immediate + offset),
 					};
 				case ASM_CONST_SYMBOL: {
 					// @TODO: In this case we should still be able to use an
@@ -493,9 +513,13 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 					AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
 					assign_vreg(builder, instr);
 
-					emit_instr2(builder, MOV, temp_vreg, asm_symbol(offset.u.symbol));
-
-					return temp_vreg;
+					emit_instr2(builder, MOV,
+							temp_vreg, asm_symbol(reg_offset.u.symbol));
+					return (AsmValue) {
+						.t = ASM_VALUE_OFFSET_REGISTER,
+						.u.offset_register.reg = temp_vreg.u.reg,
+						.u.offset_register.offset = asm_const_imm(offset),
+					};
 				}
 				case ASM_CONST_FIXED_IMMEDIATE:
 					UNREACHABLE;
@@ -512,7 +536,7 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 			assign_vreg(builder, instr);
 
 			emit_instr2(builder, MOV, temp_vreg, inner);
-			emit_instr2(builder, ADD, temp_vreg, asm_imm(field->offset));
+			emit_instr2(builder, ADD, temp_vreg, asm_imm(offset));
 
 			return asm_value(builder, pointer);
 		}

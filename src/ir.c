@@ -267,9 +267,9 @@ static void dump_instr(IrInstr *instr)
 		dump_ir_type(instr->u.local.type);
 		break;
 	case OP_FIELD:
-		dump_value(instr->u.field.struct_ptr);
+		dump_value(instr->u.field.ptr);
 		fputs(", ", stdout);
-		dump_ir_type(instr->u.field.struct_type);
+		dump_ir_type(instr->u.field.type);
 		printf(", %d", instr->u.field.field_number);
 		break;
 	case OP_LOAD:
@@ -551,14 +551,16 @@ IrValue build_local(IrBuilder *builder, IrType type)
 	return value_instr(instr);
 }
 
-IrValue build_field(IrBuilder *builder, IrValue struct_ptr, IrType struct_type,
+IrValue build_field(IrBuilder *builder, IrValue ptr, IrType type,
 		u32 field_number)
 {
+	assert(type.t == IR_STRUCT || type.t == IR_ARRAY);
+
 	IrInstr *instr = append_instr(builder);
 	instr->op = OP_FIELD;
 	instr->type = (IrType) { .t = IR_POINTER };
-	instr->u.field.struct_ptr = struct_ptr;
-	instr->u.field.struct_type = struct_type;
+	instr->u.field.ptr = ptr;
+	instr->u.field.type = type;
 	instr->u.field.field_number = field_number;
 
 	return value_instr(instr);
