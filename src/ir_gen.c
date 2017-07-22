@@ -2354,6 +2354,23 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 		CType *result_type = pointer.ctype;
 		CType *pointee_type = result_type->u.pointee_type;
 
+		// @TODO: Extend OP_FIELD to non-constant field numbers?
+		if (other.value.t == VALUE_CONST) {
+			u64 offset = other.value.u.constant;
+			if (pointee_type->t == ARRAY_TYPE) {
+				// @NOTE: We have to use the IR type size in case the inner
+				// elem is itself an array of arrays.
+				offset *= pointee_type->u.array.ir_type->u.array.size;
+			}
+
+			IrType array = c_type_to_ir_type(
+					array_type(builder, &env->type_env, pointee_type));
+			return (Term) {
+				.ctype = result_type,
+				.value = build_field(builder, pointer.value, array, offset),
+			};
+		}
+
 		// @TODO: Determine type correctly
 		IrType pointer_int_type = c_type_to_ir_type(env->type_env.int_ptr_type);
 
