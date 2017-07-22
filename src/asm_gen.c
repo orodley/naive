@@ -1014,7 +1014,7 @@ static void asm_gen_instr(
 
 					u32 to_copy = arg_class->u.mem.size;
 					u32 i = 0;
-					for (; to_copy - i > 8; i += 8) {
+					for (; to_copy - i >= 8; i += 8) {
 						AsmConst offset = asm_const_imm(location.u.immediate + i);
 						emit_instr2(builder, MOV, asm_vreg(temp_vreg, 64),
 								asm_deref((AsmValue) {
