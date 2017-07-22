@@ -1325,6 +1325,36 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 	}
 }
 
+static bool is_full_initializer(CInitializer *c_init)
+{
+	CType *type = c_init->type;
+	if (type == NULL)
+		return false;
+
+	if (c_init->t == C_INIT_LEAF)
+		return true;
+
+	u32 num_elems;
+	switch (type->t) {
+	case ARRAY_TYPE:
+		assert(!type->u.array.incomplete);
+		num_elems = type->u.array.size;
+		break;
+	case STRUCT_TYPE:
+		num_elems = type->u.strukt.fields.size;
+		break;
+	default:
+		UNREACHABLE;
+	}
+
+	for (u32 i = 0; i < num_elems; i++) {
+		if (!is_full_initializer(c_init->u.sub_elems + i)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
 		IrValue base_ptr, CInitializer *c_init, u32 current_offset)
 {
@@ -1806,16 +1836,18 @@ static void ir_gen_initializer(IrBuilder *builder, Env *env,
 	make_c_initializer(
 			builder, env, &c_init_pool, to_init.ctype, init, false, &c_init);
 
-	IrValue *memset_args = pool_alloc(&builder->trans_unit->pool,
-			3 * sizeof *memset_args);
-	memset_args[0] = to_init.value;
-	memset_args[1] = value_const(c_type_to_ir_type(&env->type_env.int_type), 0);
-	memset_args[2] = value_const(c_type_to_ir_type(env->type_env.size_type),
-			size_of_c_type(to_init.ctype));
+	if (!is_full_initializer(&c_init)) {
+		IrValue *memset_args = pool_alloc(&builder->trans_unit->pool,
+				3 * sizeof *memset_args);
+		memset_args[0] = to_init.value;
+		memset_args[1] = value_const(c_type_to_ir_type(&env->type_env.int_type), 0);
+		memset_args[2] = value_const(c_type_to_ir_type(env->type_env.size_type),
+				size_of_c_type(to_init.ctype));
 
-	// @TODO: Open-code this for small sizes
-	build_call(builder, builtin_memset(builder),
-			(IrType) { .t = IR_POINTER }, 3, memset_args);
+		// @TODO: Open-code this for small sizes
+		build_call(builder, builtin_memset(builder),
+				(IrType) { .t = IR_POINTER }, 3, memset_args);
+	}
 
 	// @TODO: Sort initializer element list by offset because something
 	// something cache something something.
