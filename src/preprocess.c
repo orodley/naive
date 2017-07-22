@@ -448,8 +448,14 @@ static bool handle_pp_directive(PP *pp)
 
 			char terminator = c == '<' ? '>' : '"';
 			u32 start_index = reader->position;
-			while (read_char(reader) != terminator)
+			while (!at_end(reader) && read_char(reader) != terminator)
 				;
+
+			if (at_end(reader)) {
+				issue_error(&include_path_source_loc, "Unterminated include path");
+				return false;
+			}
+
 			u32 end_index = reader->position - 1;
 			u32 length = end_index - start_index;
 
