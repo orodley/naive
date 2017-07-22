@@ -613,13 +613,14 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 {
 	bool ret;
 	Reader *reader = &pp->reader;
+	SourceLoc start_source_loc = pp->reader.source_loc;
 
 	Array(Macro) new_macro_params = EMPTY_ARRAY;
 
 	Array(char) arg_chars;
 	ARRAY_INIT(&arg_chars, char, 20);
 	u32 args_processed = 0;
-	for (;;) {
+	while (!at_end(reader)) {
 		char c = read_char(reader);
 		switch (c) {
 		case '(': {
@@ -689,6 +690,9 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 			*ARRAY_APPEND(&arg_chars, char) = c;
 		}
 	}
+
+	issue_error(&start_source_loc, "Unterminated macro-like function invocation");
+	ret = false;
 
 cleanup:
 	if (ret)
