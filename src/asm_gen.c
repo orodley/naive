@@ -962,6 +962,9 @@ static void asm_gen_instr(
 					pre_alloced_vreg(builder, arg_class->u.reg.reg, 64);
 				emit_instr2(builder, MOV, arg_target_reg, arg);
 				*ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
+				VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg,
+						*ARRAY_LAST(&arg_vregs, u32));
+				vreg->live_range_start = builder->current_block->size - 1;
 				break;
 			}
 			case ARG_CLASS_MEM: {
@@ -1067,9 +1070,9 @@ static void asm_gen_instr(
 
 		emit_instr1(builder, CALL, asm_value(builder, instr->u.call.callee));
 
-		// Insert fake uses at the call instr, so that we don't allocate
-		// registers used for arguments for any temporary registers used to
-		// copy structs to the stack.
+		// The live range of arg vregs ends at the call instruction. Liveness
+		// analysis won't be performed for these vregs, since we've set the
+		// start and end already.
 		for (u32 i = 0; i < arg_vregs.size; i++) {
 			u32 arg_vreg = *ARRAY_REF(&arg_vregs, u32, i);
 			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, arg_vreg);
@@ -1501,6 +1504,8 @@ static void compute_live_ranges(AsmBuilder *builder)
 			vreg_num < builder->virtual_registers.size;
 			vreg_num++) {
 		VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, vreg_num);
+		if (vreg->live_range_start != -1 && vreg->live_range_end != -1)
+			continue;
 
 		bit_set_clear_all(&liveness);
 		bit_set_set_all(&working_set);
