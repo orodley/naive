@@ -320,11 +320,82 @@ static IrOp maybe_flip_conditional(IrOp op, IrValue *arg1, IrValue *arg2)
 	return flipped;
 }
 
+// @TODO: This should probably be done on the IR level instead.
+static bool get_inner_cmp(AsmBuilder *builder, IrInstr *cmp, IrInstr **out)
+{
+	if (cmp->op != OP_EQ && cmp->op != OP_NEQ) {
+		*out = cmp;
+		return false;
+	}
+
+	IrValue arg1 = cmp->u.binary_op.arg1;
+	IrValue arg2 = cmp->u.binary_op.arg2;
+
+	u64 c;
+	IrValue non_const_arg;
+	if (arg1.t == VALUE_CONST) {
+		assert(arg2.t != VALUE_CONST);
+		c = arg1.u.constant;
+		non_const_arg = arg2;
+	} else if (arg2.t == VALUE_CONST) {
+		assert(arg1.t != VALUE_CONST);
+		c = arg2.u.constant;
+		non_const_arg = arg1;
+	} else {
+		*out = cmp;
+		return false;
+	}
+
+	if (non_const_arg.t != VALUE_INSTR || (c != 0 && c != 1)) {
+		*out = cmp;
+		return false;
+	}
+
+	IrInstr *inner = non_const_arg.u.instr;
+
+	switch (inner->op) {
+	case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE:
+		break;
+	default:
+		*out = cmp;
+		return false;
+	}
+
+	if (cmp->op == OP_EQ && c == 0)
+		return !get_inner_cmp(builder, inner, out);
+	if (cmp->op == OP_EQ && c == 1)
+		return get_inner_cmp(builder, inner, out);
+	if (cmp->op == OP_NEQ && c == 0)
+		return get_inner_cmp(builder, inner, out);
+	if (cmp->op == OP_NEQ && c == 1)
+		return !get_inner_cmp(builder, inner, out);
+
+	UNREACHABLE;
+}
+
+static IrOp invert_cmp_op(IrOp ir_op)
+{
+	switch (ir_op) {
+	case OP_EQ: return OP_NEQ;
+	case OP_NEQ: return OP_EQ;
+	case OP_GT: return OP_LTE;
+	case OP_GTE: return OP_LT;
+	case OP_LT: return OP_GTE;
+	case OP_LTE: return OP_GT;
+	default: return ir_op;
+	}
+}
+
 static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
 {
+	bool invert = get_inner_cmp(builder, instr, &instr);
+
 	IrValue arg1 = instr->u.binary_op.arg1;
 	IrValue arg2 = instr->u.binary_op.arg2;
 	IrOp ir_op = maybe_flip_conditional(instr->op, &arg1, &arg2);
+
+	if (invert)
+		ir_op = invert_cmp_op(ir_op);
 
 	AsmOp op;
 	switch (ir_op) {
@@ -566,10 +637,14 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
 		return false;
 
 	IrInstr *cond_instr = condition.u.instr;
+	bool invert = get_inner_cmp(builder, cond_instr, &cond_instr);
 
 	IrValue arg1 = cond_instr->u.binary_op.arg1;
 	IrValue arg2 = cond_instr->u.binary_op.arg2;
 	IrOp ir_op = maybe_flip_conditional(cond_instr->op, &arg1, &arg2);
+
+	if (invert)
+		ir_op = invert_cmp_op(ir_op);
 
 	AsmOp jcc;
 	switch (ir_op) {
@@ -582,7 +657,10 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
 	default: return false;
 	}
 
-	emit_instr2(builder, CMP, asm_value(builder, arg1), asm_value(builder, arg2));
+	AsmValue arg2_value = maybe_move_const_to_reg(builder,
+			asm_value(builder, arg2), size_of_ir_type(arg1.type) * 8, true);
+
+	emit_instr2(builder, CMP, asm_value(builder, arg1), arg2_value);
 	emit_instr1(builder, jcc, asm_symbol(cond->u.cond.then_block->label));
 	// The "else" case is handled by the caller.
 
