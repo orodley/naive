@@ -978,29 +978,67 @@ static void asm_gen_instr(
 							asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)),
 							arg);
 				} else {
-					// @TODO: This is essentially a really bad open-coding of
-					// memcpy. Adding a call to memcpy would be really awkward
-					// since we're in the middle of a call sequence. We should
-					// either make this smarter or somehow make it go through
-					// the regular memcpy code in IR, which we can optimise
-					// along with other uses of memcpy.
-					u32 src_vreg = next_vreg(builder);
-					append_vreg(builder);
+					// @TODO: This is essentially a bad open-coding of memcpy.
+					// Adding a call to memcpy would be really awkward since
+					// we're in the middle of a call sequence. We should either
+					// make this smarter or somehow make it go through the
+					// regular memcpy code in IR, which we can optimise along
+					// with other uses of memcpy.
+					Register src;
+					u32 initial_offset;
+					switch (arg.t) {
+					case ASM_VALUE_REGISTER:
+						src = arg.u.reg;
+						initial_offset = 0;
+						break;
+					case ASM_VALUE_OFFSET_REGISTER:
+						if (arg.u.offset_register.offset.t == ASM_CONST_IMMEDIATE) {
+							src = arg.u.offset_register.reg;
+							initial_offset = arg.u.offset_register.offset.u.immediate;
+							break;
+						}
+						// Deliberate fallthrough
+					default: {
+						append_vreg(builder);
+						AsmValue src_vreg = asm_vreg(next_vreg(builder), 64);
+						emit_instr2(builder, MOV, src_vreg, arg);
+
+						src = src_vreg.u.reg;
+						initial_offset = 0;
+						break;
+					}
+					}
+
 					u32 temp_vreg = next_vreg(builder);
 					append_vreg(builder);
-					emit_instr2(builder, MOV, asm_vreg(src_vreg, 64), arg);
-					for (u32 i = 0; i < arg_class->u.mem.size; i++) {
+
+					u32 to_copy = arg_class->u.mem.size;
+					u32 i = 0;
+					for (; to_copy - i > 8; i += 8) {
 						AsmConst offset = asm_const_imm(location.u.immediate + i);
-						emit_instr2(builder, MOV, asm_vreg(temp_vreg, 8),
-								asm_deref(asm_vreg(src_vreg, 64)));
+						emit_instr2(builder, MOV, asm_vreg(temp_vreg, 64),
+								asm_deref((AsmValue) {
+										.t = ASM_VALUE_OFFSET_REGISTER,
+										.u.offset_register.reg = src,
+										.u.offset_register.offset = asm_const_imm(i),
+										}));
+						emit_instr2(builder,
+								MOV,
+								asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+								asm_vreg(temp_vreg, 64));
+					}
+					for (; i < to_copy; i++) {
+						AsmConst offset = asm_const_imm(location.u.immediate + i);
+						emit_instr2(builder, MOV, asm_vreg(temp_vreg, 64),
+								asm_deref((AsmValue) {
+										.t = ASM_VALUE_OFFSET_REGISTER,
+										.u.offset_register.reg = src,
+										.u.offset_register.offset = asm_const_imm(i),
+										}));
 						emit_instr2(builder,
 								MOV,
 								asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
 								asm_vreg(temp_vreg, 8));
-						emit_instr2(builder,
-								ADD,
-								asm_vreg(src_vreg, 64),
-								asm_imm(1));
 					}
 				}
 				break;
