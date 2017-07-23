@@ -811,6 +811,9 @@ static bool preprocess_aux(PP *pp)
 			break;
 		}
 		case '#':
+			if (ignoring_chars(pp))
+				break;
+
 			if (peek_char(reader) == '#') {
 				// Token pasting operator
 				// @TODO: Handle empty replacements properly.
