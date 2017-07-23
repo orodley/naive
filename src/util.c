@@ -4,20 +4,6 @@
 
 extern inline u32 max(u32 a, u32 b);
 
-char *strndup(const char *str, size_t length)
-{
-	char *result = malloc(length + 1);
-	memcpy(result, str, length);
-	result[length] = '\0';
-
-	return result;
-}
-
-char *strdup(const char *str)
-{
-	return strndup(str, strlen(str));
-}
-
 extern inline bool is_valid(String str);
 
 extern inline bool streq(char *a, char *b);

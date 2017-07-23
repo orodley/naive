@@ -11,4 +11,8 @@ size_t strlen(const char *s);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 
+// @TODO: These should be hidden behind feature test macros.
+char *strndup(const char *s, size_t n);
+char *strdup(const char *s);
+
 #endif

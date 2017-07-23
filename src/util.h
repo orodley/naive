@@ -32,9 +32,6 @@ inline bool is_valid(String str)
 	return !((str.chars == INVALID_STRING.chars) && (str.len == INVALID_STRING.len));
 }
 
-char *strndup(const char *str, size_t length);
-char *strdup(const char *str);
-
 inline bool streq(char *a, char *b)
 {
 	return strcmp(a, b) == 0;
