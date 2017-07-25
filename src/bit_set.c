@@ -44,7 +44,6 @@ void bit_set_clear_all(BitSet *bit_set)
 
 extern inline bool bit_set_get_bit(BitSet *bit_set, u32 index);
 extern inline void bit_set_set_bit(BitSet *bit_set, u32 index, bool value);
-extern inline void bit_set_clear_bit(BitSet *bit_set, u32 index);
 extern inline i32 bit_set_lowest_set_bit(BitSet *bit_set);
 extern inline i32 bit_set_highest_set_bit(BitSet *bit_set);
 extern inline bool bit_set_is_empty(BitSet *bit_set);
