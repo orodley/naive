@@ -373,7 +373,8 @@ static bool handle_pp_directive(PP *pp)
 		bool cond;
 		// We do this so that we can skip stuff like #if __has_feature(...)
 		// when it's guarded by #ifdef __has_feature.
-		// @TODO: We don't even need to allocate condition_chars in this case.
+		// @TODO: We don't even need to allocate condition_chars or macroexpand
+		// it in this case.
 		if (ignoring_chars(pp)) {
 			cond = false;
 		} else {
@@ -733,7 +734,9 @@ static bool preprocess_string(PP *pp, char *string)
 {
 	Reader old_reader = pp->reader;
 	Array(Adjustment) old_adjustments = pp->out_adjustments;
+	Array(PPCondScope) old_scope_stack = pp->pp_scope_stack;
 	pp->out_adjustments = EMPTY_ARRAY;
+	pp->pp_scope_stack = EMPTY_ARRAY;
 
 	reader_init(&pp->reader,
 			(String) { string, strlen(string) }, EMPTY_ARRAY, false, "??");
@@ -742,7 +745,9 @@ static bool preprocess_string(PP *pp, char *string)
 
 	pp->reader = old_reader;
 	array_free(&pp->out_adjustments);
+	array_free(&pp->pp_scope_stack);
 	pp->out_adjustments = old_adjustments;
+	pp->pp_scope_stack = old_scope_stack;
 
 	return ret;
 }
@@ -767,6 +772,33 @@ static char *macroexpand(PP *pp, char *string)
 	return expanded;
 }
 
+static void skip_to_next_directive(Reader *reader)
+{
+	// handle_pp_directive puts us at the beginning of the next line,
+	// so we start out ready for another directive.
+	bool expecting_directive = true;
+	while (!at_end(reader)) {
+		switch (peek_char(reader)) {
+		case '#':
+			if (expecting_directive) {
+				return;
+			}
+
+			break;
+		case ' ': case '\t':
+			break;
+		case '\n':
+			expecting_directive = true;
+			break;
+		default:
+			expecting_directive = false;
+			break;
+		}
+
+		advance(reader);
+	}
+}
+
 static bool preprocess_aux(PP *pp)
 {
 	Reader *reader = &pp->reader;
@@ -778,7 +810,20 @@ static bool preprocess_aux(PP *pp)
 		u32 start_input_position = reader->position;
 		u32 start_output_position = pp->out_chars.size;
 
-		skip_whitespace_and_comments(pp, true);
+		// If we just reached a false preprocessor conditional, skip everything
+		// until the next preprocessor conditional.
+		if (ignoring_chars(pp)) {
+			skip_to_next_directive(reader);
+			if (at_end(reader)) {
+				// @TODO: Keep track of the SourceLoc of the opening directive.
+				// Maybe we should store it on PPCondScope?
+				SourceLoc s = { "<unknown>", 0, 0 };
+				issue_error(&s, "Unterminated preprocessor conditional");
+				return false;
+			}
+		} else {
+			skip_whitespace_and_comments(pp, true);
+		}
 
 		u32 end_input_position = reader->position;
 		u32 end_output_position = pp->out_chars.size;
@@ -803,8 +848,6 @@ static bool preprocess_aux(PP *pp)
 		// We need to handle string and character literals here so that we
 		// don't expand macros inside them.
 		case '\'': case '"': {
-			if (ignoring_chars(pp))
-				break;
 			if (!append_string_or_char_literal(reader, c, &pp->out_chars))
 				return false;
 
@@ -884,9 +927,6 @@ static bool preprocess_aux(PP *pp)
 		case EOF:
 			break;
 		default:
-			if (ignoring_chars(pp))
-				break;
-
 			if (initial_ident_char(c)) {
 				u32 symbol_start = reader->position - 1;
 				while (ident_char(peek_char(reader)))
