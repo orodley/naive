@@ -363,31 +363,66 @@ static bool handle_pp_directive(PP *pp)
 		while (peek_char(reader) != '\n')
 			*ARRAY_APPEND(&condition_chars, char) = read_char(reader);
 		*ARRAY_APPEND(&condition_chars, char) = '\0';
-
-		char *condition_str = macroexpand(pp, (char *)condition_chars.elements);
-		if (condition_str == NULL)
-			return false;
-
-		array_free(&condition_chars);
+		char *condition_str = (char *)condition_chars.elements;
 
 		bool cond;
-		// We do this so that we can skip stuff like #if __has_feature(...)
-		// when it's guarded by #ifdef __has_feature.
-		// @TODO: We don't even need to allocate condition_chars or macroexpand
-		// it in this case.
-		if (ignoring_chars(pp)) {
-			cond = false;
+		if (strneq(condition_str, "defined", 7)) {
+			u32 i = 7;
+			while (condition_str[i] == ' ' || condition_str[i] == '\t') {
+				i++;
+			}
+
+			bool saw_bracket = false;
+			if (condition_str[i] == '(') {
+				saw_bracket = true;
+				i++;
+
+				while (condition_str[i] == ' ' || condition_str[i] == '\t') {
+					i++;
+				}
+			}
+			assert(condition_str[i] != '\0');
+
+			u32 len = 0;
+			while (ident_char(condition_str[i + len]))
+				len++;
+
+			if (saw_bracket) {
+				u32 j = i + len;
+
+				while (condition_str[j] == ' ' || condition_str[j] == '\t') {
+					j++;
+				}
+
+				assert(condition_str[j] == ')');
+			}
+
+			String macro_name = { condition_str + i, len };
+			cond = look_up_macro(&pp->macro_env, macro_name) != NULL;
 		} else {
-			// For now we only handle #if 0 and #if 1
-			if (streq(condition_str, "0")) {
+			condition_str = macroexpand(pp, condition_str);
+			if (condition_str == NULL)
+				return false;
+
+			// We do this so that we can skip stuff like #if __has_feature(...)
+			// when it's guarded by #ifdef __has_feature.
+			// @TODO: We don't even need to allocate condition_chars or macroexpand
+			// it in this case.
+			if (ignoring_chars(pp)) {
 				cond = false;
-			} else if (streq(condition_str, "1")) {
-				cond = true;
 			} else {
-				UNIMPLEMENTED;
+				// For now we only handle #if 0, #if 1, and #if defined <...>
+				if (streq(condition_str, "0")) {
+					cond = false;
+				} else if (streq(condition_str, "1")) {
+					cond = true;
+				} else {
+					UNIMPLEMENTED;
+				}
 			}
 		}
 
+		array_free(&condition_chars);
 		start_pp_if(pp, cond);
 	} else if (strneq(directive.chars, "ifdef", directive.len)) {
 		skip_whitespace_and_comments(pp, false);
