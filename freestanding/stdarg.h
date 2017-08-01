@@ -11,7 +11,7 @@ typedef struct {
 
 #define va_start(list, last_arg) __builtin_va_start(list)
 #define va_arg(list, type) __builtin_va_arg(list, type)
-#define va_end(args) __builtin_va_end(list)
+#define va_end(list) __builtin_va_end(list)
 
 static unsigned long __builtin_va_arg_uint64(va_list list)
 {
