@@ -420,7 +420,20 @@ static bool handle_pp_directive(PP *pp)
 
 	// Process #if and friends even if we're currently ignoring tokens.
 	if (strneq(directive.chars, "if", directive.len)) {
-		start_pp_if(pp, eval_pp_condition(pp));
+		// If we're in a false preprocessor conditional, don't bother trying to
+		// handle the condition. Both because it's a waste of time, and because
+		// it might use something we don't support.
+		bool cond;
+		if (ignoring_chars(pp)) {
+			while (!at_end(reader) && peek_char(reader) != '\n') {
+				advance(reader);
+			}
+			cond = false;
+		} else {
+			cond = eval_pp_condition(pp);
+		}
+
+		start_pp_if(pp, cond);
 	} else if (strneq(directive.chars, "ifdef", directive.len)) {
 		skip_whitespace_and_comments(pp, false);
 		String macro_name = read_symbol(reader);
