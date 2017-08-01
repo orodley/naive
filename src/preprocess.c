@@ -334,6 +334,70 @@ static char *look_up_include_path(Array(char *) *include_dirs,
 static bool preprocess_file(PP *pp, char *input_filename,
 		SourceLoc blame_source_loc);
 
+static bool eval_pp_condition(PP *pp)
+{
+	Reader *reader = &pp->reader;
+	skip_whitespace_and_comments(pp, false);
+
+	Array(char) condition_chars;
+	ARRAY_INIT(&condition_chars, char, 10);
+	while (peek_char(reader) != '\n')
+		*ARRAY_APPEND(&condition_chars, char) = read_char(reader);
+	*ARRAY_APPEND(&condition_chars, char) = '\0';
+	char *condition_str = (char *)condition_chars.elements;
+
+	bool cond;
+	if (strneq(condition_str, "defined", 7)) {
+		u32 i = 7;
+		while (condition_str[i] == ' ' || condition_str[i] == '\t') {
+			i++;
+		}
+
+		bool saw_bracket = false;
+		if (condition_str[i] == '(') {
+			saw_bracket = true;
+			i++;
+
+			while (condition_str[i] == ' ' || condition_str[i] == '\t') {
+				i++;
+			}
+		}
+		assert(condition_str[i] != '\0');
+
+		u32 len = 0;
+		while (ident_char(condition_str[i + len]))
+			len++;
+
+		if (saw_bracket) {
+			u32 j = i + len;
+
+			while (condition_str[j] == ' ' || condition_str[j] == '\t') {
+				j++;
+			}
+
+			assert(condition_str[j] == ')');
+		}
+
+		String macro_name = { condition_str + i, len };
+		cond = look_up_macro(&pp->macro_env, macro_name) != NULL;
+	} else {
+		condition_str = macroexpand(pp, condition_str);
+
+		// For now we only handle #if 0, #if 1, and #if defined <...>
+		if (streq(condition_str, "0")) {
+			cond = false;
+		} else if (streq(condition_str, "1")) {
+			cond = true;
+		} else {
+			UNIMPLEMENTED;
+		}
+	}
+
+	array_free(&condition_chars);
+
+	return cond;
+}
+
 static bool handle_pp_directive(PP *pp)
 {
 	Reader *reader = &pp->reader;
@@ -356,74 +420,7 @@ static bool handle_pp_directive(PP *pp)
 
 	// Process #if and friends even if we're currently ignoring tokens.
 	if (strneq(directive.chars, "if", directive.len)) {
-		skip_whitespace_and_comments(pp, false);
-
-		Array(char) condition_chars;
-		ARRAY_INIT(&condition_chars, char, 10);
-		while (peek_char(reader) != '\n')
-			*ARRAY_APPEND(&condition_chars, char) = read_char(reader);
-		*ARRAY_APPEND(&condition_chars, char) = '\0';
-		char *condition_str = (char *)condition_chars.elements;
-
-		bool cond;
-		if (strneq(condition_str, "defined", 7)) {
-			u32 i = 7;
-			while (condition_str[i] == ' ' || condition_str[i] == '\t') {
-				i++;
-			}
-
-			bool saw_bracket = false;
-			if (condition_str[i] == '(') {
-				saw_bracket = true;
-				i++;
-
-				while (condition_str[i] == ' ' || condition_str[i] == '\t') {
-					i++;
-				}
-			}
-			assert(condition_str[i] != '\0');
-
-			u32 len = 0;
-			while (ident_char(condition_str[i + len]))
-				len++;
-
-			if (saw_bracket) {
-				u32 j = i + len;
-
-				while (condition_str[j] == ' ' || condition_str[j] == '\t') {
-					j++;
-				}
-
-				assert(condition_str[j] == ')');
-			}
-
-			String macro_name = { condition_str + i, len };
-			cond = look_up_macro(&pp->macro_env, macro_name) != NULL;
-		} else {
-			condition_str = macroexpand(pp, condition_str);
-			if (condition_str == NULL)
-				return false;
-
-			// We do this so that we can skip stuff like #if __has_feature(...)
-			// when it's guarded by #ifdef __has_feature.
-			// @TODO: We don't even need to allocate condition_chars or macroexpand
-			// it in this case.
-			if (ignoring_chars(pp)) {
-				cond = false;
-			} else {
-				// For now we only handle #if 0, #if 1, and #if defined <...>
-				if (streq(condition_str, "0")) {
-					cond = false;
-				} else if (streq(condition_str, "1")) {
-					cond = true;
-				} else {
-					UNIMPLEMENTED;
-				}
-			}
-		}
-
-		array_free(&condition_chars);
-		start_pp_if(pp, cond);
+		start_pp_if(pp, eval_pp_condition(pp));
 	} else if (strneq(directive.chars, "ifdef", directive.len)) {
 		skip_whitespace_and_comments(pp, false);
 		String macro_name = read_symbol(reader);
@@ -445,7 +442,20 @@ static bool handle_pp_directive(PP *pp)
 		bool condition = look_up_macro(&pp->macro_env, macro_name) == NULL;
 		start_pp_if(pp, condition);
 	} else if (strneq(directive.chars, "elif", directive.len)) {
-		UNIMPLEMENTED;
+		if (pp->pp_scope_stack.size == 0) {
+			issue_error(&directive_start, "#elif without #if");
+			return false;
+		}
+
+		PPCondScope *top_scope = ARRAY_LAST(&pp->pp_scope_stack, PPCondScope);
+		if (!top_scope->condition) {
+			if (top_scope->position == THEN && eval_pp_condition(pp)) {
+				ARRAY_LAST(&pp->pp_scope_stack, PPCondScope)->condition = true;
+			}
+		} else {
+			top_scope->position = ELSE;
+			top_scope->condition = false;
+		}
 	} else if (strneq(directive.chars, "else", directive.len)) {
 		PPCondScope *scope = ARRAY_LAST(&pp->pp_scope_stack, PPCondScope);
 		if (scope->position == ELSE) {
