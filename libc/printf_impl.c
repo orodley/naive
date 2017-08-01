@@ -11,8 +11,8 @@ int print_unsigned(Sink *sink, void *sink_arg, unsigned long x, int radix)
 		return ret != 0 ? -1 : 1;
 	}
 
-	int divisor = 1;
-	int x0 = x / radix;
+	unsigned long divisor = 1;
+	unsigned long x0 = x / radix;
 	while (x0 != 0) {
 		divisor *= radix;
 		x0 /= radix;
