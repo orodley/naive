@@ -1487,8 +1487,8 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 
 	Array(IrInstr *) *instrs = &builder->current_block->instrs;
 	if (instrs->size == 0
-			|| (*ARRAY_LAST(instrs, IrInstr *))->op == OP_RET
-			|| (*ARRAY_LAST(instrs, IrInstr *))->op == OP_RET_VOID) {
+			|| ((*ARRAY_LAST(instrs, IrInstr *))->op != OP_RET
+				&& (*ARRAY_LAST(instrs, IrInstr *))->op != OP_RET_VOID)) {
 		// @NOTE: We emit a ret_void here even if the function doesn't return
 		// void. This ret is purely to ensure that every block ends in a
 		// terminating instruction (ret, ret_void, branch, or cond) as it makes
