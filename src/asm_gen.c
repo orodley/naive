@@ -1252,10 +1252,10 @@ static void asm_gen_instr(
 		// the size of the register save area, and subtract the same amount
 		// from register_save_area. This way we start out pointing at the
 		// correct place, but still end up at 48 when we're out of space.
-		AsmValue starting_offset = asm_imm(48 - builder->register_save_area_size);
+		AsmValue starting_offset = asm_fixed_imm(
+				48 - builder->register_save_area_size, 32);
 
-		emit_instr2(builder, MOV,
-				asm_deref(va_list_ptr), starting_offset);
+		emit_instr2(builder, MOV, asm_deref(va_list_ptr), starting_offset);
 
 		// Skip next_vector_reg_offset since we don't use vector registers for
 		// passing arguments yet.
@@ -1264,11 +1264,11 @@ static void asm_gen_instr(
 
 		// Stack args start at the bottom of the previous stack frame, which is
 		// always rbp + 16
-		emit_instr2(builder,
-				MOV,
-				asm_deref(va_list_ptr),
-				asm_phys_reg(REG_CLASS_BP, 64));
-		emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_imm(16));
+		AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
+		append_vreg(builder);
+		emit_instr2(builder, MOV, temp_vreg, asm_phys_reg(REG_CLASS_BP, 64));
+		emit_instr2(builder, ADD, temp_vreg, asm_imm(16));
+		emit_instr2(builder, MOV, asm_deref(va_list_ptr), temp_vreg);
 
 		emit_instr2(builder, ADD, va_list_ptr, asm_imm(8));
 

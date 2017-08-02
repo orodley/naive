@@ -273,6 +273,7 @@ AsmValue asm_vreg(u32 vreg_number, u8 width);
 AsmValue asm_phys_reg(RegClass reg, u8 width);
 AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset);
 AsmValue asm_imm(u64 value);
+AsmValue asm_fixed_imm(u64 value, u32 width);
 AsmValue asm_symbol(AsmSymbol *symbol);
 AsmValue asm_deref(AsmValue asm_arg);
 

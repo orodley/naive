@@ -114,6 +114,15 @@ AsmValue asm_imm(u64 value)
 	};
 }
 
+AsmValue asm_fixed_imm(u64 value, u32 width)
+{
+	return (AsmValue) {
+		.is_deref = false,
+		.t = ASM_VALUE_CONST,
+		.u.constant = asm_const_fixed_imm(value, width),
+	};
+}
+
 AsmValue asm_symbol(AsmSymbol *symbol)
 {
 	return (AsmValue) {
