@@ -1465,10 +1465,9 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 
 		Binding *binding = ARRAY_APPEND(param_bindings, Binding);
 
-		// @HACK: We have to do this because decl_to_cdecl does extra
-		// stuff to adjust parameter types when it knows that the
-		// declarator is for a parameter. The proper fix is just to not
-		// re-process at all.
+		// @HACK: We have to do this because decl_to_cdecl does extra stuff to
+		// adjust parameter types when it knows that the declarator is for a
+		// parameter. The proper fix is just to not re-process at all.
 		cdecl.type = function_type->u.function.arg_type_array[i];
 		cdecl_to_binding(builder, &cdecl, binding);
 
