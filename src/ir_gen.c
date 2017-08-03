@@ -1204,8 +1204,8 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 
 		ASTInitializerElement *elems = init->u.initializer_element_list;
 		u32 curr_elem_index = 0;
-		CInitializer *containing_init = c_init;
 		while (elems != NULL) {
+			CInitializer *containing_init = c_init;
 			CInitializer *curr_elem = c_init;
 
 			ASTDesignator *designator_list = elems->designator_list;
@@ -1249,8 +1249,9 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 				curr_elem = containing_init->u.sub_elems + curr_elem_index;
 				curr_elem->type = field_type;
 
-				if (curr_elem->type->t == STRUCT_TYPE
-						|| curr_elem->type->t == ARRAY_TYPE) {
+				if ((curr_elem->type->t == STRUCT_TYPE
+						|| curr_elem->type->t == ARRAY_TYPE)
+						&& curr_elem->u.sub_elems == NULL) {
 					u32 inner_num_fields = c_type_num_fields(field_type);
 					CInitializer *sub_elems =
 						pool_alloc(pool, inner_num_fields * sizeof *sub_elems);
