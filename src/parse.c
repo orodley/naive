@@ -923,8 +923,12 @@ static void dump_statement(ASTStatement *statement)
 		}
 		break;
 	}
-	case EXPR_STATEMENT:
 	case RETURN_STATEMENT:
+		if (statement->u.expr == NULL) {
+			break;
+		}
+		// deliberate fallthrough
+	case EXPR_STATEMENT:
 		dump_expr(statement->u.expr);
 		break;
 	case IF_STATEMENT:
