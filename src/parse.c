@@ -817,7 +817,7 @@ static void dump_expr(ASTExpr *expr)
 		pretty_printf("%8", expr->u.int_literal);
 		break;
 	case STRING_LITERAL_EXPR:
-		pretty_printf("%s", expr->u.string_literal);
+		pretty_printf("%s", expr->u.string_literal.chars);
 		break;
 	case IDENTIFIER_EXPR:
 		pretty_printf("%s", expr->u.identifier);
