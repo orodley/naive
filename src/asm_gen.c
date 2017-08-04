@@ -976,10 +976,19 @@ static void asm_gen_instr(
 				// explicitly? We should probably just clean up the frontend
 				// codegen for struct calls instead.
 				if (!arg_class->u.mem.remains_in_memory) {
+					// Stack args that don't remain in memory should always be
+					// rounded up to 8 bytes.
+					assert(arg_class->u.mem.size == 8);
+
+					// Need a temp vreg to do an 8-byte store into memory.
+					AsmValue temp_vreg = asm_vreg(next_vreg(builder), 64);
+					append_vreg(builder);
+
+					emit_instr2(builder, MOV, temp_vreg, arg);
 					emit_instr2(builder,
 							MOV, 
 							asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)),
-							arg);
+							temp_vreg);
 				} else {
 					// @TODO: This is essentially a bad open-coding of memcpy.
 					// Adding a call to memcpy would be really awkward since
