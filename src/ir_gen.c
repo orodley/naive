@@ -2260,6 +2260,99 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 	}
 }
 
+static bool value_fits_in_type(CType *type, u64 value)
+{
+	assert(type->t == INTEGER_TYPE);
+
+	bool is_signed = type->u.integer.is_signed;
+	u32 int_width = size_of_c_type(type) * 8;
+
+	i64 min;
+	i64 max;
+	if (is_signed) {
+		min = -(i64)(1ULL << (int_width - 1));
+		max = (1ULL << (int_width - 1)) - 1;
+	} else if (int_width == 64) {
+		// Handle 64 specially, because we can't do 1 << 64
+		return true;
+	} else {
+		min = 0;
+		max = (1ULL << int_width) - 1;
+	}
+
+	return (i64)value >= min && (i64)value <= max;
+}
+
+static CType *type_that_fits(CType **types, u32 num_types, u64 value)
+{
+	for (u32 i = 0; i < num_types; i++) {
+		CType *type = types[i];
+		if (value_fits_in_type(type, value)) {
+			return type;
+		}
+	}
+
+	// @TODO: Error message for literals that don't fit into any of the types
+	// in their list.
+	UNIMPLEMENTED;
+}
+
+// @TODO: We also need to keep track of whether it's a hex/octal literal -
+// there is a second column in the table with the types to use if so. For now
+// we just treat all literals as decimal literals.
+static CType *type_of_int_literal(TypeEnv *type_env, IntLiteral int_literal)
+{
+	u64 value = int_literal.value;
+	IntLiteralSuffix suffix = int_literal.suffix;
+	bool u_suffix = (suffix & UNSIGNED_SUFFIX) != 0;
+	bool l_suffix = (suffix & LONG_SUFFIX) != 0;
+	bool ll_suffix = (suffix & LONG_LONG_SUFFIX) != 0;
+
+	assert(!l_suffix || !ll_suffix);
+
+	// This follows the table given in C99 6.4.4.1.5
+	if (suffix == NO_SUFFIX) {
+		CType *types[] = {
+			&type_env->int_type,
+			&type_env->long_type,
+			&type_env->long_long_type
+		};
+		return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
+	} else if (u_suffix && !l_suffix && !ll_suffix) {
+		CType *types[] = {
+			&type_env->unsigned_int_type,
+			&type_env->unsigned_long_type,
+			&type_env->unsigned_long_long_type,
+		};
+		return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
+	} else if (!u_suffix && l_suffix) {
+		CType *types[] = {
+			&type_env->long_type,
+			&type_env->long_long_type,
+		};
+		return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
+	} else if (u_suffix && l_suffix) {
+		CType *types[] = {
+			&type_env->unsigned_long_type,
+			&type_env->unsigned_long_long_type,
+		};
+		return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
+	} else if (!u_suffix && ll_suffix) {
+		CType *types[] = {
+			&type_env->long_long_type,
+		};
+		return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
+	} else if (u_suffix && ll_suffix) {
+		CType *types[] = {
+			&type_env->unsigned_long_long_type,
+		};
+		return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
+	} else {
+		// The cases above should cover everything.
+		UNREACHABLE;
+	}
+}
+
 static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
 		char *field_name, ExprContext context)
 {
@@ -2782,8 +2875,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		return ir_gen_deref(builder, &env->type_env, pointer, context);
 	}
 	case INT_LITERAL_EXPR: {
-		// @TODO: Determine types of constants correctly.
-		CType *result_type = &env->type_env.int_type;
+		CType *result_type =
+			type_of_int_literal(&env->type_env, expr->u.int_literal);
 
 		IrValue value = value_const(
 				c_type_to_ir_type(result_type), expr->u.int_literal.value);
