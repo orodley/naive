@@ -1098,7 +1098,7 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 					goto cleanup;
 				}
 
-				fseek(input_file, file_start + file_size_bytes, SEEK_SET);
+				checked_fseek(input_file, file_start + file_size_bytes, SEEK_SET);
 			}
 
 			break;
