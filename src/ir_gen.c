@@ -2028,10 +2028,13 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 		Term switch_value =
 			ir_gen_expr(builder, env, statement->u.expr_and_statement.expr, RVALUE_CONTEXT);
 		assert(switch_value.ctype->t == INTEGER_TYPE);
+
+		i32 default_index = -1;
+
 		for (u32 i = 0; i < env->case_labels.size; i++) {
 			SwitchCase *label = ARRAY_REF(&env->case_labels, SwitchCase, i);
 			if (label->is_default) {
-				build_branch(builder, label->block);
+				default_index = i;
 			} else {
 				IrBlock *next =
 					pool_alloc(&builder->trans_unit->pool, sizeof *next);
@@ -2053,7 +2056,13 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 			}
 		}
 
-		build_branch(builder, after);
+		if (default_index == -1) {
+			build_branch(builder, after);
+		} else {
+			SwitchCase *default_case =
+				ARRAY_REF(&env->case_labels, SwitchCase, default_index);
+			build_branch(builder, default_case->block);
+		}
 		builder->current_block = after;
 
 		env->break_target = prev_break_target;
