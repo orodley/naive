@@ -746,7 +746,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
 		u8 scale = encoded_instr.scale;
 		u8 index = encoded_instr.index;
 		u8 base = encoded_instr.base;
-		u8 sib_byte = ((scale  & 3) << 6) | ((index & 7) << 3) | (base & 7);
+		u8 sib_byte = ((scale & 3) << 6) | ((index & 7) << 3) | (base & 7);
 		write_u8(output, sib_byte);
 	}
 	if (encoded_instr.disp_fixup != NULL)
