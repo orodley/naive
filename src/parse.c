@@ -813,9 +813,21 @@ static void dump_expr(ASTExpr *expr)
 {
 	pretty_printf("%s(", expr_type_names[expr->t]);
 	switch (expr->t) {
-	case INT_LITERAL_EXPR:
+	case INT_LITERAL_EXPR: {
 		pretty_printf("%8", expr->u.int_literal);
+
+		IntLiteralSuffix suffix = expr->u.int_literal.suffix;
+		if ((suffix & UNSIGNED_SUFFIX) != 0) {
+			pretty_printf("U");
+		}
+		if ((suffix & LONG_SUFFIX) != 0) {
+			pretty_printf("L");
+		}
+		if ((suffix & LONG_LONG_SUFFIX) != 0) {
+			pretty_printf("LL");
+		}
 		break;
+	}
 	case STRING_LITERAL_EXPR:
 		pretty_printf("%s", expr->u.string_literal.chars);
 		break;

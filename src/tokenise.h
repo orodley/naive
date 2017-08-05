@@ -83,13 +83,27 @@ typedef enum TokenType
 } TokenType;
 #undef X
 
+typedef enum IntLiteralSuffix
+{
+	NO_SUFFIX = 0,
+	UNSIGNED_SUFFIX = 1,
+	LONG_SUFFIX = 2,
+	LONG_LONG_SUFFIX = 4,
+} IntLiteralSuffix;
+
+typedef struct IntLiteral
+{
+	u64 value;
+	IntLiteralSuffix suffix;
+} IntLiteral;
+
 typedef struct Token
 {
 	TokenType t;
 
 	union
 	{
-		u64 int_literal;
+		IntLiteral int_literal;
 		char *symbol;
 		String string_literal;
 	} u;

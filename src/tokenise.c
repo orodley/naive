@@ -96,39 +96,41 @@ bool tokenise(Array(SourceToken) *tokens, Array(char) *text,
 }
 
 
-static void read_int_literal_suffix(Reader *reader)
+static IntLiteralSuffix read_int_literal_suffix(Reader *reader)
 {
-	// @TODO: Assign the type based on the suffix and the table in 6.4.4.1.5
-	bool read_length_suffix = false;
-	bool read_unsigned_suffix = false;
+	IntLiteralSuffix suffix = NO_SUFFIX;
 
 	while (!at_end(reader)) {
 		char c = read_char(reader);
 		switch (c) {
 		case 'u': case 'U':
-			if (read_unsigned_suffix) {
+			if ((suffix & UNSIGNED_SUFFIX) != 0) {
 				issue_error(&reader->source_loc,
 						"Multiple 'u' suffixes on integer literal");
 			}
 
-			read_unsigned_suffix = true;
+			suffix |= UNSIGNED_SUFFIX;
 			break;
 		case 'l': case 'L':
-			if (read_length_suffix) {
+			if (((suffix & (LONG_SUFFIX | LONG_LONG_SUFFIX)) != 0)) {
 				issue_error(&reader->source_loc,
 						"Multiple 'l'/'ll' suffixes on integer literal");
 			}
 
-			read_length_suffix = true;
 			if (peek_char(reader) == c) {
 				advance(reader);
+				suffix |= LONG_LONG_SUFFIX;
+			} else {
+				suffix |= LONG_SUFFIX;
 			}
 			break;
 		default:
 			back_up(reader);
-			return;
+			return suffix;
 		}
 	}
+
+	return suffix;
 }
 
 static bool read_octal_number(Reader *reader, u64 *value)
@@ -238,6 +240,7 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 
 		switch (read_char(reader)) {
 		case '0': {
+			IntLiteralSuffix suffix = NO_SUFFIX;
 			u64 value;
 
 			if (at_end(reader)) {
@@ -253,11 +256,12 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 						return false;
 				}
 
-				read_int_literal_suffix(reader);
+				suffix = read_int_literal_suffix(reader);
 			}
 
 			Token *token = ADD_TOK(TOK_INT_LITERAL);
-			token->u.int_literal = value;
+			token->u.int_literal.value = value;
+			token->u.int_literal.suffix = suffix;
 			break;
 		}
 		case '1': case '2': case '3': case '4': case '5': case '6':
@@ -275,10 +279,11 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 				advance(reader);
 			}
 
-			read_int_literal_suffix(reader);
+			IntLiteralSuffix suffix = read_int_literal_suffix(reader);
 
 			Token *token = ADD_TOK(TOK_INT_LITERAL);
-			token->u.int_literal = value;
+			token->u.int_literal.value = value;
+			token->u.int_literal.suffix = suffix;
 
 			break;
 		}
@@ -319,7 +324,8 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 			}
 
 			Token *token = ADD_TOK(TOK_INT_LITERAL);
-			token->u.int_literal = value;
+			token->u.int_literal.value = value;
+			token->u.int_literal.suffix = NO_SUFFIX;
 			break;
 		}
 		case '+':
@@ -437,7 +443,8 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 			// @TODO: These two should be handled in the preprocessor.
 			if (strneq(symbol.chars, "__LINE__", symbol.len)) {
 				Token *line_number = ADD_TOK(TOK_INT_LITERAL);
-				line_number->u.int_literal = reader->source_loc.line;
+				line_number->u.int_literal.value = reader->source_loc.line;
+				line_number->u.int_literal.suffix = NO_SUFFIX;
 			} else if (strneq(symbol.chars, "__FILE__", symbol.len)) {
 				Token *file_name = ADD_TOK(TOK_STRING_LITERAL);
 				assert(reader->source_loc.filename != NULL);
@@ -472,9 +479,23 @@ void dump_token(Token *token)
 {
 	fputs(token_type_names[token->t], stdout);
 	switch (token->t) {
-	case TOK_INT_LITERAL:
-		printf("(%" PRIu64 ")", token->u.int_literal);
+	case TOK_INT_LITERAL: {
+		printf("(%" PRIu64, token->u.int_literal.value);
+
+		IntLiteralSuffix suffix = token->u.int_literal.suffix;
+		if ((suffix & UNSIGNED_SUFFIX) != 0) {
+			putchar('U');
+		}
+		if ((suffix & LONG_SUFFIX) != 0) {
+			putchar('L');
+		}
+		if ((suffix & LONG_LONG_SUFFIX) != 0) {
+			fputs("LL", stdout);
+		}
+
+		putchar(')');
 		break;
+	}
 	case TOK_STRING_LITERAL:
 		// @TODO: Escape the resulting string
 		printf("(\"%s\")", token->u.string_literal.chars);
