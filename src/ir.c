@@ -514,7 +514,7 @@ static u64 constant_fold_binary_op(IrOp op, u64 arg1, u64 arg2)
 	case OP_SHR: return arg1 >> arg2;
 	case OP_MUL: return arg1 * arg2;
 	case OP_DIV: return arg1 / arg2;
-	case OP_MOD: return arg1 % arg2;
+	case OP_MOD: return (i64)arg1 % (i64)arg2;
 	case OP_EQ: return arg1 == arg2;
 	case OP_NEQ: return arg1 != arg2;
 	case OP_GT: return arg1 > arg2;
