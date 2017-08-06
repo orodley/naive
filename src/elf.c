@@ -226,8 +226,12 @@ typedef struct ELFFile
 {
 	FILE *output_file;
 	ELFFileType type;
+
 	i32 entry_point_virtual_address;
 	u32 next_string_index;
+
+	u32 curr_symbol_index;
+	u32 last_local_symbol_index;
 
 	SectionInfo section_info[NUM_SECTIONS];
 } ELFFile;
@@ -240,6 +244,8 @@ static void init_elf_file(ELFFile *elf_file, FILE *output_file, ELFFileType type
 	elf_file->output_file = output_file;
 	elf_file->type = type;
 	elf_file->next_string_index = 1;
+	elf_file->curr_symbol_index = 0;
+	elf_file->last_local_symbol_index = 0;
 }
 
 static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
@@ -357,6 +363,7 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 	ELF64Symbol undef_symbol;
 	ZERO_STRUCT(&undef_symbol);
 	checked_fwrite(&undef_symbol, sizeof undef_symbol, 1, elf_file->output_file);
+	elf_file->curr_symbol_index++;
 }
 
 // @TODO: Why does this not add the string as well?
@@ -365,6 +372,9 @@ static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
 {
 	if (elf_file->type == ET_EXEC && streq(name, "_start")) {
 		elf_file->entry_point_virtual_address = value;
+	}
+	if (binding == STB_LOCAL) {
+		elf_file->last_local_symbol_index = elf_file->curr_symbol_index;
 	}
 
 	ELF64Symbol symbol;
@@ -376,6 +386,7 @@ static void add_symbol(ELFFile *elf_file, ELFSymbolType type,
 	symbol.size = size;
 
 	elf_file->next_string_index += strlen(name) + 1;
+	elf_file->curr_symbol_index++;
 
 	checked_fwrite(&symbol, sizeof symbol, 1, elf_file->output_file);
 }
@@ -607,10 +618,10 @@ static void finish_strtab_section(ELFFile *elf_file)
 		symtab_header.shstrtab_index_for_name = SYMTAB_NAME;
 		symtab_header.type = SHT_SYMTAB;
 		// For symbol tables, this field contains 1 + the index of the last
-		// local symbol. 0 is undef symbol, 1 is the symbol for the filename,
-		// then all the rest of the symbols are global (at the moment).
-		// @TODO: Determine this correctly when we handle static correctly.
-		symtab_header.misc_info = 2;
+		// local symbol. We should at least have the STT_FILE symbol (which is
+		// local), so this should never be zero.
+		assert(elf_file->last_local_symbol_index != 0);
+		symtab_header.misc_info = elf_file->last_local_symbol_index + 1;
 		symtab_header.linked_section = STRTAB_INDEX;
 		symtab_header.section_location = elf_file->section_info[SYMTAB_INDEX].offset;
 		symtab_header.section_size = elf_file->section_info[SYMTAB_INDEX].size;
