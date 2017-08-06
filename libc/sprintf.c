@@ -15,6 +15,7 @@ int sprintf(char *str, const char *format, ...)
 	};
 
 	int ret = printf_impl(string_sink, &string_sink_arg, format, ap);
+	str[ret++] = '\0';
 
 	va_end(ap);
 	return ret;

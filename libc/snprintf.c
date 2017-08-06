@@ -16,6 +16,11 @@ int snprintf(char *str, size_t size, const char *format, ...)
 	};
 
 	int ret = printf_impl(string_sink, &string_sink_arg, format, ap);
+	if ((size_t)ret == size) {
+		str[ret - 1] = '\0';
+	} else {
+		str[ret++] = '\0';
+	}
 
 	va_end(ap);
 	return ret;
