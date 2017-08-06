@@ -16,7 +16,7 @@ _IO_FILE *fopen(const char *path, const char *mode)
 		flags = O_RDONLY;
 		break;
 	case 'w':
-		flags = O_WRONLY | O_CREAT;
+		flags = O_WRONLY | O_CREAT | O_TRUNC;
 		break;
 	default:
 		assert(!"Unimplemented");
