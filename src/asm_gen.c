@@ -2076,7 +2076,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 	//
 	// See the System V x86-64 ABI spec, section 3.2.2
 	stack_adjustment +=
-		(16 - (num_callee_save_regs * 8 + builder->local_stack_usage)) % 16;
+		16 - ((num_callee_save_regs * 8 + builder->local_stack_usage) % 16);
 
 	if (stack_adjustment != 0) {
 		emit_instr2(builder,
