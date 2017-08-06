@@ -858,11 +858,9 @@ static void asm_gen_instr(
 		assert(instr->type.t == IR_INT);
 		assert(instr->u.arg.type.t == IR_INT);
 
-		emit_instr2(builder,
-				MOVSX,
-				asm_vreg(next_vreg(builder), instr->type.u.bit_width),
-				asm_value(builder, instr->u.arg));
+		AsmValue vreg = asm_vreg(next_vreg(builder), instr->type.u.bit_width);
 		assign_vreg(builder, instr);
+		emit_instr2(builder, MOVSX, vreg, asm_value(builder, instr->u.arg));
 		break;
 	}
 	case OP_TRUNC: {
