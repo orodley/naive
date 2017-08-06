@@ -8,7 +8,7 @@
 #include "parse.h"
 #include "util.h"
 
-typedef enum CTypeType
+typedef enum CKind
 {
 	VOID_TYPE,
 	INTEGER_TYPE,
@@ -16,11 +16,11 @@ typedef enum CTypeType
 	STRUCT_TYPE,
 	POINTER_TYPE,
 	ARRAY_TYPE,
-} CTypeType;
+} CKind;
 
 typedef struct CType
 {
-	CTypeType t;
+	CKind t;
 
 	union
 	{
