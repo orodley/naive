@@ -1371,14 +1371,6 @@ typedef struct Pred
 	struct Pred *next;
 } Pred;
 
-int compare_pred_dest(const void *a, const void *b)
-{
-	Pred *pred_a = (Pred *)a, *pred_b = (Pred *)b;
-	if (pred_a->dest_offset < pred_b->dest_offset) return -1;
-	if (pred_a->dest_offset == pred_b->dest_offset) return 0;
-	return 1;
-}
-
 bool references_vreg(AsmValue value, u32 vreg)
 {
 	Register reg;
