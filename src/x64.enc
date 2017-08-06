@@ -24,7 +24,7 @@ CMP r/m16, r16         =   OSO + 39 /r
 CMP r/m32, imm32       =         81 /7 id
 CMP r/m32, r32         =         39 /r
 CMP r/m64, imm32       = REX.W + 81 /7 id
-CMP r/m64, r64         = REX.W + 29 /r
+CMP r/m64, r64         = REX.W + 39 /r
 
 IMUL r32, r/m32        =         [0F AF] /r
 IMUL r32, r/m32, imm32 =         69 /r id
