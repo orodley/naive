@@ -99,4 +99,4 @@ src/%.o: src/%.c $(HEADERS) $(GEN_FILES)
 
 .PHONY: clean
 clean:
-	rm -f ncc libc.a $(shell find $(SRC_DIRS) -name '*.o') $(GEN_FILES)
+	rm -f ncc nar libc.a $(shell find $(SRC_DIRS) -name '*.o') $(GEN_FILES)
