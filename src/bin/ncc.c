@@ -102,6 +102,13 @@ int main(int argc, char *argv[])
 				}
 
 				*ARRAY_APPEND(&include_dirs, char *) = include_dir;
+			} else if (strneq(arg, "-std=", 5)) {
+				char *standard = arg + 5;
+				if (!streq(standard, "c99")) {
+					fprintf(stderr,
+							"Error: unsupported C standard '%s'\n", standard);
+					return 1;
+				}
 			} else if (streq(arg, "-o")) {
 				if (i == argc - 1) {
 					fputs("Error: No filename after '-o'", stderr);
