@@ -2626,7 +2626,9 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	bool left_is_ptr = left.ctype->t == POINTER_TYPE;
 	bool right_is_ptr = right.ctype->t == POINTER_TYPE;
 
-	if ((ir_op == OP_EQ || ir_op == OP_NEQ) && (left_is_ptr || right_is_ptr)) {
+	if ((ir_op == OP_EQ || ir_op == OP_NEQ || ir_op == OP_GT
+				|| ir_op == OP_GTE || ir_op == OP_LT || ir_op == OP_LTE)
+			&& (left_is_ptr || right_is_ptr)) {
 		CType *int_type = &env->type_env.int_type;
 		if (!left_is_ptr || !right_is_ptr) {
 			Term *ptr_term, *other_term;
