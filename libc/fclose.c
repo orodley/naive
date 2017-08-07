@@ -4,7 +4,7 @@
 
 #include "io_file_struct.h"
 
-int fclose(_IO_FILE *fp)
+int fclose(struct _IO_FILE *fp)
 {
 	int ret = close(fp->fd);
 	free(fp);

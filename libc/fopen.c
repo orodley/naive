@@ -5,7 +5,7 @@
 
 #include "io_file_struct.h"
 
-_IO_FILE *fopen(const char *path, const char *mode)
+struct _IO_FILE *fopen(const char *path, const char *mode)
 {
 	int flags = 0;
 	size_t mode_len = strlen(mode);
@@ -37,7 +37,7 @@ _IO_FILE *fopen(const char *path, const char *mode)
 	if (fd == -1) {
 		return NULL;
 	} else {
-		_IO_FILE *fp = malloc(sizeof *fp);
+		struct _IO_FILE *fp = malloc(sizeof *fp);
 		fp->fd = fd;
 		return fp;
 	}

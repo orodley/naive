@@ -3,10 +3,10 @@
 
 #include <stdbool.h>
 
-typedef struct _IO_FILE
+struct _IO_FILE
 {
 	int fd;
 	bool eof;
-} _IO_FILE;
+};
 
 #endif
