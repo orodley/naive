@@ -3009,7 +3009,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 				Term va_list_ptr = ir_gen_expr(
 						builder, env, expr->u.function_call.arg_list->expr,
 						RVALUE_CONTEXT);
-				assert(va_list_ptr.ctype->t == ARRAY_TYPE);
+				assert(va_list_ptr.ctype->t == ARRAY_TYPE
+						|| va_list_ptr.ctype->t == POINTER_TYPE);
 				assert(va_list_ptr.ctype->u.array.elem_type->t == STRUCT_TYPE);
 
 				// @TODO: Search through the type env and asert that the elem
@@ -3258,7 +3259,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		CType *arg_type = type_name_to_c_type(builder, env,
 				expr->u.builtin_va_arg.type_name);
 
-		assert(va_list_term.ctype->t == ARRAY_TYPE);
+		assert(va_list_term.ctype->t == ARRAY_TYPE
+				|| va_list_term.ctype->t == POINTER_TYPE);
 		assert(va_list_term.ctype->u.array.elem_type->t == STRUCT_TYPE);
 
 		// @TODO: Search through the type env and asert that the elem type is
