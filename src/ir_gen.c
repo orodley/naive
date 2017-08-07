@@ -948,6 +948,9 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 
 		converted = build_type_instr(
 				builder, OP_CAST, value, c_type_to_ir_type(target_type));
+	} else if (term.ctype->t == POINTER_TYPE && target_type->t == INTEGER_TYPE) {
+		converted = build_type_instr(
+				builder, OP_CAST, term.value, c_type_to_ir_type(target_type));
 	} else if (term.ctype->t == POINTER_TYPE && target_type->t == POINTER_TYPE) {
 		converted = term.value;
 	} else if (term.ctype->t == ARRAY_TYPE && target_type->t == POINTER_TYPE) {
