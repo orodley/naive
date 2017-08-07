@@ -115,6 +115,19 @@ int main(int argc, char *argv[])
 					return 1;
 				}
 				output_filename = argv[++i];
+			} else if (strneq(arg, "-W", 2)) {
+				// Do nothing. We don't support any warnings, so for self-host
+				// purposes we'll just ignore these flags, as they shouldn't
+				// affect anything if our build is clean anyway.
+			} else if (streq(arg, "-g")) {
+				// Similarly we ignore "-g". Regardless of whether debug info
+				// is present the compiler should behave the same, so this
+				// should be fine for self hosting.
+			} else if (streq(arg, "-fno-asynchronous-unwind-tables")) {
+				// Sure thing! We won't generate any unwind tables. We weren't
+				// going to anyway.
+			} else if (streq(arg, "-fno-common")) {
+				// Again, this is our default.
 			} else {
 				fprintf(stderr, "Error: Unknown command-line argument: %s\n", arg);
 				return 1;
