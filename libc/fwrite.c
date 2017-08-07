@@ -4,7 +4,7 @@
 #include "io_file_struct.h"
 
 // The world's dumbest unbuffered fwrite implementation.
-size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, struct _IO_FILE *stream)
 {
 	// Yes, this could overflow. Whatever.
 	size_t bytes_to_write = size * nmemb;
