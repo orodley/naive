@@ -1206,11 +1206,9 @@ static void asm_gen_instr(
 			emit_instr2(builder, MOV, reg_arg2, arg2);
 		}
 
+		// @TODO: Precompute liveness.
 		AsmValue quotient = pre_alloced_vreg(builder, REG_CLASS_A, width);
 		AsmValue remainder = pre_alloced_vreg(builder, REG_CLASS_D, width);
-
-		instr->vreg_number =
-			(instr->op == OP_DIV ? quotient : remainder).u.reg.u.vreg_number;
 		emit_instr2(builder, MOV, quotient, arg1);
 
 		AsmOp sign_extend_op;
@@ -1226,6 +1224,12 @@ static void asm_gen_instr(
 		AsmInstr *idiv = emit_instr1(builder, IDIV, reg_arg2);
 		add_dep(idiv, quotient);
 		add_dep(idiv, remainder);
+
+		AsmValue result = instr->op == OP_DIV ? quotient : remainder;
+		AsmValue vreg = asm_vreg(new_vreg(builder), width);
+		emit_instr2(builder, MOV, vreg, result);
+		assign_vreg(instr, vreg);
+
 		break;
 	}
 	// @NOTE: Handled specially for a similar reason to OP_FIELD and OP_LOCAL
