@@ -1139,7 +1139,6 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 
 	write_contents(elf_file, &empty_array);
 
-	add_symbol(elf_file, STT_FILE, STB_LOCAL, SHN_ABS, executable_file_name, 0, 0);
 	for (u32 i = 0; i < symbol_table.size; i++) {
 		Symbol *symbol = ARRAY_REF(&symbol_table, Symbol, i);
 
@@ -1223,7 +1222,6 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 	}
 	finish_symtab_section(elf_file);
 
-	add_string(elf_file, executable_file_name);
 	for (u32 i = 0; i < symbol_table.size; i++) {
 		Symbol *symbol = ARRAY_REF(&symbol_table, Symbol, i);
 		add_string(elf_file, symbol->name);
