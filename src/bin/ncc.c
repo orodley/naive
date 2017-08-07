@@ -57,11 +57,11 @@ int main(int argc, char *argv[])
 
 	Array(char *) include_dirs = EMPTY_ARRAY;
 	*ARRAY_APPEND(&include_dirs, char *) = "/opt/naive/freestanding/";
-	*ARRAY_APPEND(&include_dirs, char *) = "/opt/naive/include/";
 
 	bool do_link = true;
 	bool syntax_only = false;
 	bool preprocess_only = false;
+	bool freestanding = false;
 	char *output_filename = NULL;
 
 	for (i32 i = 1; i < argc; i++) {
@@ -85,6 +85,8 @@ int main(int argc, char *argv[])
 				flag_print_pre_regalloc_stats = true;
 			} else if (streq(arg, "-fsyntax-only")) {
 				syntax_only = true;
+			} else if (streq(arg, "-ffreestanding")) {
+				freestanding = true;
 			} else if (streq(arg, "-c")) {
 				do_link = false;
 			} else if (strneq(arg, "-I", 2)) {
@@ -163,6 +165,11 @@ int main(int argc, char *argv[])
 		return 12;
 	}
 
+	// Put system headers at the start, so they take precedence.
+	if (!freestanding) {
+		*ARRAY_INSERT(&include_dirs, char *, 0) = "/opt/naive/include/";
+	}
+
 	Array(char *) temp_filenames;
 	ARRAY_INIT(&temp_filenames, char *, do_link ? source_input_filenames.size : 0);
 
@@ -216,7 +223,9 @@ int main(int argc, char *argv[])
 	if (do_link && !syntax_only && !preprocess_only) {
 		// Implicitly link in the standard library. We have to put this after
 		// the rest of the inputs because it's an archive.
-		*ARRAY_APPEND(&linker_input_filenames, char *) = "/opt/naive/libc.a";
+		if (!freestanding) {
+			*ARRAY_APPEND(&linker_input_filenames, char *) = "/opt/naive/libc.a";
+		}
 
 		char *executable_filename;
 		if (output_filename == NULL)
