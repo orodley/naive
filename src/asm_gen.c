@@ -1843,17 +1843,19 @@ static void allocate_registers(AsmBuilder *builder)
 	}
 	array_free(&active_vregs);
 
-#if 0
-	for (u32 i = 0; i < builder->virtual_registers.size; i++) {
-		VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
-		printf("#%u =", i);
-		switch (vreg->t) {
-		case IN_REG: printf(" (%d)\n", vreg->u.assigned_register); break;
-		case ON_STACK: printf(" [%d]\n", vreg->u.assigned_stack_slot); break;
-		case UNASSIGNED: UNREACHABLE;
+	// @TODO: Move register dumping stuff we we can dump the name here rather
+	// than just a number
+	if (flag_dump_register_assignments) {
+		for (u32 i = 0; i < builder->virtual_registers.size; i++) {
+			VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
+			printf("#%u =", i);
+			switch (vreg->t) {
+			case IN_REG: printf(" (%d)\n", vreg->u.assigned_register); break;
+			case ON_STACK: printf(" [%d]\n", vreg->u.assigned_stack_slot); break;
+			case UNASSIGNED: UNREACHABLE;
+			}
 		}
 	}
-#endif
 
 	u32 curr_sp_diff = 0;
 	for (u32 i = 0; i < body->size; i++) {

@@ -35,6 +35,7 @@ static bool flag_dump_ast = false;
 static bool flag_dump_ir = false;
 static bool flag_dump_asm = false;
 bool flag_dump_live_ranges = false;
+bool flag_dump_register_assignments = false;
 bool flag_print_pre_regalloc_stats = false;
 
 static char *make_temp_file(void);
@@ -78,6 +79,8 @@ int main(int argc, char *argv[])
 				flag_dump_asm = true;
 			} else if (streq(arg, "-dump-live-ranges")) {
 				flag_dump_live_ranges = true;
+			} else if (streq(arg, "-dump-register-assignments")) {
+				flag_dump_register_assignments = true;
 			} else if (streq(arg, "-print-pre-regalloc-stats")) {
 				flag_print_pre_regalloc_stats = true;
 			} else if (streq(arg, "-fsyntax-only")) {
