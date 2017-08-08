@@ -63,14 +63,16 @@ void *malloc(size_t size)
 			heap_block_size *= 2;
 
 		heap_block_used = 0;
-		heap_block = mmap(NULL, heap_block_size,
+		void *new_heap_block = mmap(NULL, heap_block_size,
 				PROT_READ | PROT_WRITE,
 				MAP_PRIVATE | MAP_ANONYMOUS,
 				-1, 0);
 
-		if (heap_block == MAP_FAILED) {
+		if (new_heap_block == MAP_FAILED) {
 			return NULL;
 		}
+
+		heap_block = new_heap_block;
 	}
 
 	HeapEntryHeader *new_header = (HeapEntryHeader *)(heap_block + heap_block_used);
