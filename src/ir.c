@@ -254,6 +254,12 @@ static char *ir_op_names[] = {
 };
 #undef X
 
+#define X(x) #x
+static char *ir_cmp_names[] = {
+	IR_CMPS
+};
+#undef X
+
 static void dump_instr(IrInstr *instr)
 {
 	char *op_name = ir_op_names[instr->op];
@@ -316,9 +322,20 @@ static void dump_instr(IrInstr *instr)
 			dump_value(instr->u.call.arg_array[i]);
 		}
 		break;
+	case OP_CMP: {
+		char *cmp_name = ir_cmp_names[instr->u.cmp.cmp];
+		// Start at 4 to skip "CMP_"
+		for (u32 i = 4; cmp_name[i] != '\0'; i++) {
+			putchar(tolower(cmp_name[i]));
+		}
+		fputs(", ", stdout);
+		dump_value(instr->u.cmp.arg1);
+		fputs(", ", stdout);
+		dump_value(instr->u.cmp.arg2);
+		break;
+	}
 	case OP_BIT_XOR: case OP_BIT_AND: case OP_BIT_OR: case OP_SHL: case OP_SHR:
-	case OP_MUL: case OP_DIV: case OP_MOD: case OP_EQ: case OP_ADD:
-	case OP_SUB: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE:
+	case OP_MUL: case OP_DIV: case OP_MOD: case OP_ADD: case OP_SUB:
 	case OP_STORE: case OP_BUILTIN_VA_ARG:
 		dump_value(instr->u.binary_op.arg1);
 		fputs(", ", stdout);
@@ -489,7 +506,6 @@ static u64 constant_fold_unary_op(IrOp op, u64 arg)
 {
 	switch (op) {
 	case OP_BIT_XOR: case OP_BIT_AND: case OP_BIT_OR: case OP_MUL: case OP_DIV:
-	case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE:
 	case OP_ADD: case OP_SUB:
 		UNREACHABLE;
 	case OP_BIT_NOT:
@@ -515,17 +531,23 @@ static u64 constant_fold_binary_op(IrOp op, u64 arg1, u64 arg2)
 	case OP_MUL: return arg1 * arg2;
 	case OP_DIV: return arg1 / arg2;
 	case OP_MOD: return (i64)arg1 % (i64)arg2;
-	case OP_EQ: return arg1 == arg2;
-	case OP_NEQ: return arg1 != arg2;
-	case OP_GT: return arg1 > arg2;
-	case OP_GTE: return arg1 >= arg2;
-	case OP_LT: return arg1 < arg2;
-	case OP_LTE: return arg1 <= arg2;
 	case OP_ADD: return arg1 + arg2;
 	case OP_SUB: return arg1 - arg2;
 	default:
 		assert(constant_foldable(op));
 		UNIMPLEMENTED;
+	}
+}
+
+static u32 constant_fold_cmp(IrCmp cmp, u64 arg1, u64 arg2)
+{
+	switch (cmp) {
+	case CMP_EQ: return arg1 == arg2;
+	case CMP_NEQ: return arg1 != arg2;
+	case CMP_GT: return arg1 > arg2;
+	case CMP_GTE: return arg1 >= arg2;
+	case CMP_LT: return arg1 < arg2;
+	case CMP_LTE: return arg1 <= arg2;
 	}
 }
 
@@ -620,18 +642,7 @@ IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg)
 IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2)
 {
 	assert(ir_type_eq(&arg1.type, &arg2.type));
-
 	IrType type = arg1.type;
-	switch (op) {
-	case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE:
-		// @TODO: This shouldn't be hardcoded here. We should define some fixed
-		// type for IR comparisons and the caller should explicitly cast to
-		// whatever type they want (int in C).
-		type = (IrType) { .t = IR_INT, .u.bit_width = 32 };
-		break;
-	default:
-		break;
-	}
 
 	if (arg1.t == VALUE_CONST && arg2.t == VALUE_CONST && constant_foldable(op)) {
 		return value_const(type,
@@ -643,6 +654,26 @@ IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue ar
 	instr->type = type;
 	instr->u.binary_op.arg1 = arg1;
 	instr->u.binary_op.arg2 = arg2;
+
+	return value_instr(instr);
+}
+
+IrValue build_cmp(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2)
+{
+	assert(ir_type_eq(&arg1.type, &arg2.type));
+	IrType type = (IrType) { .t = IR_INT, .u.bit_width = 32 };
+
+	if (arg1.t == VALUE_CONST && arg2.t == VALUE_CONST) {
+		return value_const(type,
+				constant_fold_cmp(cmp, arg1.u.constant, arg2.u.constant));
+	}
+
+	IrInstr *instr = append_instr(builder);
+	instr->op = OP_CMP;
+	instr->type = type;
+	instr->u.cmp.arg1 = arg1;
+	instr->u.cmp.arg2 = arg2;
+	instr->u.cmp.cmp = cmp;
 
 	return value_instr(instr);
 }

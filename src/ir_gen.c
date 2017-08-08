@@ -2044,8 +2044,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 				block_init(next, "switch.cmp",
 						builder->current_function->blocks.size);
 
-				IrValue cmp = build_binary_instr(builder,
-						OP_EQ,
+				IrValue cmp = build_cmp(builder,
+						CMP_EQ,
 						switch_value.value,
 						value_const(switch_value.value.type,
 							label->value->u.integer));
@@ -2623,12 +2623,34 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
 	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
 
+	do_arithmetic_conversions(builder, &left, &right);
+
+	CType *result_type = left.ctype;
+	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
+	return (Term) { .ctype = result_type, .value = value };
+}
+
+static Term ir_gen_binary_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
+		IrOp ir_op)
+{
+	return ir_gen_binary_operator(
+			builder,
+			env,
+			ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
+			ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT),
+			ir_op);
+}
+
+static Term ir_gen_cmp(IrBuilder *builder, Env *env, Term left,
+		Term right, IrCmp cmp)
+{
+	left.ctype = decay_to_pointer(&env->type_env, left.ctype);
+	right.ctype = decay_to_pointer(&env->type_env, right.ctype);
+
 	bool left_is_ptr = left.ctype->t == POINTER_TYPE;
 	bool right_is_ptr = right.ctype->t == POINTER_TYPE;
 
-	if ((ir_op == OP_EQ || ir_op == OP_NEQ || ir_op == OP_GT
-				|| ir_op == OP_GTE || ir_op == OP_LT || ir_op == OP_LTE)
-			&& (left_is_ptr || right_is_ptr)) {
+	if (left_is_ptr || right_is_ptr) {
 		CType *int_type = &env->type_env.int_type;
 		if (!left_is_ptr || !right_is_ptr) {
 			Term *ptr_term, *other_term;
@@ -2651,7 +2673,7 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 				return (Term) {
 					.ctype = int_type,
 					.value = value_const(
-							c_type_to_ir_type(int_type), ir_op == OP_NEQ),
+							c_type_to_ir_type(int_type), cmp == CMP_NEQ),
 				};
 			}
 
@@ -2661,35 +2683,26 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 			return (Term) {
 				.ctype = int_type,
 				.value = value_const(
-						c_type_to_ir_type(int_type), ir_op == OP_NEQ),
+						c_type_to_ir_type(int_type), cmp == CMP_NEQ),
 			};
 		}
 	} else {
 		do_arithmetic_conversions(builder, &left, &right);
 	}
 
-	CType *result_type;
-	if (ir_op == OP_EQ || ir_op == OP_NEQ || ir_op == OP_LT || ir_op == OP_GT
-			|| ir_op == OP_LTE || ir_op == OP_GTE) {
-		result_type = &env->type_env.int_type;
-	} else {
-		result_type = left.ctype;
-	}
-
-	IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
-
+	CType *result_type = &env->type_env.int_type;
+	IrValue value = build_cmp(builder, cmp, left.value, right.value);
 	return (Term) { .ctype = result_type, .value = value };
 }
 
-static Term ir_gen_binary_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
-		IrOp ir_op)
+static Term ir_gen_cmp_expr(IrBuilder *builder, Env *env, ASTExpr *expr, IrCmp cmp)
 {
-	return ir_gen_binary_operator(
+	return ir_gen_cmp(
 			builder,
 			env,
 			ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
 			ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT),
-			ir_op);
+			cmp);
 }
 
 static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
@@ -2955,7 +2968,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 			.ctype = result_type,
 			.value = value_const(c_type_to_ir_type(result_type), 0),
 		};
-		return ir_gen_binary_operator(builder, env, inner, zero, OP_EQ);
+		return ir_gen_cmp(builder, env, inner, zero, CMP_EQ);
 	}
 	case UNARY_MINUS_EXPR: {
 		Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
@@ -2971,12 +2984,12 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case MULTIPLY_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MUL);
 	case DIVIDE_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_DIV);
 	case MODULO_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MOD);
-	case EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_EQ);
-	case NOT_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_NEQ);
-	case GREATER_THAN_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_GT);
-	case GREATER_THAN_OR_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_GTE);
-	case LESS_THAN_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_LT);
-	case LESS_THAN_OR_EQUAL_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_LTE);
+	case EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_EQ);
+	case NOT_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_NEQ);
+	case GREATER_THAN_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_GT);
+	case GREATER_THAN_OR_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_GTE);
+	case LESS_THAN_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_LT);
+	case LESS_THAN_OR_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_LTE);
 
 	case ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_INVALID);
 	case ADD_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_ADD);
@@ -3135,7 +3148,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 		builder->current_block = rhs_block;
 		Term rhs = ir_gen_expr(builder, env, rhs_expr, RVALUE_CONTEXT);
 		assert(rhs.ctype->t == INTEGER_TYPE);
-		IrValue rhs_as_bool = build_binary_instr(builder, OP_NEQ, rhs.value,
+		IrValue rhs_as_bool = build_cmp(builder, CMP_NEQ, rhs.value,
 				value_const(c_type_to_ir_type(rhs.ctype), 0));
 		build_branch(builder, after_block);
 

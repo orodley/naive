@@ -147,9 +147,6 @@ typedef struct IrValue
 	} u;
 } IrValue;
 
-// @TODO: Maybe all the relational operations should be folded into OP_CMP with
-// an enum arg that determines the type of comparision? They are all handled
-// the same way besides the particular comparision op anyway.
 #define IR_OPS \
 	X(OP_INVALID), \
 \
@@ -165,12 +162,7 @@ typedef struct IrValue
 	X(OP_MOD), \
 	X(OP_ADD), \
 	X(OP_SUB), \
-	X(OP_EQ), \
-	X(OP_NEQ), \
-	X(OP_GT), \
-	X(OP_GTE), \
-	X(OP_LT), \
-	X(OP_LTE), \
+	X(OP_CMP), \
 	X(OP_CALL), \
 	X(OP_CAST), \
 	X(OP_ZEXT), \
@@ -196,6 +188,21 @@ typedef enum IrOp
 } IrOp;
 #undef X
 
+#define IR_CMPS \
+	X(CMP_EQ), \
+	X(CMP_NEQ), \
+	X(CMP_GT), \
+	X(CMP_GTE), \
+	X(CMP_LT), \
+	X(CMP_LTE),
+
+#define X(x) x
+typedef enum IrCmp
+{
+	IR_CMPS
+} IrCmp;
+#undef X
+
 typedef struct IrPhiParam
 {
 	IrBlock *block;
@@ -218,6 +225,12 @@ typedef struct IrInstr
 			IrValue arg1;
 			IrValue arg2;
 		} binary_op;
+		struct
+		{
+			IrValue arg1;
+			IrValue arg2;
+			IrCmp cmp;
+		} cmp;
 		struct
 		{
 			IrValue ptr;
@@ -293,6 +306,7 @@ IrConst *add_struct_const(IrBuilder *builder, IrType type);
 IrValue build_nullary_instr(IrBuilder *builder, IrOp op, IrType type);
 IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg);
 IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2);
+IrValue build_cmp(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2);
 IrValue build_local(IrBuilder *builder, IrType type);
 IrValue build_field(IrBuilder *builder, IrValue ptr, IrType type,
 		u32 field_number);

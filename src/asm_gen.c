@@ -196,9 +196,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 		// @NOTE: Handled specially for a similar reason to OP_FIELD and
 		// OP_LOCAL above. These instructions are mostly used as the argument
 		// to OP_COND, so we let OP_COND match them itself in those cases.
-		case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT:
-		case OP_LTE:
-			return asm_gen_relational_instr(builder, instr);
+		case OP_CMP: return asm_gen_relational_instr(builder, instr);
 		case OP_CAST: {
 			AsmValue cast_value = asm_value(builder, instr->u.arg);
 			if (cast_value.t == ASM_VALUE_REGISTER)
@@ -286,25 +284,24 @@ static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
 	return asm_value;
 }
 
-static IrOp maybe_flip_conditional(IrOp op, IrValue *arg1, IrValue *arg2)
+static IrCmp maybe_flip_conditional(IrCmp cmp, IrValue *arg1, IrValue *arg2)
 {
 	if (arg1->t != VALUE_CONST)
-		return op;
+		return cmp;
 
 	// The only form of comparison between a register and an immediate has the
 	// immediate on the RHS. So we need to swap the LHS and RHS if the
 	// immediate is on the LHS.
-	IrOp flipped;
-	switch (op) {
+	IrCmp flipped;
+	switch (cmp) {
 	// Antisymmetric relations.
-	case OP_GT: flipped = OP_LT; break;
-	case OP_LT: flipped = OP_GT; break;
-	case OP_GTE: flipped = OP_LTE; break;
-	case OP_LTE: flipped = OP_GTE; break;
+	case CMP_GT: flipped = CMP_LT; break;
+	case CMP_LT: flipped = CMP_GT; break;
+	case CMP_GTE: flipped = CMP_LTE; break;
+	case CMP_LTE: flipped = CMP_GTE; break;
 	// Symmetric relations.
-	case OP_EQ: flipped = OP_EQ; break;
-	case OP_NEQ: flipped = OP_NEQ; break;
-	default: UNREACHABLE;
+	case CMP_EQ: flipped = CMP_EQ; break;
+	case CMP_NEQ: flipped = CMP_NEQ; break;
 	}
 
 	IrValue temp = *arg1;
@@ -315,15 +312,16 @@ static IrOp maybe_flip_conditional(IrOp op, IrValue *arg1, IrValue *arg2)
 }
 
 // @TODO: This should probably be done on the IR level instead.
-static bool get_inner_cmp(AsmBuilder *builder, IrInstr *cmp, IrInstr **out)
+static bool get_inner_cmp(AsmBuilder *builder, IrInstr *instr, IrInstr **out)
 {
-	if (cmp->op != OP_EQ && cmp->op != OP_NEQ) {
-		*out = cmp;
+	if (instr->op != OP_CMP
+			|| (instr->u.cmp.cmp != CMP_EQ && instr->u.cmp.cmp != CMP_NEQ)) {
+		*out = instr;
 		return false;
 	}
 
-	IrValue arg1 = cmp->u.binary_op.arg1;
-	IrValue arg2 = cmp->u.binary_op.arg2;
+	IrValue arg1 = instr->u.binary_op.arg1;
+	IrValue arg2 = instr->u.binary_op.arg2;
 
 	u64 c;
 	IrValue non_const_arg;
@@ -336,47 +334,44 @@ static bool get_inner_cmp(AsmBuilder *builder, IrInstr *cmp, IrInstr **out)
 		c = arg2.u.constant;
 		non_const_arg = arg1;
 	} else {
-		*out = cmp;
+		*out = instr;
 		return false;
 	}
 
 	if (non_const_arg.t != VALUE_INSTR || (c != 0 && c != 1)) {
-		*out = cmp;
+		*out = instr;
 		return false;
 	}
 
 	IrInstr *inner = non_const_arg.u.instr;
 
-	switch (inner->op) {
-	case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE:
-		break;
-	default:
-		*out = cmp;
+	if (inner->op != OP_CMP) {
+		*out = instr;
 		return false;
 	}
 
-	if (cmp->op == OP_EQ && c == 0)
+	IrCmp cmp = instr->u.cmp.cmp;
+	if (cmp == CMP_EQ && c == 0)
 		return !get_inner_cmp(builder, inner, out);
-	if (cmp->op == OP_EQ && c == 1)
+	if (cmp == CMP_EQ && c == 1)
 		return get_inner_cmp(builder, inner, out);
-	if (cmp->op == OP_NEQ && c == 0)
+	if (cmp == CMP_NEQ && c == 0)
 		return get_inner_cmp(builder, inner, out);
-	if (cmp->op == OP_NEQ && c == 1)
+	if (cmp == CMP_NEQ && c == 1)
 		return !get_inner_cmp(builder, inner, out);
 
 	UNREACHABLE;
 }
 
-static IrOp invert_cmp_op(IrOp ir_op)
+static IrCmp invert_cmp(IrCmp cmp)
 {
-	switch (ir_op) {
-	case OP_EQ: return OP_NEQ;
-	case OP_NEQ: return OP_EQ;
-	case OP_GT: return OP_LTE;
-	case OP_GTE: return OP_LT;
-	case OP_LT: return OP_GTE;
-	case OP_LTE: return OP_GT;
-	default: return ir_op;
+	switch (cmp) {
+	case CMP_EQ: return CMP_NEQ;
+	case CMP_NEQ: return CMP_EQ;
+	case CMP_GT: return CMP_LTE;
+	case CMP_GTE: return CMP_LT;
+	case CMP_LT: return CMP_GTE;
+	case CMP_LTE: return CMP_GT;
 	}
 }
 
@@ -384,22 +379,22 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
 {
 	bool invert = get_inner_cmp(builder, instr, &instr);
 
-	IrValue arg1 = instr->u.binary_op.arg1;
-	IrValue arg2 = instr->u.binary_op.arg2;
-	IrOp ir_op = maybe_flip_conditional(instr->op, &arg1, &arg2);
+	assert(instr->op == OP_CMP);
+	IrValue arg1 = instr->u.cmp.arg1;
+	IrValue arg2 = instr->u.cmp.arg2;
+	IrCmp cmp = maybe_flip_conditional(instr->u.cmp.cmp, &arg1, &arg2);
 
 	if (invert)
-		ir_op = invert_cmp_op(ir_op);
+		cmp = invert_cmp(cmp);
 
 	AsmOp op;
-	switch (ir_op) {
-	case OP_EQ: op = SETE; break;
-	case OP_NEQ: op = SETNE; break;
-	case OP_GT: op = SETG; break;
-	case OP_GTE: op = SETGE; break;
-	case OP_LT: op = SETL; break;
-	case OP_LTE: op = SETLE; break;
-	default: UNREACHABLE;
+	switch (cmp) {
+	case CMP_EQ: op = SETE; break;
+	case CMP_NEQ: op = SETNE; break;
+	case CMP_GT: op = SETG; break;
+	case CMP_GTE: op = SETGE; break;
+	case CMP_LT: op = SETL; break;
+	case CMP_LTE: op = SETLE; break;
 	}
 
 	AsmValue asm_arg1 = asm_value(builder, arg1);
@@ -631,22 +626,25 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
 
 	IrInstr *cond_instr = condition.u.instr;
 	bool invert = get_inner_cmp(builder, cond_instr, &cond_instr);
+	if (cond_instr->op != OP_CMP) {
+		return false;
+	}
 
-	IrValue arg1 = cond_instr->u.binary_op.arg1;
-	IrValue arg2 = cond_instr->u.binary_op.arg2;
-	IrOp ir_op = maybe_flip_conditional(cond_instr->op, &arg1, &arg2);
+	IrValue arg1 = cond_instr->u.cmp.arg1;
+	IrValue arg2 = cond_instr->u.cmp.arg2;
+	IrCmp cmp = maybe_flip_conditional(cond_instr->u.cmp.cmp, &arg1, &arg2);
 
 	if (invert)
-		ir_op = invert_cmp_op(ir_op);
+		cmp = invert_cmp(cmp);
 
 	AsmOp jcc;
-	switch (ir_op) {
-	case OP_EQ: jcc = JE; break;
-	case OP_NEQ: jcc = JNE; break;
-	case OP_GT: jcc = JG; break;
-	case OP_GTE: jcc = JGE; break;
-	case OP_LT: jcc = JL; break;
-	case OP_LTE: jcc = JLE; break;
+	switch (cmp) {
+	case CMP_EQ: jcc = JE; break;
+	case CMP_NEQ: jcc = JNE; break;
+	case CMP_GT: jcc = JG; break;
+	case CMP_GTE: jcc = JGE; break;
+	case CMP_LT: jcc = JL; break;
+	case CMP_LTE: jcc = JLE; break;
 	default: return false;
 	}
 
@@ -1233,9 +1231,9 @@ static void asm_gen_instr(
 		break;
 	}
 	// @NOTE: Handled specially for a similar reason to OP_FIELD and OP_LOCAL
-	// above. These instructions are mostly used as the argument to OP_COND, so
-	// we let OP_COND match them itself in those cases.
-	case OP_EQ: case OP_NEQ: case OP_GT: case OP_GTE: case OP_LT: case OP_LTE: break;
+	// above. This instruction is mostly used as the argument to OP_COND, so we
+	// let OP_COND match them itself in those cases.
+	case OP_CMP: break;
 	case OP_BUILTIN_VA_START: {
 		AsmValue va_list_ptr = asm_vreg(new_vreg(builder), 64);
 		emit_instr2(builder, MOV, va_list_ptr, asm_value(builder, instr->u.arg));
