@@ -2688,6 +2688,24 @@ static Term ir_gen_cmp(IrBuilder *builder, Env *env, Term left,
 		}
 	} else {
 		do_arithmetic_conversions(builder, &left, &right);
+
+		assert(c_type_eq(left.ctype, right.ctype));
+		assert(left.ctype->t == INTEGER_TYPE);
+
+		// @NOTE: We always pass the signed comparison ops to this function.
+		// Not because we specifically want a signed comparison. Just because
+		// all of the IrCmp members have explicit signedness. The caller
+		// expects ir_gen_cmp to adjust as necessary based on the signedness of
+		// the arguments after conversion.
+		if (!left.ctype->u.integer.is_signed) {
+			switch (cmp) {
+			case CMP_SGT: cmp = CMP_UGT; break;
+			case CMP_SGTE: cmp = CMP_UGTE; break;
+			case CMP_SLT: cmp = CMP_ULT; break;
+			case CMP_SLTE: cmp = CMP_ULTE; break;
+			default: break;
+			}
+		}
 	}
 
 	CType *result_type = &env->type_env.int_type;
@@ -2986,10 +3004,10 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 	case MODULO_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_MOD);
 	case EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_EQ);
 	case NOT_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_NEQ);
-	case GREATER_THAN_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_GT);
-	case GREATER_THAN_OR_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_GTE);
-	case LESS_THAN_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_LT);
-	case LESS_THAN_OR_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_LTE);
+	case GREATER_THAN_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_SGT);
+	case GREATER_THAN_OR_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_SGTE);
+	case LESS_THAN_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_SLT);
+	case LESS_THAN_OR_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_SLTE);
 
 	case ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_INVALID);
 	case ADD_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_ADD);

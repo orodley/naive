@@ -191,10 +191,14 @@ typedef enum IrOp
 #define IR_CMPS \
 	X(CMP_EQ), \
 	X(CMP_NEQ), \
-	X(CMP_GT), \
-	X(CMP_GTE), \
-	X(CMP_LT), \
-	X(CMP_LTE),
+	X(CMP_SGT), \
+	X(CMP_SGTE), \
+	X(CMP_SLT), \
+	X(CMP_SLTE), \
+	X(CMP_UGT), \
+	X(CMP_UGTE), \
+	X(CMP_ULT), \
+	X(CMP_ULTE),
 
 #define X(x) x
 typedef enum IrCmp

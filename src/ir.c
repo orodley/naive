@@ -544,10 +544,14 @@ static u32 constant_fold_cmp(IrCmp cmp, u64 arg1, u64 arg2)
 	switch (cmp) {
 	case CMP_EQ: return arg1 == arg2;
 	case CMP_NEQ: return arg1 != arg2;
-	case CMP_GT: return arg1 > arg2;
-	case CMP_GTE: return arg1 >= arg2;
-	case CMP_LT: return arg1 < arg2;
-	case CMP_LTE: return arg1 <= arg2;
+	case CMP_SGT: return (i64)arg1 > (i64)arg2;
+	case CMP_SGTE: return (i64)arg1 >= (i64)arg2;
+	case CMP_SLT: return (i64)arg1 < (i64)arg2;
+	case CMP_SLTE: return (i64)arg1 <= (i64)arg2;
+	case CMP_UGT: return arg1 > arg2;
+	case CMP_UGTE: return arg1 >= arg2;
+	case CMP_ULT: return arg1 < arg2;
+	case CMP_ULTE: return arg1 <= arg2;
 	}
 }
 

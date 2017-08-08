@@ -40,6 +40,10 @@ JG  rel                =         [0F 8F] cd
 JGE rel                =         [0F 8D] cd
 JL  rel                =         [0F 8C] cd
 JLE rel                =         [0F 8E] cd
+JA  rel                =         [0F 87] cd
+JAE rel                =         [0F 83] cd
+JB  rel                =         [0F 82] cd
+JBE rel                =         [0F 86] cd
 
 JMP rel                =         E9 cd
 
@@ -93,6 +97,10 @@ SETG  r/m8             =         [0F 9F] /0
 SETGE r/m8             =         [0F 9D] /0
 SETL  r/m8             =         [0F 9C] /0
 SETLE r/m8             =         [0F 9E] /0
+SETA  r/m8             =         [0F 97] /0
+SETAE r/m8             =         [0F 93] /0
+SETB  r/m8             =         [0F 92] /0
+SETBE r/m8             =         [0F 96] /0
 
 SHL r/m32, imm8        =         C1 /4 ib
 SHL r/m32, CL          =         D3 /4

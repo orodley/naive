@@ -295,10 +295,14 @@ static IrCmp maybe_flip_conditional(IrCmp cmp, IrValue *arg1, IrValue *arg2)
 	IrCmp flipped;
 	switch (cmp) {
 	// Antisymmetric relations.
-	case CMP_GT: flipped = CMP_LT; break;
-	case CMP_LT: flipped = CMP_GT; break;
-	case CMP_GTE: flipped = CMP_LTE; break;
-	case CMP_LTE: flipped = CMP_GTE; break;
+	case CMP_SGT: flipped = CMP_SLT; break;
+	case CMP_SLT: flipped = CMP_SGT; break;
+	case CMP_SGTE: flipped = CMP_SLTE; break;
+	case CMP_SLTE: flipped = CMP_SGTE; break;
+	case CMP_UGT: flipped = CMP_ULT; break;
+	case CMP_ULT: flipped = CMP_UGT; break;
+	case CMP_UGTE: flipped = CMP_ULTE; break;
+	case CMP_ULTE: flipped = CMP_UGTE; break;
 	// Symmetric relations.
 	case CMP_EQ: flipped = CMP_EQ; break;
 	case CMP_NEQ: flipped = CMP_NEQ; break;
@@ -368,10 +372,14 @@ static IrCmp invert_cmp(IrCmp cmp)
 	switch (cmp) {
 	case CMP_EQ: return CMP_NEQ;
 	case CMP_NEQ: return CMP_EQ;
-	case CMP_GT: return CMP_LTE;
-	case CMP_GTE: return CMP_LT;
-	case CMP_LT: return CMP_GTE;
-	case CMP_LTE: return CMP_GT;
+	case CMP_SGT: return CMP_SLTE;
+	case CMP_SGTE: return CMP_SLT;
+	case CMP_SLT: return CMP_SGTE;
+	case CMP_SLTE: return CMP_SGT;
+	case CMP_UGT: return CMP_ULTE;
+	case CMP_UGTE: return CMP_ULT;
+	case CMP_ULT: return CMP_UGTE;
+	case CMP_ULTE: return CMP_UGT;
 	}
 }
 
@@ -391,10 +399,14 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
 	switch (cmp) {
 	case CMP_EQ: op = SETE; break;
 	case CMP_NEQ: op = SETNE; break;
-	case CMP_GT: op = SETG; break;
-	case CMP_GTE: op = SETGE; break;
-	case CMP_LT: op = SETL; break;
-	case CMP_LTE: op = SETLE; break;
+	case CMP_SGT: op = SETG; break;
+	case CMP_SGTE: op = SETGE; break;
+	case CMP_SLT: op = SETL; break;
+	case CMP_SLTE: op = SETLE; break;
+	case CMP_UGT: op = SETA; break;
+	case CMP_UGTE: op = SETAE; break;
+	case CMP_ULT: op = SETB; break;
+	case CMP_ULTE: op = SETBE; break;
 	}
 
 	AsmValue asm_arg1 = asm_value(builder, arg1);
@@ -641,11 +653,14 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
 	switch (cmp) {
 	case CMP_EQ: jcc = JE; break;
 	case CMP_NEQ: jcc = JNE; break;
-	case CMP_GT: jcc = JG; break;
-	case CMP_GTE: jcc = JGE; break;
-	case CMP_LT: jcc = JL; break;
-	case CMP_LTE: jcc = JLE; break;
-	default: return false;
+	case CMP_SGT: jcc = JG; break;
+	case CMP_SGTE: jcc = JGE; break;
+	case CMP_SLT: jcc = JL; break;
+	case CMP_SLTE: jcc = JLE; break;
+	case CMP_UGT: jcc = JA; break;
+	case CMP_UGTE: jcc = JAE; break;
+	case CMP_ULT: jcc = JB; break;
+	case CMP_ULTE: jcc = JBE; break;
 	}
 
 	AsmValue arg2_value = maybe_move_const_to_reg(builder,
@@ -1446,6 +1461,7 @@ static void compute_live_ranges(AsmBuilder *builder)
 		AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
 		switch (instr->op) {
 		case JMP: case JE: case JNE: case JG: case JGE: case JL: case JLE:
+		case JA: case JAE: case JB: case JBE:
 			break;
 		default: continue;
 		}
@@ -1527,6 +1543,7 @@ static void compute_live_ranges(AsmBuilder *builder)
 				i32 succ0 = -1, succ1 = -1;
 				switch (instr->op) {
 				case JE: case JNE: case JG: case JGE: case JL: case JLE:
+				case JA: case JAE: case JB: case JBE:
 					succ1 = pc + 1;
 					// @NOTE: Deliberate fallthrough.
 				case JMP: {
