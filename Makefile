@@ -59,10 +59,14 @@ ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/bit_set.o \
 		src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NCC_CFLAGS) $^ -o $@
+	@echo 'Installing ncc in /opt/naive'
+	@cp ncc /opt/naive
 
 nar: src/bin/nar.o src/array.o src/file.o src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
+	@echo 'Installing nar in /opt/naive'
+	@cp nar /opt/naive
 
 libc.a: $(call objs_for_dir,libc) $(HEADERS)
 	@echo 'AR $@'
