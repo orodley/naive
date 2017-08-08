@@ -36,6 +36,10 @@ int main(int argc, char *argv[])
 
 	Array(char) too_long_filenames = EMPTY_ARRAY;
 	for (int i = input_files_start; i < argc; i++) {
+		// File headers are aligned to even byte boundaries.
+		if (checked_ftell(ar_file) % 2 == 1)
+			checked_fseek(ar_file, 1, SEEK_CUR);
+
 		ArFileHeader file_header;
 		memset(&file_header, ' ', sizeof file_header);
 
