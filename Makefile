@@ -1,6 +1,6 @@
 CC ?= clang
 AR ?= ar
-NASM ?= nasm
+ASM ?= nasm
 
 PEG ?= meta/peg.py
 ENC ?= meta/enc.py
@@ -94,8 +94,8 @@ src/%.o: src/%.c $(HEADERS) $(GEN_FILES)
 	@$(CC) -c $(COMMON_CFLAGS) $(NCC_CFLAGS) -g $< -o $@
 
 %.o: %.s
-	@echo 'NASM $<'
-	@$(NASM) -f elf64 $< -o $@
+	@echo 'ASM $<'
+	@$(ASM) -f elf64 $< -o $@
 
 %.inc: %.peg $(PEG)
 	@echo 'PEG $<'
