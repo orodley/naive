@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 
-// @PORT
-#include <sys/stat.h>
-
 #include "array.h"
 #include "file.h"
 #include "misc.h"
@@ -45,12 +42,6 @@ int main(int argc, char *argv[])
 
 		char *input_filename = argv[i];
 
-		struct stat status;
-		if (stat(input_filename, &status) == -1) {
-			perror("Failed to stat input file");
-			return 5;
-		}
-
 		FILE *input_file = fopen(input_filename, "rb");
 		if (input_file == NULL) {
 			perror("Failed to open input file");
@@ -84,23 +75,13 @@ int main(int argc, char *argv[])
 					"%s/", input_filename);
 			file_header.name[n] = ' ';
 		}
-		u32 n = snprintf(file_header.modification_timestamp_decimal,
-				sizeof file_header.modification_timestamp_decimal + 1,
-				"%ld", status.st_mtime);
-		file_header.modification_timestamp_decimal[n] = ' ';
-		n = snprintf(file_header.owner_id_decimal,
-				sizeof file_header.owner_id_decimal + 1,
-				"%d", status.st_uid);
-		file_header.owner_id_decimal[n] = ' ';
-		n = snprintf(file_header.group_id_decimal,
-				sizeof file_header.group_id_decimal + 1,
-				"%d", status.st_gid);
-		file_header.group_id_decimal[n] = ' ';
-		n = snprintf(file_header.mode_octal,
-				sizeof file_header.mode_octal + 1,
-				"%o", status.st_mode);
-		file_header.mode_octal[n] = ' ';
-		n = snprintf(file_header.size_bytes_decimal,
+		file_header.modification_timestamp_decimal[0] = '0';
+		file_header.owner_id_decimal[0] = '0';
+		file_header.group_id_decimal[0] = '0';
+		file_header.mode_octal[0] = '6';
+		file_header.mode_octal[1] = '4';
+		file_header.mode_octal[2] = '4';
+		u32 n = snprintf(file_header.size_bytes_decimal,
 				sizeof file_header.size_bytes_decimal + 1,
 				"%ld", file_size);
 		file_header.size_bytes_decimal[n] = ' ';
