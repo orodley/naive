@@ -42,6 +42,9 @@ inline bool strneq(char *a, char *b, u32 length)
 	return strncmp(a, b, length) == 0;
 }
 
+char *nconcat(char *str_a, u32 len_a, char *str_b, u32 len_b);
+char *concat(char *str_a, char *str_b);
+
 inline u32 lowest_set_bit(u64 x)
 {
 	assert(x != 0);

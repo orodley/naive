@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include "util.h"
 
@@ -14,3 +15,19 @@ extern inline u32 highest_set_bit(u64 x);
 extern inline u32 bit_count(u32 x);
 
 extern inline u32 align_to(u32 n, u32 align);
+
+char *nconcat(char *str_a, u32 len_a, char *str_b, u32 len_b)
+{
+	u32 result_length = len_a + len_b;
+	char *result = malloc(result_length + 1);
+	memcpy(result, str_a, len_a);
+	memcpy(result + len_a, str_b, len_b);
+	result[result_length] = '\0';
+
+	return result;
+}
+
+char *concat(char *str_a, char *str_b)
+{
+	return nconcat(str_a, strlen(str_a), str_b, strlen(str_b));
+}

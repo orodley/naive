@@ -21,6 +21,10 @@ ifneq (, $(shell which ccache))
 	CC := CCACHE_CPP2=yes ccache $(CC)
 endif
 
+ifneq (, $(NAIVE_DIR))
+	COMMON_CFLAGS += -naive-dir $(NAIVE_DIR)
+endif
+
 SRC_DIRS := src libc freestanding
 
 GEN_FILES := $(patsubst %.peg, %.inc, $(shell find $(SRC_DIRS) -name '*.peg'))

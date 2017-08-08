@@ -267,17 +267,6 @@ static bool file_exists(char *path)
 	return f != NULL;
 }
 
-static char *concat(char *str_a, u32 len_a, char *str_b, u32 len_b)
-{
-	u32 result_length = len_a + len_b;
-	char *result = malloc(result_length + 1);
-	memcpy(result, str_a, len_a);
-	memcpy(result + len_a, str_b, len_b);
-	result[result_length] = '\0';
-
-	return result;
-}
-
 static char *look_up_include_path(Array(char *) *include_dirs,
 		char *including_file, char *include_path)
 {
@@ -307,7 +296,7 @@ static char *look_up_include_path(Array(char *) *include_dirs,
 	}
 
 	u32 include_path_length = strlen(include_path);
-	char *potential_path = concat(
+	char *potential_path = nconcat(
 			base_path, base_length, include_path, include_path_length);
 	if (file_exists(potential_path))
 		return potential_path;
@@ -319,7 +308,7 @@ static char *look_up_include_path(Array(char *) *include_dirs,
 		base_length = strlen(base_path);
 
 		include_path_length = strlen(include_path);
-		potential_path = concat(
+		potential_path = nconcat(
 				base_path, base_length, include_path, include_path_length);
 		if (file_exists(potential_path))
 			return potential_path;
