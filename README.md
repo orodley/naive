@@ -1,5 +1,5 @@
-C compiler toolchain targeting Linux x64, written from scratch in C. Still
-fairly incomplete, but getting relatively close to self-hosting.
+C compiler toolchain targeting Linux x64, written from scratch in C. Many
+features are missing, but it is complete enough to self-host.
 
 Includes:
 
@@ -7,6 +7,7 @@ Includes:
 * C frontend
 * IR
 * Assembly generation
-* Assembler
+* Assembler (for the in-memory format, and for textual assembly)
 * ELF object file output
 * Linker
+* `ar` clone
