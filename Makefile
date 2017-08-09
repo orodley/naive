@@ -39,7 +39,7 @@ objs_for_dir = $(patsubst %.c, %.o, $(shell find $(1) -name '*.c')) \
 .SECONDARY: $(GEN_FILES)
 
 .PHONY: all
-all: ncc nar libc.a tags
+all: ncc nar nas libc.a tags
 
 .PHONY: asan
 asan: NCC_CFLAGS += -fsanitize=address
@@ -71,6 +71,13 @@ nar: src/bin/nar.o src/array.o src/file.o src/util.o
 	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
 	@echo 'Installing nar in /opt/naive'
 	@cp nar /opt/naive
+
+nas: src/bin/nas.o src/reader.o src/util.o src/diagnostics.o src/asm.o \
+		src/elf.o src/pool.o src/file.o src/array.o
+	@echo 'CC $@'
+	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
+	@echo 'Installing nas in /opt/naive'
+	@cp nas /opt/naive
 
 libc.a: $(call objs_for_dir,libc) $(HEADERS)
 	@echo 'AR $@'

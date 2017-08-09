@@ -15,16 +15,20 @@
 
 make clean && make -j16 && rm -rf /tmp/naive1 && cp -r /opt/naive/ /tmp/naive1 && make clean && \
 	echo '\n========= Compiled stage 1 =========\n' && \
-	CC=/tmp/naive1/ncc AR=/tmp/naive1/nar NAIVE_DIR=/tmp/naive1/ make -j16 && \
+	CC=/tmp/naive1/ncc AR=/tmp/naive1/nar ASM=/tmp/naive1/nas \
+		NAIVE_DIR=/tmp/naive1/ make -j16 && \
 		rm -rf /tmp/naive2 && cp -r /opt/naive /tmp/naive2 && make clean && \
 	echo '\n========= Compiled stage 2 =========\n' && \
-	CC=/tmp/naive2/ncc AR=/tmp/naive2/nar NAIVE_DIR=/tmp/naive2/ make -j16 && \
+	CC=/tmp/naive2/ncc AR=/tmp/naive2/nar ASM=/tmp/naive2/nas \
+		NAIVE_DIR=/tmp/naive2/ make -j16 && \
 		rm -rf /tmp/naive3 && cp -r /opt/naive /tmp/naive3 && make clean && \
 	echo '\n========= Compiled stage 3 =========\n' && \
-	CC=/tmp/naive3/ncc AR=/tmp/naive3/nar NAIVE_DIR=/tmp/naive3/ make -j16 && \
+	CC=/tmp/naive3/ncc AR=/tmp/naive3/nar ASM=/tmp/naive3/nas \
+		NAIVE_DIR=/tmp/naive3/ make -j16 && \
 		rm -rf /tmp/naive4 && cp -r /opt/naive /tmp/naive4 && make clean && \
 	echo '\n========= Compiled stage 4 =========\n' && \
 	diff /tmp/naive3/ncc /tmp/naive4/ncc && \
 	diff /tmp/naive3/nar /tmp/naive4/nar && \
+	diff /tmp/naive3/nas /tmp/naive4/nas && \
 	diff /tmp/naive3/libc.a /tmp/naive4/libc.a && \
 	echo 'Bootstrap completed successfully - stage 3 and 4 are consistent'
