@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +9,10 @@ struct _IO_FILE *fopen(const char *path, const char *mode)
 	int flags = 0;
 	size_t mode_len = strlen(mode);
 
-	assert(mode_len == 1 || mode_len == 2);
+	if (mode_len != 1 && mode_len != 2) {
+		// Unimplemented
+		abort();
+	}
 	switch (mode[0]) {
 	case 'r':
 		flags = O_RDONLY;
@@ -19,12 +21,14 @@ struct _IO_FILE *fopen(const char *path, const char *mode)
 		flags = O_WRONLY | O_CREAT | O_TRUNC;
 		break;
 	default:
-		assert(!"Unimplemented");
+		// Unimplemented
+		abort();
 	}
 
-	if (mode_len == 2) {
-		assert(mode[1] == 'b');
-		// NOP on Linux - text and binary files are treated the same
+	// NOP on Linux - text and binary files are treated the same
+	if (mode_len == 2 && mode[1] != 'b') {
+		// Unimplemented
+		abort();
 	}
 
 	int fd;

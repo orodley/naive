@@ -1,4 +1,4 @@
-#include <assert.h>
+#include <stdlib.h>
 
 #include "printf_impl.h"
 
@@ -128,7 +128,8 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
 					break;
 				}
 				default:
-					assert(!"Unimplemented");
+					// Unimplemented
+					abort();
 				}
 				break;
 			}
