@@ -1143,9 +1143,15 @@ bool link_elf_executable(char *executable_file_name, Array(char *) *linker_input
 		Symbol *symbol = ARRAY_REF(&symbol_table, Symbol, i);
 
 		if (!symbol->defined) {
-			fprintf(stderr, "Undefined symbol '%s'\n", symbol->name);
-			ret = false;
-			goto cleanup;
+			if (symbol->relocs.size != 0) {
+				fprintf(stderr, "Undefined symbol '%s'\n", symbol->name);
+				ret = false;
+				goto cleanup;
+			}
+
+			// Declared but never defined... but nothing references it. Just
+			// ignore the symbol.
+			continue;
 		}
 
 		SectionInfo *symbol_section_info =
