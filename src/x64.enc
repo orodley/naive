@@ -118,6 +118,8 @@ SUB r/m64, r64         = REX.W + 29 /r
 SUB r/m64, imm8        = REX.W + 83 /5 ib
 SUB r/m64, imm32       = REX.W + 81 /5 id
 
+SYSCALL                =         [0F 05]
+
 TEST r/m8, r8          =         84 /r
 TEST r/m32, r32        =         85 /r
 

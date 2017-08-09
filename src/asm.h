@@ -144,7 +144,8 @@ typedef struct AsmValue
 	X(JB), \
 	X(JBE), \
 	X(ADC), \
-	X(SBB)
+	X(SBB), \
+	X(SYSCALL),
 
 #define X(x) x
 typedef enum AsmOp
