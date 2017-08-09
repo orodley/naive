@@ -113,13 +113,13 @@ int main(int argc, char *argv[])
 				}
 			} else if (streq(arg, "-o")) {
 				if (i == argc - 1) {
-					fputs("Error: No filename after '-o'", stderr);
+					fputs("Error: No filename after '-o'\n", stderr);
 					return 1;
 				}
 				output_filename = argv[++i];
 			} else if (streq(arg, "-naive-dir")) {
 				if (i == argc - 1) {
-					fputs("Error: No directory after '-naive-dir'", stderr);
+					fputs("Error: No directory after '-naive-dir'\n", stderr);
 					return 1;
 				}
 				naive_dir = argv[++i];
