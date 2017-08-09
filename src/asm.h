@@ -216,7 +216,7 @@ typedef struct AsmSymbol
 {
 	char *name;
 	AsmSymbolSection section;
-	u32 defined;
+	bool defined;
 	AsmLinkage linkage;
 	// @TODO: Do we need this? It's always just equal to the index in the
 	// symbol array plus one, maybe we can compute it in elf.c on Symbol
