@@ -65,6 +65,15 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
 				return -1;
 
 			switch (format[i]) {
+			case 'c': {
+				unsigned char c = (unsigned char)va_arg(ap, int);
+				int ret = sink(sink_arg, c);
+				if (ret != 0)
+					return -1;
+
+				chars_printed++;
+				break;
+			}
 			case 'd': {
 				int x = va_arg(ap, int);
 				int ret = print_integer(sink, sink_arg, x, 10);
