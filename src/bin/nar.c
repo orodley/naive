@@ -118,6 +118,10 @@ int main(int argc, char *argv[])
 		file_header.magic[0] = '\x60';
 		file_header.magic[1] = '\x0A';
 
+		// File headers are aligned to even byte boundaries.
+		if (checked_ftell(ar_file) % 2 == 1)
+			checked_fseek(ar_file, 1, SEEK_CUR);
+
 		checked_fwrite(&file_header, sizeof file_header, 1, ar_file);
 
 		checked_fwrite(too_long_filenames.elements,
