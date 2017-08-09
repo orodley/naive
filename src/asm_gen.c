@@ -2187,13 +2187,26 @@ static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out)
 		break;
 	}
 	case IR_ARRAY:
-		for (u32 n = 0; n < konst->type.u.array.size; n++)
-			write_const(asm_module, konst->u.array_elems + n, out);
+		for (u32 i = 0; i < konst->type.u.array.size; i++)
+			write_const(asm_module, konst->u.array_elems + i, out);
 		break;
-	case IR_STRUCT:
-		for (u32 n = 0; n < konst->type.u.strukt.num_fields; n++)
-			write_const(asm_module, konst->u.struct_fields + n, out);
+	case IR_STRUCT: {
+		u32 prev_offset = 0;
+		for (u32 i = 0; i < konst->type.u.strukt.num_fields; i++) {
+			IrStructField *field = konst->type.u.strukt.fields + i;
+			u32 field_offset = field->offset;
+			u32 field_size = size_of_ir_type(field->type);
+
+			for (u32 n = prev_offset; n < field_offset; n++) {
+				*ARRAY_APPEND(out, u8) = 0;
+			}
+
+			write_const(asm_module, konst->u.struct_fields + i, out);
+
+			prev_offset = field_offset + field_size;
+		}
 		break;
+	}
 	case IR_FUNCTION: case IR_VOID:
 		UNREACHABLE;
 	}
