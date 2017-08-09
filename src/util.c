@@ -1,6 +1,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+// @PORT
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
 #include "util.h"
 
 extern inline u32 max(u32 a, u32 b);
@@ -30,4 +35,35 @@ char *nconcat(char *str_a, u32 len_a, char *str_b, u32 len_b)
 char *concat(char *str_a, char *str_b)
 {
 	return nconcat(str_a, strlen(str_a), str_b, strlen(str_b));
+}
+
+// @PORT
+String map_file_into_memory(char *filename)
+{
+	int fd = open(filename, O_RDONLY);
+	if (fd == -1)
+		return INVALID_STRING;
+
+	off_t file_size = lseek(fd, 0, SEEK_END);
+
+	if (file_size == -1)
+		return INVALID_STRING;
+
+	if (file_size == 0)
+		return EMPTY_STRING;
+
+	char *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+	if (buffer == MAP_FAILED)
+		return INVALID_STRING;
+
+	close(fd);
+
+	return (String) { buffer, file_size };
+}
+
+// @PORT
+void unmap_file(String buffer)
+{
+	int ret = munmap(buffer.chars, buffer.len);
+	assert(ret == 0);
 }

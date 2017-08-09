@@ -112,4 +112,7 @@ inline u32 align_to(u32 n, u32 align)
 	return (n + x) & ~x;
 }
 
+String map_file_into_memory(char *filename);
+void unmap_file(String buffer);
+
 #endif

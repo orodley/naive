@@ -4,47 +4,10 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-// @PORT
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/mman.h>
-
 #include "array.h"
 #include "diagnostics.h"
 #include "reader.h"
 #include "util.h"
-
-// @PORT
-static String map_file_into_memory(char *filename)
-{
-	int fd = open(filename, O_RDONLY);
-	if (fd == -1)
-		return INVALID_STRING;
-
-	off_t file_size = lseek(fd, 0, SEEK_END);
-
-	if (file_size == -1)
-		return INVALID_STRING;
-
-	if (file_size == 0)
-		return EMPTY_STRING;
-
-	char *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
-	if (buffer == MAP_FAILED)
-		return INVALID_STRING;
-
-	close(fd);
-
-	return (String) { buffer, file_size };
-}
-
-// @PORT
-static void unmap_file(String buffer)
-{
-	int ret = munmap(buffer.chars, buffer.len);
-	assert(ret == 0);
-}
 
 typedef struct Macro
 {
