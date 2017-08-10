@@ -140,9 +140,9 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr);
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
 	switch (value.t) {
-	case VALUE_CONST:
+	case IR_VALUE_CONST:
 		return asm_imm(value.u.constant);
-	case VALUE_INSTR: {
+	case IR_VALUE_INSTR: {
 		IrInstr *instr = value.u.instr;
 
 		switch (instr->op) {
@@ -213,7 +213,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 		}
 		}
 	}
-	case VALUE_ARG: {
+	case IR_VALUE_ARG: {
 		u32 index = value.u.arg_index;
 		ArgClass *arg_class =
 			builder->current_function->call_seq.arg_classes + index;
@@ -249,7 +249,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 
 		UNREACHABLE;
 	}
-	case VALUE_GLOBAL: {
+	case IR_VALUE_GLOBAL: {
 		AsmSymbol *symbol = value.u.global->asm_symbol;
 		assert(symbol != NULL);
 		return asm_symbol(symbol);
@@ -286,7 +286,7 @@ static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
 
 static IrCmp maybe_flip_conditional(IrCmp cmp, IrValue *arg1, IrValue *arg2)
 {
-	if (arg1->t != VALUE_CONST)
+	if (arg1->t != IR_VALUE_CONST)
 		return cmp;
 
 	// The only form of comparison between a register and an immediate has the
@@ -329,12 +329,12 @@ static bool get_inner_cmp(AsmBuilder *builder, IrInstr *instr, IrInstr **out)
 
 	u64 c;
 	IrValue non_const_arg;
-	if (arg1.t == VALUE_CONST) {
-		assert(arg2.t != VALUE_CONST);
+	if (arg1.t == IR_VALUE_CONST) {
+		assert(arg2.t != IR_VALUE_CONST);
 		c = arg1.u.constant;
 		non_const_arg = arg2;
-	} else if (arg2.t == VALUE_CONST) {
-		assert(arg1.t != VALUE_CONST);
+	} else if (arg2.t == IR_VALUE_CONST) {
+		assert(arg1.t != IR_VALUE_CONST);
 		c = arg2.u.constant;
 		non_const_arg = arg1;
 	} else {
@@ -342,7 +342,7 @@ static bool get_inner_cmp(AsmBuilder *builder, IrInstr *instr, IrInstr **out)
 		return false;
 	}
 
-	if (non_const_arg.t != VALUE_INSTR || (c != 0 && c != 1)) {
+	if (non_const_arg.t != IR_VALUE_INSTR || (c != 0 && c != 1)) {
 		*out = instr;
 		return false;
 	}
@@ -529,7 +529,7 @@ static CallSeq classify_arguments(u32 arity, IrType *arg_types)
 static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 {
 	switch (pointer.t) {
-	case VALUE_INSTR: {
+	case IR_VALUE_INSTR: {
 		IrInstr *instr = pointer.u.instr;
 		switch (instr->op) {
 		case OP_LOCAL: {
@@ -617,7 +617,7 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 			return asm_value(builder, pointer);
 		}
 	}
-	case VALUE_GLOBAL: {
+	case IR_VALUE_GLOBAL: {
 		return asm_offset_reg(REG_CLASS_IP, 64,
 				asm_const_symbol(pointer.u.global->asm_symbol));
 	}
@@ -633,7 +633,7 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
 	assert(cond->op == OP_COND);
 	IrValue condition = cond->u.cond.condition;
 
-	if (condition.t != VALUE_INSTR)
+	if (condition.t != IR_VALUE_INSTR)
 		return false;
 
 	IrInstr *cond_instr = condition.u.instr;
@@ -715,7 +715,7 @@ static void asm_gen_instr(
 		break;
 	case OP_COND: {
 		IrValue condition = instr->u.cond.condition;
-		if (condition.t == VALUE_CONST) {
+		if (condition.t == IR_VALUE_CONST) {
 			IrBlock *block = condition.u.constant ?
 				instr->u.cond.then_block :
 				instr->u.cond.else_block;
@@ -800,7 +800,7 @@ static void asm_gen_instr(
 
 		AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
 
-		if (ir_pointer.t == VALUE_GLOBAL) {
+		if (ir_pointer.t == IR_VALUE_GLOBAL) {
 			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
@@ -821,7 +821,7 @@ static void asm_gen_instr(
 
 		AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
 
-		if (pointer.t == VALUE_GLOBAL) {
+		if (pointer.t == IR_VALUE_GLOBAL) {
 			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
@@ -889,7 +889,7 @@ static void asm_gen_instr(
 		CallSeq call_seq;
 
 		bool gen_new_call_seq;
-		if (instr->u.call.callee.t == VALUE_GLOBAL) {
+		if (instr->u.call.callee.t == IR_VALUE_GLOBAL) {
 			IrGlobal *target = instr->u.call.callee.u.global;
 			assert(target->type.t == IR_FUNCTION);
 
@@ -1301,7 +1301,7 @@ static void asm_gen_instr(
 	}
 	case OP_BUILTIN_VA_ARG: {
 		AsmValue va_list_ptr = asm_value(builder, instr->u.binary_op.arg1);
-		assert(instr->u.binary_op.arg2.t == VALUE_CONST);
+		assert(instr->u.binary_op.arg2.t == IR_VALUE_CONST);
 		u64 size = instr->u.binary_op.arg2.u.constant;
 		assert(size <= 8);
 

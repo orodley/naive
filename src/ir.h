@@ -127,10 +127,10 @@ typedef struct IrValue
 {
 	enum
 	{
-		VALUE_CONST,
-		VALUE_ARG,
-		VALUE_INSTR,
-		VALUE_GLOBAL,
+		IR_VALUE_CONST,
+		IR_VALUE_ARG,
+		IR_VALUE_INSTR,
+		IR_VALUE_GLOBAL,
 	} t;
 	// @TODO: Should this be removed? It's contained in most (all?) of the
 	// union members below; we could just write a function which extracts it

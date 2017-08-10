@@ -472,14 +472,14 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 	}
 
 	switch (term.value.t) {
-	case VALUE_CONST:
+	case IR_VALUE_CONST:
 		return add_int_const(builder,
 				c_type_to_ir_type(term.ctype),
 				term.value.u.constant);
-	case VALUE_GLOBAL:
+	case IR_VALUE_GLOBAL:
 		return add_global_const(builder, term.value.u.global);
-	case VALUE_ARG:
-	case VALUE_INSTR:
+	case IR_VALUE_ARG:
+	case IR_VALUE_INSTR:
 		UNREACHABLE;
 	}
 }
@@ -1572,7 +1572,7 @@ IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
 	}
 	case POINTER_TYPE: {
 		IrValue value = c_init->u.leaf_value;
-		assert(value.t == VALUE_GLOBAL);
+		assert(value.t == IR_VALUE_GLOBAL);
 		return add_global_const(builder, value.u.global);
 	}
 	default:
@@ -2492,7 +2492,7 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
 		CType *pointee_type = result_type->u.pointee_type;
 
 		// @TODO: Extend OP_FIELD to non-constant field numbers?
-		if (other.value.t == VALUE_CONST) {
+		if (other.value.t == IR_VALUE_CONST) {
 			u64 offset = other.value.u.constant;
 			if (pointee_type->t == ARRAY_TYPE) {
 				// @NOTE: We have to use the IR type size in case the inner
@@ -2665,11 +2665,11 @@ static Term ir_gen_cmp(IrBuilder *builder, Env *env, Term left,
 			// "ptr <cmp> !ptr" is only valid if "!ptr" is zero, as a constant
 			// zero integer expression is a null pointer constant.
 			assert(other_term->ctype->t == INTEGER_TYPE);
-			assert(other_term->value.t == VALUE_CONST);
+			assert(other_term->value.t == IR_VALUE_CONST);
 			assert(other_term->value.u.constant == 0);
 
 			// Constant fold tautological comparisons between a global and NULL.
-			if (ptr_term->value.t == VALUE_GLOBAL) {
+			if (ptr_term->value.t == IR_VALUE_GLOBAL) {
 				return (Term) {
 					.ctype = int_type,
 					.value = value_const(
@@ -2678,7 +2678,7 @@ static Term ir_gen_cmp(IrBuilder *builder, Env *env, Term left,
 			}
 
 			*other_term = convert_type(builder, *other_term, ptr_term->ctype);
-		} else if (left.value.t == VALUE_GLOBAL && right.value.t == VALUE_GLOBAL) {
+		} else if (left.value.t == IR_VALUE_GLOBAL && right.value.t == IR_VALUE_GLOBAL) {
 			// Constant fold tautological comparisons between global.
 			return (Term) {
 				.ctype = int_type,

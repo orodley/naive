@@ -228,16 +228,16 @@ void dump_ir_type(IrType type)
 static void dump_value(IrValue value)
 {
 	switch (value.t) {
-	case VALUE_CONST: 
+	case IR_VALUE_CONST:
 		printf("%" PRId64, value.u.constant);
 		break;
-	case VALUE_ARG:
+	case IR_VALUE_ARG:
 		printf("@%d", value.u.arg_index);
 		break;
-	case VALUE_INSTR:
+	case IR_VALUE_INSTR:
 		printf("#%d", value.u.instr->id);
 		break;
-	case VALUE_GLOBAL:
+	case IR_VALUE_GLOBAL:
 		printf("$%s", value.u.global->name);
 		break;
 	}
@@ -558,7 +558,7 @@ static u32 constant_fold_cmp(IrCmp cmp, u64 arg1, u64 arg2)
 static IrValue value_instr(IrInstr *instr)
 {
 	return (IrValue) {
-		.t = VALUE_INSTR,
+		.t = IR_VALUE_INSTR,
 		.type = instr->type,
 		.u.instr = instr,
 	};
@@ -627,7 +627,7 @@ IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg)
 {
 	IrType type = arg.type;
 
-	if (arg.t == VALUE_CONST && constant_foldable(op)) {
+	if (arg.t == IR_VALUE_CONST && constant_foldable(op)) {
 		return value_const(type, constant_fold_unary_op(op, arg.u.constant));
 	}
 
@@ -648,7 +648,7 @@ IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue ar
 	assert(ir_type_eq(&arg1.type, &arg2.type));
 	IrType type = arg1.type;
 
-	if (arg1.t == VALUE_CONST && arg2.t == VALUE_CONST && constant_foldable(op)) {
+	if (arg1.t == IR_VALUE_CONST && arg2.t == IR_VALUE_CONST && constant_foldable(op)) {
 		return value_const(type,
 				constant_fold_binary_op(op, arg1.u.constant, arg2.u.constant));
 	}
@@ -667,7 +667,7 @@ IrValue build_cmp(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2)
 	assert(ir_type_eq(&arg1.type, &arg2.type));
 	IrType type = (IrType) { .t = IR_INT, .u.bit_width = 32 };
 
-	if (arg1.t == VALUE_CONST && arg2.t == VALUE_CONST) {
+	if (arg1.t == IR_VALUE_CONST && arg2.t == IR_VALUE_CONST) {
 		return value_const(type,
 				constant_fold_cmp(cmp, arg1.u.constant, arg2.u.constant));
 	}
@@ -701,7 +701,7 @@ IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType resu
 	if (ir_type_eq(&value.type, &result_type))
 		return value;
 
-	if (value.t == VALUE_CONST) {
+	if (value.t == IR_VALUE_CONST) {
 		return value_const(result_type, value.u.constant);
 	}
 
@@ -728,7 +728,7 @@ IrValue build_phi(IrBuilder *builder, IrType type, u32 arity)
 void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value)
 {
 	assert(ir_type_eq(&value.type, &phi.type));
-	assert(phi.t == VALUE_INSTR);
+	assert(phi.t == IR_VALUE_INSTR);
 	IrPhiParam *param = phi.u.instr->u.phi.params + index;
 	param->block = source_block;
 	param->value = value;
@@ -737,7 +737,7 @@ void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value)
 IrValue value_const(IrType type, u64 constant)
 {
 	IrValue value = {
-		.t = VALUE_CONST,
+		.t = IR_VALUE_CONST,
 		.type = type,
 		.u.constant = constant,
 	};
@@ -748,7 +748,7 @@ IrValue value_const(IrType type, u64 constant)
 IrValue value_arg(u32 arg_index, IrType type)
 {
 	IrValue value = {
-		.t = VALUE_ARG,
+		.t = IR_VALUE_ARG,
 		.type = type,
 		.u.arg_index = arg_index,
 	};
@@ -759,7 +759,7 @@ IrValue value_arg(u32 arg_index, IrType type)
 IrValue value_global(IrGlobal *global)
 {
 	IrValue value = {
-		.t = VALUE_GLOBAL,
+		.t = IR_VALUE_GLOBAL,
 		.type = (IrType) { .t = IR_POINTER },
 		.u.global = global,
 	};
