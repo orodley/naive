@@ -1,5 +1,6 @@
 /ncc
 /nar
+/nas
 
 *.o
 *.a
