@@ -35,6 +35,12 @@ HEADERS := $(shell find $(SRC_DIRS) -name '*.h')
 objs_for_dir = $(patsubst %.c, %.o, $(shell find $(1) -name '*.c')) \
 			   $(patsubst %.s, %.o, $(shell find $(1) -name '*.s')) \
 
+# Disable the builtin implicit rules. They can conflict with our rules. Usually
+# this would mean that our rules overwrite them, but this only happens if the
+# dependencies are the same. In some cases they aren't, e.g. when we depend on
+# headers as well.
+.SUFFIXES:
+
 # Please don't make us waste time regenerating temp files, Mr. Make
 .SECONDARY: $(GEN_FILES)
 
