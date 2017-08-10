@@ -69,12 +69,18 @@ ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/bit_set.o \
 		src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NCC_CFLAGS) $^ -o $@
+	@[ -w /opt/naive ] \
+		|| (echo 'Please create /opt/naive and give yourself write permissions' \
+			&& exit 1)
 	@echo 'Installing ncc in /opt/naive'
 	@cp ncc /opt/naive
 
 nar: src/bin/nar.o src/array.o src/file.o src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
+	@[ -w /opt/naive ] \
+		|| (echo 'Please create /opt/naive and give yourself write permissions' \
+			&& exit 1)
 	@echo 'Installing nar in /opt/naive'
 	@cp nar /opt/naive
 
@@ -82,6 +88,9 @@ nas: src/bin/nas.o src/reader.o src/util.o src/diagnostics.o src/asm.o \
 		src/elf.o src/pool.o src/file.o src/array.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
+	@[ -w /opt/naive ] \
+		|| (echo 'Please create /opt/naive and give yourself write permissions' \
+			&& exit 1)
 	@echo 'Installing nas in /opt/naive'
 	@cp nas /opt/naive
 
