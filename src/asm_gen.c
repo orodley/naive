@@ -601,6 +601,10 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 				break;
 			}
 
+			// @TODO: This code doesn't actually work, but it's never hit in
+			// any test cases or in self-hosting. Figure out if it's possible,
+			// and if so make it work.
+			UNREACHABLE;
 			// Fall back to computing the offset using ADD in cases where we
 			// can't use an offset register.
 			AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
