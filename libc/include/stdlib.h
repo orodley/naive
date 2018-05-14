@@ -9,13 +9,11 @@ void *calloc(size_t nmemb, size_t size);
 void *realloc(void *ptr, size_t size);
 
 void exit(int status);
-// @TODO: void in arg list
-void abort();
+void abort(void);
 
 long atol(const char *nptr);
 
-// @TODO: void in arg list
-int rand();
+int rand(void);
 void srand(unsigned int seed);
 
 void qsort(void *base, size_t nmemb, size_t size,
