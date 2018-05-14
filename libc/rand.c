@@ -1,6 +1,6 @@
 static unsigned long __seed = 0x22DD9F15693587B8;
 
-int rand()
+int rand(void)
 {
 	__seed ^= (__seed << 21);
 	__seed ^= (__seed >> 35);
