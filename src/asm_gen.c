@@ -825,7 +825,7 @@ static void asm_gen_instr(
 
 		AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
 
-		if (pointer.t == IR_VALUE_GLOBAL) {
+		if (ir_pointer.t == IR_VALUE_GLOBAL) {
 			AsmValue rip_relative_addr =
 				asm_offset_reg(
 						REG_CLASS_IP,
