@@ -255,6 +255,8 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 		return asm_symbol(symbol);
 	}
 	}
+
+	UNREACHABLE;
 }
 
 static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
@@ -381,6 +383,8 @@ static IrCmp invert_cmp(IrCmp cmp)
 	case CMP_ULT: return CMP_UGTE;
 	case CMP_ULTE: return CMP_UGT;
 	}
+
+	UNREACHABLE;
 }
 
 static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
@@ -2240,6 +2244,8 @@ static bool is_zero(IrConst *konst)
 	case IR_FUNCTION: case IR_VOID:
 		UNREACHABLE;
 	}
+
+	UNREACHABLE;
 }
 
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)

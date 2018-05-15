@@ -155,6 +155,8 @@ bool ir_type_eq(IrType *a, IrType *b)
 		return ir_type_eq(a->u.array.elem_type, b->u.array.elem_type)
 			&& a->u.array.size == b->u.array.size;
 	}
+
+	UNREACHABLE;
 }
 
 u32 size_of_ir_type(IrType type)
@@ -172,6 +174,8 @@ u32 size_of_ir_type(IrType type)
 	case IR_VOID:
 		UNREACHABLE;
 	}
+
+	UNREACHABLE;
 }
 
 u32 align_of_ir_type(IrType type)
@@ -553,6 +557,8 @@ static u32 constant_fold_cmp(IrCmp cmp, u64 arg1, u64 arg2)
 	case CMP_ULT: return arg1 < arg2;
 	case CMP_ULTE: return arg1 <= arg2;
 	}
+
+	UNREACHABLE;
 }
 
 static IrValue value_instr(IrInstr *instr)
