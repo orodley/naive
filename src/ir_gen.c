@@ -148,7 +148,7 @@ static IrType c_type_to_ir_type(CType *ctype)
 	case ARRAY_TYPE:
 		return *ctype->u.array.ir_type;
 	case FUNCTION_TYPE:
-		return (IrType) { .t = FUNCTION_TYPE };
+		return (IrType) { .t = IR_FUNCTION };
 	case STRUCT_TYPE:
 		assert(!ctype->u.strukt.incomplete);
 		return *ctype->u.strukt.ir_type;
