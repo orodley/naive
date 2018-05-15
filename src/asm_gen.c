@@ -1005,16 +1005,13 @@ static void asm_gen_instr(
 					// regular memcpy code in IR, which we can optimise along
 					// with other uses of memcpy.
 					Register src;
-					u32 initial_offset;
 					switch (arg.t) {
 					case ASM_VALUE_REGISTER:
 						src = arg.u.reg;
-						initial_offset = 0;
 						break;
 					case ASM_VALUE_OFFSET_REGISTER:
 						if (arg.u.offset_register.offset.t == ASM_CONST_IMMEDIATE) {
 							src = arg.u.offset_register.reg;
-							initial_offset = arg.u.offset_register.offset.u.immediate;
 							break;
 						}
 						// fallthrough
@@ -1023,7 +1020,6 @@ static void asm_gen_instr(
 						emit_instr2(builder, MOV, src_vreg, arg);
 
 						src = src_vreg.u.reg;
-						initial_offset = 0;
 						break;
 					}
 					}
