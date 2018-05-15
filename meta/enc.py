@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 # Generates code for encoding assembly instructions (and potentially decoding
 # in the future for a disassembler). The format that is parsed matches the
