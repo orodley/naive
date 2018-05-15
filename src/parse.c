@@ -943,7 +943,7 @@ static void dump_statement(ASTStatement *statement)
 		if (statement->u.expr == NULL) {
 			break;
 		}
-		// deliberate fallthrough
+		// fallthrough
 	case EXPR_STATEMENT:
 		dump_expr(statement->u.expr);
 		break;

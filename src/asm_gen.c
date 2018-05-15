@@ -1017,7 +1017,7 @@ static void asm_gen_instr(
 							initial_offset = arg.u.offset_register.offset.u.immediate;
 							break;
 						}
-						// Deliberate fallthrough
+						// fallthrough
 					default: {
 						AsmValue src_vreg = asm_vreg(new_vreg(builder), 64);
 						emit_instr2(builder, MOV, src_vreg, arg);
@@ -1553,7 +1553,7 @@ static void compute_live_ranges(AsmBuilder *builder)
 				case JE: case JNE: case JG: case JGE: case JL: case JLE:
 				case JA: case JAE: case JB: case JBE:
 					succ1 = pc + 1;
-					// @NOTE: Deliberate fallthrough.
+					// fallthrough.
 				case JMP: {
 					assert(instr->args[0].t == ASM_VALUE_CONST);
 					AsmConst c = instr->args[0].u.constant;
