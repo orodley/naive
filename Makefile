@@ -5,6 +5,8 @@ ASM ?= nasm
 PEG ?= meta/peg.py
 ENC ?= meta/enc.py
 
+INSTALL_DIR ?= /opt/naive
+
 COMMON_CFLAGS := $(CFLAGS) -std=c99 -Werror -Wall -Wextra -Wstrict-prototypes \
 	-Wformat
 NCC_CFLAGS := -Isrc
