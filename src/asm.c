@@ -218,6 +218,8 @@ static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
 	case ASM_CONST_SYMBOL:
 		return imm_width == 64;
 	}
+
+	UNREACHABLE;
 }
 
 #define X(x) #x
@@ -442,6 +444,8 @@ static u32 encoded_register_number(RegClass reg)
 	case REG_CLASS_R15: return 15;
 	case REG_CLASS_IP: UNIMPLEMENTED;
 	}
+
+	UNREACHABLE;
 }
 
 #define MAX_OPCODE_SIZE 3

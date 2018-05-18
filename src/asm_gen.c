@@ -255,6 +255,8 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 		return asm_symbol(symbol);
 	}
 	}
+
+	UNREACHABLE;
 }
 
 static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
@@ -381,6 +383,8 @@ static IrCmp invert_cmp(IrCmp cmp)
 	case CMP_ULT: return CMP_UGTE;
 	case CMP_ULTE: return CMP_UGT;
 	}
+
+	UNREACHABLE;
 }
 
 static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
@@ -1001,25 +1005,21 @@ static void asm_gen_instr(
 					// regular memcpy code in IR, which we can optimise along
 					// with other uses of memcpy.
 					Register src;
-					u32 initial_offset;
 					switch (arg.t) {
 					case ASM_VALUE_REGISTER:
 						src = arg.u.reg;
-						initial_offset = 0;
 						break;
 					case ASM_VALUE_OFFSET_REGISTER:
 						if (arg.u.offset_register.offset.t == ASM_CONST_IMMEDIATE) {
 							src = arg.u.offset_register.reg;
-							initial_offset = arg.u.offset_register.offset.u.immediate;
 							break;
 						}
-						// Deliberate fallthrough
+						// fallthrough
 					default: {
 						AsmValue src_vreg = asm_vreg(new_vreg(builder), 64);
 						emit_instr2(builder, MOV, src_vreg, arg);
 
 						src = src_vreg.u.reg;
-						initial_offset = 0;
 						break;
 					}
 					}
@@ -1549,7 +1549,7 @@ static void compute_live_ranges(AsmBuilder *builder)
 				case JE: case JNE: case JG: case JGE: case JL: case JLE:
 				case JA: case JAE: case JB: case JBE:
 					succ1 = pc + 1;
-					// @NOTE: Deliberate fallthrough.
+					// fallthrough.
 				case JMP: {
 					assert(instr->args[0].t == ASM_VALUE_CONST);
 					AsmConst c = instr->args[0].u.constant;
@@ -2240,6 +2240,8 @@ static bool is_zero(IrConst *konst)
 	case IR_FUNCTION: case IR_VOID:
 		UNREACHABLE;
 	}
+
+	UNREACHABLE;
 }
 
 void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)

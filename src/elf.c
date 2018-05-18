@@ -812,7 +812,6 @@ static bool process_elf_file(FILE *input_file, AsmModule *asm_module,
 	ELFSectionHeader *text_header = NULL;
 	u32 text_section_index = SHN_UNDEF;
 	ELFSectionHeader *symtab_header = NULL;
-	u32 symtab_section_index = SHN_UNDEF;
 	ELFSectionHeader *strtab_header = NULL;
 	ELFSectionHeader *rela_text_header = NULL;
 	u32 data_section_index = SHN_UNDEF;
@@ -829,7 +828,6 @@ static bool process_elf_file(FILE *input_file, AsmModule *asm_module,
 			text_section_index = i;
 		} else if (streq(section_name, ".symtab")) {
 			symtab_header = curr_header;
-			symtab_section_index = i;
 		} else if (streq(section_name, ".strtab")) {
 			strtab_header = curr_header;
 		} else if (strneq(section_name, ".rela", 5)) {

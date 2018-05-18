@@ -157,6 +157,8 @@ static char *declarator_name(ASTDeclarator *declarator)
 	case DIRECT_DECLARATOR:
 		return direct_declarator_name(declarator->u.direct_declarator);
 	}
+
+	UNREACHABLE;
 }
 
 static char *direct_declarator_name(ASTDirectDeclarator *declarator)
@@ -171,6 +173,8 @@ static char *direct_declarator_name(ASTDirectDeclarator *declarator)
 	case DECLARATOR:
 		return declarator_name(declarator->u.declarator);
 	}
+
+	UNREACHABLE;
 }
 
 ASTDecl *build_decl(Parser *parser, ASTDeclSpecifier *decl_specifier_list,
@@ -939,7 +943,7 @@ static void dump_statement(ASTStatement *statement)
 		if (statement->u.expr == NULL) {
 			break;
 		}
-		// deliberate fallthrough
+		// fallthrough
 	case EXPR_STATEMENT:
 		dump_expr(statement->u.expr);
 		break;

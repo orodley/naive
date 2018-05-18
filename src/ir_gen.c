@@ -105,6 +105,8 @@ static bool c_type_eq(CType *a, CType *b)
 				|| (a->u.array.size == b->u.array.size))
 			&& c_type_eq(a->u.array.elem_type, b->u.array.elem_type);
 	}
+
+	UNREACHABLE;
 }
 
 #if 0
@@ -153,6 +155,8 @@ static IrType c_type_to_ir_type(CType *ctype)
 		assert(!ctype->u.strukt.incomplete);
 		return *ctype->u.strukt.ir_type;
 	}
+
+	UNREACHABLE;
 }
 
 u32 size_of_c_type(CType *type)
@@ -171,6 +175,8 @@ static u8 rank(CType *type)
 	case LONG: return 4;
 	case LONG_LONG: return 5;
 	}
+
+	UNREACHABLE;
 }
 
 typedef struct Term
@@ -482,6 +488,8 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 	case IR_VALUE_INSTR:
 		UNREACHABLE;
 	}
+
+	UNREACHABLE;
 }
 
 static bool matches_sequence(ASTDeclSpecifier *decl_specifier_list, int length, ...)
