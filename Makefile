@@ -71,7 +71,7 @@ ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/bit_set.o \
 		src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NCC_CFLAGS) $^ -o $@
-	@[ -w "$(INSTALL_DIR)" ] \
+	@mkdir -p "$(INSTALL_DIR)" 2>&1 > /dev/null \
 		|| (echo "Please create $(INSTALL_DIR) and give yourself write permissions" \
 			&& exit 1)
 	@echo "Installing ncc in $(INSTALL_DIR)"
@@ -80,7 +80,7 @@ ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/bit_set.o \
 nar: src/bin/nar.o src/array.o src/file.o src/util.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
-	@[ -w "$(INSTALL_DIR)" ] \
+	@mkdir -p "$(INSTALL_DIR)" 2>&1 > /dev/null \
 		|| (echo "Please create $(INSTALL_DIR) and give yourself write permissions" \
 			&& exit 1)
 	@echo "Installing nar in $(INSTALL_DIR)"
@@ -90,7 +90,7 @@ nas: src/bin/nas.o src/reader.o src/util.o src/diagnostics.o src/asm.o \
 		src/elf.o src/pool.o src/file.o src/array.o
 	@echo 'CC $@'
 	@$(CC) $(COMMON_CFLAGS) $(NAR_CFLAGS) $^ -o $@
-	@[ -w "$(INSTALL_DIR)" ] \
+	@mkdir -p "$(INSTALL_DIR)" 2>&1 > /dev/null \
 		|| (echo "Please create $(INSTALL_DIR) and give yourself write permissions" \
 			&& exit 1)
 	@echo "Installing nas in $(INSTALL_DIR)"
@@ -99,7 +99,7 @@ nas: src/bin/nas.o src/reader.o src/util.o src/diagnostics.o src/asm.o \
 libc.a: $(call objs_for_dir,libc) $(HEADERS)
 	@echo 'AR $@'
 	@$(AR) -cr $@ $(call objs_for_dir,libc)
-	@[ -w "$(INSTALL_DIR)" ] \
+	@mkdir -p "$(INSTALL_DIR)" 2>&1 > /dev/null \
 		|| (echo "Please create $(INSTALL_DIR) and give yourself write permissions" \
 			&& exit 1)
 	@echo "Installing libc in $(INSTALL_DIR)"
