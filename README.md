@@ -11,3 +11,9 @@ Includes:
 * ELF object file output
 * Linker
 * `ar` clone
+
+Dependencies:
+
+* make
+* nasm
+* ctags

@@ -5,3 +5,5 @@
 *.o
 *.a
 *.inc
+*.tmp
+tags
