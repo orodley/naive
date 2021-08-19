@@ -109,9 +109,9 @@ libc.a: $(call objs_for_dir,libc) $(HEADERS)
 	@cp -r freestanding "$(INSTALL_DIR)"
 
 
-libc/%.o: libc/%.c
-	@echo 'CC $@'
-	@$(CC) -c $(COMMON_CFLAGS) $(LIBC_CFLAGS) $< -o $@
+libc/%.o: libc/%.c ncc
+	@echo 'NCC $@'
+	@./ncc -c $(COMMON_CFLAGS) $(LIBC_CFLAGS) $< -o $@
 
 src/%.o: src/%.c $(HEADERS) $(GEN_FILES)
 	@echo 'CC $<'
