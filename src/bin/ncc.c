@@ -131,6 +131,9 @@ int main(int argc, char *argv[])
 				// Similarly we ignore "-g". Regardless of whether debug info
 				// is present the binary should behave the same, so this should
 				// be fine for self hosting.
+			} else if (streq(arg, "-fcolor-diagnostics")) {
+				// Again, ignore this flag. Not required for correctness, just
+				// pretty output.
 			} else if (streq(arg, "-fno-asynchronous-unwind-tables")) {
 				// Sure thing! We won't generate any unwind tables. We weren't
 				// going to anyway.
