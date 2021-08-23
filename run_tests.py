@@ -220,7 +220,7 @@ def indent_bytes(bs):
     return indent(bs.decode())
 
 def indent(string):
-    return '\n'.join(["    " + line for line in string.split('\n')])
+    return '\n'.join("    " + line for line in string.split('\n'))
 
 # @TODO: check if we're on a platform that doesn't support ANSI colors
 green = '\033[92m'
