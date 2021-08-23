@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import fnmatch
 import multiprocessing
@@ -24,11 +24,11 @@ def main():
         else:
             tests.append(arg)
     if not print_details and be_positive:
-        print "Cannot specify '-s' and '-p'"
+        print("Cannot specify '-s' and '-p'")
         return
     if create_testcase:
         if len(tests) == 0:
-            print "Must specify a list of tests if passing '-c'"
+            print("Must specify a list of tests if passing '-c'")
             return
         map(create_test_files, tests)
         return
@@ -41,7 +41,7 @@ def main():
     num_tests = len(tests)
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-    print "Running %d tests:" % num_tests
+    print("Running %d tests:" % num_tests)
 
     # Try to keep n compiler processes running at once, where n = the number of
     # cpu cores on this machine.
@@ -68,19 +68,19 @@ def main():
             sys.stdout.flush()
             results.append(test_result)
 
-    print "\n"
+    print("\n")
 
     passes = sum(1 for result in results if result.passed())
-    print "%d / %d tests passed" % (passes, num_tests)
+    print("%d / %d tests passed" % (passes, num_tests))
 
     if print_details:
         results.sort(key=lambda r: r.name)
         for result in results:
             if be_positive:
                 if result.passed():
-                    print "test '%s' passed" % result.name
+                    print("test '%s' passed" % result.name)
             elif not result.passed():
-                print "\ntest '%s' failed:\n%s" % (result.name, result.error)
+                print("\ntest '%s' failed:\n%s" % (result.name, result.error))
 
 class Testcase(object):
     __slots__ = ['name', 'binary', 'cc_proc',
@@ -93,16 +93,16 @@ def start_compiling(test_dir):
 
     sub_files = os.listdir(test_dir)
 
-    testcase.expected_compile_stdout = ''
-    testcase.expected_compile_stderr = ''
-    testcase.expected_run_stdout = ''
-    testcase.expected_run_stderr = ''
-    testcase.run_stdin = ''
+    testcase.expected_compile_stdout = b''
+    testcase.expected_compile_stderr = b''
+    testcase.expected_run_stdout = b''
+    testcase.expected_run_stderr = b''
+    testcase.run_stdin = b''
 
     test_filenames = []
     extra_flags = []
     for filename in sub_files:
-        with open(os.path.join(test_dir, filename), 'r') as f:
+        with open(os.path.join(test_dir, filename), 'rb') as f:
             contents = f.read()
 
         if filename == 'compile_stdout':
@@ -117,7 +117,7 @@ def start_compiling(test_dir):
             testcase.run_stdin = contents
         elif filename.endswith('.c'):
             test_filenames.append(filename)
-            first_line = contents[:contents.index('\n')]
+            first_line = contents[:contents.index(b'\n')].decode()
             flags_str = '// FLAGS:'
             if first_line.startswith(flags_str):
                 extra_flags = first_line[len(flags_str):].strip().split(' ')
@@ -179,17 +179,17 @@ def run_testcase(testcase):
                 test_result.error = "compilation succeeded when expected to fail"
             else:
                 test_result.error = "expected compile stderr:\n%s\ngot:\n%s" \
-                    % (indent(testcase.expected_compile_stderr), indent(compile_stderr))
+                    % (indent_bytes(testcase.expected_compile_stderr), indent_bytes(compile_stderr))
             return test_result
         else:
             return test_result
     if compile_stdout != testcase.expected_compile_stdout:
         test_result.error = "expected compile stdout:\n%s\ngot:\n%s" \
-                % (indent(testcase.expected_compile_stdout), indent(compile_stdout))
+                % (indent_bytes(testcase.expected_compile_stdout), indent_bytes(compile_stdout))
 
     if not compiled_successfully:
         test_result.error = "compilation failed with stderr:\n" \
-            + indent(compile_stderr)
+            + indent_bytes(compile_stderr)
         return test_result
 
     binary_path = os.path.abspath(testcase.binary)
@@ -214,6 +214,9 @@ def run_testcase(testcase):
             (testcase.expected_run_stderr, run_stderr)
 
     return test_result
+
+def indent_bytes(bs):
+    return indent(bs.decode())
 
 def indent(string):
     return '\n'.join("    " + line for line in string.split('\n'))

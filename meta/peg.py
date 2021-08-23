@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 # Quick and dirty PEG generator.
 
@@ -68,7 +68,7 @@ class Reader(object):
         return self.tokens[self.position + offset]
 
     def read_token(self):
-        #print self.at(0)
+        #print(self.at(0))
         self.position += 1
         return self.at(-1)
 
@@ -150,8 +150,8 @@ static Token _unexpected_token;
             # We prefix with 'p' because otherwise we  generate reserved names
             # like '__foo' in some cases.
             name = 'p' + \
-                    ''.join('_' if c in "[], \"'" else c for c in `parser`) + \
-                    `len(self.definitions)`
+                    ''.join('_' if c in "[], \"'" else c for c in repr(parser)) + \
+                    repr(len(self.definitions))
         if isinstance(parser, str):
             if parser.startswith('TOK_'):
                 return self.emit_function(
@@ -208,10 +208,10 @@ if (token->t == TOK_SYMBOL && streq(token->u.symbol, "%s")) {
             result_type = args[0]
             arity = int(args[1])
             signature = 'static %s *%s(Parser *parser%s)' % \
-                (result_type, name, ''.join(', void *arg' + `i` for i in xrange(arity)))
-            field_map = [args[i:i+2] for i in xrange(2, len(args), 2)]
+                (result_type, name, ''.join(', void *arg' + str(i) for i in range(arity)))
+            field_map = [args[i:i+2] for i in range(2, len(args), 2)]
             prologue = '\n%s *result = pool_alloc(parser->pool, sizeof *result);\n' % result_type
-            prologue += ' '.join('(void)arg%d;' % i for i in xrange(arity)) + '\n'
+            prologue += ' '.join('(void)arg%d;' % i for i in range(arity)) + '\n'
             field_assigners = ''.join(
                 field_assigner(field_name, assigner) for field_name, assigner in field_map)
             epilogue = 'return result;'
@@ -250,7 +250,7 @@ parser->position = start;
 
             return self.emit_function(prologue + main + epilogue, name)
         elif operator == 'seq':
-            args = map(self.generate_parser, args)
+            args = list(map(self.generate_parser, args))
             prologue = "\nu32 start = parser->position;"
             main = ''.join(
 """
@@ -264,7 +264,7 @@ if (!_{0}_result{1}.success)
 
             return self.emit_function(prologue + main + epilogue, name)
         elif operator == 'fold':
-            args = map(self.generate_parser, args)
+            args = list(map(self.generate_parser, args))
             return self.emit_function(
 """
 ParserResult initial = %s(parser);
@@ -313,7 +313,7 @@ for (;;) {
             return self.emit_function(
 "\nreturn success(%s(parser).result);" % self.generate_parser(args[0]), name)
         else:
-            print "Unknown operator: " + operator
+            print("Unknown operator: " + operator)
             assert not "Unreachable"
 
 def field_assigner(field_name, assigner_expr):
@@ -323,7 +323,7 @@ def field_assigner(field_name, assigner_expr):
 
 if __name__ == '__main__':
     if len(sys.argv) not in (2, 3):
-        print "Usage: %s <peg definition> [output file]" % sys.argv[0]
+        print("Usage: %s <peg definition> [output file]" % sys.argv[0])
         sys.exit(1)
 
     # @PORT

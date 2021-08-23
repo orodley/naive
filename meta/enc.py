@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 # Generates code for encoding assembly instructions (and potentially decoding
 # in the future for a disassembler). The format that is parsed matches the
@@ -215,7 +215,7 @@ def arg_conditions(args):
                 + ' && {0}.u.reg.u.class == {1}'
                 + ' && {0}.u.reg.width == {2})').format(arg_str, reg_class, width))
         else:
-            print "Unknown arg type: '%s'" % arg
+            print("Unknown arg type: '%s'" % arg)
             assert False
 
     return ' && '.join(conditions)
@@ -235,7 +235,7 @@ def to_c_val(x):
 
 if __name__ == '__main__':
     if len(sys.argv) not in (2, 3):
-        print "Usage: %s <enc definition> [output file]" % sys.argv[0]
+        print("Usage: %s <enc definition> [output file]" % sys.argv[0])
         sys.exit(1)
 
     # @PORT
