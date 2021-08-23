@@ -102,7 +102,6 @@ def start_compiling(test_dir):
     test_filenames = []
     extra_flags = []
     for filename in sub_files:
-        print(test_dir, filename)
         with open(os.path.join(test_dir, filename), 'rb') as f:
             contents = f.read()
 
