@@ -76,6 +76,8 @@ ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/bit_set.o \
 			&& exit 1)
 	@echo "Installing ncc in $(INSTALL_DIR)"
 	@cp ncc "$(INSTALL_DIR)"
+	@echo "Installing freestanding headers in $(INSTALL_DIR)"
+	@cp -r freestanding "$(INSTALL_DIR)"
 
 nar: src/bin/nar.o src/array.o src/file.o src/util.o
 	@echo 'CC $@'
@@ -106,7 +108,6 @@ libc.a: $(call objs_for_dir,libc) $(HEADERS)
 	@cp $@ "$(INSTALL_DIR)"
 	@rm -rf "$(INSTALL_DIR)/include"
 	@cp -r libc/include "$(INSTALL_DIR)"
-	@cp -r freestanding "$(INSTALL_DIR)"
 
 
 libc/%.o: libc/%.c ncc
