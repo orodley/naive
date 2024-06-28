@@ -139,8 +139,20 @@ AsmValue asm_symbol(AsmSymbol *symbol)
 // ones so that we can correctly determine the width we need for the immediate.
 bool is_sign_extending_op(AsmOp op)
 {
-	return op == ADD || op == AND || op == ADC || op == CMP || op == IMUL
-		|| op == MOV || op == OR || op == SBB || op == SUB || op == TEST;
+	return op == ADD || op == AND || op == ADC ||
+        // The manual is contradictory for CMP: on the one hand the description
+        // for, say, "CMP r/m16, imm8" doesn't say it sign-extends the
+        // immediate. On the other hand the main description for CMP says it
+        // always sign-extends immediates to the length of the first operand.
+        op == CMP ||
+        // Ditto.
+        op == IMUL ||
+        op == MOV || op == OR || op == SBB || op == SUB || op == TEST;
+
+    // Should PUSH be included too? PUSH is weird. It only sign-extends if the
+    // operand size is greater than the size of the immediate. The operand size
+    // is determined by values in segment descriptors... the take-away for me
+    // is don't push immediates.
 }
 
 static bool is_sign_extending_instr(AsmInstr *instr)
