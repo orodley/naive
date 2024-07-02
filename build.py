@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import fnmatch
 import multiprocessing
 import os
@@ -9,30 +10,48 @@ import sys
 import time
 
 
-def main():
-    print_details = True
-    be_positive = False
-    create_testcase = False
-    tests = []
-    for arg in sys.argv[1:]:
-        if arg == "-s":
-            print_details = False
-        elif arg == "-p":
-            be_positive = True
-        elif arg == "-c":
-            create_testcase = True
-        else:
-            tests.append(arg)
-    if not print_details and be_positive:
-        print("Cannot specify '-s' and '-p'")
-        return
-    if create_testcase:
-        if len(tests) == 0:
+def make_arg_parser():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    test_parser = subparsers.add_parser("test", aliases=["t"], help="Run tests")
+    test_parser.add_argument(
+        "--silent", "-s", help="Show only the summary", action="store_true"
+    )
+    test_parser.add_argument(
+        "--positive",
+        "-p",
+        help="Show details even for successful tests",
+        action="store_true",
+    )
+    test_parser.add_argument(
+        "--create-testcase",
+        "-c",
+        help="Record the results for the given tests",
+        action="store_true",
+    )
+    test_parser.add_argument(
+        "tests",
+        help="The set of tests to run (empty = all)",
+        nargs="*",
+    )
+
+    return parser
+
+
+def main(args):
+    if args.command in {"test", "t"}:
+        run_tests(args)
+
+
+def run_tests(args):
+    if args.create_testcase:
+        if len(args.tests) == 0:
             print("Must specify a list of tests if passing '-c'")
             return
-        map(create_test_files, tests)
+        map(create_test_files, args.tests)
         return
 
+    tests = args.tests
     if len(tests) == 0:
         for root, dirnames, filenames in os.walk("tests"):
             if len(dirnames) == 0:
@@ -74,10 +93,10 @@ def main():
     passes = sum(1 for result in results if result.passed())
     print("%d / %d tests passed" % (passes, num_tests))
 
-    if print_details:
+    if not args.silent:
         results.sort(key=lambda r: r.name)
         for result in results:
-            if be_positive:
+            if args.positive:
                 if result.passed():
                     print("test '%s' passed" % result.name)
             elif not result.passed():
@@ -295,4 +314,4 @@ def sigint_handler(signal, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, sigint_handler)
-    main()
+    main(make_arg_parser().parse_args())
