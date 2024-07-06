@@ -6,7 +6,7 @@ typedef unsigned u32;
 
 int main()
 {
-	assert(foo.b[0] == 'a');
+  assert(foo.b[0] == 'a');
 
-	return 0;
+  return 0;
 }

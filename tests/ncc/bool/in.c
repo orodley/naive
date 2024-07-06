@@ -2,8 +2,8 @@
 
 int main()
 {
-	_Bool x = 1;
-	assert(x);
+  _Bool x = 1;
+  assert(x);
 
-	return 0;
+  return 0;
 }

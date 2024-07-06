@@ -5,6 +5,6 @@
 #include "reader.h"
 
 bool preprocess(char *input_filename, Array(char *) *include_dirs,
-		Array(char) *preprocessed, Array(Adjustment) *adjustments);
+    Array(char) *preprocessed, Array(Adjustment) *adjustments);
 
 #endif

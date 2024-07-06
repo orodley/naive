@@ -2,6 +2,6 @@
 
 int main()
 {
-	assert(1);
-	return 0;
+  assert(1);
+  return 0;
 }

@@ -3,9 +3,9 @@
 
 char *strndup(const char *s, size_t n)
 {
-	char *result = malloc(n + 1);
-	memcpy(result, s, n);
-	result[n] = '\0';
+  char *result = malloc(n + 1);
+  memcpy(result, s, n);
+  result[n] = '\0';
 
-	return result;
+  return result;
 }

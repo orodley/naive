@@ -2,6 +2,6 @@
 
 int main()
 {
-	exit(0);
-	return 1;
+  exit(0);
+  return 1;
 }

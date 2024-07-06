@@ -5,6 +5,6 @@ int main();
 
 char foo()
 {
-	char *x = " ";
-	return x[0];
+  char *x = " ";
+  return x[0];
 }

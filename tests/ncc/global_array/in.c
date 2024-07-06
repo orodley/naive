@@ -4,8 +4,8 @@ int foo[6];
 
 int main()
 {
-	*foo = 3;
-	assert(*foo == 3);
+  *foo = 3;
+  assert(*foo == 3);
 
-	return 0;
+  return 0;
 }

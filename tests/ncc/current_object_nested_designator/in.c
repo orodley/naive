@@ -2,20 +2,20 @@
 
 struct A
 {
-	struct
-	{
-		int y;
-		int z;
-	} x;
+  struct
+  {
+    int y;
+    int z;
+  } x;
 };
 
 int main()
 {
-	struct A a = {
-		.x.y = 283,
-		.x.z = 942,
-	};
-	assert(a.x.z == 942);
+  struct A a = {
+    .x.y = 283,
+    .x.z = 942,
+  };
+  assert(a.x.z == 942);
 
-	return 0;
+  return 0;
 }

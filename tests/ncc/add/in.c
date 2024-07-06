@@ -2,8 +2,8 @@
 
 int main()
 {
-	int x = 5, y = 2;
-	assert(x + y == 7);
+  int x = 5, y = 2;
+  assert(x + y == 7);
 
-	return 0;
+  return 0;
 }

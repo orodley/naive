@@ -5,8 +5,8 @@
 
 struct _IO_FILE
 {
-	int fd;
-	bool eof;
+  int fd;
+  bool eof;
 };
 
 #endif

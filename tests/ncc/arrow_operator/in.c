@@ -2,16 +2,16 @@
 
 struct Foo
 {
-	int a;
+  int a;
 };
 
 int main()
 {
-	struct Foo foo;
-	struct Foo *f = &foo;
+  struct Foo foo;
+  struct Foo *f = &foo;
 
-	f->a = 3;
-	assert(f->a == 3);
+  f->a = 3;
+  assert(f->a == 3);
 
-	return 0;
+  return 0;
 }

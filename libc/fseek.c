@@ -5,5 +5,5 @@
 
 int fseek(struct _IO_FILE *stream, long offset, int whence)
 {
-	return lseek(stream->fd, offset, whence) != -1;
+  return lseek(stream->fd, offset, whence) != -1;
 }

@@ -2,8 +2,8 @@
 
 int main()
 {
-	int bar[5];
-	assert(sizeof *bar == sizeof(int));
+  int bar[5];
+  assert(sizeof *bar == sizeof(int));
 
-	return 0;
+  return 0;
 }

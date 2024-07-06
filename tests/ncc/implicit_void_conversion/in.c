@@ -2,10 +2,10 @@
 
 int main()
 {
-	int x = 54;
-	void *p = &x;
-	int *p2 = p;
-	assert(*p2 == 54);
+  int x = 54;
+  void *p = &x;
+  int *p2 = p;
+  assert(*p2 == 54);
 
-	return 0;
+  return 0;
 }

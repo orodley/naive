@@ -6,10 +6,10 @@
 
 typedef struct StringSinkArg
 {
-	char *string;
-	size_t index;
-	size_t max_chars;
-	bool has_limit;
+  char *string;
+  size_t index;
+  size_t max_chars;
+  bool has_limit;
 } StringSinkArg;
 
 int string_sink(void *sink_arg, char c);

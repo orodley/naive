@@ -2,10 +2,10 @@
 
 int main()
 {
-	int x = 4, y = 3;
+  int x = 4, y = 3;
 
-	assert(x == 4);
-	assert(y == 3);
+  assert(x == 4);
+  assert(y == 3);
 
-	return 0;
+  return 0;
 }

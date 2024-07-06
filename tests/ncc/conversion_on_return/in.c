@@ -2,12 +2,12 @@
 
 int foo()
 {
-	char x = 3;
-	return x;
+  char x = 3;
+  return x;
 }
 
 int main()
 {
-	assert(foo() == 3);
-	return 0;
+  assert(foo() == 3);
+  return 0;
 }

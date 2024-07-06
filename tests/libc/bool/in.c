@@ -3,9 +3,9 @@
 
 int main()
 {
-	bool x = true;
-	assert(x);
-	assert(!false);
+  bool x = true;
+  assert(x);
+  assert(!false);
 
-	return 0;
+  return 0;
 }

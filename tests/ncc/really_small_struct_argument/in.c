@@ -4,11 +4,11 @@ struct Foo { int a; };
 
 void foo(struct Foo f)
 {
-	assert(f.a == 1923);
+  assert(f.a == 1923);
 }
 
 int main()
 {
-	foo((struct Foo) { 1923 });
-	return 0;
+  foo((struct Foo) { 1923 });
+  return 0;
 }

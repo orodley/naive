@@ -5,11 +5,11 @@
 
 int kill(pid_t pid, int sig)
 {
-	int ret = __syscall(62, (uint64_t)pid, (uint64_t)sig, 0, 0, 0, 0);
-	if (ret < 0) {
-		errno = -ret;
-		return -1;
-	}
+  int ret = __syscall(62, (uint64_t)pid, (uint64_t)sig, 0, 0, 0, 0);
+  if (ret < 0) {
+    errno = -ret;
+    return -1;
+  }
 
-	return 0;
+  return 0;
 }

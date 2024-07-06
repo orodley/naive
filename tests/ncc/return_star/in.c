@@ -2,5 +2,5 @@
 
 int foo(int *x)
 {
-	return *x;
+  return *x;
 }

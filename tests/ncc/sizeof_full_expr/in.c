@@ -2,13 +2,13 @@
 
 struct Foo
 {
-	int a;
+  int a;
 };
 
 int main()
 {
-	struct Foo foos[3];
-	assert(sizeof foos[1].a == sizeof(int));
+  struct Foo foos[3];
+  assert(sizeof foos[1].a == sizeof(int));
 
-	return 0;
+  return 0;
 }

@@ -3,7 +3,7 @@
 #define S(x) #x
 #define T(x) S(x)
 #define U(x) #    /*  foobar */ \
-	x
+  x
 
 S(foo)
 S("foo")

@@ -5,10 +5,10 @@ int *foo;
 
 int main()
 {
-	struct { int a; int *b; } bar = { 1 };
+  struct { int a; int *b; } bar = { 1 };
 
-	assert(foo == NULL);
-	assert(bar.b == NULL);
+  assert(foo == NULL);
+  assert(bar.b == NULL);
 
-	return 0;
+  return 0;
 }

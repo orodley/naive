@@ -2,5 +2,5 @@ static int foo;
 
 int *bar()
 {
-	return &foo;
+  return &foo;
 }

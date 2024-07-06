@@ -2,8 +2,8 @@
 
 int main()
 {
-	assert(0xdEadBeEF == 3735928559);
-	assert(072616 == 30094);
+  assert(0xdEadBeEF == 3735928559);
+  assert(072616 == 30094);
 
-	return 0;
+  return 0;
 }

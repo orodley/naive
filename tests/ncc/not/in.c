@@ -2,10 +2,10 @@
 
 int main()
 {
-	int x = 0;
-	int y = 234;
-	assert(!x);
-	assert(!!y);
+  int x = 0;
+  int y = 234;
+  assert(!x);
+  assert(!!y);
 
-	return 0;
+  return 0;
 }

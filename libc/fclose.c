@@ -6,8 +6,8 @@
 
 int fclose(struct _IO_FILE *fp)
 {
-	int ret = close(fp->fd);
-	free(fp);
+  int ret = close(fp->fd);
+  free(fp);
 
-	return ret < 0 ? EOF : 0;
+  return ret < 0 ? EOF : 0;
 }

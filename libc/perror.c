@@ -9,6 +9,6 @@ static char fmt[] = "%s: something went wrong! (errno = %d)\n";
 
 void perror(const char *s)
 {
-	// @TODO: Implement this properly.
-	fprintf(stderr, fmt, s, errno);
+  // @TODO: Implement this properly.
+  fprintf(stderr, fmt, s, errno);
 }

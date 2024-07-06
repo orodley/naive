@@ -3,6 +3,6 @@
 
 int main()
 {
-	assert(foo(3) == 6);
-	return 0;
+  assert(foo(3) == 6);
+  return 0;
 }

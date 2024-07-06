@@ -3,5 +3,5 @@
 
 char *strdup(const char *str)
 {
-	return strndup(str, strlen(str));
+  return strndup(str, strlen(str));
 }

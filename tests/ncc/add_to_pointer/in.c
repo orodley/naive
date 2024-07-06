@@ -2,11 +2,11 @@
 
 int main()
 {
-	int x = 1;
-	int *p = &x;
-	p = p + 0;
+  int x = 1;
+  int *p = &x;
+  p = p + 0;
 
-	assert(*p == 1);
+  assert(*p == 1);
 
-	return 0;
+  return 0;
 }

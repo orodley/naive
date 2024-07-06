@@ -2,5 +2,5 @@
 
 int feof(struct _IO_FILE *stream)
 {
-	return stream->eof;
+  return stream->eof;
 }

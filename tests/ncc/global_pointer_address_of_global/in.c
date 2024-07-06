@@ -5,9 +5,9 @@ int *y = &x;
 
 int main()
 {
-	assert(*y == 3);
-	*y = 2;
-	assert(x == 2);
+  assert(*y == 3);
+  *y = 2;
+  assert(x == 2);
 
-	return 0;
+  return 0;
 }

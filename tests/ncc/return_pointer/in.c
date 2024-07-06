@@ -3,13 +3,13 @@
 int foo;
 int *bar()
 {
-	return &foo;
+  return &foo;
 }
 
 int main()
 {
-	*bar() = 3;
-	assert(foo == 3);
+  *bar() = 3;
+  assert(foo == 3);
 
-	return 0;
+  return 0;
 }

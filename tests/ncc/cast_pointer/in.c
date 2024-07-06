@@ -2,9 +2,9 @@
 
 int main()
 {
-	int x = 34;
-	int *p = (int *)(void *)(struct Foo *)(char *)&x;
-	assert(*p == 34);
+  int x = 34;
+  int *p = (int *)(void *)(struct Foo *)(char *)&x;
+  assert(*p == 34);
 
-	return 0;
+  return 0;
 }

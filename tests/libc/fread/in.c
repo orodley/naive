@@ -2,11 +2,11 @@
 
 int main()
 {
-	char foo[10];
-	fread(foo, 1, 9, stdin);
-	foo[9] = '\0';
+  char foo[10];
+  fread(foo, 1, 9, stdin);
+  foo[9] = '\0';
 
-	puts(foo);
+  puts(foo);
 
-	return 0;
+  return 0;
 }

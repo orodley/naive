@@ -3,8 +3,8 @@
 
 int main()
 {
-	bool t = true;
-	assert(!(!t && !t));
+  bool t = true;
+  assert(!(!t && !t));
 
-	return 0;
+  return 0;
 }

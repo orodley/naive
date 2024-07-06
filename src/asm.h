@@ -7,267 +7,267 @@
 #include "pool.h"
 
 #define REG_CLASSES \
-	X(INVALID_REG_CLASS, "INVALID", "INVALID", "INVALID", "INVALID"), \
-	X(REG_CLASS_A,   "AL",   "AX",   "EAX",  "RAX"), \
-	X(REG_CLASS_B,   "BL",   "BX",   "EBX",  "RBX"), \
-	X(REG_CLASS_C,   "CL",   "CX",   "ECX",  "RCX"), \
-	X(REG_CLASS_D,   "DL",   "DX",   "EDX",  "RDX"), \
-	X(REG_CLASS_DI,  "DIL",  "DI",   "EDI",  "RDI"), \
-	X(REG_CLASS_SI,  "SIL",  "SI",   "ESI",  "RSI"), \
-	X(REG_CLASS_BP,  "BPL",  "BP",   "EBP",  "RBP"), \
-	X(REG_CLASS_SP,  "SPL",  "SP",   "ESP",  "RSP"), \
-	X(REG_CLASS_R8,  "R8B",  "R8W",  "R8D",  "R8"), \
-	X(REG_CLASS_R9,  "R9B",  "R9W",  "R9D",  "R9"), \
-	X(REG_CLASS_R10, "R10B", "R10W", "R10D", "R10"), \
-	X(REG_CLASS_R11, "R11B", "R11W", "R11D", "R11"), \
-	X(REG_CLASS_R12, "R12B", "R12W", "R12D", "R12"), \
-	X(REG_CLASS_R13, "R13B", "R13W", "R13D", "R13"), \
-	X(REG_CLASS_R14, "R14B", "R14W", "R14D", "R14"), \
-	X(REG_CLASS_R15, "R15B", "R15W", "R15D", "R15"), \
-	X(REG_CLASS_IP, "INVALID", "INVALID", "INVALID", "RIP"), \
-	
+  X(INVALID_REG_CLASS, "INVALID", "INVALID", "INVALID", "INVALID"), \
+  X(REG_CLASS_A,   "AL",   "AX",   "EAX",  "RAX"), \
+  X(REG_CLASS_B,   "BL",   "BX",   "EBX",  "RBX"), \
+  X(REG_CLASS_C,   "CL",   "CX",   "ECX",  "RCX"), \
+  X(REG_CLASS_D,   "DL",   "DX",   "EDX",  "RDX"), \
+  X(REG_CLASS_DI,  "DIL",  "DI",   "EDI",  "RDI"), \
+  X(REG_CLASS_SI,  "SIL",  "SI",   "ESI",  "RSI"), \
+  X(REG_CLASS_BP,  "BPL",  "BP",   "EBP",  "RBP"), \
+  X(REG_CLASS_SP,  "SPL",  "SP",   "ESP",  "RSP"), \
+  X(REG_CLASS_R8,  "R8B",  "R8W",  "R8D",  "R8"), \
+  X(REG_CLASS_R9,  "R9B",  "R9W",  "R9D",  "R9"), \
+  X(REG_CLASS_R10, "R10B", "R10W", "R10D", "R10"), \
+  X(REG_CLASS_R11, "R11B", "R11W", "R11D", "R11"), \
+  X(REG_CLASS_R12, "R12B", "R12W", "R12D", "R12"), \
+  X(REG_CLASS_R13, "R13B", "R13W", "R13D", "R13"), \
+  X(REG_CLASS_R14, "R14B", "R14W", "R14D", "R14"), \
+  X(REG_CLASS_R15, "R15B", "R15W", "R15D", "R15"), \
+  X(REG_CLASS_IP, "INVALID", "INVALID", "INVALID", "RIP"), \
+  
 #define X(x, b, w, d, o) x
 typedef enum RegClass
 {
-	REG_CLASSES
+  REG_CLASSES
 } RegClass;
 #undef X
 
 typedef struct Register
 {
-	u8 width;
+  u8 width;
 
-	enum
-	{
-		PHYS_REG,
-		V_REG,
-	} t;
+  enum
+  {
+    PHYS_REG,
+    V_REG,
+  } t;
 
-	union
-	{
-		u32 vreg_number;
-		RegClass class;
-	} u;
+  union
+  {
+    u32 vreg_number;
+    RegClass class;
+  } u;
 } Register;
 
 typedef struct AsmConst
 {
-	enum
-	{
-		ASM_CONST_IMMEDIATE,
-		ASM_CONST_FIXED_IMMEDIATE,
-		ASM_CONST_SYMBOL,
-	} t;
+  enum
+  {
+    ASM_CONST_IMMEDIATE,
+    ASM_CONST_FIXED_IMMEDIATE,
+    ASM_CONST_SYMBOL,
+  } t;
 
-	union
-	{
-		u64 immediate;
-		struct
-		{
-			u64 value;
-			u32 width;
-		} fixed_immediate;
-		struct AsmSymbol *symbol;
-	} u;
+  union
+  {
+    u64 immediate;
+    struct
+    {
+      u64 value;
+      u32 width;
+    } fixed_immediate;
+    struct AsmSymbol *symbol;
+  } u;
 } AsmConst;
 
 typedef struct AsmValue
 {
-	// @TODO: This is kinda messy considering that OFFSET_REGISTER doesn't make
-	// sense if this isn't set.
-	bool is_deref;
+  // @TODO: This is kinda messy considering that OFFSET_REGISTER doesn't make
+  // sense if this isn't set.
+  bool is_deref;
 
-	enum
-	{
-		ASM_VALUE_REGISTER,
-		ASM_VALUE_OFFSET_REGISTER,
-		ASM_VALUE_CONST,
-	} t;
+  enum
+  {
+    ASM_VALUE_REGISTER,
+    ASM_VALUE_OFFSET_REGISTER,
+    ASM_VALUE_CONST,
+  } t;
 
-	union
-	{
-		Register reg;
-		struct
-		{
-			Register reg;
-			AsmConst offset;
-		} offset_register;
-		AsmConst constant;
-	} u;
+  union
+  {
+    Register reg;
+    struct
+    {
+      Register reg;
+      AsmConst offset;
+    } offset_register;
+    AsmConst constant;
+  } u;
 } AsmValue;
 
 // @NOTE: Be sure to update compute_live_ranges and allocate_registers if more
 // Jcc instructions are added.
 #define ASM_OPS \
-	X(NOP), \
-	X(MOV), \
-	X(MOVSX), \
-	X(MOVZX), \
-	X(RET), \
-	X(CALL), \
-	X(XOR), \
-	X(AND), \
-	X(OR), \
-	X(NOT), \
-	X(NEG), \
-	X(SHL), \
-	X(SHR), \
-	X(ADD), \
-	X(SUB), \
-	X(PUSH), \
-	X(POP), \
-	X(IMUL), \
-	X(IDIV), \
-	X(CDQ), \
-	X(CQO), \
-	X(CMP), \
-	X(SETE), \
-	X(SETNE), \
-	X(SETG), \
-	X(SETGE), \
-	X(SETL), \
-	X(SETLE), \
-	X(SETA), \
-	X(SETAE), \
-	X(SETB), \
-	X(SETBE), \
-	X(TEST), \
-	X(JMP), \
-	X(JE), \
-	X(JNE), \
-	X(JG), \
-	X(JGE), \
-	X(JL), \
-	X(JLE), \
-	X(JA), \
-	X(JAE), \
-	X(JB), \
-	X(JBE), \
-	X(ADC), \
-	X(SBB), \
-	X(SYSCALL),
+  X(NOP), \
+  X(MOV), \
+  X(MOVSX), \
+  X(MOVZX), \
+  X(RET), \
+  X(CALL), \
+  X(XOR), \
+  X(AND), \
+  X(OR), \
+  X(NOT), \
+  X(NEG), \
+  X(SHL), \
+  X(SHR), \
+  X(ADD), \
+  X(SUB), \
+  X(PUSH), \
+  X(POP), \
+  X(IMUL), \
+  X(IDIV), \
+  X(CDQ), \
+  X(CQO), \
+  X(CMP), \
+  X(SETE), \
+  X(SETNE), \
+  X(SETG), \
+  X(SETGE), \
+  X(SETL), \
+  X(SETLE), \
+  X(SETA), \
+  X(SETAE), \
+  X(SETB), \
+  X(SETBE), \
+  X(TEST), \
+  X(JMP), \
+  X(JE), \
+  X(JNE), \
+  X(JG), \
+  X(JGE), \
+  X(JL), \
+  X(JLE), \
+  X(JA), \
+  X(JAE), \
+  X(JB), \
+  X(JBE), \
+  X(ADC), \
+  X(SBB), \
+  X(SYSCALL),
 
 #define X(x) x
 typedef enum AsmOp
 {
-	ASM_OPS
+  ASM_OPS
 } AsmOp;
 #undef X
 
 typedef struct AsmInstr
 {
-	AsmOp op;
-	u8 arity;
-	AsmValue args[3];
+  AsmOp op;
+  u8 arity;
+  AsmValue args[3];
 
-	u8 num_deps;
-	u32 vreg_deps[2];
+  u8 num_deps;
+  u32 vreg_deps[2];
 
-	struct AsmSymbol *label;
+  struct AsmSymbol *label;
 } AsmInstr;
 
 typedef struct ArgClass
 {
-	enum
-	{
-		ARG_CLASS_REG,
-		ARG_CLASS_MEM,
-	} t;
+  enum
+  {
+    ARG_CLASS_REG,
+    ARG_CLASS_MEM,
+  } t;
 
-	union
-	{
-		struct
-		{
-			u32 vreg; // @TODO: Is this used?
-			RegClass reg;
-		} reg;
-		struct
-		{
-			u32 offset;
-			u32 size;
-			bool remains_in_memory;
-		} mem;
-	} u;
+  union
+  {
+    struct
+    {
+      u32 vreg; // @TODO: Is this used?
+      RegClass reg;
+    } reg;
+    struct
+    {
+      u32 offset;
+      u32 size;
+      bool remains_in_memory;
+    } mem;
+  } u;
 } ArgClass;
 
 // @TODO: Should this be in asm_gen.h instead?
 typedef struct CallSeq
 {
-	u32 stack_space;
-	ArgClass *arg_classes;
+  u32 stack_space;
+  ArgClass *arg_classes;
 } CallSeq;
 
 typedef enum AsmLinkage
 {
-	ASM_GLOBAL_LINKAGE,
-	ASM_LOCAL_LINKAGE,
+  ASM_GLOBAL_LINKAGE,
+  ASM_LOCAL_LINKAGE,
 } AsmLinkage;
 
 typedef enum AsmSymbolSection
 {
-	// @TODO: Maybe this should indicate "undefined"?
-	UNKNOWN_SECTION,
-	TEXT_SECTION,
-	DATA_SECTION,
-	BSS_SECTION,
+  // @TODO: Maybe this should indicate "undefined"?
+  UNKNOWN_SECTION,
+  TEXT_SECTION,
+  DATA_SECTION,
+  BSS_SECTION,
 } AsmSymbolSection;
 
 typedef struct AsmSymbol
 {
-	char *name;
-	AsmSymbolSection section;
-	bool defined;
-	AsmLinkage linkage;
-	// @TODO: Do we need this? It's always just equal to the index in the
-	// symbol array plus one, maybe we can compute it in elf.c on Symbol
-	// instead?
-	u32 symtab_index;
-	// @NOTE: This does double duty. During asm_gen it stores the offset from
-	// the start of the function in number of instructions, to be used for
-	// asm-level analysis. After assembly it stores the offset in number of
-	// bytes, for object file emission.
-	u32 offset;
-	u32 size;
+  char *name;
+  AsmSymbolSection section;
+  bool defined;
+  AsmLinkage linkage;
+  // @TODO: Do we need this? It's always just equal to the index in the
+  // symbol array plus one, maybe we can compute it in elf.c on Symbol
+  // instead?
+  u32 symtab_index;
+  // @NOTE: This does double duty. During asm_gen it stores the offset from
+  // the start of the function in number of instructions, to be used for
+  // asm-level analysis. After assembly it stores the offset in number of
+  // bytes, for object file emission.
+  u32 offset;
+  u32 size;
 
-	// Used for asm_gen
-	struct Pred *pred;
+  // Used for asm_gen
+  struct Pred *pred;
 } AsmSymbol;
 
 typedef enum FixupType
 {
-	FIXUP_RELATIVE,
-	FIXUP_ABSOLUTE,
+  FIXUP_RELATIVE,
+  FIXUP_ABSOLUTE,
 } FixupType;
 
 typedef struct Fixup
 {
-	FixupType type;
+  FixupType type;
 
-	AsmSymbolSection section;
+  AsmSymbolSection section;
 
-	u32 offset;
-	u32 next_instr_offset;
-	u32 size_bytes;
+  u32 offset;
+  u32 next_instr_offset;
+  u32 size_bytes;
 
-	AsmSymbol *symbol;
+  AsmSymbol *symbol;
 } Fixup;
 
 typedef struct AsmModule
 {
-	char *input_file_name;
-	Pool pool;
+  char *input_file_name;
+  Pool pool;
 
-	struct
-	{
-		Array(AsmInstr) instrs;
-		Array(u8) bytes;
-	} text;
+  struct
+  {
+    Array(AsmInstr) instrs;
+    Array(u8) bytes;
+  } text;
 
-	Array(u8) data;
-	u32 bss_size;
+  Array(u8) data;
+  u32 bss_size;
 
-	Array(AsmSymbol *) symbols;
-	Array(Fixup) fixups;
+  Array(AsmSymbol *) symbols;
+  Array(Fixup) fixups;
 } AsmModule;
 
 void init_asm_module(AsmModule *asm_module, char *input_file_name);

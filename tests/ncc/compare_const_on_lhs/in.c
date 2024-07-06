@@ -2,11 +2,11 @@
 
 int main()
 {
-	int a = 1;
-	assert(0 < a);
-	assert(1 <= a);
-	assert(0 != a);
-	assert(1 == a);
+  int a = 1;
+  assert(0 < a);
+  assert(1 <= a);
+  assert(0 != a);
+  assert(1 == a);
 
-	return 0;
+  return 0;
 }

@@ -2,9 +2,9 @@
 
 int main()
 {
-	int x = 285;
-	int y = 23;
-	assert(x / y == 12);
+  int x = 285;
+  int y = 23;
+  assert(x / y == 12);
 
-	return 0;
+  return 0;
 }

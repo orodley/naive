@@ -5,6 +5,6 @@ int b;
 
 int main()
 {
-	assert(&a != &b);
-	return 0;
+  assert(&a != &b);
+  return 0;
 }

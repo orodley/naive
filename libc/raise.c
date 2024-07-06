@@ -3,5 +3,5 @@
 
 int raise(int sig)
 {
-	return kill(getpid(), sig);
+  return kill(getpid(), sig);
 }

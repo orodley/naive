@@ -6,11 +6,11 @@
 
 int main()
 {
-	struct stat s;
-	int ret = stat("in.c", &s);
-	assert (ret == 0);
+  struct stat s;
+  int ret = stat("in.c", &s);
+  assert (ret == 0);
 
-	printf("%d\n", s.st_mode);
+  printf("%d\n", s.st_mode);
 
-	return 0;
+  return 0;
 }

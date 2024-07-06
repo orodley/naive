@@ -5,15 +5,15 @@
 
 typedef struct SourceLoc
 {
-	char *filename;
-	u32 line;
-	u32 column;
+  char *filename;
+  u32 line;
+  u32 column;
 } SourceLoc;
 
 typedef enum ErrorLevel
 {
-	WARNING,
-	ERROR,
+  WARNING,
+  ERROR,
 } ErrorLevel;
 
 void issue_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...);

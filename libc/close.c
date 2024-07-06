@@ -4,11 +4,11 @@
 
 int close(int fd)
 {
-	int ret = __syscall(3, fd, 0, 0, 0, 0, 0);
-	if (ret < 0) {
-		errno = -ret;
-		return -1;
-	}
+  int ret = __syscall(3, fd, 0, 0, 0, 0, 0);
+  if (ret < 0) {
+    errno = -ret;
+    return -1;
+  }
 
-	return 0;
+  return 0;
 }

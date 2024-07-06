@@ -6,11 +6,11 @@
 
 int printf(const char *format, ...)
 {
-	va_list ap;
-	va_start(ap, format);
+  va_list ap;
+  va_start(ap, format);
 
-	int ret = printf_impl(file_sink, stdout, format, ap);
+  int ret = printf_impl(file_sink, stdout, format, ap);
 
-	va_end(ap);
-	return ret;
+  va_end(ap);
+  return ret;
 }
