@@ -35,9 +35,9 @@ typedef struct Reader
   SourceLoc prev_char_source_loc;
 } Reader;
 
-void reader_init(Reader *reader, String buffer,
-    Array(Adjustment) adjustments, bool at_start_of_line,
-    char *source_filename);
+void reader_init(
+    Reader *reader, String buffer, Array(Adjustment) adjustments,
+    bool at_start_of_line, char *source_filename);
 void back_up(Reader *reader);
 void advance(Reader *reader);
 
@@ -63,7 +63,7 @@ inline char read_char(Reader *reader)
 
 inline bool initial_ident_char(char c)
 {
-  return  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
 }
 
 inline bool ident_char(char c)

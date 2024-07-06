@@ -8,7 +8,7 @@ int main()
   assert(0);
 
   while (a != 1) {
-bar:
+  bar:
     b = 1;
   }
 
@@ -24,7 +24,7 @@ foo:
 
   switch (3) {
   case 3:
-baz:
+  baz:
     d = 1;
     break;
   }

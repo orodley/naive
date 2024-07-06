@@ -7,8 +7,14 @@ typedef struct
   {
     char a;
     int b;
-    struct { int c1; } c;
-    struct { int d1; } d;
+    struct
+    {
+      int c1;
+    } c;
+    struct
+    {
+      int d1;
+    } d;
   } u;
 } Foo;
 

@@ -2,9 +2,9 @@
 #include <string.h>
 
 // @PORT
-#include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #include "util.h"
 
@@ -41,24 +41,20 @@ char *concat(char *str_a, char *str_b)
 String map_file_into_memory(char *filename)
 {
   int fd = open(filename, O_RDONLY);
-  if (fd == -1)
-    return INVALID_STRING;
+  if (fd == -1) return INVALID_STRING;
 
   off_t file_size = lseek(fd, 0, SEEK_END);
 
-  if (file_size == -1)
-    return INVALID_STRING;
+  if (file_size == -1) return INVALID_STRING;
 
-  if (file_size == 0)
-    return EMPTY_STRING;
+  if (file_size == 0) return EMPTY_STRING;
 
   char *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
-  if (buffer == MAP_FAILED)
-    return INVALID_STRING;
+  if (buffer == MAP_FAILED) return INVALID_STRING;
 
   close(fd);
 
-  return (String) { buffer, file_size };
+  return (String){buffer, file_size};
 }
 
 // @PORT

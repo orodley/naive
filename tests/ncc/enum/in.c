@@ -1,6 +1,11 @@
 #include <assert.h>
 
-enum Foo { FOO1, FOO2, FOO3 };
+enum Foo
+{
+  FOO1,
+  FOO2,
+  FOO3
+};
 
 int main()
 {

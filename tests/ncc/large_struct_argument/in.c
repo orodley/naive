@@ -20,6 +20,6 @@ void foo(struct Foo f)
 
 int main()
 {
-  foo((struct Foo) { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
+  foo((struct Foo){0, 1, 2, 3, 4, 5, 6, 7, 8});
   return 0;
 }

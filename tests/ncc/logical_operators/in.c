@@ -21,7 +21,6 @@ int main()
   assert(a == 0);
   assert(b == 0);
 
-
   a = 1;
   b = 0;
 
@@ -41,7 +40,6 @@ int main()
   assert(!((a = 0) && (b = 0)));
   assert(a == 0);
   assert(b == 1);
-
 
   return 0;
 }

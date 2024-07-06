@@ -4,7 +4,7 @@
 int main()
 {
   {
-    int foo[5] = { 0, 1, 2, 3, 4 };
+    int foo[5] = {0, 1, 2, 3, 4};
     memmove(foo + 2, foo, sizeof(int) * 3);
 
     assert(foo[0] == 0);
@@ -15,7 +15,7 @@ int main()
   }
 
   {
-    int foo[5] = { 0, 1, 2, 3, 4 };
+    int foo[5] = {0, 1, 2, 3, 4};
     memmove(foo, foo + 2, sizeof(int) * 3);
 
     assert(foo[0] == 2);
@@ -26,7 +26,7 @@ int main()
   }
 
   {
-    int foo[5] = { 0, 1, 2, 3, 4 };
+    int foo[5] = {0, 1, 2, 3, 4};
     memmove(foo, foo, sizeof(int) * 5);
 
     assert(foo[0] == 0);
@@ -37,7 +37,7 @@ int main()
   }
 
   {
-    int foo[5] = { 0, 1, 2, 3, 4 };
+    int foo[5] = {0, 1, 2, 3, 4};
     memmove(foo + 2, foo, sizeof(int) * 2);
 
     assert(foo[0] == 0);

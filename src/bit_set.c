@@ -1,6 +1,6 @@
-#include <stdlib.h>
-
 #include "bit_set.h"
+
+#include <stdlib.h>
 
 void bit_set_init(BitSet *bit_set, u32 size_in_bits)
 {
@@ -14,8 +14,7 @@ void bit_set_init(BitSet *bit_set, u32 size_in_bits)
 
 void bit_set_free(BitSet *bit_set)
 {
-  if (bit_set->bits != &bit_set->inline_bits)
-    free(bit_set->bits);
+  if (bit_set->bits != &bit_set->inline_bits) free(bit_set->bits);
 }
 
 void bit_set_set_all(BitSet *bit_set)

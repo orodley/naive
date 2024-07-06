@@ -2,8 +2,14 @@
 
 char *foo = "foo";
 char bar[] = "bar";
-struct { char *foo; } foo_s = { "foo_s" };
-struct { char bar[5]; } bar_s = { "bar_s" };
+struct
+{
+  char *foo;
+} foo_s = {"foo_s"};
+struct
+{
+  char bar[5];
+} bar_s = {"bar_s"};
 char *baz[] = {"baz"};
 
 int main()

@@ -16,7 +16,8 @@ long atol(const char *nptr);
 int rand(void);
 void srand(unsigned int seed);
 
-void qsort(void *base, size_t nmemb, size_t size,
+void qsort(
+    void *base, size_t nmemb, size_t size,
     int (*compar)(const void *, const void *));
 
 #endif

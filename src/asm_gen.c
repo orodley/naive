@@ -1,10 +1,11 @@
+#include "asm_gen.h"
+
 #include <assert.h>
 #include <stdlib.h>
 
 #include "array.h"
-#include "bit_set.h"
 #include "asm.h"
-#include "asm_gen.h"
+#include "bit_set.h"
 #include "flags.h"
 #include "ir.h"
 #include "util.h"
@@ -49,7 +50,8 @@ AsmInstr *emit_instr1(AsmBuilder *builder, AsmOp op, AsmValue arg1)
   return instr;
 }
 
-AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmValue arg1, AsmValue arg2)
+AsmInstr *emit_instr2(
+    AsmBuilder *builder, AsmOp op, AsmValue arg1, AsmValue arg2)
 {
   AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
   instr->op = op;
@@ -59,11 +61,8 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmValue arg1, AsmValue arg
   instr->num_deps = 0;
   instr->label = NULL;
 
-  if (op == MOV
-      && arg1.t == ASM_VALUE_REGISTER
-      && arg2.t == ASM_VALUE_REGISTER
-      && arg1.u.reg.width != arg2.u.reg.width
-      && !arg1.is_deref
+  if (op == MOV && arg1.t == ASM_VALUE_REGISTER && arg2.t == ASM_VALUE_REGISTER
+      && arg1.u.reg.width != arg2.u.reg.width && !arg1.is_deref
       && !arg2.is_deref) {
     assert(!"Bad MOV! Registers are different sizes.");
   }
@@ -71,8 +70,8 @@ AsmInstr *emit_instr2(AsmBuilder *builder, AsmOp op, AsmValue arg1, AsmValue arg
   return instr;
 }
 
-AsmInstr *emit_instr3(AsmBuilder *builder, AsmOp op,
-    AsmValue arg1, AsmValue arg2, AsmValue arg3)
+AsmInstr *emit_instr3(
+    AsmBuilder *builder, AsmOp op, AsmValue arg1, AsmValue arg2, AsmValue arg3)
 {
   AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
   instr->op = op;
@@ -140,8 +139,7 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr);
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
   switch (value.t) {
-  case IR_VALUE_CONST:
-    return asm_imm(value.u.constant);
+  case IR_VALUE_CONST: return asm_imm(value.u.constant);
   case IR_VALUE_INSTR: {
     IrInstr *instr = value.u.instr;
 
@@ -161,9 +159,8 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
     case OP_LOCAL: {
       AsmValue vreg = asm_vreg(new_vreg(builder), 64);
       emit_instr2(builder, MOV, vreg, asm_phys_reg(REG_CLASS_SP, 64));
-      emit_instr2(builder,
-          ADD,
-          vreg,
+      emit_instr2(
+          builder, ADD, vreg,
           asm_imm(instr->u.local.stack_offset + builder->curr_sp_diff));
       return vreg;
     }
@@ -179,14 +176,11 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 
       u32 offset;
       switch (type.t) {
-      case IR_STRUCT:
-        offset = type.u.strukt.fields[field_num].offset;
-        break;
+      case IR_STRUCT: offset = type.u.strukt.fields[field_num].offset; break;
       case IR_ARRAY:
         offset = size_of_ir_type(*type.u.array.elem_type) * field_num;
         break;
-      default:
-        UNREACHABLE;
+      default: UNREACHABLE;
       }
       emit_instr2(builder, MOV, temp_vreg, asm_value(builder, ptr));
       emit_instr2(builder, ADD, temp_vreg, asm_imm(offset));
@@ -216,7 +210,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
   case IR_VALUE_ARG: {
     u32 index = value.u.arg_index;
     ArgClass *arg_class =
-      builder->current_function->call_seq.arg_classes + index;
+        builder->current_function->call_seq.arg_classes + index;
 
     switch (arg_class->t) {
     case ARG_CLASS_REG:
@@ -230,18 +224,13 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
       u32 vreg = new_vreg(builder);
       AsmValue vreg64 = asm_vreg(vreg, 64);
       if (arg_class->u.mem.remains_in_memory) {
-        emit_instr2(builder,
-            MOV,
-            vreg64,
-            asm_phys_reg(REG_CLASS_BP, 64));
+        emit_instr2(builder, MOV, vreg64, asm_phys_reg(REG_CLASS_BP, 64));
         emit_instr2(builder, ADD, vreg64, bp_offset);
         return vreg64;
       } else {
-        emit_instr2(builder,
-            MOV,
-            vreg64,
-            asm_deref(asm_offset_reg(REG_CLASS_BP, 64,
-                bp_offset.u.constant)));
+        emit_instr2(
+            builder, MOV, vreg64,
+            asm_deref(asm_offset_reg(REG_CLASS_BP, 64, bp_offset.u.constant)));
         return asm_vreg(vreg, size_of_ir_type(value.type) * 8);
       }
     }
@@ -259,16 +248,15 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
   UNREACHABLE;
 }
 
-static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
-    AsmValue asm_value, u32 other_operand_width, bool sext)
+static AsmValue maybe_move_const_to_reg(
+    AsmBuilder *builder, AsmValue asm_value, u32 other_operand_width, bool sext)
 {
   if (asm_value.t == ASM_VALUE_CONST
       && asm_value.u.constant.t == ASM_CONST_IMMEDIATE) {
     u64 c = asm_value.u.constant.u.immediate;
 
     if (!sext) {
-      if ((u32)c == c)
-        return asm_value;
+      if ((u32)c == c) return asm_value;
     } else if ((i32)c == (i64)c) {
       return asm_value;
     }
@@ -288,8 +276,7 @@ static AsmValue maybe_move_const_to_reg(AsmBuilder *builder,
 
 static IrCmp maybe_flip_conditional(IrCmp cmp, IrValue *arg1, IrValue *arg2)
 {
-  if (arg1->t != IR_VALUE_CONST)
-    return cmp;
+  if (arg1->t != IR_VALUE_CONST) return cmp;
 
   // The only form of comparison between a register and an immediate has the
   // immediate on the RHS. So we need to swap the LHS and RHS if the
@@ -357,14 +344,10 @@ static bool get_inner_cmp(AsmBuilder *builder, IrInstr *instr, IrInstr **out)
   }
 
   IrCmp cmp = instr->u.cmp.cmp;
-  if (cmp == CMP_EQ && c == 0)
-    return !get_inner_cmp(builder, inner, out);
-  if (cmp == CMP_EQ && c == 1)
-    return get_inner_cmp(builder, inner, out);
-  if (cmp == CMP_NEQ && c == 0)
-    return get_inner_cmp(builder, inner, out);
-  if (cmp == CMP_NEQ && c == 1)
-    return !get_inner_cmp(builder, inner, out);
+  if (cmp == CMP_EQ && c == 0) return !get_inner_cmp(builder, inner, out);
+  if (cmp == CMP_EQ && c == 1) return get_inner_cmp(builder, inner, out);
+  if (cmp == CMP_NEQ && c == 0) return get_inner_cmp(builder, inner, out);
+  if (cmp == CMP_NEQ && c == 1) return !get_inner_cmp(builder, inner, out);
 
   UNREACHABLE;
 }
@@ -396,8 +379,7 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
   IrValue arg2 = instr->u.cmp.arg2;
   IrCmp cmp = maybe_flip_conditional(instr->u.cmp.cmp, &arg1, &arg2);
 
-  if (invert)
-    cmp = invert_cmp(cmp);
+  if (invert) cmp = invert_cmp(cmp);
 
   AsmOp op;
   switch (cmp) {
@@ -421,7 +403,8 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
   assert(asm_arg1.t == ASM_VALUE_REGISTER);
 
   emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
-  emit_instr2(builder, CMP, asm_arg1,
+  emit_instr2(
+      builder, CMP, asm_arg1,
       maybe_move_const_to_reg(builder, asm_arg2, asm_arg1.u.reg.width, true));
   emit_instr1(builder, op, asm_vreg(vreg, 8));
 
@@ -439,32 +422,32 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
   assign_vreg(instr, target);
 
   emit_instr2(builder, MOV, target, arg1);
-  emit_instr2(builder, op, target, maybe_move_const_to_reg(builder,
-        arg2, instr->type.u.bit_width, is_sign_extending_op(op)));
+  emit_instr2(
+      builder, op, target,
+      maybe_move_const_to_reg(
+          builder, arg2, instr->type.u.bit_width, is_sign_extending_op(op)));
 }
 
-static void handle_phi_nodes(AsmBuilder *builder, IrBlock *src_block,
-    IrBlock *dest_block)
+static void handle_phi_nodes(
+    AsmBuilder *builder, IrBlock *src_block, IrBlock *dest_block)
 {
   Array(IrInstr *) *dest_instrs = &dest_block->instrs;
-  for (u32 ir_instr_index = 0;
-      ir_instr_index < dest_instrs->size;
-      ir_instr_index++) {
+  for (u32 ir_instr_index = 0; ir_instr_index < dest_instrs->size;
+       ir_instr_index++) {
     IrInstr *instr = *ARRAY_REF(dest_instrs, IrInstr *, ir_instr_index);
-    if (instr->op != OP_PHI)
-      break;
+    if (instr->op != OP_PHI) break;
 
     if (instr->vreg_number == -1) {
       instr->vreg_number = new_vreg(builder);
     }
 
     bool encountered_src_block = false;
-    for (u32 phi_param_index = 0;
-        phi_param_index < instr->u.phi.arity;
-        phi_param_index++) {
+    for (u32 phi_param_index = 0; phi_param_index < instr->u.phi.arity;
+         phi_param_index++) {
       IrPhiParam *param = instr->u.phi.params + phi_param_index;
       if (param->block == src_block) {
-        emit_instr2(builder, MOV,
+        emit_instr2(
+            builder, MOV,
             asm_vreg(instr->vreg_number, size_of_ir_type(instr->type) * 8),
             asm_value(builder, param->value));
 
@@ -477,8 +460,8 @@ static void handle_phi_nodes(AsmBuilder *builder, IrBlock *src_block,
 }
 
 static RegClass argument_registers[] = {
-  REG_CLASS_DI, REG_CLASS_SI, REG_CLASS_D,
-  REG_CLASS_C, REG_CLASS_R8, REG_CLASS_R9,
+    REG_CLASS_DI, REG_CLASS_SI, REG_CLASS_D,
+    REG_CLASS_C,  REG_CLASS_R8, REG_CLASS_R9,
 };
 
 // @TODO: This doesn't conform to the ABI, but it's definitely okay as long as
@@ -498,7 +481,8 @@ static CallSeq classify_arguments(u32 arity, IrType *arg_types)
     ArgClass *arg_class = arg_classes + i;
     IrType *arg_type = arg_types + i;
     switch (arg_type->t) {
-    case IR_INT: case IR_POINTER:
+    case IR_INT:
+    case IR_POINTER:
       if (curr_reg_index < STATIC_ARRAY_LENGTH(argument_registers)) {
         arg_class->t = ARG_CLASS_REG;
         arg_class->u.reg.reg = argument_registers[curr_reg_index++];
@@ -519,14 +503,15 @@ static CallSeq classify_arguments(u32 arity, IrType *arg_types)
       curr_offset += size;
       break;
     }
-    case IR_ARRAY: case IR_FUNCTION: case IR_VOID:
-      UNREACHABLE;
+    case IR_ARRAY:
+    case IR_FUNCTION:
+    case IR_VOID: UNREACHABLE;
     }
   }
 
-  return (CallSeq) {
-    .stack_space = curr_offset,
-    .arg_classes = arg_classes,
+  return (CallSeq){
+      .stack_space = curr_offset,
+      .arg_classes = arg_classes,
   };
 }
 
@@ -541,42 +526,37 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
       return asm_offset_reg(REG_CLASS_SP, 64, asm_const_imm(offset));
     }
     case OP_FIELD: {
-      AsmValue inner =
-        asm_gen_pointer_instr(builder, instr->u.field.ptr);
+      AsmValue inner = asm_gen_pointer_instr(builder, instr->u.field.ptr);
       IrType type = instr->u.field.type;
       u32 field_num = instr->u.field.field_number;
 
       u32 offset;
       switch (type.t) {
-      case IR_STRUCT:
-        offset = type.u.strukt.fields[field_num].offset;
-        break;
+      case IR_STRUCT: offset = type.u.strukt.fields[field_num].offset; break;
       case IR_ARRAY:
         offset = size_of_ir_type(*type.u.array.elem_type) * field_num;
         break;
-      default:
-        UNREACHABLE;
+      default: UNREACHABLE;
       }
 
-      if (offset == 0)
-        return inner;
+      if (offset == 0) return inner;
 
       switch (inner.t) {
       case ASM_VALUE_REGISTER:
-        return (AsmValue) {
-          .t = ASM_VALUE_OFFSET_REGISTER,
-          .u.offset_register.reg = inner.u.reg,
-          .u.offset_register.offset = asm_const_imm(offset),
+        return (AsmValue){
+            .t = ASM_VALUE_OFFSET_REGISTER,
+            .u.offset_register.reg = inner.u.reg,
+            .u.offset_register.offset = asm_const_imm(offset),
         };
       case ASM_VALUE_OFFSET_REGISTER: {
         AsmConst reg_offset = inner.u.offset_register.offset;
         switch (reg_offset.t) {
         case ASM_CONST_IMMEDIATE:
-          return (AsmValue) {
-            .t = ASM_VALUE_OFFSET_REGISTER,
-            .u.offset_register.reg = inner.u.offset_register.reg,
-            .u.offset_register.offset = asm_const_imm(
-                reg_offset.u.immediate + offset),
+          return (AsmValue){
+              .t = ASM_VALUE_OFFSET_REGISTER,
+              .u.offset_register.reg = inner.u.offset_register.reg,
+              .u.offset_register.offset =
+                  asm_const_imm(reg_offset.u.immediate + offset),
           };
         case ASM_CONST_SYMBOL: {
           // @TODO: In this case we should still be able to use an
@@ -588,21 +568,18 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
           AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
           assign_vreg(instr, temp_vreg);
 
-          emit_instr2(builder, MOV,
-              temp_vreg, asm_symbol(reg_offset.u.symbol));
-          return (AsmValue) {
-            .t = ASM_VALUE_OFFSET_REGISTER,
-            .u.offset_register.reg = temp_vreg.u.reg,
-            .u.offset_register.offset = asm_const_imm(offset),
+          emit_instr2(builder, MOV, temp_vreg, asm_symbol(reg_offset.u.symbol));
+          return (AsmValue){
+              .t = ASM_VALUE_OFFSET_REGISTER,
+              .u.offset_register.reg = temp_vreg.u.reg,
+              .u.offset_register.offset = asm_const_imm(offset),
           };
         }
-        case ASM_CONST_FIXED_IMMEDIATE:
-          UNREACHABLE;
+        case ASM_CONST_FIXED_IMMEDIATE: UNREACHABLE;
         }
         break;
       }
-      default:
-        break;
+      default: break;
       }
 
       // @TODO: This code doesn't actually work, but it's never hit in
@@ -621,18 +598,16 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
     }
     // @TODO: Handle OP_ADD and OP_SUB. This is a bit trickier because I
     // think we have to reach through casts?
-    default:
-      return asm_value(builder, pointer);
+    default: return asm_value(builder, pointer);
     }
   }
   case IR_VALUE_GLOBAL: {
-    return asm_offset_reg(REG_CLASS_IP, 64,
-        asm_const_symbol(pointer.u.global->asm_symbol));
+    return asm_offset_reg(
+        REG_CLASS_IP, 64, asm_const_symbol(pointer.u.global->asm_symbol));
   }
   // @TODO: Handle globals. This is essentially the same as OP_LOCAL, but
   // RIP-relative rather than RSP-relative.
-  default:
-    return asm_value(builder, pointer);
+  default: return asm_value(builder, pointer);
   }
 }
 
@@ -641,8 +616,7 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
   assert(cond->op == OP_COND);
   IrValue condition = cond->u.cond.condition;
 
-  if (condition.t != IR_VALUE_INSTR)
-    return false;
+  if (condition.t != IR_VALUE_INSTR) return false;
 
   IrInstr *cond_instr = condition.u.instr;
   bool invert = get_inner_cmp(builder, cond_instr, &cond_instr);
@@ -654,8 +628,7 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
   IrValue arg2 = cond_instr->u.cmp.arg2;
   IrCmp cmp = maybe_flip_conditional(cond_instr->u.cmp.cmp, &arg1, &arg2);
 
-  if (invert)
-    cmp = invert_cmp(cmp);
+  if (invert) cmp = invert_cmp(cmp);
 
   AsmOp jcc;
   switch (cmp) {
@@ -671,8 +644,8 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
   case CMP_ULTE: jcc = JBE; break;
   }
 
-  AsmValue arg2_value = maybe_move_const_to_reg(builder,
-      asm_value(builder, arg2), size_of_ir_type(arg1.type) * 8, true);
+  AsmValue arg2_value = maybe_move_const_to_reg(
+      builder, asm_value(builder, arg2), size_of_ir_type(arg1.type) * 8, true);
 
   emit_instr2(builder, CMP, asm_value(builder, arg1), arg2_value);
   emit_instr1(builder, jcc, asm_symbol(cond->u.cond.then_block->label));
@@ -682,7 +655,8 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
 }
 
 static void asm_gen_instr(
-    AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block, IrInstr *instr)
+    AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block,
+    IrInstr *instr)
 {
   switch (instr->op) {
   case OP_INVALID: UNREACHABLE;
@@ -709,8 +683,8 @@ static void asm_gen_instr(
     IrType *return_type = ir_global->type.u.function.return_type;
     assert(return_type->t == IR_INT || return_type->t == IR_POINTER);
 
-    emit_instr2(builder,
-        MOV,
+    emit_instr2(
+        builder, MOV,
         asm_phys_reg(REG_CLASS_A, size_of_ir_type(*return_type) * 8),
         asm_value(builder, arg));
     emit_instr1(builder, JMP, asm_symbol(builder->ret_label));
@@ -724,12 +698,10 @@ static void asm_gen_instr(
   case OP_COND: {
     IrValue condition = instr->u.cond.condition;
     if (condition.t == IR_VALUE_CONST) {
-      IrBlock *block = condition.u.constant ?
-        instr->u.cond.then_block :
-        instr->u.cond.else_block;
-      IrBlock *other_block = condition.u.constant ?
-        instr->u.cond.else_block :
-        instr->u.cond.then_block;
+      IrBlock *block = condition.u.constant ? instr->u.cond.then_block
+                                            : instr->u.cond.else_block;
+      IrBlock *other_block = condition.u.constant ? instr->u.cond.else_block
+                                                  : instr->u.cond.then_block;
 
       handle_phi_nodes(builder, curr_block, block);
       emit_instr1(builder, JMP, asm_symbol(block->label));
@@ -764,8 +736,7 @@ static void asm_gen_instr(
     // require no codegen in their containing block. All we need to do is
     // make sure we have a vreg assigned, as we might not have visited the
     // incoming blocks yet.
-    if (instr->vreg_number == -1)
-      instr->vreg_number = new_vreg(builder);
+    if (instr->vreg_number == -1) instr->vreg_number = new_vreg(builder);
 
     break;
   }
@@ -777,9 +748,7 @@ static void asm_gen_instr(
 
     AsmValue value = asm_value(builder, ir_value);
     switch (value.t) {
-    case ASM_VALUE_REGISTER:
-      value.u.reg.width = bit_width;
-      break;
+    case ASM_VALUE_REGISTER: value.u.reg.width = bit_width; break;
     case ASM_VALUE_CONST: {
       // @TODO: Use maybe_move_const_to_reg instead?
       if (size_of_ir_type(type) == 8) {
@@ -800,20 +769,15 @@ static void asm_gen_instr(
         value.u.constant = asm_const_fixed_imm(konst.u.immediate, bit_width);
         break;
       }
-      }
-      break;
-    case ASM_VALUE_OFFSET_REGISTER:
-      UNREACHABLE;
+    } break;
+    case ASM_VALUE_OFFSET_REGISTER: UNREACHABLE;
     }
 
     AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
 
     if (ir_pointer.t == IR_VALUE_GLOBAL) {
-      AsmValue rip_relative_addr =
-        asm_offset_reg(
-            REG_CLASS_IP,
-            64,
-            asm_const_symbol(ir_pointer.u.global->asm_symbol));
+      AsmValue rip_relative_addr = asm_offset_reg(
+          REG_CLASS_IP, 64, asm_const_symbol(ir_pointer.u.global->asm_symbol));
       emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
     } else {
       emit_instr2(builder, MOV, asm_deref(pointer), value);
@@ -830,28 +794,21 @@ static void asm_gen_instr(
     AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
 
     if (ir_pointer.t == IR_VALUE_GLOBAL) {
-      AsmValue rip_relative_addr =
-        asm_offset_reg(
-            REG_CLASS_IP,
-            64,
-            asm_const_symbol(ir_pointer.u.global->asm_symbol));
-      emit_instr2(builder,
-          MOV,
-          target,
-          asm_deref(rip_relative_addr));
+      AsmValue rip_relative_addr = asm_offset_reg(
+          REG_CLASS_IP, 64, asm_const_symbol(ir_pointer.u.global->asm_symbol));
+      emit_instr2(builder, MOV, target, asm_deref(rip_relative_addr));
     } else {
       emit_instr2(builder, MOV, target, asm_deref(pointer));
     }
 
     break;
   }
-  case OP_CAST: break; // cast is a type-theoretic operation only
+  case OP_CAST: break;  // cast is a type-theoretic operation only
   case OP_ZEXT: {
     assert(instr->type.t == IR_INT);
     assert(instr->u.arg.type.t == IR_INT);
 
-    if (instr->type.u.bit_width == 64
-        && instr->u.arg.type.u.bit_width == 32) {
+    if (instr->type.u.bit_width == 64 && instr->u.arg.type.u.bit_width == 32) {
       AsmValue vreg = asm_vreg(new_vreg(builder), 32);
       assign_vreg(instr, vreg);
 
@@ -905,9 +862,10 @@ static void asm_gen_instr(
       assert(callee_type.t == IR_FUNCTION);
 
       u32 callee_arity = callee_type.u.function.arity;
-      assert(call_arity == callee_arity
+      assert(
+          call_arity == callee_arity
           || (call_arity > callee_arity
-            && callee_type.u.function.variable_arity));
+              && callee_type.u.function.variable_arity));
 
       if (!callee_type.u.function.variable_arity) {
         gen_new_call_seq = false;
@@ -947,7 +905,8 @@ static void asm_gen_instr(
     // See the System V x86-64 ABI spec, section 3.2.2
     u32 args_plus_padding = align_to(args_stack_space, 16);
     if (args_plus_padding > 0) {
-      emit_instr2(builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
+      emit_instr2(
+          builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
           asm_imm(args_plus_padding));
     }
 
@@ -960,19 +919,18 @@ static void asm_gen_instr(
       AsmValue arg = asm_value(builder, instr->u.call.arg_array[i]);
       // Use the 64-bit version of the register, as all argument
       // registers are 64-bit.
-      if (arg.t == ASM_VALUE_REGISTER)
-        arg.u.reg.width = 64;
+      if (arg.t == ASM_VALUE_REGISTER) arg.u.reg.width = 64;
 
       ArgClass *arg_class = call_seq.arg_classes + i;
 
       switch (arg_class->t) {
       case ARG_CLASS_REG: {
         AsmValue arg_target_reg =
-          pre_alloced_vreg(builder, arg_class->u.reg.reg, 64);
+            pre_alloced_vreg(builder, arg_class->u.reg.reg, 64);
         emit_instr2(builder, MOV, arg_target_reg, arg);
         *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
-        VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg,
-            *ARRAY_LAST(&arg_vregs, u32));
+        VReg *vreg = ARRAY_REF(
+            &builder->virtual_registers, VReg, *ARRAY_LAST(&arg_vregs, u32));
         vreg->live_range_start = builder->current_block->size - 1;
         break;
       }
@@ -993,10 +951,9 @@ static void asm_gen_instr(
           AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
 
           emit_instr2(builder, MOV, temp_vreg, arg);
-          emit_instr2(builder,
-              MOV, 
-              asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)),
-              temp_vreg);
+          emit_instr2(
+              builder, MOV,
+              asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)), temp_vreg);
         } else {
           // @TODO: This is essentially a bad open-coding of memcpy.
           // Adding a call to memcpy would be really awkward since
@@ -1006,9 +963,7 @@ static void asm_gen_instr(
           // with other uses of memcpy.
           Register src;
           switch (arg.t) {
-          case ASM_VALUE_REGISTER:
-            src = arg.u.reg;
-            break;
+          case ASM_VALUE_REGISTER: src = arg.u.reg; break;
           case ASM_VALUE_OFFSET_REGISTER:
             if (arg.u.offset_register.offset.t == ASM_CONST_IMMEDIATE) {
               src = arg.u.offset_register.reg;
@@ -1029,27 +984,29 @@ static void asm_gen_instr(
           u32 i = 0;
           for (; to_copy - i >= 8; i += 8) {
             AsmConst offset = asm_const_imm(location.u.immediate + i);
-            emit_instr2(builder, MOV, asm_vreg(temp_vreg, 64),
-                asm_deref((AsmValue) {
+            emit_instr2(
+                builder, MOV, asm_vreg(temp_vreg, 64),
+                asm_deref((AsmValue){
                     .t = ASM_VALUE_OFFSET_REGISTER,
                     .u.offset_register.reg = src,
                     .u.offset_register.offset = asm_const_imm(i),
-                    }));
-            emit_instr2(builder,
-                MOV,
+                }));
+            emit_instr2(
+                builder, MOV,
                 asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
                 asm_vreg(temp_vreg, 64));
           }
           for (; i < to_copy; i++) {
             AsmConst offset = asm_const_imm(location.u.immediate + i);
-            emit_instr2(builder, MOV, asm_vreg(temp_vreg, 64),
-                asm_deref((AsmValue) {
+            emit_instr2(
+                builder, MOV, asm_vreg(temp_vreg, 64),
+                asm_deref((AsmValue){
                     .t = ASM_VALUE_OFFSET_REGISTER,
                     .u.offset_register.reg = src,
                     .u.offset_register.offset = asm_const_imm(i),
-                    }));
-            emit_instr2(builder,
-                MOV,
+                }));
+            emit_instr2(
+                builder, MOV,
                 asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
                 asm_vreg(temp_vreg, 8));
           }
@@ -1071,8 +1028,8 @@ static void asm_gen_instr(
     //
     // @TODO: Once we pass args in vector registers, set al appropriately.
     if (gen_new_call_seq) {
-      emit_instr2(builder, MOV,
-          pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_imm(0));
+      emit_instr2(
+          builder, MOV, pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_imm(0));
 
       // Done with call_seq now
       free(call_seq.arg_classes);
@@ -1092,7 +1049,8 @@ static void asm_gen_instr(
     array_free(&arg_vregs);
 
     if (args_plus_padding > 0) {
-      emit_instr2(builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
+      emit_instr2(
+          builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
           asm_imm(args_plus_padding));
     }
     builder->curr_sp_diff = 0;
@@ -1154,26 +1112,24 @@ static void asm_gen_instr(
     emit_instr2(builder, MOV, target, arg1);
 
     switch (arg2.t) {
-    case ASM_VALUE_CONST:
-      emit_instr2(builder, op, target, arg2);
-      break;
+    case ASM_VALUE_CONST: emit_instr2(builder, op, target, arg2); break;
     case ASM_VALUE_REGISTER: {
       AsmValue reg_cl = pre_alloced_vreg(builder, REG_CLASS_C, 8);
 
       Register arg2_low = arg2.u.reg;
       arg2_low.width = 8;
 
-      emit_instr2(builder, MOV, reg_cl,
-          (AsmValue) {
-            .t = ASM_VALUE_REGISTER,
-            .u.reg = arg2_low,
+      emit_instr2(
+          builder, MOV, reg_cl,
+          (AsmValue){
+              .t = ASM_VALUE_REGISTER,
+              .u.reg = arg2_low,
           });
 
       emit_instr2(builder, op, target, reg_cl);
       break;
     }
-    default:
-      UNREACHABLE;
+    default: UNREACHABLE;
     }
 
     break;
@@ -1210,7 +1166,8 @@ static void asm_gen_instr(
 
     break;
   }
-  case OP_DIV: case OP_MOD: {
+  case OP_DIV:
+  case OP_MOD: {
     assert(instr->type.t == IR_INT);
     u8 width = instr->type.u.bit_width;
 
@@ -1267,8 +1224,8 @@ static void asm_gen_instr(
     // the size of the register save area, and subtract the same amount
     // from register_save_area. This way we start out pointing at the
     // correct place, but still end up at 48 when we're out of space.
-    AsmValue starting_offset = asm_fixed_imm(
-        48 - builder->register_save_area_size, 32);
+    AsmValue starting_offset =
+        asm_fixed_imm(48 - builder->register_save_area_size, 32);
 
     emit_instr2(builder, MOV, asm_deref(va_list_ptr), starting_offset);
 
@@ -1291,15 +1248,10 @@ static void asm_gen_instr(
     // reasons.
     AsmValue register_save_area = asm_vreg(new_vreg(builder), 64);
 
-    emit_instr2(builder,
-        MOV,
-        register_save_area,
-        asm_phys_reg(REG_CLASS_SP, 64));
+    emit_instr2(
+        builder, MOV, register_save_area, asm_phys_reg(REG_CLASS_SP, 64));
     emit_instr2(builder, SUB, register_save_area, starting_offset);
-    emit_instr2(builder,
-        MOV,
-        asm_deref(va_list_ptr),
-        register_save_area);
+    emit_instr2(builder, MOV, asm_deref(va_list_ptr), register_save_area);
 
     break;
   }
@@ -1325,47 +1277,33 @@ static void asm_gen_instr(
 
 static Register *arg_reg(AsmValue *arg)
 {
-  if (arg->t == ASM_VALUE_REGISTER)
-    return &arg->u.reg;
-  if (arg->t == ASM_VALUE_OFFSET_REGISTER)
-    return &arg->u.offset_register.reg;
+  if (arg->t == ASM_VALUE_REGISTER) return &arg->u.reg;
+  if (arg->t == ASM_VALUE_OFFSET_REGISTER) return &arg->u.offset_register.reg;
   return NULL;
 }
 
 // Reserved for spills and fills.
 #define SPILL_REGISTER REG_CLASS_R12
 
-#define ALLOCATION_ORDER \
-  X(0,  REG_CLASS_R13), \
-  X(1,  REG_CLASS_R14), \
-  X(2,  REG_CLASS_R15), \
-  X(3,  REG_CLASS_B), \
-  X(4,  REG_CLASS_R11), \
-  X(5,  REG_CLASS_R10), \
-  X(6,  REG_CLASS_R9), \
-  X(7,  REG_CLASS_R8), \
-  X(8,  REG_CLASS_C), \
-  X(9,  REG_CLASS_D), \
-  X(10, REG_CLASS_SI), \
-  X(11, REG_CLASS_DI), \
-  X(12, REG_CLASS_A),
+#define ALLOCATION_ORDER                                           \
+  X(0, REG_CLASS_R13), X(1, REG_CLASS_R14), X(2, REG_CLASS_R15),   \
+      X(3, REG_CLASS_B), X(4, REG_CLASS_R11), X(5, REG_CLASS_R10), \
+      X(6, REG_CLASS_R9), X(7, REG_CLASS_R8), X(8, REG_CLASS_C),   \
+      X(9, REG_CLASS_D), X(10, REG_CLASS_SI), X(11, REG_CLASS_DI), \
+      X(12, REG_CLASS_A),
 
 #define X(i, x) [i] = x
-static RegClass alloc_index_to_reg[] = {
-  ALLOCATION_ORDER
-};
+static RegClass alloc_index_to_reg[] = {ALLOCATION_ORDER};
 #undef X
 
 #define X(i, x) [x] = i
-static u32 reg_to_alloc_index[] = {
-  ALLOCATION_ORDER
-};
+static u32 reg_to_alloc_index[] = {ALLOCATION_ORDER};
 #undef X
 
 // We deliberately exclude RBP from this list, as we don't support omitting the
 // frame pointer and so we never use it for register allocation.
 static RegClass callee_save_registers[] = {
-  REG_CLASS_R15, REG_CLASS_R14, REG_CLASS_R13, REG_CLASS_R12, REG_CLASS_B,
+    REG_CLASS_R15, REG_CLASS_R14, REG_CLASS_R13, REG_CLASS_R12, REG_CLASS_B,
 };
 
 static bool is_callee_save(RegClass reg)
@@ -1379,10 +1317,10 @@ static bool is_callee_save(RegClass reg)
   return false;
 }
 
-#define CALLER_SAVE_REGS_BITMASK \
-  ((1 << REG_CLASS_A) | (1 << REG_CLASS_DI) | (1 << REG_CLASS_SI) | \
-   (1 << REG_CLASS_D) | (1 << REG_CLASS_C) | (1 << REG_CLASS_R8) | \
-   (1 << REG_CLASS_R9) | (1 << REG_CLASS_R10) | (1 << REG_CLASS_R11))
+#define CALLER_SAVE_REGS_BITMASK                                   \
+  ((1 << REG_CLASS_A) | (1 << REG_CLASS_DI) | (1 << REG_CLASS_SI)  \
+   | (1 << REG_CLASS_D) | (1 << REG_CLASS_C) | (1 << REG_CLASS_R8) \
+   | (1 << REG_CLASS_R9) | (1 << REG_CLASS_R10) | (1 << REG_CLASS_R11))
 
 typedef struct Pred
 {
@@ -1424,25 +1362,34 @@ bool is_def(AsmInstr *instr, u32 vreg_num, VReg *vreg)
 {
   switch (instr->op) {
   // Special case for pre-allocated return value vregs.
-  case CALL: return vreg->pre_alloced && vreg->u.assigned_register == REG_CLASS_A;
+  case CALL:
+    return vreg->pre_alloced && vreg->u.assigned_register == REG_CLASS_A;
 
-  case CDQ: case CQO:
-    return vreg->pre_alloced && vreg->u.assigned_register == REG_CLASS_D
-      // We're using "is_use" just to check that we're in the vreg_deps
-      // for this instr - we don't want to return true for some random
-      // register that is also pre-allocated to REG_CLASS_D.
-      && is_use(instr, vreg_num);
+  case CDQ:
+  case CQO:
+    return vreg->pre_alloced
+           && vreg->u.assigned_register == REG_CLASS_D
+           // We're using "is_use" just to check that we're in the vreg_deps
+           // for this instr - we don't want to return true for some random
+           // register that is also pre-allocated to REG_CLASS_D.
+           && is_use(instr, vreg_num);
 
   // Special case for zeroing a register by XOR'ing with itself
   case XOR:
     return references_vreg(instr->args[0], vreg_num)
-      && references_vreg(instr->args[1], vreg_num);
+           && references_vreg(instr->args[1], vreg_num);
 
-  case MOV: case MOVSX: case MOVZX:
+  case MOV:
+  case MOVSX:
+  case MOVZX:
   case POP:
   case IMUL:
-  case SETE: case SETNE: case SETG: case SETGE: case SETL: case SETLE:
-    return references_vreg(instr->args[0], vreg_num);
+  case SETE:
+  case SETNE:
+  case SETG:
+  case SETGE:
+  case SETL:
+  case SETLE: return references_vreg(instr->args[0], vreg_num);
 
   default: return false;
   }
@@ -1464,9 +1411,17 @@ static void compute_live_ranges(AsmBuilder *builder)
   for (u32 i = 0; i < body->size; i++) {
     AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
     switch (instr->op) {
-    case JMP: case JE: case JNE: case JG: case JGE: case JL: case JLE:
-    case JA: case JAE: case JB: case JBE:
-      break;
+    case JMP:
+    case JE:
+    case JNE:
+    case JG:
+    case JGE:
+    case JL:
+    case JLE:
+    case JA:
+    case JAE:
+    case JB:
+    case JBE: break;
     default: continue;
     }
 
@@ -1507,12 +1462,10 @@ static void compute_live_ranges(AsmBuilder *builder)
   BitSet working_set;
   bit_set_init(&working_set, body->size);
 
-  for (u32 vreg_num = 0;
-      vreg_num < builder->virtual_registers.size;
-      vreg_num++) {
+  for (u32 vreg_num = 0; vreg_num < builder->virtual_registers.size;
+       vreg_num++) {
     VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, vreg_num);
-    if (vreg->live_range_start != -1 && vreg->live_range_end != -1)
-      continue;
+    if (vreg->live_range_start != -1 && vreg->live_range_end != -1) continue;
 
     bit_set_clear_all(&liveness);
     bit_set_set_all(&working_set);
@@ -1527,8 +1480,7 @@ static void compute_live_ranges(AsmBuilder *builder)
           for (i32 i = pc / 64; i >= 0; i--) {
             u64 bits = working_set.bits[i];
             if (bits != 0) {
-              largest_working_set_elem =
-                64 * i + highest_set_bit(bits);
+              largest_working_set_elem = 64 * i + highest_set_bit(bits);
               break;
             }
           }
@@ -1546,8 +1498,16 @@ static void compute_live_ranges(AsmBuilder *builder)
         AsmInstr *instr = ARRAY_REF(body, AsmInstr, pc);
         i32 succ0 = -1, succ1 = -1;
         switch (instr->op) {
-        case JE: case JNE: case JG: case JGE: case JL: case JLE:
-        case JA: case JAE: case JB: case JBE:
+        case JE:
+        case JNE:
+        case JG:
+        case JGE:
+        case JL:
+        case JLE:
+        case JA:
+        case JAE:
+        case JB:
+        case JBE:
           succ1 = pc + 1;
           // fallthrough.
         case JMP: {
@@ -1563,20 +1523,23 @@ static void compute_live_ranges(AsmBuilder *builder)
           break;
         }
         default:
-          if (pc != body->size - 1)
-            succ0 = pc + 1;
+          if (pc != body->size - 1) succ0 = pc + 1;
           break;
         }
 
         bool new;
         if (is_use(instr, vreg_num)) {
           new = true;
-        } else if (!((succ0 != -1 && (
-                  bit_set_get_bit(&liveness, succ0) && !is_def(
-                    ARRAY_REF(body, AsmInstr, succ0), vreg_num, vreg)))
-              || (succ1 != -1 && (
-                  bit_set_get_bit(&liveness, succ1) && !is_def(
-                    ARRAY_REF(body, AsmInstr, succ1), vreg_num, vreg))))) {
+        } else if (!((succ0 != -1
+                      && (bit_set_get_bit(&liveness, succ0)
+                          && !is_def(
+                              ARRAY_REF(body, AsmInstr, succ0), vreg_num,
+                              vreg)))
+                     || (succ1 != -1
+                         && (bit_set_get_bit(&liveness, succ1)
+                             && !is_def(
+                                 ARRAY_REF(body, AsmInstr, succ1), vreg_num,
+                                 vreg))))) {
           // The big hairy condition above checks if all of our
           // successors are either not live or a def. If so then
           // we're not live.
@@ -1590,8 +1553,7 @@ static void compute_live_ranges(AsmBuilder *builder)
 
         u32 prev;
         Pred *pred = NULL;
-        if (instr->label != NULL)
-          pred = instr->label->pred;
+        if (instr->label != NULL) pred = instr->label->pred;
 
         if (pred != NULL && pred->dest_offset == pc) {
           prev = pred->src_offset;
@@ -1607,14 +1569,13 @@ static void compute_live_ranges(AsmBuilder *builder)
         // then we definitely haven't, and we can skip the whole loop.
         // The second half of the refinement check is the liveness
         // check before adding to working_set below.
-        if (new && pred != NULL) {
+        if (new &&pred != NULL) {
           pred = pred->next;
           while (pred != NULL) {
             u32 src = pred->src_offset;
             u32 dest = pred->dest_offset;
 
-            if (dest != pc)
-              break;
+            if (dest != pc) break;
 
             if (!bit_set_get_bit(&liveness, src)) {
               bit_set_set_bit(&working_set, src, true);
@@ -1624,8 +1585,7 @@ static void compute_live_ranges(AsmBuilder *builder)
           }
         }
 
-        if (!(new && !bit_set_get_bit(&liveness, prev)))
-          break;
+        if (!(new && !bit_set_get_bit(&liveness, prev))) break;
 
         pc = prev;
       }
@@ -1636,7 +1596,8 @@ static void compute_live_ranges(AsmBuilder *builder)
       vreg->live_range_start = lowest;
 
     i32 highest = bit_set_highest_set_bit(&liveness);
-    if (vreg->live_range_end == -1 || (highest != -1 && vreg->live_range_end < highest))
+    if (vreg->live_range_end == -1
+        || (highest != -1 && vreg->live_range_end < highest))
       vreg->live_range_end = highest;
   }
 
@@ -1695,7 +1656,8 @@ static void allocate_registers(AsmBuilder *builder)
   // until later. Linear scan depends on this ordering, so we sort it first.
   // We can't sort it in place because the indices are used to look vregs up
   // by vreg number.
-  VReg **live_ranges = malloc(builder->virtual_registers.size * sizeof *live_ranges);
+  VReg **live_ranges =
+      malloc(builder->virtual_registers.size * sizeof *live_ranges);
   u32 live_range_out_index = 0;
   for (u32 i = 0; i < builder->virtual_registers.size; i++) {
     VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
@@ -1710,7 +1672,9 @@ static void allocate_registers(AsmBuilder *builder)
     live_range_out_index++;
   }
   u32 num_live_ranges = live_range_out_index;
-  qsort(live_ranges, num_live_ranges, sizeof *live_ranges, compare_live_range_start);
+  qsort(
+      live_ranges, num_live_ranges, sizeof *live_ranges,
+      compare_live_range_start);
 
   Array(VReg *) active_vregs;
   ARRAY_INIT(&active_vregs, VReg *, 16);
@@ -1719,14 +1683,12 @@ static void allocate_registers(AsmBuilder *builder)
 
     while (active_vregs.size != 0) {
       VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, 0);
-      if (active_vreg->live_range_end >= vreg->live_range_start)
-        break;
+      if (active_vreg->live_range_end >= vreg->live_range_start) break;
 
       switch (active_vreg->t) {
       case UNASSIGNED: UNREACHABLE;
       case IN_REG: {
-        u32 alloc_index =
-          reg_to_alloc_index[active_vreg->u.assigned_register];
+        u32 alloc_index = reg_to_alloc_index[active_vreg->u.assigned_register];
         free_regs_bitset |= 1 << alloc_index;
         break;
       }
@@ -1767,8 +1729,9 @@ static void allocate_registers(AsmBuilder *builder)
         VReg *existing = NULL;
         for (u32 i = 0; i < active_vregs.size; i++) {
           VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, i);
-          if (active_vreg->t == IN_REG &&
-              active_vreg->u.assigned_register == vreg->u.assigned_register) {
+          if (active_vreg->t == IN_REG
+              && active_vreg->u.assigned_register
+                     == vreg->u.assigned_register) {
             existing = active_vreg;
             break;
           }
@@ -1806,10 +1769,8 @@ static void allocate_registers(AsmBuilder *builder)
   for (u32 i = 0; i < body->size; i++) {
     while (active_vregs.size != 0) {
       VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, 0);
-      if (active_vreg->live_range_end == -1)
-        continue;
-      if ((u32)active_vreg->live_range_end >= i)
-        break;
+      if (active_vreg->live_range_end == -1) continue;
+      if ((u32)active_vreg->live_range_end >= i) break;
       assert(active_vreg->t == IN_REG);
 
       // @TODO: Remove all the invalidated vregs at once instead of
@@ -1818,20 +1779,18 @@ static void allocate_registers(AsmBuilder *builder)
     }
     if (vreg_index != builder->virtual_registers.size) {
       VReg *next_vreg =
-        ARRAY_REF(&builder->virtual_registers, VReg, vreg_index);
+          ARRAY_REF(&builder->virtual_registers, VReg, vreg_index);
       // Pre-alloced vregs aren't counted. Otherwise we'd think we need
       // to spill registers we just used to pass arguments.
       // @TODO: Perhaps this is too weak of a condition? It'd be nice if
       // we could still catch errors, where we accidentally pre-allocated
       // a caller-save register across a callsite.
-      if (next_vreg->t == IN_REG
-          && !next_vreg->pre_alloced
+      if (next_vreg->t == IN_REG && !next_vreg->pre_alloced
           && (u32)next_vreg->live_range_start == i) {
         u32 insertion_point = active_vregs.size;
         for (u32 j = 0; j < active_vregs.size; j++) {
           VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, j);
-          if (active_vreg->live_range_end == -1)
-            continue;
+          if (active_vreg->live_range_end == -1) continue;
           if ((u32)active_vreg->live_range_end < i) {
             insertion_point = j;
             break;
@@ -1849,8 +1808,7 @@ static void allocate_registers(AsmBuilder *builder)
         VReg *vreg = *ARRAY_REF(&active_vregs, VReg *, j);
         if (vreg->t == IN_REG) {
           RegClass reg = vreg->u.assigned_register;
-          if (((1 << reg) & CALLER_SAVE_REGS_BITMASK) == 0)
-            continue;
+          if (((1 << reg) & CALLER_SAVE_REGS_BITMASK) == 0) continue;
 
           vreg->t = ON_STACK;
           vreg->u.assigned_stack_slot = builder->local_stack_usage;
@@ -1897,13 +1855,11 @@ static void allocate_registers(AsmBuilder *builder)
     for (u32 j = 0; j < instr->arity; j++) {
       AsmValue *arg = instr->args + j;
       Register *reg = arg_reg(arg);
-      if (reg == NULL)
-        continue;
+      if (reg == NULL) continue;
 
       if (reg->t == V_REG) {
         u32 vreg_number = reg->u.vreg_number;
-        VReg *vreg = ARRAY_REF(&builder->virtual_registers,
-            VReg, vreg_number);
+        VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, vreg_number);
 
         switch (vreg->t) {
         case IN_REG:
@@ -1917,25 +1873,26 @@ static void allocate_registers(AsmBuilder *builder)
           // every time.
           // @TODO: Elide this when we just write to the register and
           // don't use the previous value
-          *ARRAY_INSERT(body, AsmInstr, i) = (AsmInstr) {
-            .op = MOV,
-            .arity = 2,
-            .args[0] = asm_phys_reg(SPILL_REGISTER, 64),
-            .args[1] = asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
-                asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
+          *ARRAY_INSERT(body, AsmInstr, i) = (AsmInstr){
+              .op = MOV,
+              .arity = 2,
+              .args[0] = asm_phys_reg(SPILL_REGISTER, 64),
+              .args[1] = asm_deref(asm_offset_reg(
+                  REG_CLASS_SP, 64,
+                  asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
           };
           // @TODO: Elide this when we just read the register and
           // don't write anything back.
-          *ARRAY_INSERT(body, AsmInstr, i + 2) = (AsmInstr) {
-            .op = MOV,
-            .arity = 2,
-            .args[0] = asm_deref(asm_offset_reg(REG_CLASS_SP, 64,
-                asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
-            .args[1] = asm_phys_reg(SPILL_REGISTER, 64),
+          *ARRAY_INSERT(body, AsmInstr, i + 2) = (AsmInstr){
+              .op = MOV,
+              .arity = 2,
+              .args[0] = asm_deref(asm_offset_reg(
+                  REG_CLASS_SP, 64,
+                  asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
+              .args[1] = asm_phys_reg(SPILL_REGISTER, 64),
           };
           break;
-        case UNASSIGNED:
-          UNREACHABLE;
+        case UNASSIGNED: UNREACHABLE;
         }
       }
     }
@@ -1951,8 +1908,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   assert(asm_symbol != NULL);
 
   asm_symbol->defined = ir_global->initializer != NULL;
-  if (!asm_symbol->defined)
-    return;
+  if (!asm_symbol->defined) return;
 
   Array(AsmInstr) body;
   ARRAY_INIT(&body, AsmInstr, 20);
@@ -1962,13 +1918,14 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
   builder->local_stack_usage = 0;
 
-  AsmSymbol *ret_label = pool_alloc(&builder->asm_module.pool, sizeof *ret_label);
-  *ret_label = (AsmSymbol) {
-    .name = "ret",
-    .section = TEXT_SECTION,
-    .defined = true,
-    .linkage = ASM_LOCAL_LINKAGE,
-    .pred = NULL,
+  AsmSymbol *ret_label =
+      pool_alloc(&builder->asm_module.pool, sizeof *ret_label);
+  *ret_label = (AsmSymbol){
+      .name = "ret",
+      .section = TEXT_SECTION,
+      .defined = true,
+      .linkage = ASM_LOCAL_LINKAGE,
+      .pred = NULL,
   };
   builder->ret_label = ret_label;
 
@@ -1976,8 +1933,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     array_free(&builder->virtual_registers);
   ARRAY_INIT(&builder->virtual_registers, VReg, 20);
   IrType return_type = *ir_global->type.u.function.return_type;
-  assert(return_type.t == IR_INT
-      || return_type.t == IR_POINTER
+  assert(
+      return_type.t == IR_INT || return_type.t == IR_POINTER
       || return_type.t == IR_VOID);
 
   for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
@@ -1985,12 +1942,12 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     AsmSymbol *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
     block->label = label;
 
-    *label = (AsmSymbol) {
-      .name = block->name,
-      .section = TEXT_SECTION,
-      .defined = true,
-      .linkage = ASM_LOCAL_LINKAGE,
-      .pred = NULL,
+    *label = (AsmSymbol){
+        .name = block->name,
+        .section = TEXT_SECTION,
+        .defined = true,
+        .linkage = ASM_LOCAL_LINKAGE,
+        .pred = NULL,
     };
   }
 
@@ -2006,7 +1963,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     ArgClass *arg_class = ir_global->call_seq.arg_classes + i;
     if (arg_class->t == ARG_CLASS_REG) {
       u32 vreg_num = new_vreg(builder);
-      emit_instr2(builder, MOV, asm_vreg(vreg_num, 64),
+      emit_instr2(
+          builder, MOV, asm_vreg(vreg_num, 64),
           asm_phys_reg(arg_class->u.reg.reg, 64));
       arg_class->u.reg.vreg = vreg_num;
 
@@ -2027,8 +1985,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
     IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
 
-    u32 first_instr_of_block_index = block_index == 0
-      ? 0 : builder->current_block->size;
+    u32 first_instr_of_block_index =
+        block_index == 0 ? 0 : builder->current_block->size;
     block->label->offset = first_instr_of_block_index;
 
     Array(IrInstr *) *instrs = &block->instrs;
@@ -2037,14 +1995,15 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
       asm_gen_instr(builder, ir_global, block, instr);
     }
 
-    AsmInstr *first_instr_of_block = ARRAY_REF(
-        builder->current_block, AsmInstr, first_instr_of_block_index);
+    AsmInstr *first_instr_of_block =
+        ARRAY_REF(builder->current_block, AsmInstr, first_instr_of_block_index);
     first_instr_of_block->label = block->label;
   }
 
   if (flag_print_pre_regalloc_stats) {
-    printf("%s: %u instrs, %u vregs\n",
-        ir_global->name, body.size, builder->virtual_registers.size);
+    printf(
+        "%s: %u instrs, %u vregs\n", ir_global->name, body.size,
+        builder->virtual_registers.size);
   }
 
   allocate_registers(builder);
@@ -2054,9 +2013,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     AsmInstr *instr = ARRAY_REF(builder->current_block, AsmInstr, i);
     for (u32 j = 0; j < instr->arity; j++) {
       Register *reg = arg_reg(instr->args + j);
-      if (reg != NULL &&
-          reg->t == PHYS_REG &&
-          is_callee_save(reg->u.class)) {
+      if (reg != NULL && reg->t == PHYS_REG && is_callee_save(reg->u.class)) {
         used_callee_save_regs_bitset |= 1 << reg->u.class;
       }
     }
@@ -2069,11 +2026,10 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   AsmSymbol *entry_label = ir_global->asm_symbol;
 
   AsmInstr *prologue_first_instr =
-    emit_instr1(builder, PUSH, asm_phys_reg(REG_CLASS_BP, 64));
+      emit_instr1(builder, PUSH, asm_phys_reg(REG_CLASS_BP, 64));
   prologue_first_instr->label = entry_label;
-  emit_instr2(builder,
-      MOV,
-      asm_phys_reg(REG_CLASS_BP, 64),
+  emit_instr2(
+      builder, MOV, asm_phys_reg(REG_CLASS_BP, 64),
       asm_phys_reg(REG_CLASS_SP, 64));
   u32 temp_regs_bitset = used_callee_save_regs_bitset;
   while (temp_regs_bitset != 0) {
@@ -2093,12 +2049,11 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   //
   // See the System V x86-64 ABI spec, section 3.2.2
   stack_adjustment +=
-    16 - ((num_callee_save_regs * 8 + builder->local_stack_usage) % 16);
+      16 - ((num_callee_save_regs * 8 + builder->local_stack_usage) % 16);
 
   if (stack_adjustment != 0) {
-    emit_instr2(builder,
-        SUB,
-        asm_phys_reg(REG_CLASS_SP, 64),
+    emit_instr2(
+        builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
         asm_imm(stack_adjustment));
   }
 
@@ -2117,28 +2072,25 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
       }
     }
 
-    for (u32 i = num_reg_args;
-        i < STATIC_ARRAY_LENGTH(argument_registers);
-        i++) {
+    for (u32 i = num_reg_args; i < STATIC_ARRAY_LENGTH(argument_registers);
+         i++) {
       AsmConst offset = asm_const_imm((i - num_reg_args) * 8);
-      emit_instr2(builder,
-          MOV,
-          asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+      emit_instr2(
+          builder, MOV, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
           asm_phys_reg(argument_registers[i], 64));
     }
   }
 
   for (u32 j = 0; j < body.size; j++) {
     *ARRAY_APPEND(builder->current_block, AsmInstr) =
-      *ARRAY_REF(&body, AsmInstr, j);
+        *ARRAY_REF(&body, AsmInstr, j);
   }
 
   u32 epilogue_start = builder->current_block->size;
 
   if (stack_adjustment != 0) {
-    emit_instr2(builder,
-        ADD,
-        asm_phys_reg(REG_CLASS_SP, 64),
+    emit_instr2(
+        builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
         asm_imm(stack_adjustment));
   }
   temp_regs_bitset = used_callee_save_regs_bitset;
@@ -2152,8 +2104,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   emit_instr1(builder, POP, asm_phys_reg(REG_CLASS_BP, 64));
   emit_instr0(builder, RET);
 
-  AsmInstr *epilogue_first_instr = ARRAY_REF(builder->current_block,
-      AsmInstr, epilogue_start);
+  AsmInstr *epilogue_first_instr =
+      ARRAY_REF(builder->current_block, AsmInstr, epilogue_start);
   epilogue_first_instr->label = ret_label;
 
   array_free(&body);
@@ -2173,13 +2125,13 @@ static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out)
     if (global != NULL) {
       Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
       *ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
-      *fixup = (Fixup) {
-        .type = FIXUP_ABSOLUTE,
-        .section = DATA_SECTION,
-        .offset = out->size,
-        // @PORT: Hardcoded pointer size.
-        .size_bytes = 8,
-        .symbol = konst->u.global_pointer->asm_symbol,
+      *fixup = (Fixup){
+          .type = FIXUP_ABSOLUTE,
+          .section = DATA_SECTION,
+          .offset = out->size,
+          // @PORT: Hardcoded pointer size.
+          .size_bytes = 8,
+          .symbol = konst->u.global_pointer->asm_symbol,
       };
     }
 
@@ -2211,18 +2163,16 @@ static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out)
     }
     break;
   }
-  case IR_FUNCTION: case IR_VOID:
-    UNREACHABLE;
+  case IR_FUNCTION:
+  case IR_VOID: UNREACHABLE;
   }
 }
 
 static bool is_zero(IrConst *konst)
 {
   switch (konst->type.t) {
-  case IR_INT:
-    return konst->u.integer == 0;
-  case IR_POINTER:
-    return false;
+  case IR_INT: return konst->u.integer == 0;
+  case IR_POINTER: return false;
   case IR_ARRAY:
     for (u32 n = 0; n < konst->type.u.array.size; n++) {
       if (!is_zero(konst->u.array_elems + n)) {
@@ -2237,8 +2187,8 @@ static bool is_zero(IrConst *konst)
       }
     }
     return true;
-  case IR_FUNCTION: case IR_VOID:
-    UNREACHABLE;
+  case IR_FUNCTION:
+  case IR_VOID: UNREACHABLE;
   }
 
   UNREACHABLE;
@@ -2300,8 +2250,7 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
   for (u32 i = 0; i < trans_unit->globals.size; i++) {
     IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
     AsmSymbol *asm_symbol = ir_global->asm_symbol;
-    if (!asm_symbol->defined)
-      continue;
+    if (!asm_symbol->defined) continue;
 
     IrConst *konst = ir_global->initializer;
     if (ir_global->type.t == IR_FUNCTION) {

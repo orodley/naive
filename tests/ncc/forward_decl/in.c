@@ -2,15 +2,9 @@
 
 int foo(int a);
 
-int bar(int a)
-{
-  return 2 * foo(a);
-}
+int bar(int a) { return 2 * foo(a); }
 
-int foo(int a)
-{
-  return a + 5;
-}
+int foo(int a) { return a + 5; }
 
 int main()
 {

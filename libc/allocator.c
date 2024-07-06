@@ -35,8 +35,7 @@ static HeapEntryHeader *header_for_ptr(void *ptr)
 
 void *malloc(size_t size)
 {
-  if (size == 0)
-    return NULL;
+  if (size == 0) return NULL;
 
   HeapEntryHeader *curr_entry = heap_free_list;
   HeapEntryHeader *prev_entry = NULL;
@@ -57,16 +56,13 @@ void *malloc(size_t size)
 
   size_t extra = align_to(sizeof(HeapEntryHeader) + size, 8);
   if (heap_block_used + extra > heap_block_size) {
-    if (heap_block_size == 0)
-      heap_block_size = 32768;
-    while (extra > heap_block_size)
-      heap_block_size *= 2;
+    if (heap_block_size == 0) heap_block_size = 32768;
+    while (extra > heap_block_size) heap_block_size *= 2;
 
     heap_block_used = 0;
-    void *new_heap_block = mmap(NULL, heap_block_size,
-        PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS,
-        -1, 0);
+    void *new_heap_block = mmap(
+        NULL, heap_block_size, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if (new_heap_block == MAP_FAILED) {
       return NULL;
@@ -75,7 +71,8 @@ void *malloc(size_t size)
     heap_block = new_heap_block;
   }
 
-  HeapEntryHeader *new_header = (HeapEntryHeader *)(heap_block + heap_block_used);
+  HeapEntryHeader *new_header =
+      (HeapEntryHeader *)(heap_block + heap_block_used);
   heap_block_used += extra;
 
   new_header->next = NULL;
@@ -89,8 +86,7 @@ void *malloc(size_t size)
 // details.
 void free(void *ptr)
 {
-  if (ptr == NULL)
-    return;
+  if (ptr == NULL) return;
 
   HeapEntryHeader *header = header_for_ptr(ptr);
   header->next = heap_free_list;
@@ -99,20 +95,16 @@ void free(void *ptr)
 
 void *realloc(void *ptr, size_t size)
 {
-  if (ptr == NULL)
-    return malloc(size);
+  if (ptr == NULL) return malloc(size);
 
-  if (size == 0)
-    return NULL;
+  if (size == 0) return NULL;
 
   HeapEntryHeader *header = header_for_ptr(ptr);
   size_t old_size = header->size;
-  if (old_size >= size)
-    return ptr;
+  if (old_size >= size) return ptr;
 
   void *new_ptr = malloc(size);
-  if (new_ptr == NULL)
-    return NULL;
+  if (new_ptr == NULL) return NULL;
 
   memcpy(new_ptr, ptr, old_size);
   free(ptr);
@@ -122,8 +114,7 @@ void *realloc(void *ptr, size_t size)
 
 void *calloc(size_t nmemb, size_t size)
 {
-  if (nmemb == 0 || size == 0)
-    return NULL;
+  if (nmemb == 0 || size == 0) return NULL;
 
   void *ptr = malloc(nmemb * size);
   memset(ptr, 0, nmemb * size);

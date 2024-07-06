@@ -14,10 +14,10 @@ struct Bar
 
 int main()
 {
-  struct Foo foo = { 9217, 172 };
+  struct Foo foo = {9217, 172};
   struct Bar bar = {
-    .foo = foo,
-    .c = 8272,
+      .foo = foo,
+      .c = 8272,
   };
 
   assert(bar.foo.a == 9217);

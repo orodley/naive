@@ -14,6 +14,6 @@ typedef long blksize_t;
 typedef long blkcnt_t;
 
 typedef long ssize_t;
-typedef long off_t; // @TODO: Is this where this is meant to be defined?
+typedef long off_t;  // @TODO: Is this where this is meant to be defined?
 
 #endif

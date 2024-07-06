@@ -11,7 +11,4 @@ int rand(void)
 
 // Both in the same TU because they're very frequently used together, and srand
 // is very small anyway.
-void srand(unsigned int seed)
-{
-  __seed = seed;
-}
+void srand(unsigned int seed) { __seed = seed; }

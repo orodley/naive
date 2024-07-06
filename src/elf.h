@@ -6,6 +6,7 @@
 
 bool write_elf_object_file(char *output_file_name, AsmModule *asm_module);
 
-bool link_elf_executable(char *executable_filename, Array(char *) *linker_input_filenames);
+bool link_elf_executable(
+    char *executable_filename, Array(char *) *linker_input_filenames);
 
 #endif

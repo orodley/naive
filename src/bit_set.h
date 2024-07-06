@@ -2,6 +2,7 @@
 #define NAIVE_BIT_SET_H_
 
 #include <assert.h>
+
 #include "misc.h"
 #include "util.h"
 

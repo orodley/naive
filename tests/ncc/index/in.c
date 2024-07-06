@@ -15,7 +15,7 @@ int main()
   p[0] = 4;
   assert(p[0] == 4);
 
-  0[p] = 5;
+  0 [p] = 5;
   assert(p[0] == 5);
 
   return 0;

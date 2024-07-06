@@ -7,7 +7,7 @@ struct Foo
 
 int main()
 {
-  struct Foo f = { 1, 2 };
+  struct Foo f = {1, 2};
   struct Foo *fp = &f;
   struct Foo f2 = *fp;
 

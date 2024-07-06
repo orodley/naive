@@ -1,6 +1,10 @@
 #include <assert.h>
 
-enum Foo { A, B };
+enum Foo
+{
+  A,
+  B
+};
 
 enum Foo a = A;
 enum Foo b = B;

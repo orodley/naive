@@ -15,6 +15,6 @@ void foo(struct Foo f)
 
 int main()
 {
-  foo((struct Foo) { 0, 1, 2, 3 });
+  foo((struct Foo){0, 1, 2, 3});
   return 0;
 }

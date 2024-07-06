@@ -13,7 +13,7 @@ D
 #if 1
 E
 #elif 1
-F
+    F
 #elif 0
-G
+    G
 #endif

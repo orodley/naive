@@ -1,6 +1,10 @@
 #include <assert.h>
 
-struct Foo { int a; int b; };
+struct Foo
+{
+  int a;
+  int b;
+};
 
 struct Foo foo(int *a, int b)
 {

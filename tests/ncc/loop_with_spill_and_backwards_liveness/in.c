@@ -1,6 +1,10 @@
 #include <assert.h>
 
-struct Foo { long a; long b; };
+struct Foo
+{
+  long a;
+  long b;
+};
 
 struct Foo bar(int c)
 {
@@ -10,7 +14,7 @@ struct Foo bar(int c)
     a += i * 3;
     b += i * 4;
 
-    if (i >= c) return (struct Foo) { a, b };
+    if (i >= c) return (struct Foo){a, b};
   }
 }
 

@@ -12,8 +12,8 @@ struct A
 int main()
 {
   struct A a = {
-    .x.y = 283,
-    .x.z = 942,
+      .x.y = 283,
+      .x.z = 942,
   };
   assert(a.x.z == 942);
 

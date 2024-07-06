@@ -1,10 +1,7 @@
 #include <assert.h>
 
 int foo;
-int *bar()
-{
-  return &foo;
-}
+int *bar() { return &foo; }
 
 int main()
 {

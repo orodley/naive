@@ -1,6 +1,6 @@
-#include <stdlib.h>
-
 #include "printf_impl.h"
+
+#include <stdlib.h>
 
 static char digits[] = "0123456789abcdef";
 
@@ -22,8 +22,7 @@ int print_unsigned(Sink *sink, void *sink_arg, unsigned long x, int radix)
   while (divisor != 0) {
     char c = digits[(x / divisor) % radix];
     int ret = sink(sink_arg, c);
-    if (ret != 0)
-      return ret;
+    if (ret != 0) return ret;
 
     chars_printed++;
     divisor /= radix;
@@ -38,8 +37,7 @@ int print_integer(Sink *sink, void *sink_arg, long x, int radix)
   if (x < 0) {
     x = -x;
     int ret = sink(sink_arg, '-');
-    if (ret != 0)
-      return -1;
+    if (ret != 0) return -1;
 
     chars_printed++;
   }
@@ -55,21 +53,18 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
     char c = format[i];
     if (c != '%') {
       int ret = sink(sink_arg, c);
-      if (ret != 0)
-        return -1;
+      if (ret != 0) return -1;
 
       chars_printed++;
     } else {
       i++;
-      if (format[i] == '\0')
-        return -1;
+      if (format[i] == '\0') return -1;
 
       switch (format[i]) {
       case 'c': {
         unsigned char c = (unsigned char)va_arg(ap, int);
         int ret = sink(sink_arg, c);
-        if (ret != 0)
-          return -1;
+        if (ret != 0) return -1;
 
         chars_printed++;
         break;
@@ -77,8 +72,7 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
       case 'd': {
         int x = va_arg(ap, int);
         int ret = print_integer(sink, sink_arg, x, 10);
-        if (ret < 0)
-          return ret;
+        if (ret < 0) return ret;
 
         chars_printed += ret;
         break;
@@ -86,8 +80,7 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
       case 'u': {
         unsigned x = va_arg(ap, unsigned);
         int ret = print_unsigned(sink, sink_arg, x, 10);
-        if (ret < 0)
-          return ret;
+        if (ret < 0) return ret;
 
         chars_printed += ret;
         break;
@@ -95,8 +88,7 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
       case 'x': {
         unsigned x = va_arg(ap, unsigned);
         int ret = print_unsigned(sink, sink_arg, x, 16);
-        if (ret < 0)
-          return ret;
+        if (ret < 0) return ret;
 
         chars_printed += ret;
         break;
@@ -105,8 +97,7 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
         char *str = va_arg(ap, char *);
         for (int i = 0; str[i] != '\0'; i++) {
           int ret = sink(sink_arg, str[i]);
-          if (ret != 0)
-            return -1;
+          if (ret != 0) return -1;
 
           chars_printed++;
         }
@@ -114,15 +105,13 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
       }
       case 'l': {
         i++;
-        if (format[i] == '\0')
-          return -1;
+        if (format[i] == '\0') return -1;
 
         switch (format[i]) {
         case 'u': {
           unsigned long x = va_arg(ap, unsigned long);
           int ret = print_unsigned(sink, sink_arg, x, 10);
-          if (ret < 0)
-            return ret;
+          if (ret < 0) return ret;
 
           chars_printed += ret;
           break;
@@ -130,8 +119,7 @@ int printf_impl(Sink *sink, void *sink_arg, const char *format, va_list ap)
         case 'd': {
           long x = va_arg(ap, long);
           int ret = print_integer(sink, sink_arg, x, 10);
-          if (ret < 0)
-            return ret;
+          if (ret < 0) return ret;
 
           chars_printed += ret;
           break;

@@ -11,8 +11,7 @@ int open(const char *pathname, int flags, ...)
   va_start(varargs, flags);
 
   int mode = 0;
-  if ((flags & O_CREAT) != 0)
-    mode = va_arg(varargs, int);
+  if ((flags & O_CREAT) != 0) mode = va_arg(varargs, int);
 
   va_end(varargs);
 

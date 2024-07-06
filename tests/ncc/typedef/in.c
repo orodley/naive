@@ -1,6 +1,12 @@
 typedef int innt, *pint;
-typedef struct Foo { int a; } TFoo;
-typedef struct { int b; } Bar;
+typedef struct Foo
+{
+  int a;
+} TFoo;
+typedef struct
+{
+  int b;
+} Bar;
 
 int main()
 {

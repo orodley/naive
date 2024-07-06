@@ -14,8 +14,10 @@
 
 #define MAP_FAILED ((void *)-1)
 
-void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
-void *mremap(void *old_address, size_t old_size, size_t new_size, int flags, ...);
+void *mmap(
+    void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+void *mremap(
+    void *old_address, size_t old_size, size_t new_size, int flags, ...);
 int munmap(void *addr, size_t length);
 
 #endif

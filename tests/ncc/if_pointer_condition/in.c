@@ -5,11 +5,15 @@ int main()
 {
   int foo;
   int *bar = &foo;
-  if (bar) { }
-  else { assert(0); }
+  if (bar) {
+  } else {
+    assert(0);
+  }
 
   int *baz = NULL;
-  if (baz) { assert(0); }
+  if (baz) {
+    assert(0);
+  }
 
   return 0;
 }

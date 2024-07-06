@@ -2,7 +2,10 @@
 
 int main()
 {
-  struct { int a, b; } foo[2] = { { 1, 2 }, { 3, 4 } };
+  struct
+  {
+    int a, b;
+  } foo[2] = {{1, 2}, {3, 4}};
 
   assert(foo[0].a == 1);
   assert(foo[0].b == 2);

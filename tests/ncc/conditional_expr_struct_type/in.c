@@ -1,11 +1,15 @@
 #include <assert.h>
 
-struct Foo { int a; int b; };
+struct Foo
+{
+  int a;
+  int b;
+};
 
 int main()
 {
-  struct Foo f1 = { 1, 2 };
-  struct Foo f2 = { 3, 4 };
+  struct Foo f1 = {1, 2};
+  struct Foo f2 = {3, 4};
 
   int z = 0;
   int o = 1;

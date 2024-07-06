@@ -2,7 +2,10 @@
 
 int main()
 {
-  struct Foo { int a; } foo;
+  struct Foo
+  {
+    int a;
+  } foo;
   struct Foo bar;
 
   foo.a = 1;

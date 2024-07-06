@@ -6,26 +6,26 @@
 #include "array.h"
 #include "pool.h"
 
-#define REG_CLASSES \
+#define REG_CLASSES                                                 \
   X(INVALID_REG_CLASS, "INVALID", "INVALID", "INVALID", "INVALID"), \
-  X(REG_CLASS_A,   "AL",   "AX",   "EAX",  "RAX"), \
-  X(REG_CLASS_B,   "BL",   "BX",   "EBX",  "RBX"), \
-  X(REG_CLASS_C,   "CL",   "CX",   "ECX",  "RCX"), \
-  X(REG_CLASS_D,   "DL",   "DX",   "EDX",  "RDX"), \
-  X(REG_CLASS_DI,  "DIL",  "DI",   "EDI",  "RDI"), \
-  X(REG_CLASS_SI,  "SIL",  "SI",   "ESI",  "RSI"), \
-  X(REG_CLASS_BP,  "BPL",  "BP",   "EBP",  "RBP"), \
-  X(REG_CLASS_SP,  "SPL",  "SP",   "ESP",  "RSP"), \
-  X(REG_CLASS_R8,  "R8B",  "R8W",  "R8D",  "R8"), \
-  X(REG_CLASS_R9,  "R9B",  "R9W",  "R9D",  "R9"), \
-  X(REG_CLASS_R10, "R10B", "R10W", "R10D", "R10"), \
-  X(REG_CLASS_R11, "R11B", "R11W", "R11D", "R11"), \
-  X(REG_CLASS_R12, "R12B", "R12W", "R12D", "R12"), \
-  X(REG_CLASS_R13, "R13B", "R13W", "R13D", "R13"), \
-  X(REG_CLASS_R14, "R14B", "R14W", "R14D", "R14"), \
-  X(REG_CLASS_R15, "R15B", "R15W", "R15D", "R15"), \
-  X(REG_CLASS_IP, "INVALID", "INVALID", "INVALID", "RIP"), \
-  
+      X(REG_CLASS_A, "AL", "AX", "EAX", "RAX"),                     \
+      X(REG_CLASS_B, "BL", "BX", "EBX", "RBX"),                     \
+      X(REG_CLASS_C, "CL", "CX", "ECX", "RCX"),                     \
+      X(REG_CLASS_D, "DL", "DX", "EDX", "RDX"),                     \
+      X(REG_CLASS_DI, "DIL", "DI", "EDI", "RDI"),                   \
+      X(REG_CLASS_SI, "SIL", "SI", "ESI", "RSI"),                   \
+      X(REG_CLASS_BP, "BPL", "BP", "EBP", "RBP"),                   \
+      X(REG_CLASS_SP, "SPL", "SP", "ESP", "RSP"),                   \
+      X(REG_CLASS_R8, "R8B", "R8W", "R8D", "R8"),                   \
+      X(REG_CLASS_R9, "R9B", "R9W", "R9D", "R9"),                   \
+      X(REG_CLASS_R10, "R10B", "R10W", "R10D", "R10"),              \
+      X(REG_CLASS_R11, "R11B", "R11W", "R11D", "R11"),              \
+      X(REG_CLASS_R12, "R12B", "R12W", "R12D", "R12"),              \
+      X(REG_CLASS_R13, "R13B", "R13W", "R13D", "R13"),              \
+      X(REG_CLASS_R14, "R14B", "R14W", "R14D", "R14"),              \
+      X(REG_CLASS_R15, "R15B", "R15W", "R15D", "R15"),              \
+      X(REG_CLASS_IP, "INVALID", "INVALID", "INVALID", "RIP"),
+
 #define X(x, b, w, d, o) x
 typedef enum RegClass
 {
@@ -98,54 +98,13 @@ typedef struct AsmValue
 
 // @NOTE: Be sure to update compute_live_ranges and allocate_registers if more
 // Jcc instructions are added.
-#define ASM_OPS \
-  X(NOP), \
-  X(MOV), \
-  X(MOVSX), \
-  X(MOVZX), \
-  X(RET), \
-  X(CALL), \
-  X(XOR), \
-  X(AND), \
-  X(OR), \
-  X(NOT), \
-  X(NEG), \
-  X(SHL), \
-  X(SHR), \
-  X(ADD), \
-  X(SUB), \
-  X(PUSH), \
-  X(POP), \
-  X(IMUL), \
-  X(IDIV), \
-  X(CDQ), \
-  X(CQO), \
-  X(CMP), \
-  X(SETE), \
-  X(SETNE), \
-  X(SETG), \
-  X(SETGE), \
-  X(SETL), \
-  X(SETLE), \
-  X(SETA), \
-  X(SETAE), \
-  X(SETB), \
-  X(SETBE), \
-  X(TEST), \
-  X(JMP), \
-  X(JE), \
-  X(JNE), \
-  X(JG), \
-  X(JGE), \
-  X(JL), \
-  X(JLE), \
-  X(JA), \
-  X(JAE), \
-  X(JB), \
-  X(JBE), \
-  X(ADC), \
-  X(SBB), \
-  X(SYSCALL),
+#define ASM_OPS                                                               \
+  X(NOP), X(MOV), X(MOVSX), X(MOVZX), X(RET), X(CALL), X(XOR), X(AND), X(OR), \
+      X(NOT), X(NEG), X(SHL), X(SHR), X(ADD), X(SUB), X(PUSH), X(POP),        \
+      X(IMUL), X(IDIV), X(CDQ), X(CQO), X(CMP), X(SETE), X(SETNE), X(SETG),   \
+      X(SETGE), X(SETL), X(SETLE), X(SETA), X(SETAE), X(SETB), X(SETBE),      \
+      X(TEST), X(JMP), X(JE), X(JNE), X(JG), X(JGE), X(JL), X(JLE), X(JA),    \
+      X(JAE), X(JB), X(JBE), X(ADC), X(SBB), X(SYSCALL),
 
 #define X(x) x
 typedef enum AsmOp
@@ -178,7 +137,7 @@ typedef struct ArgClass
   {
     struct
     {
-      u32 vreg; // @TODO: Is this used?
+      u32 vreg;  // @TODO: Is this used?
       RegClass reg;
     } reg;
     struct

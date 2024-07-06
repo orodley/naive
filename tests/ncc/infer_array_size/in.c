@@ -1,10 +1,10 @@
 #include <assert.h>
 
-int foo[] = { 1, 2, 3, 4 };
+int foo[] = {1, 2, 3, 4};
 
 int main()
 {
-  int bar[] = { 4, 3, 2 };
+  int bar[] = {4, 3, 2};
   char baz[] = "quux";
 
   assert(sizeof foo / sizeof *foo == 4);

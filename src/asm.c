@@ -1,3 +1,5 @@
+#include "asm.h"
+
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -5,7 +7,6 @@
 #include <string.h>
 
 #include "array.h"
-#include "asm.h"
 #include "asm_gen.h"
 #include "file.h"
 #include "util.h"
@@ -38,48 +39,48 @@ void free_asm_module(AsmModule *asm_module)
 
 AsmConst asm_const_imm(u64 value)
 {
-  return (AsmConst) {
-    .t = ASM_CONST_IMMEDIATE,
-    .u.immediate = value,
+  return (AsmConst){
+      .t = ASM_CONST_IMMEDIATE,
+      .u.immediate = value,
   };
 }
 
 AsmConst asm_const_fixed_imm(u64 value, u32 width)
 {
-  return (AsmConst) {
-    .t = ASM_CONST_FIXED_IMMEDIATE,
-    .u.fixed_immediate.value = value,
-    .u.fixed_immediate.width = width,
+  return (AsmConst){
+      .t = ASM_CONST_FIXED_IMMEDIATE,
+      .u.fixed_immediate.value = value,
+      .u.fixed_immediate.width = width,
   };
 }
 
 AsmConst asm_const_symbol(AsmSymbol *symbol)
 {
-  return (AsmConst) {
-    .t = ASM_CONST_SYMBOL,
-    .u.symbol = symbol,
+  return (AsmConst){
+      .t = ASM_CONST_SYMBOL,
+      .u.symbol = symbol,
   };
 }
 
 AsmValue asm_vreg(u32 vreg_number, u8 width)
 {
-  return (AsmValue) {
-    .is_deref = false,
-    .t = ASM_VALUE_REGISTER,
-    .u.reg.width = width,
-    .u.reg.t = V_REG,
-    .u.reg.u.vreg_number = vreg_number,
+  return (AsmValue){
+      .is_deref = false,
+      .t = ASM_VALUE_REGISTER,
+      .u.reg.width = width,
+      .u.reg.t = V_REG,
+      .u.reg.u.vreg_number = vreg_number,
   };
 }
 
 AsmValue asm_phys_reg(RegClass reg, u8 width)
 {
-  return (AsmValue) {
-    .is_deref = false,
-    .t = ASM_VALUE_REGISTER,
-    .u.reg.width = width,
-    .u.reg.t = PHYS_REG,
-    .u.reg.u.class = reg,
+  return (AsmValue){
+      .is_deref = false,
+      .t = ASM_VALUE_REGISTER,
+      .u.reg.width = width,
+      .u.reg.t = PHYS_REG,
+      .u.reg.u.class = reg,
   };
 }
 
@@ -94,44 +95,45 @@ AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset)
   if (offset.t == ASM_CONST_IMMEDIATE && offset.u.immediate == 0) {
     return asm_phys_reg(reg, width);
   } else {
-    return (AsmValue) {
-      .is_deref = false,
-      .t = ASM_VALUE_OFFSET_REGISTER,
-      .u.offset_register.reg.width = width,
-      .u.offset_register.reg.t = PHYS_REG,
-      .u.offset_register.reg.u.class = reg,
-      .u.offset_register.offset = offset,
+    return (AsmValue){
+        .is_deref = false,
+        .t = ASM_VALUE_OFFSET_REGISTER,
+        .u.offset_register.reg.width = width,
+        .u.offset_register.reg.t = PHYS_REG,
+        .u.offset_register.reg.u.class = reg,
+        .u.offset_register.offset = offset,
     };
   }
 }
 
 AsmValue asm_imm(u64 value)
 {
-  return (AsmValue) {
-    .is_deref = false,
-    .t = ASM_VALUE_CONST,
-    .u.constant = asm_const_imm(value),
+  return (AsmValue){
+      .is_deref = false,
+      .t = ASM_VALUE_CONST,
+      .u.constant = asm_const_imm(value),
   };
 }
 
 AsmValue asm_fixed_imm(u64 value, u32 width)
 {
-  return (AsmValue) {
-    .is_deref = false,
-    .t = ASM_VALUE_CONST,
-    .u.constant = asm_const_fixed_imm(value, width),
+  return (AsmValue){
+      .is_deref = false,
+      .t = ASM_VALUE_CONST,
+      .u.constant = asm_const_fixed_imm(value, width),
   };
 }
 
 AsmValue asm_symbol(AsmSymbol *symbol)
 {
-  return (AsmValue) {
-    .is_deref = false,
-    .t = ASM_VALUE_CONST,
-    .u.constant = (AsmConst) {
-      .t = ASM_CONST_SYMBOL,
-      .u.symbol = symbol,
-    },
+  return (AsmValue){
+      .is_deref = false,
+      .t = ASM_VALUE_CONST,
+      .u.constant =
+          (AsmConst){
+              .t = ASM_CONST_SYMBOL,
+              .u.symbol = symbol,
+          },
   };
 }
 
@@ -140,19 +142,20 @@ AsmValue asm_symbol(AsmSymbol *symbol)
 bool is_sign_extending_op(AsmOp op)
 {
   return op == ADD || op == AND || op == ADC ||
-        // The manual is contradictory for CMP: on the one hand the description
-        // for, say, "CMP r/m16, imm8" doesn't say it sign-extends the
-        // immediate. On the other hand the main description for CMP says it
-        // always sign-extends immediates to the length of the first operand.
-        op == CMP ||
-        // Ditto.
-        op == IMUL ||
-        op == MOV || op == OR || op == SBB || op == SUB || op == TEST;
+         // The manual is contradictory for CMP: on the one hand the description
+         // for, say, "CMP r/m16, imm8" doesn't say it sign-extends the
+         // immediate. On the other hand the main description for CMP says it
+         // always sign-extends immediates to the length of the first operand.
+         op == CMP ||
+         // Ditto.
+         op == IMUL ||
+         // The rest are documented as expected.
+         op == MOV || op == OR || op == SBB || op == SUB || op == TEST;
 
-    // Should PUSH be included too? PUSH is weird. It only sign-extends if the
-    // operand size is greater than the size of the immediate. The operand size
-    // is determined by values in segment descriptors... the take-away for me
-    // is don't push immediates.
+  // Should PUSH be included too? PUSH is weird. It only sign-extends if the
+  // operand size is greater than the size of the immediate. The operand size
+  // is determined by values in segment descriptors... the take-away for me
+  // is don't push immediates.
 }
 
 static bool is_sign_extending_instr(AsmInstr *instr)
@@ -181,8 +184,8 @@ static bool is_sign_extending_instr(AsmInstr *instr)
 // c = truncate a to imm_width
 // d = sign- or zero-extend c to ext_width
 // a fits iff d == b
-static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
-    u32 imm_width, bool sext)
+static bool is_const_and_fits(
+    AsmValue asm_value, u32 ext_width, u32 imm_width, bool sext)
 {
   assert(ext_width >= imm_width);
 
@@ -195,8 +198,7 @@ static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
   case ASM_CONST_IMMEDIATE: {
     // Handle this case specially, as various bitwise calculations are
     // harder if we don't have any extra bits to work with.
-    if (imm_width == 64)
-      return true;
+    if (imm_width == 64) return true;
 
     u64 imm = constant.u.immediate;
     u64 canonical_value;
@@ -210,8 +212,9 @@ static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
       // one, so sign-extension would produce the same value.
       u64 ext_trunc_bits = imm >> ext_width;
       if (ext_trunc_bits != 0
-          && !((ext_trunc_bits == (1ULL << (64 - ext_width)) - 1)
-            && ((imm >> (ext_width - 1)) & 1) == 1)) {
+          && !(
+              (ext_trunc_bits == (1ULL << (64 - ext_width)) - 1)
+              && ((imm >> (ext_width - 1)) & 1) == 1)) {
         return false;
       }
 
@@ -227,39 +230,33 @@ static bool is_const_and_fits(AsmValue asm_value, u32 ext_width,
   }
   case ASM_CONST_FIXED_IMMEDIATE:
     return imm_width == constant.u.fixed_immediate.width;
-  case ASM_CONST_SYMBOL:
-    return imm_width == 64;
+  case ASM_CONST_SYMBOL: return imm_width == 64;
   }
 
   UNREACHABLE;
 }
 
 #define X(x) #x
-static char *asm_op_names[] = {
-  ASM_OPS
-};
+static char *asm_op_names[] = {ASM_OPS};
 #undef X
 
-#define X(x, b, d, w, o) { b, d, w, o }
-static char *physical_register_names[][4] = {
-  REG_CLASSES
-};
+#define X(x, b, d, w, o) \
+  {                      \
+    b, d, w, o           \
+  }
+static char *physical_register_names[][4] = {REG_CLASSES};
 #undef X
 
 static void dump_register(Register reg)
 {
   switch (reg.t) {
   case PHYS_REG: {
-    char *reg_name = physical_register_names
-        [reg.u.class]
-        [lowest_set_bit(reg.width) - 3];
-    for (u32 i = 0; reg_name[i] != '\0'; i++)
-      putchar(tolower(reg_name[i]));
+    char *reg_name =
+        physical_register_names[reg.u.class][lowest_set_bit(reg.width) - 3];
+    for (u32 i = 0; reg_name[i] != '\0'; i++) putchar(tolower(reg_name[i]));
     break;
   }
-  case V_REG:
-    printf("#%u", reg.u.vreg_number);
-    break;
+  case V_REG: printf("#%u", reg.u.vreg_number); break;
   }
 }
 
@@ -274,9 +271,7 @@ static void dump_immediate(u64 x)
 static void dump_asm_const(AsmConst constant)
 {
   switch (constant.t) {
-  case ASM_CONST_IMMEDIATE:
-    dump_immediate(constant.u.immediate);
-    break;
+  case ASM_CONST_IMMEDIATE: dump_immediate(constant.u.immediate); break;
   case ASM_CONST_FIXED_IMMEDIATE: {
     char *size_name;
     switch (constant.u.fixed_immediate.width) {
@@ -291,54 +286,42 @@ static void dump_asm_const(AsmConst constant)
     dump_immediate(constant.u.immediate);
     break;
   }
-  case ASM_CONST_SYMBOL:
-    printf("%s", constant.u.symbol->name);
-    break;
+  case ASM_CONST_SYMBOL: printf("%s", constant.u.symbol->name); break;
   }
 }
 
 static void dump_symbol(AsmSymbol *symbol)
 {
   char *name = symbol->name;
-  if (symbol->linkage == ASM_GLOBAL_LINKAGE)
-    printf("global %s\n", name);
+  if (symbol->linkage == ASM_GLOBAL_LINKAGE) printf("global %s\n", name);
   printf("%s:\n", name);
 }
 
 void dump_asm_instr(AsmInstr *instr)
 {
-  if (instr->label != NULL)
-    dump_symbol(instr->label);
+  if (instr->label != NULL) dump_symbol(instr->label);
 
   putchar('\t');
   char *op_name = asm_op_names[instr->op];
-  for (u32 i = 0; op_name[i] != '\0'; i++)
-    putchar(tolower(op_name[i]));
+  for (u32 i = 0; op_name[i] != '\0'; i++) putchar(tolower(op_name[i]));
 
   putchar(' ');
 
   for (u32 i = 0; i < instr->arity; i++) {
-    if (i != 0)
-      fputs(", ", stdout);
+    if (i != 0) fputs(", ", stdout);
 
     AsmValue *arg = instr->args + i;
-    if (arg->is_deref)
-      putchar('[');
+    if (arg->is_deref) putchar('[');
     switch (arg->t) {
-    case ASM_VALUE_REGISTER:
-      dump_register(arg->u.reg);
-      break;
+    case ASM_VALUE_REGISTER: dump_register(arg->u.reg); break;
     case ASM_VALUE_OFFSET_REGISTER:
       dump_register(arg->u.offset_register.reg);
       fputs(" + ", stdout);
       dump_asm_const(arg->u.offset_register.offset);
       break;
-    case ASM_VALUE_CONST:
-      dump_asm_const(arg->u.constant);
-      break;
+    case ASM_VALUE_CONST: dump_asm_const(arg->u.constant); break;
     }
-    if (arg->is_deref)
-      putchar(']');
+    if (arg->is_deref) putchar(']');
   }
   putchar('\n');
 }
@@ -349,8 +332,7 @@ void dump_asm_module(AsmModule *asm_module)
   for (u32 i = 0; i < symbols->size; i++) {
     AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
 
-    if (!symbol->defined)
-      printf("extern %s\n", symbol->name);
+    if (!symbol->defined) printf("extern %s\n", symbol->name);
   }
   putchar('\n');
 
@@ -367,13 +349,13 @@ void dump_asm_module(AsmModule *asm_module)
   u32 next_symbol = 0;
   for (u32 i = 0; i < data->size; i++) {
     while (next_symbol < symbols->size
-        && (*ARRAY_REF(symbols, AsmSymbol *, next_symbol))->section != DATA_SECTION) {
+           && (*ARRAY_REF(symbols, AsmSymbol *, next_symbol))->section
+                  != DATA_SECTION) {
       next_symbol++;
     }
 
     AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, next_symbol);
-    if (next_symbol < symbols->size
-        && symbol->section == DATA_SECTION
+    if (next_symbol < symbols->size && symbol->section == DATA_SECTION
         && symbol->offset == i) {
       dump_symbol(symbol);
       next_symbol++;
@@ -387,8 +369,7 @@ void dump_asm_module(AsmModule *asm_module)
   u32 pos = 0;
   for (u32 i = 0; i < symbols->size; i++) {
     AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
-    if (symbol->section != BSS_SECTION)
-      continue;
+    if (symbol->section != BSS_SECTION) continue;
 
     assert(symbol->offset == pos);
 
@@ -399,20 +380,16 @@ void dump_asm_module(AsmModule *asm_module)
   }
 }
 
-static void write_u8(Array(u8) *output, u8 x)
-{
-  *ARRAY_APPEND(output, u8) = x;
-}
+static void write_u8(Array(u8) *output, u8 x) { *ARRAY_APPEND(output, u8) = x; }
 
 static void write_int_at(Array(u8) *output, u32 offset, u64 x, u32 size)
 {
   ARRAY_ENSURE_ROOM(output, u8, offset + size);
-  for (u32 n = 0; n < size; n ++) {
+  for (u32 n = 0; n < size; n++) {
     u8 byte = (x >> (n * 8)) & 0xFF;
     *ARRAY_REF(output, u8, offset + n) = byte;
   }
-  if (output->size < offset + size)
-    output->size = offset + size;
+  if (output->size < offset + size) output->size = offset + size;
 }
 
 static void write_int(Array(u8) *output, u64 x, u32 size)
@@ -446,8 +423,8 @@ static u32 encoded_register_number(RegClass reg)
   case REG_CLASS_BP: return 5;
   case REG_CLASS_SI: return 6;
   case REG_CLASS_DI: return 7;
-  case REG_CLASS_R8:  return 8;
-  case REG_CLASS_R9:  return 9;
+  case REG_CLASS_R8: return 8;
+  case REG_CLASS_R9: return 9;
   case REG_CLASS_R10: return 10;
   case REG_CLASS_R11: return 11;
   case REG_CLASS_R12: return 12;
@@ -485,8 +462,9 @@ typedef struct EncodedInstr
   Fixup *imm_fixup;
 } EncodedInstr;
 
-static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
-    AsmValue *asm_value, FixupType fixup_type)
+static void add_mod_rm_arg(
+    AsmModule *asm_module, EncodedInstr *encoded_instr, AsmValue *asm_value,
+    FixupType fixup_type)
 {
   encoded_instr->has_modrm = true;
 
@@ -500,7 +478,8 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
         encoded_instr->rm = encoded_register_number(class);
         return;
       }
-      case REG_CLASS_SP: case REG_CLASS_R12: {
+      case REG_CLASS_SP:
+      case REG_CLASS_R12: {
         // Mod = 0, R/M = 4 means SIB addressing
         encoded_instr->mod = 0;
         encoded_instr->rm = 4;
@@ -512,7 +491,8 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
 
         return;
       }
-      case REG_CLASS_BP: case REG_CLASS_R13: {
+      case REG_CLASS_BP:
+      case REG_CLASS_R13: {
         // Mod = 1 means 8-bit displacement
         encoded_instr->mod = 1;
         encoded_instr->rm = encoded_register_number(class);
@@ -540,8 +520,7 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
       // Dummy value, gets patched later.
       offset = 0;
 
-      if (reg == REG_CLASS_IP)
-        fixup_type = FIXUP_RELATIVE;
+      if (reg == REG_CLASS_IP) fixup_type = FIXUP_RELATIVE;
 
       Fixup *fixup = pool_alloc(&asm_module->pool, sizeof *fixup);
       *ARRAY_APPEND(&asm_module->fixups, Fixup *) = fixup;
@@ -566,15 +545,25 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
     }
 
     switch (reg) {
-    case REG_CLASS_A: case REG_CLASS_C: case REG_CLASS_D: case REG_CLASS_B:
-    case REG_CLASS_BP: case REG_CLASS_SI: case REG_CLASS_DI:
-    case REG_CLASS_R8: case REG_CLASS_R9: case REG_CLASS_R10:
-    case REG_CLASS_R11: case REG_CLASS_R13: case REG_CLASS_R14:
+    case REG_CLASS_A:
+    case REG_CLASS_C:
+    case REG_CLASS_D:
+    case REG_CLASS_B:
+    case REG_CLASS_BP:
+    case REG_CLASS_SI:
+    case REG_CLASS_DI:
+    case REG_CLASS_R8:
+    case REG_CLASS_R9:
+    case REG_CLASS_R10:
+    case REG_CLASS_R11:
+    case REG_CLASS_R13:
+    case REG_CLASS_R14:
     case REG_CLASS_R15: {
       encoded_instr->rm = encoded_register_number(reg);
       break;
     }
-    case REG_CLASS_R12: case REG_CLASS_SP:
+    case REG_CLASS_R12:
+    case REG_CLASS_SP:
       // Same as above: SIB addressing
       encoded_instr->rm = encoded_register_number(reg);
       encoded_instr->has_sib = true;
@@ -595,15 +584,19 @@ static void add_mod_rm_arg(AsmModule *asm_module, EncodedInstr *encoded_instr,
       encoded_instr->displacement_size = 4;
       encoded_instr->displacement = 0;
       break;
-    default:
-      UNIMPLEMENTED;
+    default: UNIMPLEMENTED;
     }
   } else {
     UNIMPLEMENTED;
   }
 }
 
-typedef enum ArgOrder { INVALID, RM, MR } ArgOrder;
+typedef enum ArgOrder
+{
+  INVALID,
+  RM,
+  MR
+} ArgOrder;
 
 static void write_bytes(Array(u8) *output, u32 size, u8 *bytes)
 {
@@ -620,18 +613,18 @@ typedef enum RexPrefix
 } RexPrefix;
 
 // Called by the generated function "assemble_instr".
-static void encode_instr(Array(u8) *output, AsmModule *asm_module,
-    AsmInstr *instr, ArgOrder arg_order, bool use_rex_w, bool use_oso,
-    u32 opcode_size, u8 opcode[], bool reg_and_rm, i32 opcode_extension,
-    i32 immediate_size, bool reg_in_opcode, FixupType fixup_type)
+static void encode_instr(
+    Array(u8) *output, AsmModule *asm_module, AsmInstr *instr,
+    ArgOrder arg_order, bool use_rex_w, bool use_oso, u32 opcode_size,
+    u8 opcode[], bool reg_and_rm, i32 opcode_extension, i32 immediate_size,
+    bool reg_in_opcode, FixupType fixup_type)
 {
   EncodedInstr encoded_instr;
   ZERO_STRUCT(&encoded_instr);
   encoded_instr.displacement_size = -1;
   encoded_instr.immediate_size = -1;
 
-  if (use_rex_w)
-    encoded_instr.rex_prefix |= REX_W;
+  if (use_rex_w) encoded_instr.rex_prefix |= REX_W;
 
   encoded_instr.has_oso = use_oso;
 
@@ -639,7 +632,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
   memcpy(encoded_instr.opcode, opcode, opcode_size);
   if (reg_in_opcode) {
     encoded_instr.opcode_extension =
-      encoded_register_number(get_reg_class(instr->args));
+        encoded_register_number(get_reg_class(instr->args));
   }
 
   if (reg_and_rm) {
@@ -662,7 +655,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
       encoded_instr.reg = 0;
     } else {
       encoded_instr.reg =
-        encoded_register_number(get_reg_class(register_operand));
+          encoded_register_number(get_reg_class(register_operand));
     }
     add_mod_rm_arg(asm_module, &encoded_instr, memory_operand, fixup_type);
   } else if (opcode_extension != -1) {
@@ -682,7 +675,7 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
   // immediate size in AsmValue.
   if (immediate_size != -1) {
     encoded_instr.immediate_size = immediate_size;
-    AsmValue* immediate_arg = NULL;
+    AsmValue *immediate_arg = NULL;
     for (u32 i = 0; i < instr->arity; i++) {
       if (instr->args[i].t == ASM_VALUE_CONST) {
         // Check that we only have one immediate.
@@ -720,16 +713,12 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
     }
   }
 
-
   if (encoded_instr.has_modrm) {
-    if (encoded_instr.reg >= 8)
-      encoded_instr.rex_prefix |= REX_R;
-    if (encoded_instr.rm >= 8)
-      encoded_instr.rex_prefix |= REX_B;
+    if (encoded_instr.reg >= 8) encoded_instr.rex_prefix |= REX_R;
+    if (encoded_instr.rm >= 8) encoded_instr.rex_prefix |= REX_B;
   }
   if (encoded_instr.has_sib) {
-    if (encoded_instr.index >= 8)
-      encoded_instr.rex_prefix |= REX_X;
+    if (encoded_instr.index >= 8) encoded_instr.rex_prefix |= REX_X;
     if (encoded_instr.base >= 8) {
       // Make sure we didn't already use REX.B for the RM field.
       assert((encoded_instr.rex_prefix & REX_B) == 0);
@@ -768,7 +757,8 @@ static void encode_instr(Array(u8) *output, AsmModule *asm_module,
   if (encoded_instr.disp_fixup != NULL)
     encoded_instr.disp_fixup->offset = output->size;
   if (encoded_instr.displacement_size != -1)
-    write_int(output, encoded_instr.displacement, encoded_instr.displacement_size);
+    write_int(
+        output, encoded_instr.displacement, encoded_instr.displacement_size);
   if (encoded_instr.imm_fixup != NULL)
     encoded_instr.imm_fixup->offset = output->size;
   if (encoded_instr.immediate_size != -1)
@@ -821,16 +811,14 @@ void assemble(AsmModule *asm_module)
   for (u32 i = 0; i < asm_module->fixups.size; i++) {
     Fixup *fixup = *ARRAY_REF(&asm_module->fixups, Fixup *, i);
     AsmSymbol *symbol = fixup->symbol;
-    if (fixup->type == FIXUP_ABSOLUTE
-        || !symbol->defined
-        || fixup->section != TEXT_SECTION
-        || symbol->section != TEXT_SECTION) {
+    if (fixup->type == FIXUP_ABSOLUTE || !symbol->defined
+        || fixup->section != TEXT_SECTION || symbol->section != TEXT_SECTION) {
       continue;
     }
 
     // Relative accesses are relative to the start of the next instruction.
     i32 value = (i32)symbol->offset - (i32)fixup->next_instr_offset;
-    write_int_at(&asm_module->text.bytes, fixup->offset,
-        (u64)value, fixup->size_bytes);
+    write_int_at(
+        &asm_module->text.bytes, fixup->offset, (u64)value, fixup->size_bytes);
   }
 }

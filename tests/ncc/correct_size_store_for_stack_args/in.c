@@ -1,9 +1,6 @@
 #include <assert.h>
 
-void foo(int a, int b, int c, int d, int e, int f, int g)
-{
-  assert(g == -1);
-}
+void foo(int a, int b, int c, int d, int e, int f, int g) { assert(g == -1); }
 
 int main()
 {

@@ -3,8 +3,8 @@
 
 #include "array.h"
 #include "misc.h"
-#include "tokenise.h"
 #include "pool.h"
+#include "tokenise.h"
 #include "util.h"
 
 typedef struct ParseError
@@ -13,74 +13,24 @@ typedef struct ParseError
   char *expected;
 } ParseError;
 
-#define AST_EXPR_TYPES \
-    X(INT_LITERAL_EXPR), \
-    X(STRING_LITERAL_EXPR), \
-\
-    X(IDENTIFIER_EXPR), \
-\
-    X(STRUCT_DOT_FIELD_EXPR), \
-    X(STRUCT_ARROW_FIELD_EXPR), \
-\
-    X(INDEX_EXPR), \
-    X(FUNCTION_CALL_EXPR), \
-    X(POST_INCREMENT_EXPR), \
-    X(POST_DECREMENT_EXPR), \
-\
-    X(PRE_INCREMENT_EXPR), \
-    X(PRE_DECREMENT_EXPR), \
-    X(ADDRESS_OF_EXPR), \
-    X(DEREF_EXPR), \
-    X(UNARY_PLUS_EXPR), \
-    X(UNARY_MINUS_EXPR), \
-    X(BIT_NOT_EXPR), \
-    X(LOGICAL_NOT_EXPR), \
-\
-    X(CAST_EXPR), \
-    X(SIZEOF_EXPR_EXPR), \
-    X(SIZEOF_TYPE_EXPR), \
-\
-    X(MULTIPLY_EXPR), \
-    X(DIVIDE_EXPR), \
-    X(MODULO_EXPR), \
-    X(ADD_EXPR), \
-    X(MINUS_EXPR), \
-    X(LEFT_SHIFT_EXPR), \
-    X(RIGHT_SHIFT_EXPR), \
-\
-    X(LESS_THAN_EXPR), \
-    X(GREATER_THAN_EXPR), \
-    X(LESS_THAN_OR_EQUAL_EXPR), \
-    X(GREATER_THAN_OR_EQUAL_EXPR), \
-    X(EQUAL_EXPR), \
-    X(NOT_EQUAL_EXPR), \
-\
-    X(BIT_AND_EXPR), \
-    X(BIT_XOR_EXPR), \
-    X(BIT_OR_EXPR), \
-\
-    X(LOGICAL_AND_EXPR), \
-    X(LOGICAL_OR_EXPR), \
-\
-    X(CONDITIONAL_EXPR), \
-\
-    X(COMPOUND_EXPR), \
-\
-    X(ASSIGN_EXPR), \
-    X(MULTIPLY_ASSIGN_EXPR), \
-    X(DIVIDE_ASSIGN_EXPR), \
-    X(MODULO_ASSIGN_EXPR), \
-    X(ADD_ASSIGN_EXPR), \
-    X(MINUS_ASSIGN_EXPR), \
-    X(LEFT_SHIFT_ASSIGN_EXPR), \
-    X(RIGHT_SHIFT_ASSIGN_EXPR), \
-    X(BIT_AND_ASSIGN_EXPR), \
-    X(BIT_XOR_ASSIGN_EXPR), \
-    X(BIT_OR_ASSIGN_EXPR), \
-\
-    X(COMMA_EXPR), \
-\
-    X(BUILTIN_VA_ARG_EXPR),
+#define AST_EXPR_TYPES                                                         \
+  X(INT_LITERAL_EXPR), X(STRING_LITERAL_EXPR), X(IDENTIFIER_EXPR),             \
+      X(STRUCT_DOT_FIELD_EXPR), X(STRUCT_ARROW_FIELD_EXPR), X(INDEX_EXPR),     \
+      X(FUNCTION_CALL_EXPR), X(POST_INCREMENT_EXPR), X(POST_DECREMENT_EXPR),   \
+      X(PRE_INCREMENT_EXPR), X(PRE_DECREMENT_EXPR), X(ADDRESS_OF_EXPR),        \
+      X(DEREF_EXPR), X(UNARY_PLUS_EXPR), X(UNARY_MINUS_EXPR), X(BIT_NOT_EXPR), \
+      X(LOGICAL_NOT_EXPR), X(CAST_EXPR), X(SIZEOF_EXPR_EXPR),                  \
+      X(SIZEOF_TYPE_EXPR), X(MULTIPLY_EXPR), X(DIVIDE_EXPR), X(MODULO_EXPR),   \
+      X(ADD_EXPR), X(MINUS_EXPR), X(LEFT_SHIFT_EXPR), X(RIGHT_SHIFT_EXPR),     \
+      X(LESS_THAN_EXPR), X(GREATER_THAN_EXPR), X(LESS_THAN_OR_EQUAL_EXPR),     \
+      X(GREATER_THAN_OR_EQUAL_EXPR), X(EQUAL_EXPR), X(NOT_EQUAL_EXPR),         \
+      X(BIT_AND_EXPR), X(BIT_XOR_EXPR), X(BIT_OR_EXPR), X(LOGICAL_AND_EXPR),   \
+      X(LOGICAL_OR_EXPR), X(CONDITIONAL_EXPR), X(COMPOUND_EXPR),               \
+      X(ASSIGN_EXPR), X(MULTIPLY_ASSIGN_EXPR), X(DIVIDE_ASSIGN_EXPR),          \
+      X(MODULO_ASSIGN_EXPR), X(ADD_ASSIGN_EXPR), X(MINUS_ASSIGN_EXPR),         \
+      X(LEFT_SHIFT_ASSIGN_EXPR), X(RIGHT_SHIFT_ASSIGN_EXPR),                   \
+      X(BIT_AND_ASSIGN_EXPR), X(BIT_XOR_ASSIGN_EXPR), X(BIT_OR_ASSIGN_EXPR),   \
+      X(COMMA_EXPR), X(BUILTIN_VA_ARG_EXPR),
 
 #define X(x) x
 typedef enum ASTExprType
@@ -88,7 +38,6 @@ typedef enum ASTExprType
   AST_EXPR_TYPES
 } ASTExprType;
 #undef X
-
 
 typedef struct ASTExpr
 {
@@ -146,21 +95,12 @@ typedef struct ASTArgument
   struct ASTArgument *next;
 } ASTArgument;
 
-#define AST_STATEMENT_TYPES \
-    X(EMPTY_STATEMENT), \
-    X(LABELED_STATEMENT), \
-    X(CASE_STATEMENT), \
-    X(COMPOUND_STATEMENT), \
-    X(EXPR_STATEMENT), \
-    X(IF_STATEMENT), \
-    X(SWITCH_STATEMENT), \
-    X(WHILE_STATEMENT), \
-    X(DO_WHILE_STATEMENT), \
-    X(FOR_STATEMENT), \
-    X(GOTO_STATEMENT), \
-    X(CONTINUE_STATEMENT), \
-    X(BREAK_STATEMENT), \
-    X(RETURN_STATEMENT)
+#define AST_STATEMENT_TYPES                                           \
+  X(EMPTY_STATEMENT), X(LABELED_STATEMENT), X(CASE_STATEMENT),        \
+      X(COMPOUND_STATEMENT), X(EXPR_STATEMENT), X(IF_STATEMENT),      \
+      X(SWITCH_STATEMENT), X(WHILE_STATEMENT), X(DO_WHILE_STATEMENT), \
+      X(FOR_STATEMENT), X(GOTO_STATEMENT), X(CONTINUE_STATEMENT),     \
+      X(BREAK_STATEMENT), X(RETURN_STATEMENT)
 
 #define X(x) x
 typedef enum ASTStatementType
@@ -225,13 +165,12 @@ typedef struct ASTBlockItem
     BLOCK_ITEM_STATEMENT,
   } t;
 
-  union 
+  union
   {
     struct ASTDecl *decl;
     ASTStatement *statement;
   } u;
 } ASTBlockItem;
-
 
 typedef struct ASTDesignator
 {
@@ -489,7 +428,7 @@ typedef struct ASTToplevel
 } ASTToplevel;
 
 void dump_toplevel(ASTToplevel *ast);
-bool parse_toplevel(Array(SourceToken) *tokens, Pool *ast_pool,
-    ASTToplevel **toplevel);
+bool parse_toplevel(
+    Array(SourceToken) *tokens, Pool *ast_pool, ASTToplevel **toplevel);
 
 #endif

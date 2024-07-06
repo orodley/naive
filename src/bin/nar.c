@@ -15,7 +15,8 @@ int main(int argc, char *argv[])
     return 1;
   }
   if (!streq(argv[1], "-cr")) {
-    fprintf(stderr, "Sorry, we only support '-cr' at the moment, not '%s'\n",
+    fprintf(
+        stderr, "Sorry, we only support '-cr' at the moment, not '%s'\n",
         argv[1]);
     return 2;
   }
@@ -34,8 +35,7 @@ int main(int argc, char *argv[])
   Array(char) too_long_filenames = EMPTY_ARRAY;
   for (int i = input_files_start; i < argc; i++) {
     // File headers are aligned to even byte boundaries.
-    if (checked_ftell(ar_file) % 2 == 1)
-      checked_fseek(ar_file, 1, SEEK_CUR);
+    if (checked_ftell(ar_file) % 2 == 1) checked_fseek(ar_file, 1, SEEK_CUR);
 
     ArFileHeader file_header;
     memset(&file_header, ' ', sizeof file_header);
@@ -52,7 +52,6 @@ int main(int argc, char *argv[])
     long file_size = checked_ftell(input_file);
     checked_fseek(input_file, 0, SEEK_SET);
 
-
     // Bleh - there's no way to tell *printf not to append a NULL, so we
     // manually overwrite the NULL with a space. Since we write from
     // left-to-right we accept that the NULL might run over into the next
@@ -62,17 +61,16 @@ int main(int argc, char *argv[])
     if (filename_len > sizeof file_header.name) {
       u32 offset = too_long_filenames.size;
 
-      ARRAY_APPEND_ELEMS(&too_long_filenames, char, filename_len, input_filename);
+      ARRAY_APPEND_ELEMS(
+          &too_long_filenames, char, filename_len, input_filename);
       *ARRAY_APPEND(&too_long_filenames, char) = '\n';
 
-      u32 n = snprintf(file_header.name,
-          sizeof file_header.name + 1,
-          "/%u", offset);
+      u32 n = snprintf(
+          file_header.name, sizeof file_header.name + 1, "/%u", offset);
       file_header.name[n] = ' ';
     } else {
-      u32 n = snprintf(file_header.name,
-          sizeof file_header.name + 1,
-          "%s/", input_filename);
+      u32 n = snprintf(
+          file_header.name, sizeof file_header.name + 1, "%s/", input_filename);
       file_header.name[n] = ' ';
     }
     file_header.modification_timestamp_decimal[0] = '0';
@@ -81,9 +79,9 @@ int main(int argc, char *argv[])
     file_header.mode_octal[0] = '6';
     file_header.mode_octal[1] = '4';
     file_header.mode_octal[2] = '4';
-    u32 n = snprintf(file_header.size_bytes_decimal,
-        sizeof file_header.size_bytes_decimal + 1,
-        "%ld", file_size);
+    u32 n = snprintf(
+        file_header.size_bytes_decimal,
+        sizeof file_header.size_bytes_decimal + 1, "%ld", file_size);
     file_header.size_bytes_decimal[n] = ' ';
     file_header.magic[0] = '\x60';
     file_header.magic[1] = '\x0A';
@@ -111,21 +109,21 @@ int main(int argc, char *argv[])
 
     file_header.name[0] = '/';
     file_header.name[1] = '/';
-    u32 n = snprintf(file_header.size_bytes_decimal,
-        sizeof file_header.size_bytes_decimal + 1,
-        "%u", too_long_filenames.size);
+    u32 n = snprintf(
+        file_header.size_bytes_decimal,
+        sizeof file_header.size_bytes_decimal + 1, "%u",
+        too_long_filenames.size);
     file_header.size_bytes_decimal[n] = ' ';
     file_header.magic[0] = '\x60';
     file_header.magic[1] = '\x0A';
 
     // File headers are aligned to even byte boundaries.
-    if (checked_ftell(ar_file) % 2 == 1)
-      checked_fseek(ar_file, 1, SEEK_CUR);
+    if (checked_ftell(ar_file) % 2 == 1) checked_fseek(ar_file, 1, SEEK_CUR);
 
     checked_fwrite(&file_header, sizeof file_header, 1, ar_file);
 
-    checked_fwrite(too_long_filenames.elements,
-        too_long_filenames.size, 1, ar_file);
+    checked_fwrite(
+        too_long_filenames.elements, too_long_filenames.size, 1, ar_file);
   }
 
   fclose(ar_file);

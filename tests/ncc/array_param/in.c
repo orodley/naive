@@ -1,9 +1,6 @@
 #include <assert.h>
 
-void foo(int *x[])
-{
-  **x = 3;
-}
+void foo(int *x[]) { **x = 3; }
 
 int main()
 {

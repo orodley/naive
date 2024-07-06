@@ -5,8 +5,8 @@
 int main()
 {
   char *x = "f" /* foo */ OOB
-    // foo
-    "ar";
+            // foo
+            "ar";
 
   assert(x[0] == 'f');
   assert(x[1] == 'o');

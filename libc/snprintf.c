@@ -9,10 +9,10 @@ int snprintf(char *str, size_t size, const char *format, ...)
   va_start(ap, format);
 
   StringSinkArg string_sink_arg = {
-    .string = str,
-    .index = 0,
-    .max_chars = size,
-    .has_limit = true,
+      .string = str,
+      .index = 0,
+      .max_chars = size,
+      .has_limit = true,
   };
 
   int ret = printf_impl(string_sink, &string_sink_arg, format, ap);

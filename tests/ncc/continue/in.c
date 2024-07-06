@@ -19,7 +19,7 @@ int main()
   j = 0;
   while (i != 6) {
     j = 1;
-    if (i == 0)  {
+    if (i == 0) {
       i = 6;
       continue;
     }

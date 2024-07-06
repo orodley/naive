@@ -9,8 +9,8 @@
 // @PORT
 #include <errno.h>
 #include <fcntl.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "array.h"
@@ -20,15 +20,12 @@
 #include "file.h"
 #include "ir_gen.h"
 #include "misc.h"
-#include "tokenise.h"
 #include "parse.h"
 #include "preprocess.h"
+#include "tokenise.h"
 #include "util.h"
 
-int __lsan_is_turned_off(void)
-{
-  return 1;
-}
+int __lsan_is_turned_off(void) { return 1; }
 
 static bool flag_dump_tokens = false;
 static bool flag_dump_ast = false;
@@ -39,8 +36,9 @@ bool flag_dump_register_assignments = false;
 bool flag_print_pre_regalloc_stats = false;
 
 static char *make_temp_file(void);
-static int compile_file(char *input_filename, char *output_filename,
-    Array(char *) *include_dirs, bool syntax_only, bool preprocess_only);
+static int compile_file(
+    char *input_filename, char *output_filename, Array(char *) *include_dirs,
+    bool syntax_only, bool preprocess_only);
 static int make_file_executable(char *filename);
 
 int main(int argc, char *argv[])
@@ -107,8 +105,7 @@ int main(int argc, char *argv[])
       } else if (strneq(arg, "-std=", 5)) {
         char *standard = arg + 5;
         if (!streq(standard, "c99")) {
-          fprintf(stderr,
-              "Error: unsupported C standard '%s'\n", standard);
+          fprintf(stderr, "Error: unsupported C standard '%s'\n", standard);
           return 1;
         }
       } else if (streq(arg, "-o")) {
@@ -169,8 +166,10 @@ int main(int argc, char *argv[])
     return 2;
   }
   if (!do_link && output_filename != NULL && source_input_filenames.size > 1) {
-    fputs("Cannot specify output filename"
-        " when generating multiple output files\n", stderr);
+    fputs(
+        "Cannot specify output filename"
+        " when generating multiple output files\n",
+        stderr);
     return 12;
   }
 
@@ -183,10 +182,12 @@ int main(int argc, char *argv[])
   *ARRAY_INSERT(&include_dirs, char *, 0) = concat(naive_dir, "/freestanding/");
 
   Array(char *) temp_filenames;
-  ARRAY_INIT(&temp_filenames, char *, do_link ? source_input_filenames.size : 0);
+  ARRAY_INIT(
+      &temp_filenames, char *, do_link ? source_input_filenames.size : 0);
 
   for (u32 i = 0; i < source_input_filenames.size; i++) {
-    char *source_input_filename = *ARRAY_REF(&source_input_filenames, char *, i);
+    char *source_input_filename =
+        *ARRAY_REF(&source_input_filenames, char *, i);
     char *object_filename = NULL;
     if (!syntax_only && !preprocess_only) {
       if (do_link) {
@@ -204,16 +205,16 @@ int main(int argc, char *argv[])
           object_filename = output_filename;
         } else {
           u32 input_filename_length = strlen(source_input_filename);
-          object_filename = malloc(input_filename_length + 1); // @LEAK
-          memcpy(object_filename, source_input_filename,
+          object_filename = malloc(input_filename_length + 1);  // @LEAK
+          memcpy(
+              object_filename, source_input_filename,
               input_filename_length + 1);
           object_filename[input_filename_length - 1] = 'o';
           object_filename[input_filename_length] = '\0';
 
           u32 last_slash = input_filename_length - 1;
           for (; last_slash != 0; last_slash--) {
-            if (object_filename[last_slash] == '/')
-              break;
+            if (object_filename[last_slash] == '/') break;
           }
 
           if (last_slash != 0) {
@@ -224,10 +225,10 @@ int main(int argc, char *argv[])
       }
     }
 
-    int result = compile_file(source_input_filename, object_filename,
-        &include_dirs, syntax_only, preprocess_only);
-    if (result != 0)
-      return result;
+    int result = compile_file(
+        source_input_filename, object_filename, &include_dirs, syntax_only,
+        preprocess_only);
+    if (result != 0) return result;
   }
 
   array_free(&source_input_filenames);
@@ -236,8 +237,8 @@ int main(int argc, char *argv[])
     // Implicitly link in the standard library. We have to put this after
     // the rest of the inputs because it's an archive.
     if (!freestanding) {
-      *ARRAY_APPEND(&linker_input_filenames, char *)
-        = concat(naive_dir, "/libc.a");
+      *ARRAY_APPEND(&linker_input_filenames, char *) =
+          concat(naive_dir, "/libc.a");
     }
 
     char *executable_filename;
@@ -263,12 +264,10 @@ int main(int argc, char *argv[])
       }
     }
 
-    if (result != 0)
-      return result;
+    if (result != 0) return result;
 
     result = make_file_executable(executable_filename);
-    if (result != 0)
-      return result;
+    if (result != 0) return result;
   }
 
   array_free(&linker_input_filenames);
@@ -276,8 +275,9 @@ int main(int argc, char *argv[])
   return 0;
 }
 
-static int compile_file(char *input_filename, char *output_filename,
-    Array(char *) *include_dirs, bool syntax_only, bool preprocess_only)
+static int compile_file(
+    char *input_filename, char *output_filename, Array(char *) *include_dirs,
+    bool syntax_only, bool preprocess_only)
 {
   Array(char) preprocessed;
   Array(Adjustment) adjustments;
@@ -312,8 +312,7 @@ static int compile_file(char *input_filename, char *output_filename,
   }
 
   Array(SourceToken) tokens;
-  if (!tokenise(&tokens, &preprocessed, &adjustments))
-    return 11;
+  if (!tokenise(&tokens, &preprocessed, &adjustments)) return 11;
 
   array_free(&preprocessed);
   array_free(&adjustments);
@@ -333,12 +332,10 @@ static int compile_file(char *input_filename, char *output_filename,
   Pool ast_pool;
   pool_init(&ast_pool, 1024);
   ASTToplevel *ast;
-  if (!parse_toplevel(&tokens, &ast_pool, &ast))
-    return 3;
+  if (!parse_toplevel(&tokens, &ast_pool, &ast)) return 3;
 
   if (flag_dump_ast) {
-    if (flag_dump_tokens)
-      puts("\n");
+    if (flag_dump_tokens) puts("\n");
     dump_toplevel(ast);
   }
 
@@ -360,20 +357,18 @@ static int compile_file(char *input_filename, char *output_filename,
   pool_free(&ast_pool);
 
   if (flag_dump_ir) {
-    if (flag_dump_tokens || flag_dump_ast)
-      puts("\n");
+    if (flag_dump_tokens || flag_dump_ast) puts("\n");
     dump_trans_unit(&tu);
   }
 
   AsmBuilder asm_builder;
   init_asm_builder(&asm_builder, input_filename);
-  generate_asm_module(&asm_builder, &tu); 
+  generate_asm_module(&asm_builder, &tu);
 
   trans_unit_free(&tu);
 
   if (flag_dump_asm) {
-    if (flag_dump_tokens || flag_dump_ast || flag_dump_ir)
-      puts("\n");
+    if (flag_dump_tokens || flag_dump_ast || flag_dump_ir) puts("\n");
     dump_asm_module(&asm_builder.asm_module);
   }
 

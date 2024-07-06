@@ -6,7 +6,8 @@ int main()
   assert(sizeof foo == 8 * sizeof(int));
   assert(sizeof foo[0] == 4 * sizeof(int));
 
-  struct {
+  struct
+  {
     int a[2][2];
     int b;
   } bar;

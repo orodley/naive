@@ -58,7 +58,8 @@ inline void checked_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
   }
 }
 
-inline void checked_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+inline void checked_fwrite(
+    const void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
   size_t entries_written = fwrite(ptr, size, nmemb, stream);
   if (entries_written != nmemb) {

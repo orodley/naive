@@ -5,10 +5,7 @@ struct Foo
   int a, b, c, d;
 };
 
-struct Foo foo()
-{
-  return (struct Foo) { 1, 2, 3, 4 };
-}
+struct Foo foo() { return (struct Foo){1, 2, 3, 4}; }
 
 int main()
 {

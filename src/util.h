@@ -4,18 +4,15 @@
 #define NAIVE_UTIL_H_
 
 #include <assert.h>
-#include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "misc.h"
 
 #define ZERO_STRUCT(s) memset(s, 0, sizeof *s);
 
-inline u32 max(u32 a, u32 b)
-{
-  return (a < b) ? b : a;
-}
+inline u32 max(u32 a, u32 b) { return (a < b) ? b : a; }
 
 // @TODO: Maybe use this more widely.
 typedef struct String
@@ -24,18 +21,16 @@ typedef struct String
   u32 len;
 } String;
 
-#define INVALID_STRING ((String) { NULL, -1 })
-#define EMPTY_STRING ((String) { NULL, 0 })
+#define INVALID_STRING ((String){NULL, -1})
+#define EMPTY_STRING ((String){NULL, 0})
 
 inline bool is_valid(String str)
 {
-  return !((str.chars == INVALID_STRING.chars) && (str.len == INVALID_STRING.len));
+  return !(
+      (str.chars == INVALID_STRING.chars) && (str.len == INVALID_STRING.len));
 }
 
-inline bool streq(char *a, char *b)
-{
-  return strcmp(a, b) == 0;
-}
+inline bool streq(char *a, char *b) { return strcmp(a, b) == 0; }
 
 inline bool strneq(char *a, char *b, u32 length)
 {
@@ -76,9 +71,8 @@ inline u32 highest_set_bit(u64 x)
   // an N-bit integer in O(lg(N)) operations" from the famous "Bit Twiddling
   // Hacks" page:
   // https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog
-  const uint64_t b[] = {
-    0x2, 0xC, 0xF0, 0xFF00, 0xFFFF0000, 0xFFFFFFFF00000000ULL
-  };
+  const uint64_t b[] = {0x2,    0xC,        0xF0,
+                        0xFF00, 0xFFFF0000, 0xFFFFFFFF00000000ULL};
   const unsigned s[] = {1, 2, 4, 8, 16, 32};
 
   uint64_t r = 0;
@@ -97,9 +91,8 @@ inline u32 highest_set_bit(u64 x)
 inline u32 bit_count(u32 x)
 {
   u32 n = 0;
-  for (; x != 0; n++)
-  {
-    x &= x - 1; // clear the least significant bit set
+  for (; x != 0; n++) {
+    x &= x - 1;  // clear the least significant bit set
   }
 
   return n;

@@ -14,12 +14,8 @@ struct _IO_FILE *fopen(const char *path, const char *mode)
     abort();
   }
   switch (mode[0]) {
-  case 'r':
-    flags = O_RDONLY;
-    break;
-  case 'w':
-    flags = O_WRONLY | O_CREAT | O_TRUNC;
-    break;
+  case 'r': flags = O_RDONLY; break;
+  case 'w': flags = O_WRONLY | O_CREAT | O_TRUNC; break;
   default:
     // Unimplemented
     abort();

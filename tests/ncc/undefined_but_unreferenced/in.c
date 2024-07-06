@@ -1,6 +1,3 @@
 void foo(void);
 
-int main()
-{
-  return 0;
-}
+int main() { return 0; }

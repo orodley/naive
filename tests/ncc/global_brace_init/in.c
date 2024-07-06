@@ -1,15 +1,18 @@
 #include <assert.h>
 
-int foo[5] = { 1, 2, 3, 4, 5 };
-struct { int a, b; } bar[2] = {
-  {
-    .a = 1,
-    .b = 2,
-  },
-  {
-    .a = 3,
-    .b = 4,
-  },
+int foo[5] = {1, 2, 3, 4, 5};
+struct
+{
+  int a, b;
+} bar[2] = {
+    {
+        .a = 1,
+        .b = 2,
+    },
+    {
+        .a = 3,
+        .b = 4,
+    },
 };
 
 int main()

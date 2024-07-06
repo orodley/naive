@@ -5,10 +5,12 @@
 
 // @NOTE: We do this so we only have to allocate constant space for doing
 // swaps, rather than allocating at every recursive call.
-static void qsort_aux(void *base, size_t nmemb, size_t size,
+static void qsort_aux(
+    void *base, size_t nmemb, size_t size,
     int (*compar)(const void *, const void *), void *swap_space);
 
-void qsort(void *base, size_t nmemb, size_t size,
+void qsort(
+    void *base, size_t nmemb, size_t size,
     int (*compar)(const void *, const void *))
 {
   void *swap_space = malloc(size);
@@ -25,10 +27,11 @@ static void swap_elems(void *a, void *b, size_t size, void *swap_space)
   }
 }
 
-static void qsort_aux(void *base, size_t nmemb, size_t size,
+static void qsort_aux(
+    void *base, size_t nmemb, size_t size,
     int (*compar)(const void *, const void *), void *swap_space)
 {
-#define NTH_ELEM(n) ((void *)((uint8_t *)base + ((n) * size)))
+#define NTH_ELEM(n) ((void *)((uint8_t *)base + ((n)*size)))
 
   if (nmemb <= 1) {
     return;

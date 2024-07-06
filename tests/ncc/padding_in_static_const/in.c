@@ -1,6 +1,10 @@
 #include <assert.h>
 
-static struct { int a; char *b; } foo = {0, "a" };
+static struct
+{
+  int a;
+  char *b;
+} foo = {0, "a"};
 
 typedef unsigned u32;
 

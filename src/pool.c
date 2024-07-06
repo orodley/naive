@@ -1,6 +1,6 @@
-#include <stdlib.h>
-
 #include "pool.h"
+
+#include <stdlib.h>
 
 #if RUNNING_UNDER_SANITIZER
 

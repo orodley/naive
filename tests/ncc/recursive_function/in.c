@@ -2,8 +2,7 @@
 
 int foo(int a)
 {
-  if (a > 3)
-    return a;
+  if (a > 3) return a;
 
   return a + foo(a + 1);
 }

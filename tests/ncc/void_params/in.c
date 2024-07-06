@@ -2,10 +2,7 @@
 
 int foo(void);
 
-int foo(void)
-{
-  return 253;
-}
+int foo(void) { return 253; }
 
 int main()
 {

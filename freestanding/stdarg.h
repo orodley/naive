@@ -2,7 +2,8 @@
 #define _STDARG_H
 
 // As defined in the System V x86-64 ABI spec, in section 3.5.7
-typedef struct {
+typedef struct
+{
   unsigned int next_int_reg_offset;
   unsigned int next_vector_reg_offset;
   void *next_stack_arg;
@@ -20,8 +21,9 @@ static unsigned long __builtin_va_arg_uint64(va_list list)
     result = *(unsigned long *)list->next_stack_arg;
     list->next_stack_arg = (char *)list->next_stack_arg + 8;
   } else {
-    result = *(unsigned long *)
-      ((char *)list->register_save_area + list->next_int_reg_offset);
+    result =
+        *(unsigned long
+              *)((char *)list->register_save_area + list->next_int_reg_offset);
     list->next_int_reg_offset += 8;
   }
 

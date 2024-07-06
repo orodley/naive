@@ -39,7 +39,4 @@ void set_a(struct Bar **bar, int a)
   (*bar)->a = a;
 }
 
-int get_a(struct Bar *bar)
-{
-  return bar->a;
-}
+int get_a(struct Bar *bar) { return bar->a; }

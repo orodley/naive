@@ -1,26 +1,23 @@
-#include <stdarg.h>
-#include <stdio.h>
 #include "diagnostics.h"
 
-static void v_issue_diagnostic(ErrorLevel err_level,
-    SourceLoc *context, char *fmt, va_list varargs)
+#include <stdarg.h>
+#include <stdio.h>
+
+static void v_issue_diagnostic(
+    ErrorLevel err_level, SourceLoc *context, char *fmt, va_list varargs)
 {
-  fprintf(stderr, "%s:%d:%d: ", context->filename, context->line, context->column);
+  fprintf(
+      stderr, "%s:%d:%d: ", context->filename, context->line, context->column);
   switch (err_level) {
-  case WARNING:
-    fputs("Warning: ", stderr);
-    break;
-  case ERROR:
-    fputs("Error: ", stderr);
-    break;
+  case WARNING: fputs("Warning: ", stderr); break;
+  case ERROR: fputs("Error: ", stderr); break;
   }
 
   vfprintf(stderr, fmt, varargs);
   putc('\n', stderr);
 }
 
-void issue_diagnostic(ErrorLevel err_level, SourceLoc *context,
-    char *fmt, ...)
+void issue_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...)
 {
   va_list varargs;
   va_start(varargs, fmt);

@@ -1,7 +1,7 @@
 #include <assert.h>
-#include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "array.h"
 #include "ir.h"
@@ -69,32 +69,27 @@ typedef struct CDecl
 
 static bool c_type_eq(CType *a, CType *b)
 {
-  if (a->t != b->t)
-    return false;
+  if (a->t != b->t) return false;
 
   switch (a->t) {
-  case VOID_TYPE:
-    return true;
+  case VOID_TYPE: return true;
   case INTEGER_TYPE:
     return a->u.integer.type == b->u.integer.type
-      && a->u.integer.is_signed == b->u.integer.is_signed;
+           && a->u.integer.is_signed == b->u.integer.is_signed;
   case FUNCTION_TYPE:
-    if (a->u.function.arity != b->u.function.arity)
-      return false;
+    if (a->u.function.arity != b->u.function.arity) return false;
     if (!c_type_eq(a->u.function.return_type, b->u.function.return_type))
       return false;
     for (u32 i = 0; i < a->u.function.arity; i++) {
-      if (!c_type_eq(a->u.function.arg_type_array[i],
-            b->u.function.arg_type_array[i]))
+      if (!c_type_eq(
+              a->u.function.arg_type_array[i], b->u.function.arg_type_array[i]))
         return false;
     }
 
     return true;
   case STRUCT_TYPE:
-    if (a->u.strukt.incomplete != b->u.strukt.incomplete)
-      return false;
-    if (a->u.strukt.incomplete)
-      return a == b;
+    if (a->u.strukt.incomplete != b->u.strukt.incomplete) return false;
+    if (a->u.strukt.incomplete) return a == b;
     return a->u.strukt.ir_type == b->u.strukt.ir_type;
   case POINTER_TYPE:
     assert(a != a->u.pointee_type);
@@ -102,8 +97,8 @@ static bool c_type_eq(CType *a, CType *b)
     return c_type_eq(a->u.pointee_type, b->u.pointee_type);
   case ARRAY_TYPE:
     return ((a->u.array.incomplete && b->u.array.incomplete)
-        || (a->u.array.size == b->u.array.size))
-      && c_type_eq(a->u.array.elem_type, b->u.array.elem_type);
+            || (a->u.array.size == b->u.array.size))
+           && c_type_eq(a->u.array.elem_type, b->u.array.elem_type);
   }
 
   UNREACHABLE;
@@ -112,12 +107,11 @@ static bool c_type_eq(CType *a, CType *b)
 #if 0
 static bool c_type_compatible(CType *a, CType *b)
 {
-  if (c_type_eq(a, b))
-    return true;
+  if (c_type_eq(a, b)) return true;
 
   if (a->t == POINTER_TYPE && b->t == POINTER_TYPE
       && (a->u.pointee_type->t == VOID_TYPE
-        || b->u.pointee_type->t == VOID_TYPE)) {
+          || b->u.pointee_type->t == VOID_TYPE)) {
     return true;
   }
 
@@ -128,29 +122,27 @@ static bool c_type_compatible(CType *a, CType *b)
 static IrType c_type_to_ir_type(CType *ctype)
 {
   switch (ctype->t) {
-  case VOID_TYPE:
-    return (IrType) { .t = IR_VOID };
+  case VOID_TYPE: return (IrType){.t = IR_VOID};
   case INTEGER_TYPE: {
     u32 bit_width;
     switch (ctype->u.integer.type) {
-    case BOOL: case CHAR: bit_width = 8; break;
+    case BOOL:
+    case CHAR: bit_width = 8; break;
     case SHORT: bit_width = 16; break;
     case INT: bit_width = 32; break;
-    case LONG: case LONG_LONG: bit_width = 64; break;
+    case LONG:
+    case LONG_LONG: bit_width = 64; break;
     default: UNIMPLEMENTED;
     }
 
-    return (IrType) {
-      .t = IR_INT,
-      .u.bit_width = bit_width,
+    return (IrType){
+        .t = IR_INT,
+        .u.bit_width = bit_width,
     };
   }
-  case POINTER_TYPE:
-    return (IrType) { .t = IR_POINTER };
-  case ARRAY_TYPE:
-    return *ctype->u.array.ir_type;
-  case FUNCTION_TYPE:
-    return (IrType) { .t = IR_FUNCTION };
+  case POINTER_TYPE: return (IrType){.t = IR_POINTER};
+  case ARRAY_TYPE: return *ctype->u.array.ir_type;
+  case FUNCTION_TYPE: return (IrType){.t = IR_FUNCTION};
   case STRUCT_TYPE:
     assert(!ctype->u.strukt.incomplete);
     return *ctype->u.strukt.ir_type;
@@ -202,8 +194,7 @@ Binding *binding_for_name(Scope *scope, char *name)
 {
   for (u32 i = 0; i < scope->bindings.size; i++) {
     Binding *binding = ARRAY_REF(&scope->bindings, Binding, i);
-    if (streq(binding->name, name))
-      return binding;
+    if (streq(binding->name, name)) return binding;
   }
 
   if (scope->parent_scope != NULL) {
@@ -253,64 +244,64 @@ static void init_type_env(TypeEnv *type_env)
   ARRAY_INIT(&type_env->typedef_types, TypeEnvEntry *, 10);
 
   // @PORT: Most of these types are x86-64 dependent.
-  type_env->void_type = (CType) {
-    .t = VOID_TYPE,
+  type_env->void_type = (CType){
+      .t = VOID_TYPE,
   };
-  type_env->bool_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = BOOL,
-    .u.integer.is_signed = false,
+  type_env->bool_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = BOOL,
+      .u.integer.is_signed = false,
   };
-  type_env->char_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = CHAR,
-    // System V x86-64 says "char" == "signed char"
-    .u.integer.is_signed = true,
+  type_env->char_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = CHAR,
+      // System V x86-64 says "char" == "signed char"
+      .u.integer.is_signed = true,
   };
-  type_env->unsigned_char_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = CHAR,
-    .u.integer.is_signed = false,
+  type_env->unsigned_char_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = CHAR,
+      .u.integer.is_signed = false,
   };
-  type_env->short_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = SHORT,
-    .u.integer.is_signed = true,
+  type_env->short_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = SHORT,
+      .u.integer.is_signed = true,
   };
-  type_env->unsigned_short_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = SHORT,
-    .u.integer.is_signed = false,
+  type_env->unsigned_short_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = SHORT,
+      .u.integer.is_signed = false,
   };
-  type_env->int_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = INT,
-    .u.integer.is_signed = true,
+  type_env->int_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = INT,
+      .u.integer.is_signed = true,
   };
-  type_env->unsigned_int_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = INT,
-    .u.integer.is_signed = false,
+  type_env->unsigned_int_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = INT,
+      .u.integer.is_signed = false,
   };
-  type_env->long_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = LONG,
-    .u.integer.is_signed = true,
+  type_env->long_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = LONG,
+      .u.integer.is_signed = true,
   };
-  type_env->unsigned_long_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = LONG,
-    .u.integer.is_signed = false,
+  type_env->unsigned_long_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = LONG,
+      .u.integer.is_signed = false,
   };
-  type_env->long_long_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = LONG_LONG,
-    .u.integer.is_signed = true,
+  type_env->long_long_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = LONG_LONG,
+      .u.integer.is_signed = true,
   };
-  type_env->unsigned_long_long_type = (CType) {
-    .t = INTEGER_TYPE,
-    .u.integer.type = LONG_LONG,
-    .u.integer.is_signed = false,
+  type_env->unsigned_long_long_type = (CType){
+      .t = INTEGER_TYPE,
+      .u.integer.type = LONG_LONG,
+      .u.integer.is_signed = false,
   };
 
   type_env->size_type = &type_env->unsigned_long_type;
@@ -341,7 +332,7 @@ static CType *decay_to_pointer(TypeEnv *type_env, CType *type)
 {
   if (type->t == ARRAY_TYPE) {
     return pointer_type(type_env, type->u.array.elem_type);
-  } else  {
+  } else {
     return type;
   }
 }
@@ -368,7 +359,7 @@ static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
   array_type->u.array.incomplete = true;
 
   IrType *ir_array_type =
-    pool_alloc(&builder->trans_unit->pool, sizeof *ir_array_type);
+      pool_alloc(&builder->trans_unit->pool, sizeof *ir_array_type);
   ir_array_type->t = IR_ARRAY;
   ir_array_type->u.array.size = 0;
 
@@ -379,8 +370,7 @@ static CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
     ir_elem_type = elem_type.u.array.elem_type;
     ir_array_type->u.array.size = elem_type.u.array.size;
   } else {
-    ir_elem_type =
-      pool_alloc(&builder->trans_unit->pool, sizeof *ir_elem_type);
+    ir_elem_type = pool_alloc(&builder->trans_unit->pool, sizeof *ir_elem_type);
     *ir_elem_type = c_type_to_ir_type(type);
   }
   ir_array_type->u.array.elem_type = ir_elem_type;
@@ -393,8 +383,7 @@ static CType *struct_type(TypeEnv *type_env, char *name)
 {
   TypeEnvEntry *entry = pool_alloc(&type_env->pool, sizeof *entry);
   *ARRAY_APPEND(&type_env->struct_types, TypeEnvEntry *) = entry;
-  if (name == NULL)
-    name = "<anonymous struct>";
+  if (name == NULL) name = "<anonymous struct>";
   entry->name = name;
 
   CType *type = &entry->type;
@@ -453,8 +442,9 @@ typedef enum ExprContext
   RVALUE_CONTEXT,
   CONST_CONTEXT,
 } ExprContext;
-static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
-    ExprContext context);
+
+static Term ir_gen_expr(
+    IrBuilder *builder, Env *env, ASTExpr *expr, ExprContext context);
 
 static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 {
@@ -479,20 +469,18 @@ static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 
   switch (term.value.t) {
   case IR_VALUE_CONST:
-    return add_int_const(builder,
-        c_type_to_ir_type(term.ctype),
-        term.value.u.constant);
-  case IR_VALUE_GLOBAL:
-    return add_global_const(builder, term.value.u.global);
+    return add_int_const(
+        builder, c_type_to_ir_type(term.ctype), term.value.u.constant);
+  case IR_VALUE_GLOBAL: return add_global_const(builder, term.value.u.global);
   case IR_VALUE_ARG:
-  case IR_VALUE_INSTR:
-    UNREACHABLE;
+  case IR_VALUE_INSTR: UNREACHABLE;
   }
 
   UNREACHABLE;
 }
 
-static bool matches_sequence(ASTDeclSpecifier *decl_specifier_list, int length, ...)
+static bool matches_sequence(
+    ASTDeclSpecifier *decl_specifier_list, int length, ...)
 {
   va_list args;
   va_start(args, length);
@@ -524,17 +512,18 @@ static bool matches_sequence(ASTDeclSpecifier *decl_specifier_list, int length, 
   return decl_specifier_list == NULL;
 }
 
-static void decl_to_cdecl(IrBuilder *builder, Env *env, CType *ident_type,
-    ASTDeclarator *declarator, CDecl *cdecl);
+static void decl_to_cdecl(
+    IrBuilder *builder, Env *env, CType *ident_type, ASTDeclarator *declarator,
+    CDecl *cdecl);
 
-static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
-    ASTDeclSpecifier *decl_specifier_list)
+static CType *decl_specifier_list_to_c_type(
+    IrBuilder *builder, Env *env, ASTDeclSpecifier *decl_specifier_list)
 {
   TypeEnv *type_env = &env->type_env;
 
   // @TODO: Actually handle type qualifiers rather than ignoring them.
-  while (decl_specifier_list != NULL &&
-      decl_specifier_list->t == TYPE_QUALIFIER) {
+  while (decl_specifier_list != NULL
+         && decl_specifier_list->t == TYPE_QUALIFIER) {
     decl_specifier_list = decl_specifier_list->next;
   }
 
@@ -567,7 +556,8 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
       return &type_env->short_type;
     }
     if (matches_sequence(decl_specifier_list, 2, "unsigned", "short")
-        || matches_sequence(decl_specifier_list, 3, "unsigned", "short", "int")) {
+        || matches_sequence(
+            decl_specifier_list, 3, "unsigned", "short", "int")) {
       return &type_env->unsigned_short_type;
     }
     if (matches_sequence(decl_specifier_list, 1, "int")
@@ -586,17 +576,20 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
       return &type_env->long_type;
     }
     if (matches_sequence(decl_specifier_list, 2, "unsigned", "long")
-        || matches_sequence(decl_specifier_list, 3, "unsigned", "long", "int")) {
+        || matches_sequence(
+            decl_specifier_list, 3, "unsigned", "long", "int")) {
       return &type_env->unsigned_long_type;
     }
     if (matches_sequence(decl_specifier_list, 2, "long", "long")
         || matches_sequence(decl_specifier_list, 3, "signed", "long", "long")
         || matches_sequence(decl_specifier_list, 3, "long", "long", "int")
-        || matches_sequence(decl_specifier_list, 4, "signed", "long", "long", "int")) {
+        || matches_sequence(
+            decl_specifier_list, 4, "signed", "long", "long", "int")) {
       return &type_env->long_long_type;
     }
     if (matches_sequence(decl_specifier_list, 3, "unsigned", "long", "long")
-        || matches_sequence(decl_specifier_list, 4, "unsigned", "long", "long", "int")) {
+        || matches_sequence(
+            decl_specifier_list, 4, "unsigned", "long", "long", "int")) {
       return &type_env->unsigned_long_long_type;
     }
 
@@ -609,7 +602,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
   case STRUCT_TYPE_SPECIFIER:
   case UNION_TYPE_SPECIFIER: {
     ASTFieldDecl *field_list =
-      type_spec->u.struct_or_union_specifier.field_list;
+        type_spec->u.struct_or_union_specifier.field_list;
     char *name = type_spec->u.struct_or_union_specifier.name;
     ASTAttribute *attribute = type_spec->u.struct_or_union_specifier.attribute;
     bool is_packed = attribute != NULL && streq(attribute->name, "packed");
@@ -662,7 +655,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
     }
 
     IrType *ir_struct =
-      trans_unit_add_struct(builder->trans_unit, name, fields->size);
+        trans_unit_add_struct(builder->trans_unit, name, fields->size);
     u32 current_offset = 0;
     u32 max_field_size = 0;
     u32 max_field_align = 0;
@@ -678,8 +671,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
       max_field_align = max(max_field_align, field_align);
 
       if (type_spec->t == STRUCT_TYPE_SPECIFIER) {
-        if (!is_packed)
-          current_offset = align_to(current_offset, field_align);
+        if (!is_packed) current_offset = align_to(current_offset, field_align);
         ir_struct->u.strukt.fields[i].offset = current_offset;
 
         current_offset += field_size;
@@ -688,9 +680,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
       }
     }
     ir_struct->u.strukt.total_size = align_to(
-        type_spec->t == STRUCT_TYPE_SPECIFIER
-          ? current_offset
-          : max_field_size,
+        type_spec->t == STRUCT_TYPE_SPECIFIER ? current_offset : max_field_size,
         is_packed ? 1 : max_field_align);
     ir_struct->u.strukt.alignment = is_packed ? 1 : max_field_align;
 
@@ -702,7 +692,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
   case ENUM_TYPE_SPECIFIER: {
     char *tag = type_spec->u.enum_specifier.name;
     ASTEnumerator *enumerator_list =
-      type_spec->u.enum_specifier.enumerator_list;
+        type_spec->u.enum_specifier.enumerator_list;
 
     // @TODO: Pick the type based on the largest member
     CType *ctype = &type_env->int_type;
@@ -729,9 +719,8 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
 
     if (tag != NULL) {
       TypeEnvEntry *new_type_alias =
-        pool_alloc(&env->type_env.pool, sizeof *new_type_alias);
-      *ARRAY_APPEND(&env->type_env.enum_types, TypeEnvEntry *)
-        = new_type_alias;
+          pool_alloc(&env->type_env.pool, sizeof *new_type_alias);
+      *ARRAY_APPEND(&env->type_env.enum_types, TypeEnvEntry *) = new_type_alias;
       new_type_alias->name = tag;
       new_type_alias->type = *ctype;
     }
@@ -752,7 +741,7 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
       binding->constant = true;
       binding->term.ctype = ctype;
       binding->term.value =
-        value_const(c_type_to_ir_type(ctype), curr_enum_value++);
+          value_const(c_type_to_ir_type(ctype), curr_enum_value++);
 
       enumerator_list = enumerator_list->next;
     }
@@ -763,7 +752,8 @@ static CType *decl_specifier_list_to_c_type(IrBuilder *builder, Env *env,
   }
 }
 
-static ASTParameterDecl *params_for_function_declarator(ASTDeclarator *declarator)
+static ASTParameterDecl *params_for_function_declarator(
+    ASTDeclarator *declarator)
 {
   while (declarator->t != DIRECT_DECLARATOR) {
     assert(declarator->t == POINTER_DECLARATOR);
@@ -771,34 +761,35 @@ static ASTParameterDecl *params_for_function_declarator(ASTDeclarator *declarato
   }
 
   assert(declarator->t == DIRECT_DECLARATOR);
-  ASTDirectDeclarator* direct_declarator = declarator->u.direct_declarator;
+  ASTDirectDeclarator *direct_declarator = declarator->u.direct_declarator;
   assert(direct_declarator->t == FUNCTION_DECLARATOR);
 
   return direct_declarator->u.function_declarator.parameters;
 }
 
-static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
-    CType *ident_type, ASTDirectDeclarator *declarator, CDecl *cdecl)
+static void direct_declarator_to_cdecl(
+    IrBuilder *builder, Env *env, CType *ident_type,
+    ASTDirectDeclarator *declarator, CDecl *cdecl)
 {
   switch (declarator->t) {
   case DECLARATOR:
     decl_to_cdecl(builder, env, ident_type, declarator->u.declarator, cdecl);
     break;
   case IDENTIFIER_DECLARATOR:
-    *cdecl = (CDecl) { declarator->u.name, ident_type };
+    *cdecl = (CDecl){declarator->u.name, ident_type};
     break;
   case ARRAY_DECLARATOR: {
     ASTDirectDeclarator *elem_declarator =
-      declarator->u.array_declarator.element_declarator;
-    direct_declarator_to_cdecl(builder, env, ident_type,
-        elem_declarator, cdecl);
+        declarator->u.array_declarator.element_declarator;
+    direct_declarator_to_cdecl(
+        builder, env, ident_type, elem_declarator, cdecl);
 
     CType *array = array_type(builder, &env->type_env, cdecl->type);
     cdecl->type = array;
     ASTExpr *array_length_expr = declarator->u.array_declarator.array_length;
     if (array_length_expr != NULL) {
       IrConst *length_const =
-        eval_constant_expr(builder, env, array_length_expr);
+          eval_constant_expr(builder, env, array_length_expr);
       assert(length_const->type.t == IR_INT);
       u64 length = length_const->u.integer;
 
@@ -809,7 +800,7 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
   }
   case FUNCTION_DECLARATOR: {
     ASTParameterDecl *first_param =
-      declarator->u.function_declarator.parameters;
+        declarator->u.function_declarator.parameters;
     ASTParameterDecl *params = first_param;
 
     u32 arity = 0;
@@ -823,9 +814,8 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
 
     params = first_param;
 
-    CType **arg_c_types = pool_alloc(
-        &builder->trans_unit->pool,
-        sizeof(*arg_c_types) * arity);
+    CType **arg_c_types =
+        pool_alloc(&builder->trans_unit->pool, sizeof(*arg_c_types) * arity);
 
     bool variable_arity = false;
     for (u32 i = 0; params != NULL; i++) {
@@ -834,8 +824,8 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
         CType *param_ident_type = decl_specifier_list_to_c_type(
             builder, env, params->decl_specifier_list);
         CDecl param_cdecl;
-        decl_to_cdecl(builder, env,
-            param_ident_type, params->declarator, &param_cdecl);
+        decl_to_cdecl(
+            builder, env, param_ident_type, params->declarator, &param_cdecl);
 
         if (param_cdecl.type->t == VOID_TYPE) {
           assert(i == 0);
@@ -875,32 +865,32 @@ static void direct_declarator_to_cdecl(IrBuilder *builder, Env *env,
     ctype->u.function.return_type = ident_type;
 
     ASTDirectDeclarator *function_declarator =
-      declarator->u.function_declarator.declarator;
-    direct_declarator_to_cdecl(builder, env, ctype,
-        function_declarator, cdecl);
+        declarator->u.function_declarator.declarator;
+    direct_declarator_to_cdecl(builder, env, ctype, function_declarator, cdecl);
 
     break;
   }
   }
 }
 
-static void decl_to_cdecl(IrBuilder *builder, Env *env, CType *ident_type,
-    ASTDeclarator *declarator, CDecl *cdecl)
+static void decl_to_cdecl(
+    IrBuilder *builder, Env *env, CType *ident_type, ASTDeclarator *declarator,
+    CDecl *cdecl)
 {
   if (declarator == NULL) {
-    *cdecl = (CDecl) { NULL, ident_type };
+    *cdecl = (CDecl){NULL, ident_type};
     return;
   }
 
   switch (declarator->t) {
   case POINTER_DECLARATOR:
-    decl_to_cdecl(builder, env,
-        pointer_type(&env->type_env, ident_type),
+    decl_to_cdecl(
+        builder, env, pointer_type(&env->type_env, ident_type),
         declarator->u.pointer_declarator.pointee, cdecl);
     break;
   case DIRECT_DECLARATOR:
-    direct_declarator_to_cdecl(builder, env, ident_type,
-        declarator->u.direct_declarator, cdecl);
+    direct_declarator_to_cdecl(
+        builder, env, ident_type, declarator->u.direct_declarator, cdecl);
     break;
   }
 }
@@ -911,8 +901,7 @@ static CType *type_name_to_c_type(
   CDecl cdecl;
   CType *decl_spec_type = decl_specifier_list_to_c_type(
       builder, env, type_name->decl_specifier_list);
-  decl_to_cdecl(builder, env, decl_spec_type,
-      type_name->declarator, &cdecl);
+  decl_to_cdecl(builder, env, decl_spec_type, type_name->declarator, &cdecl);
   assert(cdecl.name == NULL);
   return cdecl.type;
 }
@@ -929,8 +918,7 @@ static void cdecl_to_binding(IrBuilder *builder, CDecl *cdecl, Binding *binding)
 
 static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 {
-  if (c_type_eq(term.ctype, target_type))
-    return term;
+  if (c_type_eq(term.ctype, target_type)) return term;
 
   IrValue converted;
   if (term.ctype->t == INTEGER_TYPE && target_type->t == INTEGER_TYPE) {
@@ -948,8 +936,9 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 
     IrValue value = term.value;
     if (width < 64) {
-      value = build_type_instr(builder, OP_ZEXT, term.value,
-          (IrType) { .t = IR_INT, .u.bit_width = 64 });
+      value = build_type_instr(
+          builder, OP_ZEXT, term.value,
+          (IrType){.t = IR_INT, .u.bit_width = 64});
     } else {
       assert(width == 64);
     }
@@ -966,8 +955,8 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
     // element anyway, so this conversion is a no-op that just changes type.
     assert(term.value.type.t == IR_POINTER);
     converted = term.value;
-  } else if (target_type->t == POINTER_TYPE
-      && term.ctype->t == FUNCTION_TYPE
+  } else if (
+      target_type->t == POINTER_TYPE && term.ctype->t == FUNCTION_TYPE
       && c_type_eq(target_type->u.pointee_type, term.ctype)) {
     // Implicit conversion from function to pointer-to-function.
     converted = term.value;
@@ -980,19 +969,20 @@ static Term convert_type(IrBuilder *builder, Term term, CType *target_type)
     UNIMPLEMENTED;
   }
 
-  return (Term) {
-    .ctype = target_type,
-    .value = converted,
+  return (Term){
+      .ctype = target_type,
+      .value = converted,
   };
 }
 
 static IrBlock *add_block(IrBuilder *builder, char *name)
 {
-  return add_block_to_function(builder->trans_unit, builder->current_function, name);
+  return add_block_to_function(
+      builder->trans_unit, builder->current_function, name);
 }
 
-static void infer_array_size_from_initializer(IrBuilder *builder,
-    Env *env, ASTInitializer *init, CType *type)
+static void infer_array_size_from_initializer(
+    IrBuilder *builder, Env *env, ASTInitializer *init, CType *type)
 {
   if (type->t != ARRAY_TYPE || !type->u.array.incomplete || init == NULL)
     return;
@@ -1007,8 +997,8 @@ static void infer_array_size_from_initializer(IrBuilder *builder,
       ASTDesignator *designator = init_elem->designator_list;
       if (designator != NULL) {
         assert(designator->t == INDEX_DESIGNATOR);
-        IrConst *index_value = eval_constant_expr(
-            builder, env, designator->u.index_expr);
+        IrConst *index_value =
+            eval_constant_expr(builder, env, designator->u.index_expr);
         assert(index_value->type.t == IR_INT);
 
         current_index = index_value->u.integer;
@@ -1016,8 +1006,7 @@ static void infer_array_size_from_initializer(IrBuilder *builder,
         current_index++;
       }
 
-      if (current_index > max_index)
-        max_index = current_index;
+      if (current_index > max_index) max_index = current_index;
 
       init_elem = init_elem->next;
     }
@@ -1031,12 +1020,13 @@ static void infer_array_size_from_initializer(IrBuilder *builder,
   set_array_type_length(type, size);
 }
 
-static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
-    ASTDeclSpecifier *decl_specifier_list, ASTDeclarator *declarator,
-    ASTInitializer *initializer, CType **result_c_type)
+static IrGlobal *ir_global_for_decl(
+    IrBuilder *builder, Env *env, ASTDeclSpecifier *decl_specifier_list,
+    ASTDeclarator *declarator, ASTInitializer *initializer,
+    CType **result_c_type)
 {
   CType *decl_spec_type =
-    decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
+      decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
   CDecl cdecl;
   decl_to_cdecl(builder, env, decl_spec_type, declarator, &cdecl);
   infer_array_size_from_initializer(builder, env, initializer, cdecl.type);
@@ -1048,15 +1038,14 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
     bool struct_ret = ctype->u.function.return_type->t == STRUCT_TYPE;
 
     u32 arity = ctype->u.function.arity;
-    if (struct_ret)
-      arity++;
+    if (struct_ret) arity++;
 
     IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
-    
+
     u32 i = 0;
     u32 j = 0;
     if (struct_ret) {
-      arg_ir_types[0] = (IrType) { .t = IR_POINTER };
+      arg_ir_types[0] = (IrType){.t = IR_POINTER};
       i++;
     }
     for (; i < arity; i++, j++) {
@@ -1074,15 +1063,15 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
         break;
       }
     }
-    
-    if (global == NULL) {
-      IrType return_type = struct_ret
-        ? (IrType) { .t = IR_VOID }
-        : c_type_to_ir_type(ctype->u.function.return_type);
 
-      global = trans_unit_add_function(builder->trans_unit, cdecl.name,
-          return_type, arity, ctype->u.function.variable_arity,
-          arg_ir_types);
+    if (global == NULL) {
+      IrType return_type =
+          struct_ret ? (IrType){.t = IR_VOID}
+                     : c_type_to_ir_type(ctype->u.function.return_type);
+
+      global = trans_unit_add_function(
+          builder->trans_unit, cdecl.name, return_type, arity,
+          ctype->u.function.variable_arity, arg_ir_types);
     }
 
     assert(global->type.t == IR_FUNCTION);
@@ -1103,9 +1092,7 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
 
     if (global == NULL) {
       global = trans_unit_add_var(
-          builder->trans_unit,
-          cdecl.name,
-          c_type_to_ir_type(ctype));
+          builder->trans_unit, cdecl.name, c_type_to_ir_type(ctype));
     }
 
     *result_c_type = cdecl.type;
@@ -1114,15 +1101,14 @@ static IrGlobal *ir_global_for_decl(IrBuilder *builder, Env *env,
   }
 }
 
-static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *statement);
+static void ir_gen_statement(
+    IrBuilder *builder, Env *env, ASTStatement *statement);
 
 static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 {
   switch (ctype->t) {
-  case INTEGER_TYPE:
-    return add_int_const(builder, c_type_to_ir_type(ctype), 0);
-  case POINTER_TYPE:
-    return add_global_const(builder, NULL);
+  case INTEGER_TYPE: return add_int_const(builder, c_type_to_ir_type(ctype), 0);
+  case POINTER_TYPE: return add_global_const(builder, NULL);
   case ARRAY_TYPE: {
     assert(!ctype->u.array.incomplete);
     // @TODO: This allocates unnecessarily by calling zero_initializer
@@ -1130,7 +1116,7 @@ static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
     IrConst *konst = add_array_const(builder, c_type_to_ir_type(ctype));
     for (u32 i = 0; i < ctype->u.array.size; i++) {
       konst->u.array_elems[i] =
-        *zero_initializer(builder, ctype->u.array.elem_type);
+          *zero_initializer(builder, ctype->u.array.elem_type);
     }
     return konst;
   }
@@ -1145,8 +1131,7 @@ static IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
     }
     return konst;
   }
-  default:
-    UNIMPLEMENTED;
+  default: UNIMPLEMENTED;
   }
 }
 
@@ -1178,27 +1163,26 @@ static u32 c_type_num_fields(CType *type)
   }
 }
 
-static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
-    CType *type, ASTInitializer *init, bool const_context,
-    CInitializer *c_init)
+static void make_c_initializer(
+    IrBuilder *builder, Env *env, Pool *pool, CType *type, ASTInitializer *init,
+    bool const_context, CInitializer *c_init)
 {
   c_init->type = type;
 
-  if (type->t == ARRAY_TYPE
-      && init->t == EXPR_INITIALIZER
+  if (type->t == ARRAY_TYPE && init->t == EXPR_INITIALIZER
       && init->u.expr->t == STRING_LITERAL_EXPR) {
     c_init->t = C_INIT_COMPOUND;
 
     String str = init->u.expr->u.string_literal;
     CInitializer *init_elems =
-      pool_alloc(pool, (str.len + 1) * sizeof *init_elems);
-    for (u32 i = 0 ; i < str.len + 1; i++) {
+        pool_alloc(pool, (str.len + 1) * sizeof *init_elems);
+    for (u32 i = 0; i < str.len + 1; i++) {
       CType *char_type = &env->type_env.char_type;
-      init_elems[i] = (CInitializer) {
-        .t = C_INIT_LEAF,
+      init_elems[i] = (CInitializer){
+          .t = C_INIT_LEAF,
           .type = char_type,
           .u.leaf_value =
-            value_const(c_type_to_ir_type(char_type), str.chars[i]),
+              value_const(c_type_to_ir_type(char_type), str.chars[i]),
       };
     }
 
@@ -1209,7 +1193,7 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
     u32 num_fields = c_type_num_fields(type);
 
     CInitializer *init_elems =
-      pool_alloc(pool, num_fields * sizeof *init_elems);
+        pool_alloc(pool, num_fields * sizeof *init_elems);
     memset(init_elems, 0, num_fields * sizeof *init_elems);
     c_init->u.sub_elems = init_elems;
 
@@ -1246,8 +1230,8 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
         }
         case INDEX_DESIGNATOR: {
           assert(curr_elem->type->t == ARRAY_TYPE);
-          IrConst *index = eval_constant_expr(builder,
-              env, designator_list->u.index_expr);
+          IrConst *index =
+              eval_constant_expr(builder, env, designator_list->u.index_expr);
           assert(index->type.t == IR_INT);
 
           field_type = curr_elem->type->u.array.elem_type;
@@ -1261,11 +1245,11 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
         curr_elem->type = field_type;
 
         if ((curr_elem->type->t == STRUCT_TYPE
-            || curr_elem->type->t == ARRAY_TYPE)
+             || curr_elem->type->t == ARRAY_TYPE)
             && curr_elem->u.sub_elems == NULL) {
           u32 inner_num_fields = c_type_num_fields(field_type);
           CInitializer *sub_elems =
-            pool_alloc(pool, inner_num_fields * sizeof *sub_elems);
+              pool_alloc(pool, inner_num_fields * sizeof *sub_elems);
           memset(sub_elems, 0, inner_num_fields * sizeof *sub_elems);
           curr_elem->u.sub_elems = sub_elems;
         }
@@ -1286,16 +1270,16 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
         break;
       case STRUCT_TYPE:
         curr_elem_type =
-          ARRAY_REF(&containing_init->type->u.strukt.fields,
-            CDecl, curr_elem_index)
-          ->type;
+            ARRAY_REF(
+                &containing_init->type->u.strukt.fields, CDecl, curr_elem_index)
+                ->type;
         break;
-      default:
-        UNREACHABLE;
+      default: UNREACHABLE;
       }
 
-      make_c_initializer(builder, env, pool, curr_elem_type,
-          elems->initializer, const_context, curr_elem);
+      make_c_initializer(
+          builder, env, pool, curr_elem_type, elems->initializer, const_context,
+          curr_elem);
 
       curr_elem_index++;
       elems = elems->next;
@@ -1325,8 +1309,7 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 
         break;
       }
-      default:
-        UNIMPLEMENTED;
+      default: UNIMPLEMENTED;
       }
     } else {
       Term term = ir_gen_expr(builder, env, expr, RVALUE_CONTEXT);
@@ -1340,11 +1323,9 @@ static void make_c_initializer(IrBuilder *builder, Env *env, Pool *pool,
 static bool is_full_initializer(CInitializer *c_init)
 {
   CType *type = c_init->type;
-  if (type == NULL)
-    return false;
+  if (type == NULL) return false;
 
-  if (c_init->t == C_INIT_LEAF)
-    return true;
+  if (c_init->t == C_INIT_LEAF) return true;
 
   u32 num_elems;
   switch (type->t) {
@@ -1352,11 +1333,8 @@ static bool is_full_initializer(CInitializer *c_init)
     assert(!type->u.array.incomplete);
     num_elems = type->u.array.size;
     break;
-  case STRUCT_TYPE:
-    num_elems = type->u.strukt.fields.size;
-    break;
-  default:
-    UNREACHABLE;
+  case STRUCT_TYPE: num_elems = type->u.strukt.fields.size; break;
+  default: UNREACHABLE;
   }
 
   for (u32 i = 0; i < num_elems; i++) {
@@ -1367,12 +1345,12 @@ static bool is_full_initializer(CInitializer *c_init)
   return true;
 }
 
-static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
-    IrValue base_ptr, CInitializer *c_init, u32 current_offset)
+static void ir_gen_c_init(
+    IrBuilder *builder, TypeEnv *type_env, IrValue base_ptr,
+    CInitializer *c_init, u32 current_offset)
 {
   CType *type = c_init->type;
-  if (type == NULL)
-    return;
+  if (type == NULL) return;
 
   switch (type->t) {
   case ARRAY_TYPE: {
@@ -1383,8 +1361,8 @@ static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
     u32 elem_size = size_of_c_type(type->u.array.elem_type);
 
     for (u32 i = 0; i < type->u.array.size; i++) {
-      ir_gen_c_init(builder, type_env, base_ptr, c_init->u.sub_elems + i,
-          current_offset);
+      ir_gen_c_init(
+          builder, type_env, base_ptr, c_init->u.sub_elems + i, current_offset);
       current_offset += elem_size;
     }
     break;
@@ -1395,25 +1373,27 @@ static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
       IrStructField *fields = type->u.strukt.ir_type->u.strukt.fields;
       for (u32 i = 0; i < type->u.strukt.fields.size; i++) {
         u32 field_offset = current_offset + fields[i].offset;
-        ir_gen_c_init(builder, type_env, base_ptr,
-            c_init->u.sub_elems + i, field_offset);
+        ir_gen_c_init(
+            builder, type_env, base_ptr, c_init->u.sub_elems + i, field_offset);
       }
       break;
     }
     // Struct values can be initialized with expressions.
     case C_INIT_LEAF: {
-      IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,
-          3 * sizeof *memcpy_args);
-      memcpy_args[0] = build_binary_instr(builder, OP_ADD, base_ptr,
-          value_const(c_type_to_ir_type(type_env->int_ptr_type),
-            current_offset));
+      IrValue *memcpy_args =
+          pool_alloc(&builder->trans_unit->pool, 3 * sizeof *memcpy_args);
+      memcpy_args[0] = build_binary_instr(
+          builder, OP_ADD, base_ptr,
+          value_const(
+              c_type_to_ir_type(type_env->int_ptr_type), current_offset));
       memcpy_args[1] = c_init->u.leaf_value;
-      memcpy_args[2] = value_const(c_type_to_ir_type(type_env->size_type),
-          size_of_c_type(type));
+      memcpy_args[2] = value_const(
+          c_type_to_ir_type(type_env->size_type), size_of_c_type(type));
 
       // @TODO: Open-code this for small sizes
-      build_call(builder, builtin_memcpy(builder),
-          (IrType) { .t = IR_POINTER }, 3, memcpy_args);
+      build_call(
+          builder, builtin_memcpy(builder), (IrType){.t = IR_POINTER}, 3,
+          memcpy_args);
       break;
     }
     }
@@ -1422,19 +1402,21 @@ static void ir_gen_c_init(IrBuilder *builder, TypeEnv *type_env,
     assert(c_init->t == C_INIT_LEAF);
 
     IrType int_ptr_type = c_type_to_ir_type(type_env->int_ptr_type);
-    IrValue field_ptr = build_binary_instr(builder, OP_ADD,
-        base_ptr, value_const(int_ptr_type, current_offset));
+    IrValue field_ptr = build_binary_instr(
+        builder, OP_ADD, base_ptr, value_const(int_ptr_type, current_offset));
     build_store(builder, field_ptr, c_init->u.leaf_value);
     break;
   }
   }
 }
 
-static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
-    Term right, IrOp ir_op, Term *pre_assign_value);
+static Term ir_gen_assign_op(
+    IrBuilder *builder, Env *env, Term left, Term right, IrOp ir_op,
+    Term *pre_assign_value);
 
-void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
-    CType *function_type, ASTFunctionDef *function_def)
+void ir_gen_function(
+    IrBuilder *builder, Env *env, IrGlobal *global, CType *function_type,
+    ASTFunctionDef *function_def)
 {
   IrConst *konst = add_init_to_function(builder->trans_unit, global);
   IrFunction *function = &konst->u.function;
@@ -1455,18 +1437,17 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
   // parameter when parsing function parameter declarators, since
   // this has nothing to do with the type.
   ASTParameterDecl *param =
-    params_for_function_declarator(function_def->declarator);
+      params_for_function_declarator(function_def->declarator);
   for (u32 i = 0; param != NULL; i++, param = param->next) {
     if (param->t == ELLIPSIS_DECL) {
       assert(param->next == NULL);
       continue;
     }
 
-    CType *decl_spec_type = decl_specifier_list_to_c_type(
-        builder, env, param->decl_specifier_list);
+    CType *decl_spec_type =
+        decl_specifier_list_to_c_type(builder, env, param->decl_specifier_list);
     CDecl cdecl;
-    decl_to_cdecl(builder, env, decl_spec_type,
-        param->declarator, &cdecl);
+    decl_to_cdecl(builder, env, decl_spec_type, param->declarator, &cdecl);
 
     if (cdecl.type->t == VOID_TYPE) {
       assert(i == 0);
@@ -1484,12 +1465,11 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
     cdecl_to_binding(builder, &cdecl, binding);
 
     u32 ir_arg_index = i;
-    if (function_type->u.function.return_type->t == STRUCT_TYPE)
-      ir_arg_index++;
+    if (function_type->u.function.return_type->t == STRUCT_TYPE) ir_arg_index++;
     Term arg = {
-      .ctype = cdecl.type,
-      .value = value_arg(ir_arg_index,
-          global->type.u.function.arg_types[ir_arg_index]),
+        .ctype = cdecl.type,
+        .value = value_arg(
+            ir_arg_index, global->type.u.function.arg_types[ir_arg_index]),
     };
     ir_gen_assign_op(builder, env, binding->term, arg, OP_INVALID, NULL);
   }
@@ -1499,13 +1479,13 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
   Array(IrInstr *) *instrs = &builder->current_block->instrs;
   if (instrs->size == 0
       || ((*ARRAY_LAST(instrs, IrInstr *))->op != OP_RET
-        && (*ARRAY_LAST(instrs, IrInstr *))->op != OP_RET_VOID)) {
+          && (*ARRAY_LAST(instrs, IrInstr *))->op != OP_RET_VOID)) {
     // @NOTE: We emit a ret_void here even if the function doesn't return
     // void. This ret is purely to ensure that every block ends in a
     // terminating instruction (ret, ret_void, branch, or cond) as it makes
     // it easier for us. We don't emit a warning because we don't know if
     // this block is actually reachable.
-    build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
+    build_nullary_instr(builder, OP_RET_VOID, (IrType){.t = IR_VOID});
   }
 
   env->scope = env->scope->parent_scope;
@@ -1514,8 +1494,8 @@ void ir_gen_function(IrBuilder *builder, Env *env, IrGlobal *global,
 
 IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init);
 
-void const_gen_c_init_array(IrBuilder *builder,
-    CInitializer *c_init, IrConst *konst, u32 *const_index)
+void const_gen_c_init_array(
+    IrBuilder *builder, CInitializer *c_init, IrConst *konst, u32 *const_index)
 {
   CType *type = c_init->type;
   assert(type->t == ARRAY_TYPE);
@@ -1534,10 +1514,10 @@ void const_gen_c_init_array(IrBuilder *builder,
 
       if (sub_init->type == NULL) {
         konst->u.array_elems[*const_index + i] =
-          *zero_initializer(builder, elem_type);
+            *zero_initializer(builder, elem_type);
       } else {
         konst->u.array_elems[*const_index + i] =
-          *const_gen_c_init(builder, sub_init);
+            *const_gen_c_init(builder, sub_init);
       }
     }
 
@@ -1583,8 +1563,7 @@ IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
     assert(value.t == IR_VALUE_GLOBAL);
     return add_global_const(builder, value.u.global);
   }
-  default:
-    UNIMPLEMENTED;
+  default: UNIMPLEMENTED;
   }
 }
 
@@ -1592,17 +1571,14 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 {
   Scope global_scope;
   global_scope.parent_scope = NULL;
-  Array(Binding)* global_bindings = &global_scope.bindings;
+  Array(Binding) *global_bindings = &global_scope.bindings;
   ARRAY_INIT(global_bindings, Binding, 10);
 
   // This is used for sizeof expr. We switch to this function, ir_gen the
   // expression, and then switch back, keeping only the type of the resulting
   // Term.
   IrGlobal *scratch_function = trans_unit_add_function(
-      builder->trans_unit,
-      "__scratch",
-      (IrType) { .t = IR_VOID },
-      0, false, NULL);
+      builder->trans_unit, "__scratch", (IrType){.t = IR_VOID}, 0, false, NULL);
   add_init_to_function(builder->trans_unit, scratch_function);
 
   Env env;
@@ -1631,11 +1607,8 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
       IrLinkage linkage = IR_GLOBAL_LINKAGE;
       while (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER) {
         switch (decl_specifier_list->u.storage_class_specifier) {
-        case STATIC_SPECIFIER:
-          linkage = IR_LOCAL_LINKAGE;
-          break;
-        default:
-          UNIMPLEMENTED;
+        case STATIC_SPECIFIER: linkage = IR_LOCAL_LINKAGE; break;
+        default: UNIMPLEMENTED;
         }
 
         decl_specifier_list = decl_specifier_list->next;
@@ -1643,16 +1616,16 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
       bool is_inline = false;
       while (decl_specifier_list != NULL
-          && decl_specifier_list->t == FUNCTION_SPECIFIER
-          && decl_specifier_list->u.function_specifier == INLINE_SPECIFIER) {
+             && decl_specifier_list->t == FUNCTION_SPECIFIER
+             && decl_specifier_list->u.function_specifier == INLINE_SPECIFIER) {
         is_inline = true;
         decl_specifier_list = decl_specifier_list->next;
       }
 
       ASTDeclarator *declarator = func->declarator;
 
-      global = ir_global_for_decl(builder, &env, decl_specifier_list,
-          declarator, NULL, &global_type);
+      global = ir_global_for_decl(
+          builder, &env, decl_specifier_list, declarator, NULL, &global_type);
       global->linkage = linkage;
 
       Binding *binding = ARRAY_APPEND(global_bindings, Binding);
@@ -1662,18 +1635,18 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
       binding->term.value = value_global(global);
 
       if (is_inline) {
-        *ARRAY_APPEND(&env.inline_functions, InlineFunction) =
-          (InlineFunction) {
+        *ARRAY_APPEND(&env.inline_functions, InlineFunction) = (InlineFunction){
             .global = global,
             .function_type = global_type,
-            .function_def = {
-              .decl_specifier_list = decl_specifier_list,
-              .declarator = declarator,
-              .old_style_param_decl_list =
-                func->old_style_param_decl_list,
-              .body = func->body,
-            },
-          };
+            .function_def =
+                {
+                    .decl_specifier_list = decl_specifier_list,
+                    .declarator = declarator,
+                    .old_style_param_decl_list =
+                        func->old_style_param_decl_list,
+                    .body = func->body,
+                },
+        };
       } else {
         ir_gen_function(builder, &env, global, global_type, func);
       }
@@ -1690,20 +1663,21 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
           && decl_specifier_list->u.storage_class_specifier == EXTERN_SPECIFIER
           && decl_specifier_list->next != NULL
           && decl_specifier_list->next->t == FUNCTION_SPECIFIER
-          && decl_specifier_list->next->u.function_specifier == INLINE_SPECIFIER) {
+          && decl_specifier_list->next->u.function_specifier
+                 == INLINE_SPECIFIER) {
         decl_specifier_list = decl_specifier_list->next->next;
 
-        CType *decl_spec_type = decl_specifier_list_to_c_type(
-            builder, &env, decl_specifier_list);
+        CType *decl_spec_type =
+            decl_specifier_list_to_c_type(builder, &env, decl_specifier_list);
         CDecl cdecl;
-        decl_to_cdecl(builder, &env, decl_spec_type,
-            init_declarator->declarator, &cdecl);
+        decl_to_cdecl(
+            builder, &env, decl_spec_type, init_declarator->declarator, &cdecl);
 
         InlineFunction *matching = NULL;
 
         for (u32 i = 0; i < env.inline_functions.size; i++) {
           InlineFunction *inline_function =
-            ARRAY_REF(&env.inline_functions, InlineFunction, i);
+              ARRAY_REF(&env.inline_functions, InlineFunction, i);
           if (streq(inline_function->global->name, cdecl.name)) {
             assert(c_type_eq(cdecl.type, inline_function->function_type));
             matching = inline_function;
@@ -1712,25 +1686,29 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
         }
         assert(matching != NULL);
 
-        ir_gen_function(builder, &env, matching->global,
-            matching->function_type, &matching->function_def);
-      } else if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
-          && decl_specifier_list->u.storage_class_specifier == TYPEDEF_SPECIFIER) {
+        ir_gen_function(
+            builder, &env, matching->global, matching->function_type,
+            &matching->function_def);
+      } else if (
+          decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
+          && decl_specifier_list->u.storage_class_specifier
+                 == TYPEDEF_SPECIFIER) {
         assert(init_declarator != NULL);
         decl_specifier_list = decl_specifier_list->next;
-        CType *decl_spec_type = decl_specifier_list_to_c_type(
-            builder, &env, decl_specifier_list);
+        CType *decl_spec_type =
+            decl_specifier_list_to_c_type(builder, &env, decl_specifier_list);
 
         while (init_declarator != NULL) {
           assert(init_declarator->initializer == NULL);
           CDecl cdecl;
-          decl_to_cdecl(builder, &env, decl_spec_type,
-              init_declarator->declarator, &cdecl);
+          decl_to_cdecl(
+              builder, &env, decl_spec_type, init_declarator->declarator,
+              &cdecl);
 
           TypeEnvEntry *new_type_alias =
-            pool_alloc(&env.type_env.pool, sizeof *new_type_alias);
-          *ARRAY_APPEND(&env.type_env.typedef_types, TypeEnvEntry *)
-            = new_type_alias;
+              pool_alloc(&env.type_env.pool, sizeof *new_type_alias);
+          *ARRAY_APPEND(&env.type_env.typedef_types, TypeEnvEntry *) =
+              new_type_alias;
           new_type_alias->name = cdecl.name;
           new_type_alias->type = *cdecl.type;
 
@@ -1749,8 +1727,9 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
           ASTDeclarator *declarator = init_declarator->declarator;
 
           // @TODO: Multiple declarators in one global decl.
-          global = ir_global_for_decl(builder, &env, type_specs,
-              declarator, init_declarator->initializer, &global_type);
+          global = ir_global_for_decl(
+              builder, &env, type_specs, declarator,
+              init_declarator->initializer, &global_type);
           bool is_extern = global_type->t == FUNCTION_TYPE;
 
           Binding *binding = ARRAY_APPEND(global_bindings, Binding);
@@ -1763,7 +1742,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
           while (decl_specifier_list != type_specs) {
             assert(decl_specifier_list->t == STORAGE_CLASS_SPECIFIER);
             ASTStorageClassSpecifier storage_class =
-              decl_specifier_list->u.storage_class_specifier;
+                decl_specifier_list->u.storage_class_specifier;
             if (storage_class == STATIC_SPECIFIER)
               global->linkage = IR_LOCAL_LINKAGE;
             else if (storage_class == EXTERN_SPECIFIER)
@@ -1777,8 +1756,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
           ASTInitializer *init = init_declarator->initializer;
           if (init == NULL) {
             if (!is_extern) {
-              global->initializer =
-                zero_initializer(builder, global_type);
+              global->initializer = zero_initializer(builder, global_type);
             }
           } else {
             assert(!is_extern);
@@ -1787,12 +1765,11 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
             pool_init(&c_init_pool, sizeof(CInitializer) * 5);
 
             CInitializer c_init;
-            make_c_initializer(builder, &env, &c_init_pool,
-                global_type, init, true, &c_init);
+            make_c_initializer(
+                builder, &env, &c_init_pool, global_type, init, true, &c_init);
             assert(c_type_eq(c_init.type, global_type));
 
-            global->initializer =
-              const_gen_c_init(builder, &c_init);
+            global->initializer = const_gen_c_init(builder, &c_init);
             pool_free(&c_init_pool);
           }
         }
@@ -1822,7 +1799,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
   }
 
   IrGlobal *first_global =
-    *ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, 0);
+      *ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, 0);
   assert(streq(first_global->name, "__scratch"));
   ARRAY_REMOVE(&builder->trans_unit->globals, IrGlobal *, 0);
 
@@ -1836,8 +1813,8 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
   array_free(global_bindings);
 }
 
-static void ir_gen_initializer(IrBuilder *builder, Env *env,
-    Term to_init, ASTInitializer *init)
+static void ir_gen_initializer(
+    IrBuilder *builder, Env *env, Term to_init, ASTInitializer *init)
 {
   Pool c_init_pool;
   pool_init(&c_init_pool, sizeof(CInitializer) * 5);
@@ -1848,22 +1825,25 @@ static void ir_gen_initializer(IrBuilder *builder, Env *env,
       builder, env, &c_init_pool, to_init.ctype, init, false, &c_init);
 
   if (!is_full_initializer(&c_init)) {
-    IrValue *memset_args = pool_alloc(&builder->trans_unit->pool,
-        3 * sizeof *memset_args);
+    IrValue *memset_args =
+        pool_alloc(&builder->trans_unit->pool, 3 * sizeof *memset_args);
     memset_args[0] = to_init.value;
     memset_args[1] = value_const(c_type_to_ir_type(&env->type_env.int_type), 0);
-    memset_args[2] = value_const(c_type_to_ir_type(env->type_env.size_type),
+    memset_args[2] = value_const(
+        c_type_to_ir_type(env->type_env.size_type),
         size_of_c_type(to_init.ctype));
 
     // @TODO: Open-code this for small sizes
-    build_call(builder, builtin_memset(builder),
-        (IrType) { .t = IR_POINTER }, 3, memset_args);
+    build_call(
+        builder, builtin_memset(builder), (IrType){.t = IR_POINTER}, 3,
+        memset_args);
   }
 
   // @TODO: Sort initializer element list by offset because something
   // something cache something something.
 
-  IrValue base_ptr = build_type_instr(builder, OP_CAST, to_init.value,
+  IrValue base_ptr = build_type_instr(
+      builder, OP_CAST, to_init.value,
       c_type_to_ir_type(env->type_env.int_ptr_type));
   ir_gen_c_init(builder, &env->type_env, base_ptr, &c_init, 0);
 
@@ -1874,14 +1854,14 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
 {
   ASTInitDeclarator *init_declarator = decl->init_declarators;
   CType *decl_spec_type =
-    decl_specifier_list_to_c_type(builder, env, decl->decl_specifier_list);
-  
+      decl_specifier_list_to_c_type(builder, env, decl->decl_specifier_list);
+
   while (init_declarator != NULL) {
     CDecl cdecl;
-    decl_to_cdecl(builder, env, decl_spec_type,
-        init_declarator->declarator, &cdecl);
-    infer_array_size_from_initializer(builder, env,
-        init_declarator->initializer, cdecl.type);
+    decl_to_cdecl(
+        builder, env, decl_spec_type, init_declarator->declarator, &cdecl);
+    infer_array_size_from_initializer(
+        builder, env, init_declarator->initializer, cdecl.type);
 
     Binding *binding = ARRAY_APPEND(&env->scope->bindings, Binding);
     cdecl_to_binding(builder, &cdecl, binding);
@@ -1894,12 +1874,13 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
       // fields, which just feels gross to do for every local scalar
       // value. Once we've fixed this, we should remove this case.
       if (initializer->t == EXPR_INITIALIZER
-          && !(initializer->u.expr->t == STRING_LITERAL_EXPR
-            && cdecl.type->t == ARRAY_TYPE)) {
-        Term init_term = ir_gen_expr(builder, env,
-            initializer->u.expr, RVALUE_CONTEXT);
-        ir_gen_assign_op(builder, env,
-            binding->term, init_term, OP_INVALID, NULL);
+          && !(
+              initializer->u.expr->t == STRING_LITERAL_EXPR
+              && cdecl.type->t == ARRAY_TYPE)) {
+        Term init_term =
+            ir_gen_expr(builder, env, initializer->u.expr, RVALUE_CONTEXT);
+        ir_gen_assign_op(
+            builder, env, binding->term, init_term, OP_INVALID, NULL);
       } else {
         ir_gen_initializer(builder, env, binding->term, initializer);
       }
@@ -1909,7 +1890,8 @@ static void add_decl_to_scope(IrBuilder *builder, Env *env, ASTDecl *decl)
   }
 }
 
-static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *statement)
+static void ir_gen_statement(
+    IrBuilder *builder, Env *env, ASTStatement *statement)
 {
   switch (statement->t) {
   case COMPOUND_STATEMENT: {
@@ -1943,22 +1925,20 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
   }
   case RETURN_STATEMENT: {
     if (statement->u.expr == NULL) {
-      build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
+      build_nullary_instr(builder, OP_RET_VOID, (IrType){.t = IR_VOID});
     } else {
-      Term term =
-        ir_gen_expr(builder, env, statement->u.expr, RVALUE_CONTEXT);
+      Term term = ir_gen_expr(builder, env, statement->u.expr, RVALUE_CONTEXT);
       if (term.ctype->t == STRUCT_TYPE) {
         // If we return a struct, the first arg is a pointer to space
         // the caller allocated for the struct.
-        Term caller_ptr = (Term) {
-          .ctype = term.ctype,
-          .value = value_arg(0, (IrType) { .t = IR_POINTER }),
+        Term caller_ptr = (Term){
+            .ctype = term.ctype,
+            .value = value_arg(0, (IrType){.t = IR_POINTER}),
         };
         ir_gen_assign_op(builder, env, caller_ptr, term, OP_INVALID, NULL);
-        build_nullary_instr(builder, OP_RET_VOID, (IrType) { .t = IR_VOID });
+        build_nullary_instr(builder, OP_RET_VOID, (IrType){.t = IR_VOID});
       } else {
-        CType *return_type =
-          env->current_function_type->u.function.return_type;
+        CType *return_type = env->current_function_type->u.function.return_type;
         Term converted = convert_type(builder, term, return_type);
         build_unary_instr(builder, OP_RET, converted.value);
       }
@@ -1971,18 +1951,18 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
     ASTExpr *condition_expr = statement->u.if_statement.condition;
     Term condition_term =
-      ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
+        ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
     switch (condition_term.ctype->t) {
     case INTEGER_TYPE: break;
     case POINTER_TYPE: {
       CType *int_ptr_type = env->type_env.int_ptr_type;
       condition_term.ctype = int_ptr_type;
-      condition_term.value = build_type_instr(builder,
-          OP_CAST, condition_term.value, c_type_to_ir_type(int_ptr_type));
+      condition_term.value = build_type_instr(
+          builder, OP_CAST, condition_term.value,
+          c_type_to_ir_type(int_ptr_type));
       break;
     }
-    default:
-      UNIMPLEMENTED;
+    default: UNIMPLEMENTED;
     }
     assert(condition_term.ctype->t == INTEGER_TYPE);
 
@@ -2036,8 +2016,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
     build_branch(builder, after);
 
     builder->current_block = switch_entry;
-    Term switch_value =
-      ir_gen_expr(builder, env, statement->u.expr_and_statement.expr, RVALUE_CONTEXT);
+    Term switch_value = ir_gen_expr(
+        builder, env, statement->u.expr_and_statement.expr, RVALUE_CONTEXT);
     assert(switch_value.ctype->t == INTEGER_TYPE);
 
     i32 default_index = -1;
@@ -2047,22 +2027,18 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
       if (label->is_default) {
         default_index = i;
       } else {
-        IrBlock *next =
-          pool_alloc(&builder->trans_unit->pool, sizeof *next);
-        block_init(next, "switch.cmp",
-            builder->current_function->blocks.size);
+        IrBlock *next = pool_alloc(&builder->trans_unit->pool, sizeof *next);
+        block_init(next, "switch.cmp", builder->current_function->blocks.size);
 
-        IrValue cmp = build_cmp(builder,
-            CMP_EQ,
-            switch_value.value,
-            value_const(switch_value.value.type,
-              label->value->u.integer));
+        IrValue cmp = build_cmp(
+            builder, CMP_EQ, switch_value.value,
+            value_const(switch_value.value.type, label->value->u.integer));
         build_cond(builder, cmp, label->block, next);
         builder->current_block = next;
 
         // @TODO: Shift them all down at once rather than one-by-one.
-        *ARRAY_INSERT(&builder->current_function->blocks,
-            IrBlock *, before_body) = next;
+        *ARRAY_INSERT(
+            &builder->current_function->blocks, IrBlock *, before_body) = next;
         before_body++;
       }
     }
@@ -2071,7 +2047,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
       build_branch(builder, after);
     } else {
       SwitchCase *default_case =
-        ARRAY_REF(&env->case_labels, SwitchCase, default_index);
+          ARRAY_REF(&env->case_labels, SwitchCase, default_index);
       build_branch(builder, default_case->block);
     }
     builder->current_block = after;
@@ -2091,8 +2067,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
 
     SwitchCase *switch_case = ARRAY_APPEND(&env->case_labels, SwitchCase);
     switch_case->is_default = false;
-    switch_case->value = eval_constant_expr(builder, env,
-        statement->u.expr_and_statement.expr);
+    switch_case->value =
+        eval_constant_expr(builder, env, statement->u.expr_and_statement.expr);
     switch_case->block = case_block;
     break;
   }
@@ -2129,7 +2105,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
     build_branch(builder, pre_header);
     builder->current_block = pre_header;
     Term condition_term =
-      ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
+        ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
     assert(condition_term.ctype->t == INTEGER_TYPE);
 
     IrBlock *body = add_block(builder, "while.body");
@@ -2148,7 +2124,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
     env->continue_target = prev_continue_target;
 
     *ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = after;
-    block_init(after, "while.after", builder->current_function->blocks.size - 1);
+    block_init(
+        after, "while.after", builder->current_function->blocks.size - 1);
     builder->current_block = after;
 
     break;
@@ -2164,7 +2141,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
     build_branch(builder, body);
     builder->current_block = pre_header;
     Term condition_term =
-      ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
+        ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
 
     assert(condition_term.ctype->t == INTEGER_TYPE);
     build_cond(builder, condition_term.value, body, after);
@@ -2217,12 +2194,11 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
     builder->current_block = pre_header;
     Term condition_term;
     if (f->condition != NULL) {
-      condition_term =
-        ir_gen_expr(builder, env, f->condition, RVALUE_CONTEXT);
+      condition_term = ir_gen_expr(builder, env, f->condition, RVALUE_CONTEXT);
     } else {
-      condition_term = (Term) {
-        .value = value_const(c_type_to_ir_type(&env->type_env.int_type), 1),
-        .ctype = &env->type_env.int_type,
+      condition_term = (Term){
+          .value = value_const(c_type_to_ir_type(&env->type_env.int_type), 1),
+          .ctype = &env->type_env.int_type,
       };
     }
 
@@ -2240,7 +2216,8 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
     builder->current_block = update;
 
     *ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = update;
-    block_init(update, "for.update", builder->current_function->blocks.size - 1);
+    block_init(
+        update, "for.update", builder->current_function->blocks.size - 1);
 
     env->break_target = prev_break_target;
     env->continue_target = prev_continue_target;
@@ -2275,8 +2252,7 @@ static void ir_gen_statement(IrBuilder *builder, Env *env, ASTStatement *stateme
     assert(env->continue_target != NULL);
     build_branch(builder, env->continue_target);
     break;
-  case EMPTY_STATEMENT:
-    break;
+  case EMPTY_STATEMENT: break;
   }
 }
 
@@ -2333,38 +2309,35 @@ static CType *type_of_int_literal(TypeEnv *type_env, IntLiteral int_literal)
   // This follows the table given in C99 6.4.4.1.5
   if (suffix == NO_SUFFIX) {
     CType *types[] = {
-      &type_env->int_type,
-      &type_env->long_type,
-      &type_env->long_long_type
-    };
+        &type_env->int_type, &type_env->long_type, &type_env->long_long_type};
     return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
   } else if (u_suffix && !l_suffix && !ll_suffix) {
     CType *types[] = {
-      &type_env->unsigned_int_type,
-      &type_env->unsigned_long_type,
-      &type_env->unsigned_long_long_type,
+        &type_env->unsigned_int_type,
+        &type_env->unsigned_long_type,
+        &type_env->unsigned_long_long_type,
     };
     return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
   } else if (!u_suffix && l_suffix) {
     CType *types[] = {
-      &type_env->long_type,
-      &type_env->long_long_type,
+        &type_env->long_type,
+        &type_env->long_long_type,
     };
     return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
   } else if (u_suffix && l_suffix) {
     CType *types[] = {
-      &type_env->unsigned_long_type,
-      &type_env->unsigned_long_long_type,
+        &type_env->unsigned_long_type,
+        &type_env->unsigned_long_long_type,
     };
     return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
   } else if (!u_suffix && ll_suffix) {
     CType *types[] = {
-      &type_env->long_long_type,
+        &type_env->long_long_type,
     };
     return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
   } else if (u_suffix && ll_suffix) {
     CType *types[] = {
-      &type_env->unsigned_long_long_type,
+        &type_env->unsigned_long_long_type,
     };
     return type_that_fits(types, STATIC_ARRAY_LENGTH(types), value);
   } else {
@@ -2373,48 +2346,48 @@ static CType *type_of_int_literal(TypeEnv *type_env, IntLiteral int_literal)
   }
 }
 
-static Term ir_gen_struct_field(IrBuilder *builder, Term struct_term,
-    char *field_name, ExprContext context)
+static Term ir_gen_struct_field(
+    IrBuilder *builder, Term struct_term, char *field_name, ExprContext context)
 {
-    assert(struct_term.value.type.t == IR_POINTER);
+  assert(struct_term.value.type.t == IR_POINTER);
 
-    CType *ctype = struct_term.ctype;
-    if (struct_term.ctype->t == POINTER_TYPE) {
-      ctype = ctype->u.pointee_type;
+  CType *ctype = struct_term.ctype;
+  if (struct_term.ctype->t == POINTER_TYPE) {
+    ctype = ctype->u.pointee_type;
+  }
+
+  assert(ctype->t == STRUCT_TYPE);
+  Array(CDecl) *fields = &ctype->u.strukt.fields;
+  CDecl *selected_field = NULL;
+  u32 field_number;
+  for (u32 i = 0; i < fields->size; i++) {
+    CDecl *field = ARRAY_REF(fields, CDecl, i);
+    if (streq(field->name, field_name)) {
+      selected_field = field;
+      field_number = i;
+      break;
     }
+  }
+  assert(selected_field != NULL);
 
-    assert(ctype->t == STRUCT_TYPE);
-    Array(CDecl) *fields = &ctype->u.strukt.fields;
-    CDecl *selected_field = NULL;
-    u32 field_number;
-    for (u32 i = 0; i < fields->size; i++) {
-      CDecl *field = ARRAY_REF(fields, CDecl, i);
-      if (streq(field->name, field_name)) {
-        selected_field = field;
-        field_number = i;
-        break;
-      }
-    }
-    assert(selected_field != NULL);
+  IrValue value = build_field(
+      builder, struct_term.value, *ctype->u.strukt.ir_type, field_number);
+  IrType *struct_ir_type = ctype->u.strukt.ir_type;
+  assert(struct_ir_type->t == IR_STRUCT);
+  IrType field_type = struct_ir_type->u.strukt.fields[field_number].type;
 
-    IrValue value = build_field(builder, struct_term.value,
-        *ctype->u.strukt.ir_type, field_number);
-    IrType *struct_ir_type = ctype->u.strukt.ir_type;
-    assert(struct_ir_type->t == IR_STRUCT);
-    IrType field_type = struct_ir_type->u.strukt.fields[field_number].type;
+  if (context == RVALUE_CONTEXT && selected_field->type->t != STRUCT_TYPE
+      && selected_field->type->t != ARRAY_TYPE) {
+    value = build_load(builder, value, field_type);
+  }
 
-    if (context == RVALUE_CONTEXT
-        && selected_field->type->t != STRUCT_TYPE
-        && selected_field->type->t != ARRAY_TYPE) {
-      value = build_load(builder, value, field_type);
-    }
-
-    return (Term) { .ctype = selected_field->type, .value = value };
+  return (Term){.ctype = selected_field->type, .value = value};
 }
 
 // @TODO: Implement this fully
-void do_arithmetic_conversions_with_blocks(IrBuilder *builder, Term *left,
-    IrBlock *left_block, Term *right, IrBlock *right_block)
+void do_arithmetic_conversions_with_blocks(
+    IrBuilder *builder, Term *left, IrBlock *left_block, Term *right,
+    IrBlock *right_block)
 {
   assert(left->ctype->t == INTEGER_TYPE && right->ctype->t == INTEGER_TYPE);
 
@@ -2458,7 +2431,8 @@ void do_arithmetic_conversions_with_blocks(IrBuilder *builder, Term *left,
       *signed_term = convert_type(builder, *signed_term, unsigned_term->ctype);
     } else if (rank(signed_term->ctype) > rank(unsigned_term->ctype)) {
       builder->current_block = unsigned_block;
-      *unsigned_term = convert_type(builder, *unsigned_term, signed_term->ctype);
+      *unsigned_term =
+          convert_type(builder, *unsigned_term, signed_term->ctype);
     } else {
       UNIMPLEMENTED;
     }
@@ -2469,8 +2443,8 @@ void do_arithmetic_conversions_with_blocks(IrBuilder *builder, Term *left,
 
 void do_arithmetic_conversions(IrBuilder *builder, Term *left, Term *right)
 {
-  do_arithmetic_conversions_with_blocks(builder, left, builder->current_block,
-      right, builder->current_block);
+  do_arithmetic_conversions_with_blocks(
+      builder, left, builder->current_block, right, builder->current_block);
 }
 
 static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
@@ -2484,12 +2458,13 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
   if (left.ctype->t == INTEGER_TYPE && right.ctype->t == INTEGER_TYPE) {
     do_arithmetic_conversions(builder, &left, &right);
 
-    IrValue value = build_binary_instr(builder, OP_ADD, left.value, right.value);
+    IrValue value =
+        build_binary_instr(builder, OP_ADD, left.value, right.value);
 
     // @TODO: Determine type correctly
-    return (Term) {
-      .ctype = left.ctype,
-      .value = value,
+    return (Term){
+        .ctype = left.ctype,
+        .value = value,
     };
   } else if (left_is_pointer ^ right_is_pointer) {
     Term pointer = left_is_pointer ? left : right;
@@ -2508,11 +2483,11 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
         offset *= pointee_type->u.array.ir_type->u.array.size;
       }
 
-      IrType array = c_type_to_ir_type(
-          array_type(builder, &env->type_env, pointee_type));
-      return (Term) {
-        .ctype = result_type,
-        .value = build_field(builder, pointer.value, array, offset),
+      IrType array =
+          c_type_to_ir_type(array_type(builder, &env->type_env, pointee_type));
+      return (Term){
+          .ctype = result_type,
+          .value = build_field(builder, pointer.value, array, offset),
       };
     }
 
@@ -2520,22 +2495,20 @@ static Term ir_gen_add(IrBuilder *builder, Env *env, Term left, Term right)
     IrType pointer_int_type = c_type_to_ir_type(env->type_env.int_ptr_type);
 
     IrValue zext =
-      build_type_instr(builder, OP_ZEXT, other.value, pointer_int_type);
+        build_type_instr(builder, OP_ZEXT, other.value, pointer_int_type);
     IrValue ptr_to_int =
-      build_type_instr(builder, OP_CAST, pointer.value, pointer_int_type);
+        build_type_instr(builder, OP_CAST, pointer.value, pointer_int_type);
     IrValue addend = build_binary_instr(
-        builder,
-        OP_MUL,
-        zext,
+        builder, OP_MUL, zext,
         value_const(pointer_int_type, size_of_c_type(pointee_type)));
 
     IrValue sum = build_binary_instr(builder, OP_ADD, ptr_to_int, addend);
-    IrValue int_to_ptr = build_type_instr(builder, OP_CAST, sum,
-        c_type_to_ir_type(result_type));
+    IrValue int_to_ptr =
+        build_type_instr(builder, OP_CAST, sum, c_type_to_ir_type(result_type));
 
-    return (Term) {
-      .ctype = result_type,
-      .value = int_to_ptr,
+    return (Term){
+        .ctype = result_type,
+        .value = int_to_ptr,
     };
   } else {
     UNIMPLEMENTED;
@@ -2553,12 +2526,13 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
   if (left.ctype->t == INTEGER_TYPE && right.ctype->t == INTEGER_TYPE) {
     do_arithmetic_conversions(builder, &left, &right);
 
-    IrValue value = build_binary_instr(builder, OP_SUB, left.value, right.value);
+    IrValue value =
+        build_binary_instr(builder, OP_SUB, left.value, right.value);
 
     // @TODO: Determine type correctly
-    return (Term) {
-      .ctype = left.ctype,
-      .value = value,
+    return (Term){
+        .ctype = left.ctype,
+        .value = value,
     };
   } else if (left_is_pointer && right_is_pointer) {
     CType *pointee_type = left.ctype->u.pointee_type;
@@ -2570,21 +2544,19 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
     CType *result_c_type = &env->type_env.int_type;
 
     IrValue left_int =
-      build_type_instr(builder, OP_CAST, left.value, pointer_int_type);
+        build_type_instr(builder, OP_CAST, left.value, pointer_int_type);
     IrValue right_int =
-      build_type_instr(builder, OP_CAST, right.value, pointer_int_type);
+        build_type_instr(builder, OP_CAST, right.value, pointer_int_type);
     IrValue diff = build_binary_instr(builder, OP_SUB, left_int, right_int);
     IrValue cast = build_type_instr(
         builder, OP_CAST, diff, c_type_to_ir_type(result_c_type));
     IrValue scaled = build_binary_instr(
-        builder,
-        OP_DIV,
-        cast,
+        builder, OP_DIV, cast,
         value_const(cast.type, size_of_c_type(pointee_type)));
 
-    return (Term) {
-      .ctype = result_c_type,
-      .value = scaled,
+    return (Term){
+        .ctype = result_c_type,
+        .value = scaled,
     };
   } else if (left_is_pointer && (right.ctype->t == INTEGER_TYPE)) {
     // @TODO: This block is almost identical to the corresponding block in
@@ -2598,35 +2570,31 @@ static Term ir_gen_sub(IrBuilder *builder, Env *env, Term left, Term right)
     IrType pointer_int_type = c_type_to_ir_type(env->type_env.int_ptr_type);
 
     IrValue zext =
-      build_type_instr(builder, OP_ZEXT, right.value, pointer_int_type);
+        build_type_instr(builder, OP_ZEXT, right.value, pointer_int_type);
     IrValue ptr_to_int =
-      build_type_instr(builder, OP_CAST, left.value, pointer_int_type);
+        build_type_instr(builder, OP_CAST, left.value, pointer_int_type);
     IrValue subtrahend = build_binary_instr(
-        builder,
-        OP_MUL,
-        zext,
+        builder, OP_MUL, zext,
         value_const(pointer_int_type, size_of_c_type(pointee_type)));
 
     IrValue sum = build_binary_instr(builder, OP_SUB, ptr_to_int, subtrahend);
-    IrValue int_to_ptr = build_type_instr(builder, OP_CAST, sum,
-        c_type_to_ir_type(result_type));
+    IrValue int_to_ptr =
+        build_type_instr(builder, OP_CAST, sum, c_type_to_ir_type(result_type));
 
-    return (Term) {
-      .ctype = result_type,
-      .value = int_to_ptr,
+    return (Term){
+        .ctype = result_type,
+        .value = int_to_ptr,
     };
   } else {
     UNIMPLEMENTED;
   }
 }
 
-static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
-    Term right, IrOp ir_op)
+static Term ir_gen_binary_operator(
+    IrBuilder *builder, Env *env, Term left, Term right, IrOp ir_op)
 {
-  if (ir_op == OP_ADD)
-    return ir_gen_add(builder, env, left, right);
-  if (ir_op == OP_SUB)
-    return ir_gen_sub(builder, env, left, right);
+  if (ir_op == OP_ADD) return ir_gen_add(builder, env, left, right);
+  if (ir_op == OP_SUB) return ir_gen_sub(builder, env, left, right);
 
   left.ctype = decay_to_pointer(&env->type_env, left.ctype);
   right.ctype = decay_to_pointer(&env->type_env, right.ctype);
@@ -2635,22 +2603,20 @@ static Term ir_gen_binary_operator(IrBuilder *builder, Env *env, Term left,
 
   CType *result_type = left.ctype;
   IrValue value = build_binary_instr(builder, ir_op, left.value, right.value);
-  return (Term) { .ctype = result_type, .value = value };
+  return (Term){.ctype = result_type, .value = value};
 }
 
-static Term ir_gen_binary_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
-    IrOp ir_op)
+static Term ir_gen_binary_expr(
+    IrBuilder *builder, Env *env, ASTExpr *expr, IrOp ir_op)
 {
   return ir_gen_binary_operator(
-      builder,
-      env,
+      builder, env,
       ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
-      ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT),
-      ir_op);
+      ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT), ir_op);
 }
 
-static Term ir_gen_cmp(IrBuilder *builder, Env *env, Term left,
-    Term right, IrCmp cmp)
+static Term ir_gen_cmp(
+    IrBuilder *builder, Env *env, Term left, Term right, IrCmp cmp)
 {
   left.ctype = decay_to_pointer(&env->type_env, left.ctype);
   right.ctype = decay_to_pointer(&env->type_env, right.ctype);
@@ -2678,20 +2644,19 @@ static Term ir_gen_cmp(IrBuilder *builder, Env *env, Term left,
 
       // Constant fold tautological comparisons between a global and NULL.
       if (ptr_term->value.t == IR_VALUE_GLOBAL) {
-        return (Term) {
-          .ctype = int_type,
-          .value = value_const(
-              c_type_to_ir_type(int_type), cmp == CMP_NEQ),
+        return (Term){
+            .ctype = int_type,
+            .value = value_const(c_type_to_ir_type(int_type), cmp == CMP_NEQ),
         };
       }
 
       *other_term = convert_type(builder, *other_term, ptr_term->ctype);
-    } else if (left.value.t == IR_VALUE_GLOBAL && right.value.t == IR_VALUE_GLOBAL) {
+    } else if (
+        left.value.t == IR_VALUE_GLOBAL && right.value.t == IR_VALUE_GLOBAL) {
       // Constant fold tautological comparisons between global.
-      return (Term) {
-        .ctype = int_type,
-        .value = value_const(
-            c_type_to_ir_type(int_type), cmp == CMP_NEQ),
+      return (Term){
+          .ctype = int_type,
+          .value = value_const(c_type_to_ir_type(int_type), cmp == CMP_NEQ),
       };
     }
   } else {
@@ -2718,29 +2683,29 @@ static Term ir_gen_cmp(IrBuilder *builder, Env *env, Term left,
 
   CType *result_type = &env->type_env.int_type;
   IrValue value = build_cmp(builder, cmp, left.value, right.value);
-  return (Term) { .ctype = result_type, .value = value };
+  return (Term){.ctype = result_type, .value = value};
 }
 
-static Term ir_gen_cmp_expr(IrBuilder *builder, Env *env, ASTExpr *expr, IrCmp cmp)
+static Term ir_gen_cmp_expr(
+    IrBuilder *builder, Env *env, ASTExpr *expr, IrCmp cmp)
 {
   return ir_gen_cmp(
-      builder,
-      env,
+      builder, env,
       ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
-      ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT),
-      cmp);
+      ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT), cmp);
 }
 
-static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
-    Term right, IrOp ir_op, Term *pre_assign_value)
+static Term ir_gen_assign_op(
+    IrBuilder *builder, Env *env, Term left, Term right, IrOp ir_op,
+    Term *pre_assign_value)
 {
   Term result = right;
 
   if (left.ctype->t == STRUCT_TYPE || left.ctype->t == ARRAY_TYPE) {
     assert(c_type_eq(left.ctype, right.ctype));
 
-    IrValue *memcpy_args = pool_alloc(&builder->trans_unit->pool,
-        3 * sizeof *memcpy_args);
+    IrValue *memcpy_args =
+        pool_alloc(&builder->trans_unit->pool, 3 * sizeof *memcpy_args);
     memcpy_args[0] = left.value;
     memcpy_args[1] = right.value;
     memcpy_args[2] = value_const(
@@ -2748,16 +2713,17 @@ static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
         size_of_ir_type(*left.ctype->u.strukt.ir_type));
 
     // @TODO: Open-code this for small sizes.
-    build_call(builder, builtin_memcpy(builder),
-        (IrType) { .t = IR_POINTER }, 3, memcpy_args);
+    build_call(
+        builder, builtin_memcpy(builder), (IrType){.t = IR_POINTER}, 3,
+        memcpy_args);
   } else {
     if (ir_op != OP_INVALID) {
-      Term load = (Term) {
-        .ctype = left.ctype,
-        .value = build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
+      Term load = (Term){
+          .ctype = left.ctype,
+          .value =
+              build_load(builder, left.value, c_type_to_ir_type(left.ctype)),
       };
-      if (pre_assign_value != NULL)
-        *pre_assign_value = load;
+      if (pre_assign_value != NULL) *pre_assign_value = load;
 
       result = ir_gen_binary_operator(builder, env, load, right, ir_op);
     }
@@ -2769,19 +2735,23 @@ static Term ir_gen_assign_op(IrBuilder *builder, Env *env, Term left,
   return result;
 }
 
-static Term ir_gen_assign_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
-    IrOp ir_op)
+static Term ir_gen_assign_expr(
+    IrBuilder *builder, Env *env, ASTExpr *expr, IrOp ir_op)
 {
   Term left = ir_gen_expr(builder, env, expr->u.binary_op.arg1, LVALUE_CONTEXT);
-  Term right = ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT);
+  Term right =
+      ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT);
   return ir_gen_assign_op(builder, env, left, right, ir_op, NULL);
 }
 
-static Term ir_gen_inc_dec(IrBuilder *builder, Env *env, ASTExpr *expr) {
+static Term ir_gen_inc_dec(IrBuilder *builder, Env *env, ASTExpr *expr)
+{
   IrOp op;
   switch (expr->t) {
-  case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR: op = OP_ADD; break;
-  case PRE_DECREMENT_EXPR: case POST_DECREMENT_EXPR: op = OP_SUB; break;
+  case PRE_INCREMENT_EXPR:
+  case POST_INCREMENT_EXPR: op = OP_ADD; break;
+  case PRE_DECREMENT_EXPR:
+  case POST_DECREMENT_EXPR: op = OP_SUB; break;
   default: UNREACHABLE;
   }
   bool is_pre = expr->t == PRE_INCREMENT_EXPR || expr->t == PRE_DECREMENT_EXPR;
@@ -2789,13 +2759,13 @@ static Term ir_gen_inc_dec(IrBuilder *builder, Env *env, ASTExpr *expr) {
   Term ptr = ir_gen_expr(builder, env, expr->u.unary_arg, LVALUE_CONTEXT);
   // @TODO: Correct type
   CType *one_type = &env->type_env.int_type;
-  Term one = (Term) {
-    .value = value_const(c_type_to_ir_type(one_type), 1),
-    .ctype = one_type,
+  Term one = (Term){
+      .value = value_const(c_type_to_ir_type(one_type), 1),
+      .ctype = one_type,
   };
   Term pre_assign_value;
   Term incremented =
-    ir_gen_assign_op(builder, env, ptr, one, op, &pre_assign_value);
+      ir_gen_assign_op(builder, env, ptr, one, op, &pre_assign_value);
 
   if (is_pre) {
     return incremented;
@@ -2804,8 +2774,8 @@ static Term ir_gen_inc_dec(IrBuilder *builder, Env *env, ASTExpr *expr) {
   }
 }
 
-static Term ir_gen_deref(IrBuilder *builder, TypeEnv *type_env,
-    Term pointer, ExprContext context)
+static Term ir_gen_deref(
+    IrBuilder *builder, TypeEnv *type_env, Term pointer, ExprContext context)
 {
   CType *pointer_type = decay_to_pointer(type_env, pointer.ctype);
   assert(pointer_type->t == POINTER_TYPE);
@@ -2819,43 +2789,47 @@ static Term ir_gen_deref(IrBuilder *builder, TypeEnv *type_env,
   } else {
     assert(context == RVALUE_CONTEXT);
 
-    value = build_load(
-        builder,
-        pointer.value,
-        c_type_to_ir_type(pointee_type));
+    value = build_load(builder, pointer.value, c_type_to_ir_type(pointee_type));
   }
 
-  return (Term) { .ctype = pointee_type, .value = value };
+  return (Term){.ctype = pointee_type, .value = value};
 }
 
-static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
-    ExprContext context)
+static Term ir_gen_expr(
+    IrBuilder *builder, Env *env, ASTExpr *expr, ExprContext context)
 {
   IGNORE(builder);
 
   ASTExprType t = expr->t;
   if (context == LVALUE_CONTEXT) {
-    switch(t) {
-    case IDENTIFIER_EXPR: case STRUCT_DOT_FIELD_EXPR:
-    case STRUCT_ARROW_FIELD_EXPR: case INDEX_EXPR: case DEREF_EXPR:
-      break;
-    default:
-      UNREACHABLE;
+    switch (t) {
+    case IDENTIFIER_EXPR:
+    case STRUCT_DOT_FIELD_EXPR:
+    case STRUCT_ARROW_FIELD_EXPR:
+    case INDEX_EXPR:
+    case DEREF_EXPR: break;
+    default: UNREACHABLE;
     }
   }
 
   if (context == CONST_CONTEXT) {
     switch (t) {
-    case ASSIGN_EXPR: case ADD_ASSIGN_EXPR: case MINUS_ASSIGN_EXPR:
-    case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR:
-    case PRE_DECREMENT_EXPR: case POST_DECREMENT_EXPR:
-    case BIT_XOR_ASSIGN_EXPR: case BIT_AND_ASSIGN_EXPR:
-    case BIT_OR_ASSIGN_EXPR: case RIGHT_SHIFT_ASSIGN_EXPR:
-    case MULTIPLY_ASSIGN_EXPR: case DIVIDE_ASSIGN_EXPR:
-    case FUNCTION_CALL_EXPR: case COMMA_EXPR:
-      UNREACHABLE;
-    default:
-      break;
+    case ASSIGN_EXPR:
+    case ADD_ASSIGN_EXPR:
+    case MINUS_ASSIGN_EXPR:
+    case PRE_INCREMENT_EXPR:
+    case POST_INCREMENT_EXPR:
+    case PRE_DECREMENT_EXPR:
+    case POST_DECREMENT_EXPR:
+    case BIT_XOR_ASSIGN_EXPR:
+    case BIT_AND_ASSIGN_EXPR:
+    case BIT_OR_ASSIGN_EXPR:
+    case RIGHT_SHIFT_ASSIGN_EXPR:
+    case MULTIPLY_ASSIGN_EXPR:
+    case DIVIDE_ASSIGN_EXPR:
+    case FUNCTION_CALL_EXPR:
+    case COMMA_EXPR: UNREACHABLE;
+    default: break;
     }
   }
 
@@ -2869,8 +2843,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     IrValue value;
 
     // Functions, arrays, and structs implicitly have their address taken.
-    if (context == LVALUE_CONTEXT
-        || binding->term.ctype->t == FUNCTION_TYPE
+    if (context == LVALUE_CONTEXT || binding->term.ctype->t == FUNCTION_TYPE
         || binding->term.ctype->t == ARRAY_TYPE
         || binding->term.ctype->t == STRUCT_TYPE) {
       assert(!binding->constant);
@@ -2881,13 +2854,12 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
       } else {
         assert(context != CONST_CONTEXT);
         value = build_load(
-            builder,
-            binding->term.value,
+            builder, binding->term.value,
             c_type_to_ir_type(binding->term.ctype));
       }
     }
 
-    return (Term) { .ctype = binding->term.ctype, .value = value };
+    return (Term){.ctype = binding->term.ctype, .value = value};
   }
   case STRUCT_ARROW_FIELD_EXPR: {
     ASTExpr *struct_expr = expr->u.struct_field.struct_expr;
@@ -2895,16 +2867,16 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     assert(struct_term.ctype->t == POINTER_TYPE);
     assert(struct_term.ctype->u.pointee_type->t == STRUCT_TYPE);
 
-    return ir_gen_struct_field(builder, struct_term,
-        expr->u.struct_field.field_name, context);
+    return ir_gen_struct_field(
+        builder, struct_term, expr->u.struct_field.field_name, context);
   }
   case STRUCT_DOT_FIELD_EXPR: {
     ASTExpr *struct_expr = expr->u.struct_field.struct_expr;
     Term struct_term = ir_gen_expr(builder, env, struct_expr, RVALUE_CONTEXT);
     assert(struct_term.ctype->t == STRUCT_TYPE);
 
-    return ir_gen_struct_field(builder, struct_term,
-        expr->u.struct_field.field_name, context);
+    return ir_gen_struct_field(
+        builder, struct_term, expr->u.struct_field.field_name, context);
   }
   case ADDRESS_OF_EXPR: {
     ASTExpr *inner_expr = expr->u.unary_arg;
@@ -2920,8 +2892,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
   }
   case INDEX_EXPR: {
     Term pointer = ir_gen_add(
-        builder,
-        env,
+        builder, env,
         ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT),
         ir_gen_expr(builder, env, expr->u.binary_op.arg2, RVALUE_CONTEXT));
     assert(pointer.ctype->t == POINTER_TYPE);
@@ -2929,12 +2900,12 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
   }
   case INT_LITERAL_EXPR: {
     CType *result_type =
-      type_of_int_literal(&env->type_env, expr->u.int_literal);
+        type_of_int_literal(&env->type_env, expr->u.int_literal);
 
-    IrValue value = value_const(
-        c_type_to_ir_type(result_type), expr->u.int_literal.value);
+    IrValue value =
+        value_const(c_type_to_ir_type(result_type), expr->u.int_literal.value);
 
-    return (Term) { .ctype = result_type, .value = value };
+    return (Term){.ctype = result_type, .value = value};
   }
   case STRING_LITERAL_EXPR: {
     char fmt[] = "__string_literal_%x";
@@ -2949,7 +2920,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     String string = expr->u.string_literal;
     u32 length = string.len + 1;
     CType *result_type =
-      array_type(builder, &env->type_env, &env->type_env.char_type);
+        array_type(builder, &env->type_env, &env->type_env.char_type);
     set_array_type_length(result_type, length);
     IrType ir_type = c_type_to_ir_type(result_type);
     IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
@@ -2958,19 +2929,16 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     IrConst *konst = add_array_const(builder, ir_type);
     IrType ir_char_type = c_type_to_ir_type(&env->type_env.char_type);
     for (u32 i = 0; i < length; i++) {
-      konst->u.array_elems[i] = (IrConst) {
-        .type = ir_char_type,
-        .u.integer = string.chars[i],
+      konst->u.array_elems[i] = (IrConst){
+          .type = ir_char_type,
+          .u.integer = string.chars[i],
       };
     }
 
     konst->type = ir_type;
     global->initializer = konst;
 
-    return (Term) {
-      .ctype = result_type,
-      .value = value_global(global)
-    };
+    return (Term){.ctype = result_type, .value = value_global(global)};
   }
   case ADD_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_ADD);
   case MINUS_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SUB);
@@ -2982,26 +2950,26 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     CType *result_type = &env->type_env.int_type;
     Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
 
-    return (Term) {
-      .value = build_unary_instr(builder, OP_BIT_NOT, term.value),
-      .ctype = result_type,
+    return (Term){
+        .value = build_unary_instr(builder, OP_BIT_NOT, term.value),
+        .ctype = result_type,
     };
   }
   case LOGICAL_NOT_EXPR: {
     CType *result_type = &env->type_env.int_type;
     Term inner = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
     Term zero = {
-      .ctype = result_type,
-      .value = value_const(c_type_to_ir_type(result_type), 0),
+        .ctype = result_type,
+        .value = value_const(c_type_to_ir_type(result_type), 0),
     };
     return ir_gen_cmp(builder, env, inner, zero, CMP_EQ);
   }
   case UNARY_MINUS_EXPR: {
     Term term = ir_gen_expr(builder, env, expr->u.unary_arg, RVALUE_CONTEXT);
 
-    return (Term) {
-      .value = build_unary_instr(builder, OP_NEG, term.value),
-      .ctype = term.ctype,
+    return (Term){
+        .value = build_unary_instr(builder, OP_NEG, term.value),
+        .ctype = term.ctype,
     };
   }
   case LEFT_SHIFT_EXPR: return ir_gen_binary_expr(builder, env, expr, OP_SHL);
@@ -3013,23 +2981,33 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
   case EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_EQ);
   case NOT_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_NEQ);
   case GREATER_THAN_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_SGT);
-  case GREATER_THAN_OR_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_SGTE);
+  case GREATER_THAN_OR_EQUAL_EXPR:
+    return ir_gen_cmp_expr(builder, env, expr, CMP_SGTE);
   case LESS_THAN_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_SLT);
-  case LESS_THAN_OR_EQUAL_EXPR: return ir_gen_cmp_expr(builder, env, expr, CMP_SLTE);
+  case LESS_THAN_OR_EQUAL_EXPR:
+    return ir_gen_cmp_expr(builder, env, expr, CMP_SLTE);
 
   case ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_INVALID);
   case ADD_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_ADD);
   case MINUS_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SUB);
-  case PRE_INCREMENT_EXPR: case POST_INCREMENT_EXPR:
-  case PRE_DECREMENT_EXPR: case POST_DECREMENT_EXPR:
-    return ir_gen_inc_dec(builder, env, expr);
-  case BIT_XOR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_XOR);
-  case BIT_AND_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_AND);
-  case BIT_OR_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_BIT_OR);
-  case RIGHT_SHIFT_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SHR);
-  case LEFT_SHIFT_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_SHL);
-  case MULTIPLY_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_MUL);
-  case DIVIDE_ASSIGN_EXPR: return ir_gen_assign_expr(builder, env, expr, OP_DIV);
+  case PRE_INCREMENT_EXPR:
+  case POST_INCREMENT_EXPR:
+  case PRE_DECREMENT_EXPR:
+  case POST_DECREMENT_EXPR: return ir_gen_inc_dec(builder, env, expr);
+  case BIT_XOR_ASSIGN_EXPR:
+    return ir_gen_assign_expr(builder, env, expr, OP_BIT_XOR);
+  case BIT_AND_ASSIGN_EXPR:
+    return ir_gen_assign_expr(builder, env, expr, OP_BIT_AND);
+  case BIT_OR_ASSIGN_EXPR:
+    return ir_gen_assign_expr(builder, env, expr, OP_BIT_OR);
+  case RIGHT_SHIFT_ASSIGN_EXPR:
+    return ir_gen_assign_expr(builder, env, expr, OP_SHR);
+  case LEFT_SHIFT_ASSIGN_EXPR:
+    return ir_gen_assign_expr(builder, env, expr, OP_SHL);
+  case MULTIPLY_ASSIGN_EXPR:
+    return ir_gen_assign_expr(builder, env, expr, OP_MUL);
+  case DIVIDE_ASSIGN_EXPR:
+    return ir_gen_assign_expr(builder, env, expr, OP_DIV);
   case FUNCTION_CALL_EXPR: {
     ASTExpr *callee_expr = expr->u.function_call.callee;
 
@@ -3046,25 +3024,25 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
         assert(call_arity == 1);
 
         Term va_list_ptr = ir_gen_expr(
-            builder, env, expr->u.function_call.arg_list->expr,
-            RVALUE_CONTEXT);
-        assert(va_list_ptr.ctype->t == ARRAY_TYPE
+            builder, env, expr->u.function_call.arg_list->expr, RVALUE_CONTEXT);
+        assert(
+            va_list_ptr.ctype->t == ARRAY_TYPE
             || va_list_ptr.ctype->t == POINTER_TYPE);
         assert(va_list_ptr.ctype->u.array.elem_type->t == STRUCT_TYPE);
 
         // @TODO: Search through the type env and asert that the elem
         // type is the same as the type bound to "va_list".
 
-        return (Term) {
-          .ctype = &env->type_env.void_type,
-          .value = build_builtin_va_start(builder, va_list_ptr.value),
+        return (Term){
+            .ctype = &env->type_env.void_type,
+            .value = build_builtin_va_start(builder, va_list_ptr.value),
         };
       } else if (streq(name, "__builtin_va_end")) {
         // va_end is a NOP for System V x64, so just return a dummy
         // value, and give it void type to ensure it's not used.
-        return (Term) {
-          .ctype = &env->type_env.void_type,
-          .value = value_const((IrType) { .t = IR_VOID }, 0),
+        return (Term){
+            .ctype = &env->type_env.void_type,
+            .value = value_const((IrType){.t = IR_VOID}, 0),
         };
       }
     }
@@ -3086,12 +3064,11 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     // Struct returns are handled in the frontend, by adding a pointer
     // parameter at the start, and allocating a local in the caller.
     bool struct_ret = callee.ctype->u.function.return_type->t == STRUCT_TYPE;
-    if (struct_ret)
-      call_arity++;
+    if (struct_ret) call_arity++;
 
     CType *return_type = callee.ctype->u.function.return_type;
-    IrValue *arg_array = pool_alloc(&builder->trans_unit->pool,
-        call_arity * sizeof(*arg_array));
+    IrValue *arg_array =
+        pool_alloc(&builder->trans_unit->pool, call_arity * sizeof(*arg_array));
 
     // If we have a struct return, then the IR parameters and the C
     // parameters are off by one. So we track "out_index" and "i"
@@ -3100,7 +3077,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     IrValue local_for_ret_value;
     if (struct_ret) {
       local_for_ret_value =
-        build_local(builder, c_type_to_ir_type(return_type));
+          build_local(builder, c_type_to_ir_type(return_type));
       arg_array[0] = local_for_ret_value;
       out_index++;
     }
@@ -3122,16 +3099,17 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
       arg_array[out_index] = arg_term.value;
     }
 
-    IrType return_ir_type = struct_ret
-      ? (IrType) { .t = IR_VOID }
-      : c_type_to_ir_type(return_type);
+    IrType return_ir_type =
+        struct_ret ? (IrType){.t = IR_VOID} : c_type_to_ir_type(return_type);
 
-    IrValue value = build_call(builder, callee.value, return_ir_type,
-        call_arity, arg_array);
-    if (struct_ret)
-      value = local_for_ret_value;
+    IrValue value = build_call(
+        builder, callee.value, return_ir_type, call_arity, arg_array);
+    if (struct_ret) value = local_for_ret_value;
 
-    return (Term) { .ctype = return_type, .value = value, };
+    return (Term){
+        .ctype = return_type,
+        .value = value,
+    };
   }
   case COMMA_EXPR:
     ir_gen_expr(builder, env, expr->u.binary_op.arg1, RVALUE_CONTEXT);
@@ -3141,18 +3119,19 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     ASTDeclarator *declarator = expr->u.type->declarator;
 
     CDecl cdecl;
-    CType *decl_spec_type = decl_specifier_list_to_c_type(
-        builder, env, decl_specifier_list);
+    CType *decl_spec_type =
+        decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
     decl_to_cdecl(builder, env, decl_spec_type, declarator, &cdecl);
 
     CType *result_type = env->type_env.size_type;
 
-    IrValue value = value_const(c_type_to_ir_type(result_type),
-        size_of_c_type(cdecl.type));
+    IrValue value =
+        value_const(c_type_to_ir_type(result_type), size_of_c_type(cdecl.type));
 
-    return (Term) { .ctype = result_type, .value = value };
+    return (Term){.ctype = result_type, .value = value};
   }
-  case LOGICAL_OR_EXPR: case LOGICAL_AND_EXPR: {
+  case LOGICAL_OR_EXPR:
+  case LOGICAL_AND_EXPR: {
     bool is_or = t == LOGICAL_OR_EXPR;
 
     IrBlock *rhs_block = add_block(builder, is_or ? "or.rhs" : "and.rhs");
@@ -3174,7 +3153,8 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     builder->current_block = rhs_block;
     Term rhs = ir_gen_expr(builder, env, rhs_expr, RVALUE_CONTEXT);
     assert(rhs.ctype->t == INTEGER_TYPE);
-    IrValue rhs_as_bool = build_cmp(builder, CMP_NEQ, rhs.value,
+    IrValue rhs_as_bool = build_cmp(
+        builder, CMP_NEQ, rhs.value,
         value_const(c_type_to_ir_type(rhs.ctype), 0));
     build_branch(builder, after_block);
 
@@ -3183,13 +3163,13 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
     builder->current_block = after_block;
     IrValue phi =
-      build_phi(builder, c_type_to_ir_type(&env->type_env.int_type), 2);
-    phi_set_param(phi, 0, lhs_resultant_block,
-        value_const(c_type_to_ir_type(&env->type_env.int_type),
-          is_or ? 1 : 0));
+        build_phi(builder, c_type_to_ir_type(&env->type_env.int_type), 2);
+    phi_set_param(
+        phi, 0, lhs_resultant_block,
+        value_const(c_type_to_ir_type(&env->type_env.int_type), is_or ? 1 : 0));
     phi_set_param(phi, 1, rhs_resultant_block, rhs_as_bool);
 
-    return (Term) { .ctype = &env->type_env.int_type, .value = phi };
+    return (Term){.ctype = &env->type_env.int_type, .value = phi};
   }
   case CONDITIONAL_EXPR: {
     IrBlock *then_block = add_block(builder, "ternary.then");
@@ -3198,7 +3178,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
     ASTExpr *condition_expr = expr->u.ternary_op.arg1;
     Term condition_term =
-      ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
+        ir_gen_expr(builder, env, condition_expr, RVALUE_CONTEXT);
     assert(condition_term.ctype->t == INTEGER_TYPE);
     build_cond(builder, condition_term.value, then_block, else_block);
 
@@ -3218,14 +3198,15 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
     // @TODO: The rest of the conversions specified in C99 6.5.15.
     CType *result_type = then_term.ctype;
-    if (then_term.ctype->t == INTEGER_TYPE && else_term.ctype->t == INTEGER_TYPE) {
-      do_arithmetic_conversions_with_blocks(builder,
-          &then_term, then_resultant_block,
-          &else_term, else_resultant_block);
-    } else if (then_term.ctype->t == POINTER_TYPE
-        && else_term.ctype->t == POINTER_TYPE
+    if (then_term.ctype->t == INTEGER_TYPE
+        && else_term.ctype->t == INTEGER_TYPE) {
+      do_arithmetic_conversions_with_blocks(
+          builder, &then_term, then_resultant_block, &else_term,
+          else_resultant_block);
+    } else if (
+        then_term.ctype->t == POINTER_TYPE && else_term.ctype->t == POINTER_TYPE
         && (then_term.ctype->u.pointee_type->t == VOID_TYPE
-          || else_term.ctype->u.pointee_type->t == VOID_TYPE)) {
+            || else_term.ctype->u.pointee_type->t == VOID_TYPE)) {
       // IR pointers are untyped, so this is a no-op conversion.
       result_type = pointer_type(&env->type_env, &env->type_env.void_type);
     } else {
@@ -3243,21 +3224,19 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     IrValue phi = build_phi(builder, then_term.value.type, 2);
     phi_set_param(phi, 0, then_resultant_block, then_term.value);
     phi_set_param(phi, 1, else_resultant_block, else_term.value);
-    return (Term) { .ctype = result_type, .value = phi };
+    return (Term){.ctype = result_type, .value = phi};
   }
   case COMPOUND_EXPR: {
-    CType *type =
-      type_name_to_c_type(builder, env, expr->u.compound.type_name);
+    CType *type = type_name_to_c_type(builder, env, expr->u.compound.type_name);
     ASTInitializer initializer = {
-      .t = BRACE_INITIALIZER,
-      .u.initializer_element_list
-        = expr->u.compound.initializer_element_list,
+        .t = BRACE_INITIALIZER,
+        .u.initializer_element_list = expr->u.compound.initializer_element_list,
     };
 
     infer_array_size_from_initializer(builder, env, &initializer, type);
 
     IrValue local = build_local(builder, c_type_to_ir_type(type));
-    Term compound_value = { .value = local, .ctype = type };
+    Term compound_value = {.value = local, .ctype = type};
 
     ir_gen_initializer(builder, env, compound_value, &initializer);
 
@@ -3272,7 +3251,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     // @TODO: Maybe we should clear the function out after using it.
     builder->current_function = env->scratch_function;
     builder->current_block =
-      *ARRAY_LAST(&builder->current_function->blocks, IrBlock *);
+        *ARRAY_LAST(&builder->current_function->blocks, IrBlock *);
 
     Term term = ir_gen_expr(builder, env, sizeof_expr, RVALUE_CONTEXT);
 
@@ -3283,22 +3262,22 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
     CType *result_type = env->type_env.size_type;
     IrValue value = value_const(c_type_to_ir_type(result_type), size);
-    return (Term) { .ctype = result_type, .value = value };
+    return (Term){.ctype = result_type, .value = value};
   }
   case CAST_EXPR: {
     CType *cast_type =
-      type_name_to_c_type(builder, env, expr->u.cast.cast_type);
-    Term castee =
-      ir_gen_expr(builder, env, expr->u.cast.arg, RVALUE_CONTEXT);
+        type_name_to_c_type(builder, env, expr->u.cast.cast_type);
+    Term castee = ir_gen_expr(builder, env, expr->u.cast.arg, RVALUE_CONTEXT);
     return convert_type(builder, castee, cast_type);
   }
   case BUILTIN_VA_ARG_EXPR: {
-    Term va_list_term = ir_gen_expr(builder, env,
-        expr->u.builtin_va_arg.va_list_expr, RVALUE_CONTEXT);
-    CType *arg_type = type_name_to_c_type(builder, env,
-        expr->u.builtin_va_arg.type_name);
+    Term va_list_term = ir_gen_expr(
+        builder, env, expr->u.builtin_va_arg.va_list_expr, RVALUE_CONTEXT);
+    CType *arg_type =
+        type_name_to_c_type(builder, env, expr->u.builtin_va_arg.type_name);
 
-    assert(va_list_term.ctype->t == ARRAY_TYPE
+    assert(
+        va_list_term.ctype->t == ARRAY_TYPE
         || va_list_term.ctype->t == POINTER_TYPE);
     assert(va_list_term.ctype->u.array.elem_type->t == STRUCT_TYPE);
 
@@ -3310,7 +3289,7 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
     IrGlobal *global_builtin_va_arg_int = NULL;
     for (u32 i = 0; i < builder->trans_unit->globals.size; i++) {
       IrGlobal *global =
-        *ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, i);
+          *ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, i);
       if (streq(global->name, "__builtin_va_arg_uint64")) {
         global_builtin_va_arg_int = global;
         break;
@@ -3320,21 +3299,18 @@ static Term ir_gen_expr(IrBuilder *builder, Env *env, ASTExpr *expr,
 
     // @PORT: We want "uint64_t" here.
     IrType unsigned_long_type =
-      c_type_to_ir_type(&env->type_env.unsigned_long_type);
+        c_type_to_ir_type(&env->type_env.unsigned_long_type);
 
     IrValue *args = malloc(sizeof *args * 1);
     args[0] = va_list_term.value;
-    Term builtin_result = (Term) {
-      .ctype = &env->type_env.unsigned_long_type,
-      .value = build_call(builder,
-          value_global(global_builtin_va_arg_int),
-          unsigned_long_type,
-          1, args),
+    Term builtin_result = (Term){
+        .ctype = &env->type_env.unsigned_long_type,
+        .value = build_call(
+            builder, value_global(global_builtin_va_arg_int),
+            unsigned_long_type, 1, args),
     };
     return convert_type(builder, builtin_result, arg_type);
   }
-  default:
-    printf("%d\n", t);
-    UNIMPLEMENTED;
+  default: printf("%d\n", t); UNIMPLEMENTED;
   }
 }

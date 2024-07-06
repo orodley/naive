@@ -1,9 +1,6 @@
 #include <assert.h>
 
-int foo(int **b)
-{
-  return **b;
-}
+int foo(int **b) { return **b; }
 
 int main()
 {

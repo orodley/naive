@@ -12,10 +12,11 @@ struct Foo
 int main()
 {
   struct Foo foos[5][5] = {
-    [3][2] = {
-      .bar.a = 3,
-      .bar.b[2][4] = 4,
-    },
+      [3][2] =
+          {
+              .bar.a = 3,
+              .bar.b[2][4] = 4,
+          },
   };
 
   assert(foos[3][2].bar.b[2][4] == 4);

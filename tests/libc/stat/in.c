@@ -8,7 +8,7 @@ int main()
 {
   struct stat s;
   int ret = stat("in.c", &s);
-  assert (ret == 0);
+  assert(ret == 0);
 
   printf("%d\n", s.st_mode);
 

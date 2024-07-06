@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809
-#include <stdio.h>
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "asm.h"
@@ -8,8 +8,8 @@
 #include "elf.h"
 #include "misc.h"
 #include "pool.h"
-#include "util.h"
 #include "reader.h"
+#include "util.h"
 
 // @NOTE: This doesn't skip newlines, because newlines aren't allowed in the
 // middle of instructions or directives.
@@ -36,19 +36,20 @@ static u64 read_integer(Reader *reader)
   return imm;
 }
 
-#define X(c, b, w, d, o) { c, { b, w, d, o } }
-static struct {
+#define X(c, b, w, d, o) \
+  {                      \
+    c, { b, w, d, o }    \
+  }
+static struct
+{
   RegClass class;
   char *names[4];
-} registers[] = {
-  REG_CLASSES
-};
+} registers[] = {REG_CLASSES};
 #undef X
 
 static bool string_eq_case_insensitive(String a, char *b)
 {
-  if (strlen(b) != a.len)
-    return false;
+  if (strlen(b) != a.len) return false;
 
   for (u32 i = 0; i < a.len; i++) {
     if (tolower(a.chars[i]) != tolower(b[i])) {
@@ -59,7 +60,8 @@ static bool string_eq_case_insensitive(String a, char *b)
   return true;
 }
 
-static AsmValue read_register_or_symbol(Reader *reader, Array(AsmSymbol *) *symbols)
+static AsmValue read_register_or_symbol(
+    Reader *reader, Array(AsmSymbol *) *symbols)
 {
   String ident = read_symbol(reader);
   assert(is_valid(ident));
@@ -88,9 +90,16 @@ static AsmValue read_register_or_symbol(Reader *reader, Array(AsmSymbol *) *symb
 static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
 {
   switch (peek_char(reader)) {
-  case '0': case '1': case '2': case '3': case '4':
-  case '5': case '6': case '7': case '8': case '9':
-    return asm_imm(read_integer(reader));
+  case '0':
+  case '1':
+  case '2':
+  case '3':
+  case '4':
+  case '5':
+  case '6':
+  case '7':
+  case '8':
+  case '9': return asm_imm(read_integer(reader));
   case '[': {
     advance(reader);
     AsmValue value = read_register_or_symbol(reader, symbols);
@@ -108,13 +117,11 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
       skip_whitespace(reader);
       assert(read_char(reader) == ']');
 
-      return asm_deref(asm_offset_reg(
-            reg.u.class, reg.width, asm_const_imm(offset)));
+      return asm_deref(
+          asm_offset_reg(reg.u.class, reg.width, asm_const_imm(offset)));
     }
-    case ']':
-      return asm_deref(asm_phys_reg(reg.u.class, reg.width));
-    default:
-      UNREACHABLE;
+    case ']': return asm_deref(asm_phys_reg(reg.u.class, reg.width));
+    default: UNREACHABLE;
     }
   }
   default: {
@@ -124,9 +131,7 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
 }
 
 #define X(x) #x
-static char *asm_op_names[] = {
-  ASM_OPS
-};
+static char *asm_op_names[] = {ASM_OPS};
 #undef X
 
 int main(int argc, char *argv[])
@@ -146,8 +151,7 @@ int main(int argc, char *argv[])
 
         char *format = argv[++i];
         if (!streq(format, "elf64")) {
-          fprintf(stderr,
-              "Error: Unsupported output format '%s'\n", format);
+          fprintf(stderr, "Error: Unsupported output format '%s'\n", format);
           return 1;
         }
       } else if (streq(arg, "-o")) {
@@ -192,17 +196,18 @@ int main(int argc, char *argv[])
 
   while (!at_end(reader)) {
     switch (peek_char(reader)) {
-    case ' ': case '\t': case '\n':
-      advance(reader);
-      break;
+    case ' ':
+    case '\t':
+    case '\n': advance(reader); break;
     case ';':
       while (read_char(reader) != '\n')
         ;
       break;
     default: {
       if (!initial_ident_char(peek_char(reader))) {
-        issue_error(&reader->source_loc,
-            "Unexpected character: '%c'\n", peek_char(reader));
+        issue_error(
+            &reader->source_loc, "Unexpected character: '%c'\n",
+            peek_char(reader));
         return 1;
       }
 
@@ -232,8 +237,7 @@ int main(int argc, char *argv[])
           return 1;
         }
 
-        if (starts_with_dot)
-          section_name.chars--;
+        if (starts_with_dot) section_name.chars--;
 
         if (strneq(section_name.chars, ".text", section_name.len)) {
           in_text_section = true;
@@ -256,18 +260,19 @@ int main(int argc, char *argv[])
         }
 
         AsmSymbol *symbol = pool_alloc(&asm_module.pool, sizeof *symbol);
-        *symbol = (AsmSymbol) {
-          .name = strndup(symbol_name.chars, symbol_name.len),
-          .section = TEXT_SECTION,
-          .defined = false,
-          .linkage = ASM_GLOBAL_LINKAGE,
-          .symtab_index = asm_module.symbols.size + 1,
+        *symbol = (AsmSymbol){
+            .name = strndup(symbol_name.chars, symbol_name.len),
+            .section = TEXT_SECTION,
+            .defined = false,
+            .linkage = ASM_GLOBAL_LINKAGE,
+            .symtab_index = asm_module.symbols.size + 1,
         };
 
         *ARRAY_APPEND(&asm_module.symbols, AsmSymbol *) = symbol;
       } else if (peek_char(reader) != ':') {
         if (!in_text_section) {
-          issue_error(&ident_source_loc,
+          issue_error(
+              &ident_source_loc,
               "Instruction encountered before section directive");
           return 1;
         }
@@ -291,8 +296,8 @@ int main(int argc, char *argv[])
         }
 
         if (!found) {
-          issue_error(&ident_source_loc,
-              "Unknown instruction name '%s'\n",
+          issue_error(
+              &ident_source_loc, "Unknown instruction name '%s'\n",
               strndup(ident.chars, ident.len));
           return 1;
         }
@@ -313,8 +318,8 @@ int main(int argc, char *argv[])
             advance(reader);
             skip_whitespace(reader);
           } else if (!at_end(reader) && peek_char(reader) != '\n') {
-            issue_error(&reader->source_loc,
-                "Expected comma or newline after operand");
+            issue_error(
+                &reader->source_loc, "Expected comma or newline after operand");
             return 1;
           }
 
@@ -326,28 +331,28 @@ int main(int argc, char *argv[])
         advance(reader);
 
         if (!in_text_section) {
-          issue_error(&ident_source_loc,
-              "Symbol encountered before section directive");
+          issue_error(
+              &ident_source_loc, "Symbol encountered before section directive");
           return 1;
         }
 
         AsmLinkage linkage = ASM_LOCAL_LINKAGE;
         for (u32 i = 0; i < global_symbols.size; i++) {
           String *existing = ARRAY_REF(&global_symbols, String, i);
-          if (ident.len == existing->len &&
-              strneq(existing->chars, ident.chars, ident.len)) {
+          if (ident.len == existing->len
+              && strneq(existing->chars, ident.chars, ident.len)) {
             linkage = ASM_GLOBAL_LINKAGE;
             break;
           }
         }
 
         AsmSymbol *symbol = pool_alloc(&asm_module.pool, sizeof *symbol);
-        *symbol = (AsmSymbol) {
-          .name = strndup(ident.chars, ident.len),
-          .section = TEXT_SECTION,
-          .defined = true,
-          .linkage = linkage,
-          .symtab_index = asm_module.symbols.size + 1,
+        *symbol = (AsmSymbol){
+            .name = strndup(ident.chars, ident.len),
+            .section = TEXT_SECTION,
+            .defined = true,
+            .linkage = linkage,
+            .symtab_index = asm_module.symbols.size + 1,
         };
 
         *ARRAY_APPEND(&asm_module.symbols, AsmSymbol *) = symbol;

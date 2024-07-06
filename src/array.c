@@ -1,8 +1,9 @@
 // Basic dynamic array
 
+#include "array.h"
+
 #include <stdlib.h>
 #include <string.h>
-#include "array.h"
 
 void _array_init(Array_ *array, u32 element_size, u32 initial_capacity)
 {
@@ -31,15 +32,9 @@ void _array_ensure_room(Array_ *array, u32 element_size, u32 count)
   }
 }
 
-void array_delete_last(Array_ *array)
-{
-  array->size--;
-}
+void array_delete_last(Array_ *array) { array->size--; }
 
-void array_free(Array_ *array)
-{
-  free(array->elements);
-}
+void array_free(Array_ *array) { free(array->elements); }
 
 void _array_append_elems(Array_ *array, u32 element_size, u32 size, void *elems)
 {
@@ -52,7 +47,8 @@ void _array_append_elems(Array_ *array, u32 element_size, u32 size, void *elems)
 void *_array_insert(Array_ *array, u32 element_size, u32 insertion_point)
 {
   _array_ensure_room(array, element_size, 1);
-  memmove(array->elements + (insertion_point + 1) * element_size,
+  memmove(
+      array->elements + (insertion_point + 1) * element_size,
       array->elements + insertion_point * element_size,
       (array->size - insertion_point) * element_size);
 
@@ -63,7 +59,8 @@ void *_array_insert(Array_ *array, u32 element_size, u32 insertion_point)
 void _array_remove(Array_ *array, u32 element_size, u32 removal_point)
 {
   if (removal_point != array->size - 1) {
-    memmove(array->elements + removal_point * element_size,
+    memmove(
+        array->elements + removal_point * element_size,
         array->elements + (removal_point + 1) * element_size,
         (array->size - removal_point - 1) * element_size);
   }
@@ -71,7 +68,4 @@ void _array_remove(Array_ *array, u32 element_size, u32 removal_point)
   array->size--;
 }
 
-void array_clear(Array_ *array)
-{
-  array->size = 0;
-}
+void array_clear(Array_ *array) { array->size = 0; }

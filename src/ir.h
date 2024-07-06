@@ -1,10 +1,10 @@
 #ifndef NAIVE_IR_H_
 #define NAIVE_IR_H_
 
-#include "asm.h"
 #include "array.h"
-#include "pool.h"
+#include "asm.h"
 #include "misc.h"
+#include "pool.h"
 
 typedef struct TransUnit
 {
@@ -122,7 +122,6 @@ typedef struct IrBuilder
   IrBlock *current_block;
 } IrBuilder;
 
-
 typedef struct IrValue
 {
   enum
@@ -147,39 +146,13 @@ typedef struct IrValue
   } u;
 } IrValue;
 
-#define IR_OPS \
-  X(OP_INVALID), \
-\
-  X(OP_BIT_XOR), \
-  X(OP_BIT_OR), \
-  X(OP_BIT_AND), \
-  X(OP_BIT_NOT), \
-  X(OP_NEG), \
-  X(OP_SHL), \
-  X(OP_SHR), \
-  X(OP_MUL), \
-  X(OP_DIV), \
-  X(OP_MOD), \
-  X(OP_ADD), \
-  X(OP_SUB), \
-  X(OP_CMP), \
-  X(OP_CALL), \
-  X(OP_CAST), \
-  X(OP_ZEXT), \
-  X(OP_SEXT), \
-  X(OP_TRUNC), \
-  X(OP_FIELD), \
-  X(OP_LOAD), \
-  X(OP_STORE), \
-  X(OP_LOCAL), \
-  X(OP_RET), \
-  X(OP_RET_VOID), \
-  X(OP_BRANCH), \
-  X(OP_COND), \
-  X(OP_PHI), \
-\
-  X(OP_BUILTIN_VA_START), \
-  X(OP_BUILTIN_VA_ARG),
+#define IR_OPS                                                              \
+  X(OP_INVALID), X(OP_BIT_XOR), X(OP_BIT_OR), X(OP_BIT_AND), X(OP_BIT_NOT), \
+      X(OP_NEG), X(OP_SHL), X(OP_SHR), X(OP_MUL), X(OP_DIV), X(OP_MOD),     \
+      X(OP_ADD), X(OP_SUB), X(OP_CMP), X(OP_CALL), X(OP_CAST), X(OP_ZEXT),  \
+      X(OP_SEXT), X(OP_TRUNC), X(OP_FIELD), X(OP_LOAD), X(OP_STORE),        \
+      X(OP_LOCAL), X(OP_RET), X(OP_RET_VOID), X(OP_BRANCH), X(OP_COND),     \
+      X(OP_PHI), X(OP_BUILTIN_VA_START), X(OP_BUILTIN_VA_ARG),
 
 #define X(x) x
 typedef enum IrOp
@@ -188,17 +161,9 @@ typedef enum IrOp
 } IrOp;
 #undef X
 
-#define IR_CMPS \
-  X(CMP_EQ), \
-  X(CMP_NEQ), \
-  X(CMP_SGT), \
-  X(CMP_SGTE), \
-  X(CMP_SLT), \
-  X(CMP_SLTE), \
-  X(CMP_UGT), \
-  X(CMP_UGTE), \
-  X(CMP_ULT), \
-  X(CMP_ULTE),
+#define IR_CMPS                                                            \
+  X(CMP_EQ), X(CMP_NEQ), X(CMP_SGT), X(CMP_SGTE), X(CMP_SLT), X(CMP_SLTE), \
+      X(CMP_UGT), X(CMP_UGTE), X(CMP_ULT), X(CMP_ULTE),
 
 #define X(x) x
 typedef enum IrCmp
@@ -218,7 +183,7 @@ typedef struct IrInstr
   u32 id;
   IrType type;
   IrOp op;
-  i32 vreg_number; // used by asm_gen
+  i32 vreg_number;  // used by asm_gen
 
   union
   {
@@ -263,7 +228,7 @@ typedef struct IrInstr
     struct
     {
       IrType type;
-      u32 stack_offset; // used by asm_gen
+      u32 stack_offset;  // used by asm_gen
     } local;
     struct
     {
@@ -275,10 +240,12 @@ typedef struct IrInstr
 
 void trans_unit_init(TransUnit *trans_unit);
 void trans_unit_free(TransUnit *trans_unit);
-IrGlobal *trans_unit_add_function(TransUnit *trans_unit, char *name,
-    IrType return_type, u32 arity, bool variable_arity, IrType *arg_types);
+IrGlobal *trans_unit_add_function(
+    TransUnit *trans_unit, char *name, IrType return_type, u32 arity,
+    bool variable_arity, IrType *arg_types);
 IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type);
-IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields);
+IrType *trans_unit_add_struct(
+    TransUnit *trans_unit, char *name, u32 num_fields);
 
 void block_init(IrBlock *block, char *name, u32 id);
 
@@ -295,8 +262,9 @@ void dump_trans_unit(TransUnit *trans_unit);
 
 void builder_init(IrBuilder *builder, TransUnit *trans_unit);
 IrInstr *build_branch(IrBuilder *builder, IrBlock *block);
-IrInstr *build_cond(IrBuilder *builder,
-    IrValue condition, IrBlock *then_block, IrBlock *else_block);
+IrInstr *build_cond(
+    IrBuilder *builder, IrValue condition, IrBlock *then_block,
+    IrBlock *else_block);
 
 IrValue value_const(IrType type, u64 constant);
 IrValue value_arg(u32 arg_index, IrType type);
@@ -309,25 +277,29 @@ IrConst *add_struct_const(IrBuilder *builder, IrType type);
 
 IrValue build_nullary_instr(IrBuilder *builder, IrOp op, IrType type);
 IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg);
-IrValue build_binary_instr(IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2);
+IrValue build_binary_instr(
+    IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2);
 IrValue build_cmp(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2);
 IrValue build_local(IrBuilder *builder, IrType type);
-IrValue build_field(IrBuilder *builder, IrValue ptr, IrType type,
-    u32 field_number);
+IrValue build_field(
+    IrBuilder *builder, IrValue ptr, IrType type, u32 field_number);
 IrValue build_load(IrBuilder *builder, IrValue pointer, IrType type);
 IrValue build_store(IrBuilder *builder, IrValue pointer, IrValue value);
-IrValue build_call(IrBuilder *builder, IrValue callee, IrType return_type, u32 arity,
+IrValue build_call(
+    IrBuilder *builder, IrValue callee, IrType return_type, u32 arity,
     IrValue *arg_array);
-IrValue build_type_instr(IrBuilder *builder, IrOp op, IrValue value, IrType result_type);
+IrValue build_type_instr(
+    IrBuilder *builder, IrOp op, IrValue value, IrType result_type);
 IrValue build_phi(IrBuilder *builder, IrType type, u32 arity);
 
-void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value);
+void phi_set_param(
+    IrValue phi, u32 index, IrBlock *source_block, IrValue value);
 
 IrValue builtin_memcpy(IrBuilder *builder);
 IrValue builtin_memset(IrBuilder *builder);
 
 IrValue build_builtin_va_start(IrBuilder *builder, IrValue va_list_ptr);
-IrValue build_builtin_va_arg(IrBuilder *builder, IrValue va_list_ptr,
-    IrValue object_size);
+IrValue build_builtin_va_arg(
+    IrBuilder *builder, IrValue va_list_ptr, IrValue object_size);
 
 #endif
