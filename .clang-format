@@ -1,0 +1,13 @@
+BasedOnStyle: Google
+BreakBeforeBraces: Mozilla
+TypenameMacros: [Array]
+StatementMacros: [CASE, CASE2]
+AlignAfterOpenBracket: AlwaysBreak
+AllowShortCaseLabelsOnASingleLine: true
+IndentCaseLabels: false
+BreakBeforeBinaryOperators: NonAssignment
+
+# @TODO: Enable these once we're on clang-format 17+
+#AlignConsecutiveShortCaseStatements:
+#  Enabled: true
+#BracedInitializerIndentWidth: 2
