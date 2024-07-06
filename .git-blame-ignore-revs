@@ -3,3 +3,6 @@
 
 # Tabs -> spaces
 c044f5697e1658c12b0fb60e17bed67b243503d7
+
+# Format everything with clang-format
+0e9afbb6887a83f11a91e48ee765ad34b40bc9f2
