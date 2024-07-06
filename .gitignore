@@ -1,6 +1,7 @@
 /ncc
 /nar
 /nas
+/build
 
 *.o
 *.a

@@ -4,10 +4,12 @@ import argparse
 import fnmatch
 import multiprocessing
 import os
+import shutil
 import signal
 import subprocess
 import sys
 import time
+from functools import reduce
 
 
 def make_arg_parser():
@@ -35,12 +37,21 @@ def make_arg_parser():
         nargs="*",
     )
 
+    build_parser = subparsers.add_parser(
+        "build",
+        aliases=["b"],
+        help="Build the toolchain",
+    )
+
     return parser
 
 
 def main(args):
     if args.command in {"test", "t"}:
-        run_tests(args)
+        ret = run_tests(args)
+    elif args.command in {"build", "b"}:
+        ret = build(args)
+    sys.exit(ret)
 
 
 def run_tests(args):
@@ -49,15 +60,16 @@ def run_tests(args):
             print("Must specify a list of tests if passing '-c'")
             return
         map(create_test_files, args.tests)
-        return
+        return 0
 
-    tests = args.tests
-    if len(tests) == 0:
+    test_names = args.tests
+    if len(test_names) == 0:
         for root, dirnames, filenames in os.walk("tests"):
             if len(dirnames) == 0:
-                tests.append(root)
+                test_names.append(root)
+    testcases = list(map(make_testcase, test_names))
 
-    num_tests = len(tests)
+    num_tests = len(testcases)
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     print("Running %d tests:" % num_tests)
@@ -67,26 +79,15 @@ def run_tests(args):
     # @NOTE: we don't bother running the binaries produced in parallel, because
     # none of the tests we have so far take a significant amount of time to
     # run. If they start taking a while, we'll want to change this.
-    parallel_testcases = multiprocessing.cpu_count()
-    running_testcases = []
+    procs = []
     results = []
-    while len(results) != num_tests:
-        done, running_testcases = partition(
-            running_testcases, lambda testcase: testcase.cc_proc.poll() is not None
-        )
-
-        while len(running_testcases) < parallel_testcases and len(tests) > 0:
-            new_test = tests.pop()
-            running_testcases.append(start_compiling(new_test))
-
-        if len(done) == 0:
-            time.sleep(0.05)
-
-        for testcase in done:
-            test_result = run_testcase(testcase)
-            sys.stdout.write(result_char(test_result))
-            sys.stdout.flush()
-            results.append(test_result)
+    for testcase in testcases:
+        enqueue_proc(procs, testcase.cmdline, testcase, cwd=testcase.name)
+    for returncode, stdout, stderr, (testcase,) in run_all_procs(procs):
+        test_result = run_testcase(testcase, returncode, stdout, stderr)
+        sys.stdout.write(result_char(test_result))
+        sys.stdout.flush()
+        results.append(test_result)
 
     print("\n")
 
@@ -102,12 +103,14 @@ def run_tests(args):
             elif not result.passed():
                 print("\ntest '%s' failed:\n%s" % (result.name, result.error))
 
+    return 0 if passes == num_tests else 1
+
 
 class Testcase(object):
     __slots__ = [
         "name",
+        "cmdline",
         "binary",
-        "cc_proc",
         "expected_compile_stdout",
         "expected_compile_stderr",
         "expected_run_stdout",
@@ -116,7 +119,7 @@ class Testcase(object):
     ]
 
 
-def start_compiling(test_dir):
+def make_testcase(test_dir):
     testcase = Testcase()
     testcase.name = test_dir
 
@@ -154,20 +157,18 @@ def start_compiling(test_dir):
     assert test_filenames != []
 
     testcase.binary = os.path.abspath(os.path.join(test_dir, "a.out.tmp"))
-    testcase.cc_proc = subprocess.Popen(
-        [os.path.abspath("./ncc"), "-o", testcase.binary]
-        + extra_flags
-        + test_filenames,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=test_dir,
+    testcase.cmdline = (
+        [os.path.abspath("./ncc"), "-o", testcase.binary] + extra_flags + test_filenames
     )
     return testcase
 
 
 def create_test_files(test_dir):
-    testcase = start_compiling(test_dir)
-    compile_stdout, compile_stderr = testcase.cc_proc.communicate()
+    testcase = make_testcase(test_dir)
+    cc_proc = subprocess.Popen(
+        testcase.cmdline, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=test_dir
+    )
+    compile_stdout, compile_stderr = cc_proc.communicate()
 
     run_stdout = ""
     run_stderr = ""
@@ -201,18 +202,14 @@ class TestResult(object):
         return self.error == ""
 
 
-def run_testcase(testcase):
+def run_testcase(testcase, compile_returncode, compile_stdout, compile_stderr):
     test_result = TestResult()
     test_result.name = testcase.name
     test_result.error = ""
-    cc_proc = testcase.cc_proc
 
-    # @TODO: This seems to hang forever if cc produces loads of output (like if
-    # we have some debugging stuff in there.
-    compile_stdout, compile_stderr = cc_proc.communicate()
-    compiled_successfully = cc_proc.returncode == 0
+    compiled_successfully = compile_returncode == 0
     # Non-empty stderr = expected compile failure
-    if testcase.expected_compile_stderr != "":
+    if testcase.expected_compile_stderr != b"":
         if testcase.expected_compile_stderr != compile_stderr:
             if compiled_successfully:
                 os.remove(testcase.binary)
@@ -225,6 +222,7 @@ def run_testcase(testcase):
             return test_result
         else:
             return test_result
+
     if compile_stdout != testcase.expected_compile_stdout:
         test_result.error = "expected compile stdout:\n%s\ngot:\n%s" % (
             indent_bytes(testcase.expected_compile_stdout),
@@ -300,6 +298,146 @@ def partition(l, pred):
             false.append(x)
 
     return true, false
+
+
+def build(args):
+    # @TODO: Check $CC
+    CC = ["clang"]
+    COMMON_CFLAGS = [
+        "-Isrc",
+        "-Ibuild",
+        "-std=c99",
+        "-Werror",
+        "-Wall",
+        "-Wextra",
+        "-Wstrict-prototypes",
+        "-Wformat",
+    ]
+
+    os.chdir(os.path.dirname(os.path.realpath(__file__)))
+    os.makedirs("build/toolchain", exist_ok=True)
+    os.makedirs("build/bin", exist_ok=True)
+
+    # Run the metaprograms
+    procs = []
+    enqueue_proc(procs, ["meta/peg.py", "src/parse.peg", "build/parse.inc"], "PEG")
+    enqueue_proc(procs, ["meta/enc.py", "src/x64.enc", "build/x64.inc"], "INC")
+    if (ret := run_all_procs_printing_failures(procs)) != 0:
+        return ret
+
+    binaries = []
+    for filename in os.listdir(os.path.join("src", "bin")):
+        _, ext = os.path.splitext(filename)
+        if ext == ".c":
+            binaries.append(os.path.join("src", "bin", filename))
+
+    procs = []
+    for binary in binaries:
+        enqueue_proc(procs, CC + COMMON_CFLAGS + ["-MM", binary])
+
+    deps_for_bin = {
+        "src/bin/ncc": [
+            "src/bin/ncc.o",
+            "src/array.o",
+            "src/asm.o",
+            "src/asm_gen.o",
+            "src/bit_set.o",
+            "src/diagnostics.o",
+            "src/elf.o",
+            "src/file.o",
+            "src/ir.o",
+            "src/ir_gen.o",
+            "src/parse.o",
+            "src/pool.o",
+            "src/preprocess.o",
+            "src/reader.o",
+            "src/tokenise.o",
+            "src/util.o",
+        ],
+        "src/bin/nas": [
+            "src/bin/nas.o",
+            "src/reader.o",
+            "src/util.o",
+            "src/diagnostics.o",
+            "src/asm.o",
+            "src/elf.o",
+            "src/pool.o",
+            "src/file.o",
+            "src/array.o",
+        ],
+        "src/bin/nar": ["src/bin/nar.o", "src/array.o", "src/file.o", "src/util.o"],
+    }
+
+    procs = []
+    for dep in reduce(set.union, map(set, deps_for_bin.values())):
+        enqueue_proc(
+            procs,
+            CC
+            + COMMON_CFLAGS
+            + ["-c"]
+            + ["-o", dep.replace("src/", "build/")]
+            + [dep.replace(".o", ".c")],
+        )
+    if (ret := run_all_procs_printing_failures(procs)) != 0:
+        return ret
+
+    procs = []
+    for bin, deps in deps_for_bin.items():
+        enqueue_proc(
+            procs,
+            CC
+            + COMMON_CFLAGS
+            + ["-o", bin.replace("src/bin/", "build/toolchain/")]
+            + [d.replace("src/", "build/") for d in deps],
+        )
+
+    if (ret := run_all_procs_printing_failures(procs)) != 0:
+        return ret
+
+    return 0
+
+
+def enqueue_proc(procs, cmdline, *proc_info, **kwargs):
+    procs.append((cmdline, proc_info, kwargs))
+
+
+def run_all_procs(procs):
+    parallel_procs = multiprocessing.cpu_count()
+    running_procs = []
+    while procs or running_procs:
+        done, running_procs = partition(
+            running_procs, lambda proc: proc[0].poll() is not None
+        )
+
+        while len(running_procs) < parallel_procs and len(procs) > 0:
+            cmdline, proc_info, kwargs = procs.pop()
+            running_procs.append(
+                (
+                    subprocess.Popen(
+                        cmdline,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        **kwargs,
+                    ),
+                    proc_info,
+                )
+            )
+
+        if len(done) == 0:
+            time.sleep(0.05)
+
+        for subproc, info in done:
+            stdout, stderr = subproc.communicate()
+            yield subproc.returncode, stdout, stderr, info
+
+
+def run_all_procs_printing_failures(procs):
+    overall_ret_code = 0
+    for returncode, stdout, stderr, _ in run_all_procs(procs):
+        if returncode != 0:
+            overall_ret_code = returncode
+            print(stderr.decode("utf-8"), file=sys.stderr)
+    return overall_ret_code
 
 
 def sigint_handler(signal, frame):
