@@ -326,16 +326,6 @@ def build(args):
     if (ret := run_all_procs_printing_failures(procs)) != 0:
         return ret
 
-    binaries = []
-    for filename in os.listdir(os.path.join("src", "bin")):
-        _, ext = os.path.splitext(filename)
-        if ext == ".c":
-            binaries.append(os.path.join("src", "bin", filename))
-
-    procs = []
-    for binary in binaries:
-        enqueue_proc(procs, cc + COMMON_CFLAGS + ["-MM", binary])
-
     deps_for_bin = {
         "src/bin/ncc": [
             "src/bin/ncc.o",
