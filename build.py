@@ -301,8 +301,7 @@ def partition(l, pred):
 
 
 def build(args):
-    # @TODO: Check $CC
-    CC = ["clang"]
+    cc = [get_cc()]
     COMMON_CFLAGS = [
         "-Isrc",
         "-Ibuild",
@@ -333,7 +332,7 @@ def build(args):
 
     procs = []
     for binary in binaries:
-        enqueue_proc(procs, CC + COMMON_CFLAGS + ["-MM", binary])
+        enqueue_proc(procs, cc + COMMON_CFLAGS + ["-MM", binary])
 
     deps_for_bin = {
         "src/bin/ncc": [
@@ -372,7 +371,7 @@ def build(args):
     for dep in reduce(set.union, map(set, deps_for_bin.values())):
         enqueue_proc(
             procs,
-            CC
+            cc
             + COMMON_CFLAGS
             + ["-c"]
             + ["-o", dep.replace("src/", "build/")]
@@ -385,7 +384,7 @@ def build(args):
     for bin, deps in deps_for_bin.items():
         enqueue_proc(
             procs,
-            CC
+            cc
             + COMMON_CFLAGS
             + ["-o", bin.replace("src/bin/", "build/toolchain/")]
             + [d.replace("src/", "build/") for d in deps],
@@ -438,6 +437,20 @@ def run_all_procs_printing_failures(procs):
             overall_ret_code = returncode
             print(stderr.decode("utf-8"), file=sys.stderr)
     return overall_ret_code
+
+
+def program_exists(name):
+    return shutil.which(name) is not None
+
+
+def get_cc():
+    if (cc := os.getenv("CC")) is not None:
+        return cc
+    if program_exists("clang"):
+        return "clang"
+    if program_exists("gcc"):
+        return "gcc"
+    raise Exception("No C compiler could be found")
 
 
 def sigint_handler(signal, frame):
