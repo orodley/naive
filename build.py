@@ -302,6 +302,8 @@ def partition(l, pred):
 
 def build(args):
     cc = [get_cc()]
+    if program_exists("ccache"):
+        cc = ["ccache"] + cc
     COMMON_CFLAGS = [
         "-Isrc",
         "-Ibuild",
