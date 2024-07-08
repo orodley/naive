@@ -304,6 +304,8 @@ def partition(l, pred):
 
 def build(args):
     cc = [get_cc()]
+    ASM = "nasm"
+    AR = "ar"
     if program_exists("ccache"):
         cc = ["ccache"] + cc
     COMMON_CFLAGS = [
@@ -316,10 +318,18 @@ def build(args):
         "-Wstrict-prototypes",
         "-Wformat",
     ]
+    LIBC_CFLAGS = [
+        "-fno-asynchronous-unwind-tables",
+        "-ffreestanding",
+        "-fno-common",
+        "-Ilibc",
+        "-Ilibc/include",
+    ]
 
     os.chdir(os.path.dirname(os.path.realpath(__file__)))
     os.makedirs("build/toolchain", exist_ok=True)
     os.makedirs("build/bin", exist_ok=True)
+    os.makedirs("build/libc", exist_ok=True)
 
     # Run the metaprograms
     procs = []
@@ -383,7 +393,47 @@ def build(args):
             + ["-o", bin.replace("src/bin/", "build/toolchain/")]
             + [d.replace("src/", "build/") for d in deps],
         )
+    if (ret := run_all_procs_printing_failures(procs)) != 0:
+        return ret
 
+    shutil.copytree("freestanding", "build/toolchain/freestanding", dirs_exist_ok=True)
+    shutil.copytree("libc/include", "build/toolchain/include", dirs_exist_ok=True)
+
+    procs = []
+    libc_objs = []
+    for libc_source_file in os.listdir("libc"):
+        libc_source_file = f"libc/{libc_source_file}"
+        if libc_source_file.endswith(".c"):
+            obj = f"build/{libc_source_file.replace('.c', '.o')}"
+            enqueue_proc(
+                procs,
+                ["build/toolchain/ncc"]
+                + COMMON_CFLAGS
+                + LIBC_CFLAGS
+                + ["-c", "-o", obj, libc_source_file],
+            )
+        elif libc_source_file.endswith(".s"):
+            obj = f"build/{libc_source_file.replace('.s', '.o')}"
+            enqueue_proc(
+                procs,
+                [
+                    ASM,
+                    "-f",
+                    "elf64",
+                    "-o",
+                    obj,
+                    libc_source_file,
+                ],
+            )
+        else:
+            continue
+        libc_objs.append(obj)
+
+    if (ret := run_all_procs_printing_failures(procs)) != 0:
+        return ret
+
+    procs = []
+    enqueue_proc(procs, [AR, "-cr", "build/toolchain/libc.a"] + libc_objs)
     if (ret := run_all_procs_printing_failures(procs)) != 0:
         return ret
 
