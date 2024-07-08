@@ -12,8 +12,10 @@ Includes:
 * Linker
 * `ar` clone
 
-Dependencies:
+Build-time dependencies:
 
+* A C compiler
+* Python 3
 * make
 * nasm
 * ctags
