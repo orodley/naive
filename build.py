@@ -158,7 +158,9 @@ def make_testcase(test_dir):
 
     testcase.binary = os.path.abspath(os.path.join(test_dir, "a.out.tmp"))
     testcase.cmdline = (
-        [os.path.abspath("./ncc"), "-o", testcase.binary] + extra_flags + test_filenames
+        [os.path.abspath(get_cc()), "-o", testcase.binary]
+        + extra_flags
+        + test_filenames
     )
     return testcase
 

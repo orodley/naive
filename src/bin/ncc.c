@@ -40,6 +40,7 @@ static int compile_file(
     char *input_filename, char *output_filename, Array(char *) *include_dirs,
     bool syntax_only, bool preprocess_only);
 static int make_file_executable(char *filename);
+static char *directory_of_executable(void);
 
 int main(int argc, char *argv[])
 {
@@ -59,7 +60,6 @@ int main(int argc, char *argv[])
   bool syntax_only = false;
   bool preprocess_only = false;
   bool freestanding = false;
-  char *naive_dir = "/opt/naive";
   char *output_filename = NULL;
 
   for (i32 i = 1; i < argc; i++) {
@@ -114,12 +114,6 @@ int main(int argc, char *argv[])
           return 1;
         }
         output_filename = argv[++i];
-      } else if (streq(arg, "-naive-dir")) {
-        if (i == argc - 1) {
-          fputs("Error: No directory after '-naive-dir'\n", stderr);
-          return 1;
-        }
-        naive_dir = argv[++i];
       } else if (strneq(arg, "-W", 2)) {
         // Do nothing. We don't support any warnings, so for self-host
         // purposes we'll just ignore these flags, as they shouldn't
@@ -173,13 +167,18 @@ int main(int argc, char *argv[])
     return 12;
   }
 
+  // @LEAK
+  char *toolchain_dir = directory_of_executable();
+
   // Put system headers at the start, so they take precedence.
   if (!freestanding) {
     // @LEAK: concat
-    *ARRAY_INSERT(&include_dirs, char *, 0) = concat(naive_dir, "/include/");
+    *ARRAY_INSERT(&include_dirs, char *, 0) =
+        concat(toolchain_dir, "/include/");
   }
   // @LEAK: concat
-  *ARRAY_INSERT(&include_dirs, char *, 0) = concat(naive_dir, "/freestanding/");
+  *ARRAY_INSERT(&include_dirs, char *, 0) =
+      concat(toolchain_dir, "/freestanding/");
 
   Array(char *) temp_filenames;
   ARRAY_INIT(
@@ -238,7 +237,7 @@ int main(int argc, char *argv[])
     // the rest of the inputs because it's an archive.
     if (!freestanding) {
       *ARRAY_APPEND(&linker_input_filenames, char *) =
-          concat(naive_dir, "/libc.a");
+          concat(toolchain_dir, "/libc.a");
     }
 
     char *executable_filename;
@@ -429,4 +428,25 @@ static int make_file_executable(char *filename)
 
   close(fd);
   return 0;
+}
+
+// @PORT
+// /proc/self/exe isn't a standard POSIX thing. On Windows there's
+// GetModuleFileName. On some other Unixes there are slightly different
+// /proc-based things. On other systems without /proc there isn't a great
+// alternative unfortunately.
+static char *directory_of_executable(void)
+{
+  char buf[1024];
+  ssize_t size = readlink("/proc/self/exe", buf, sizeof buf);
+  assert(size > 0);
+  assert(size != 1024);
+
+  while (buf[size - 1] != '/') size--;
+
+  char *ret = malloc(size + 1);
+  memcpy(ret, buf, size);
+  ret[size] = '\0';
+
+  return ret;
 }

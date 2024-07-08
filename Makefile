@@ -5,7 +5,7 @@ ASM ?= nasm
 PEG ?= meta/peg.py
 ENC ?= meta/enc.py
 
-INSTALL_DIR ?= /opt/naive
+INSTALL_DIR ?= build/toolchain/
 
 COMMON_CFLAGS := $(CFLAGS) -std=c99 -Werror -Wall -Wextra -Wstrict-prototypes \
 	-Wformat
@@ -21,10 +21,6 @@ ifneq (, $(shell which ccache))
 
 	# CCACHE_CPP2 prevents warnings from compiling pre-preproccessed files
 	CC := CCACHE_CPP2=yes ccache $(CC)
-endif
-
-ifneq (, $(NAIVE_DIR))
-	COMMON_CFLAGS += -naive-dir $(NAIVE_DIR)
 endif
 
 SRC_DIRS := src libc freestanding
