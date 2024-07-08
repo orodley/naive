@@ -383,7 +383,7 @@ static int compile_file(
 }
 
 // @PORT
-static char *make_temp_file()
+static char *make_temp_file(void)
 {
   char fmt[] = "/tmp/ncc_temp_%x.o";
 
