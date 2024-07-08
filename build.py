@@ -429,7 +429,7 @@ def run_all_procs_printing_failures(procs):
     for returncode, stdout, stderr, _ in run_all_procs(procs):
         if returncode != 0:
             overall_ret_code = returncode
-            print(stderr.decode("utf-8"), file=sys.stderr)
+            print(stderr.decode(), file=sys.stderr)
     return overall_ret_code
 
 
