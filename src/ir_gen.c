@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "array.h"
+#include "diagnostics.h"
 #include "ir.h"
 #include "parse.h"
 #include "util.h"
@@ -2838,7 +2839,10 @@ static Term ir_gen_expr(
   case IDENTIFIER_EXPR: {
     Binding *binding = binding_for_name(env->scope, expr->u.identifier);
 
-    assert(binding != NULL);
+    if (binding == NULL) {
+      fprintf(stderr, "Unknown identifier '%s'\n", expr->u.identifier);
+      exit(1);
+    }
     assert(binding->term.value.type.t == IR_POINTER || binding->constant);
 
     IrValue value;
