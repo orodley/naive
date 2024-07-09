@@ -44,6 +44,12 @@ def make_arg_parser():
         help="Build the toolchain",
     )
 
+    check_parser = subparsers.add_parser(
+        "check",
+        aliases=["c"],
+        help="Run static checks",
+    )
+
     return parser
 
 
@@ -52,6 +58,8 @@ def main(args):
         ret = run_tests(args)
     elif args.command in {"build", "b"}:
         ret = build(args)
+    elif args.command in {"check", "c"}:
+        ret = check(args)
     sys.exit(ret)
 
 
@@ -470,6 +478,22 @@ def add_compile_command(cmdline, cwd):
 def dump_compile_commands():
     with open("compile_commands.json", "w") as f:
         json.dump(compile_commands, f)
+
+
+def check(args):
+    build(args)
+    procs = []
+    for command in compile_commands:
+        enqueue_proc(
+            procs, ["clang-tidy", "--quiet", "--use-color", "-p", ".", command["file"]]
+        )
+    ret = 0
+    for retcode, stdout, stderr, _ in run_all_procs(procs):
+        if retcode != 0:
+            ret = retcode
+        if stdout:
+            print(stdout.decode())
+    return ret
 
 
 def run_all_procs(procs):
