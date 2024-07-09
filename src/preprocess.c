@@ -330,7 +330,12 @@ static bool eval_pp_condition(PP *pp)
     } else if (streq(condition_str, "1")) {
       cond = true;
     } else {
-      UNIMPLEMENTED;
+      fprintf(
+          stderr,
+          "Preprocessor condition expanded to something other than 0 or 1: "
+          "%s\n",
+          condition_str);
+      exit(1);
     }
   }
 
