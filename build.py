@@ -5,6 +5,7 @@ import fnmatch
 import json
 import multiprocessing
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -487,13 +488,18 @@ def check(args):
         enqueue_proc(
             procs, ["clang-tidy", "--quiet", "--use-color", "-p", ".", command["file"]]
         )
-    ret = 0
-    for retcode, stdout, stderr, _ in run_all_procs(procs):
-        if retcode != 0:
-            ret = retcode
+
+    total_warnings = 0
+    for _, stdout, stderr, _ in run_all_procs(procs):
+        if match := re.match(r"(\d) warnings? generated", stderr.decode()):
+            total_warnings += int(match.group(1))
         if stdout:
             print(stdout.decode())
-    return ret
+
+    if total_warnings != 0:
+        print(f"{total_warnings} warnings")
+        return 1
+    return 0
 
 
 def run_all_procs(procs):
