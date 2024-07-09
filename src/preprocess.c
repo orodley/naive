@@ -1017,6 +1017,9 @@ bool preprocess(
       .curr_macro_params = EMPTY_ARRAY,
   };
   add_predefined_macro(&pp.macro_env, "__STDC__", "1");
+  // @TODO: Change this based on -std, once we support multiple standard
+  // versions.
+  add_predefined_macro(&pp.macro_env, "__STDC_VERSION__", "199901L");
 
   bool ret = preprocess_file(&pp, input_filename, (SourceLoc){NULL, 0, 0});
 
