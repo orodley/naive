@@ -17,7 +17,23 @@ from functools import reduce
 
 def make_arg_parser():
     parser = argparse.ArgumentParser()
+
+    parser.add_argument("--toolchain", help="The Naive toolchain to build with")
+    parser.add_argument("--cc", help="The C compiler to build with")
+    parser.add_argument("--asm", help="The assembler to build with")
+    parser.add_argument("--ar", help="The static archiver to build with")
+    parser.add_argument(
+        "--no-ccache", help="Don't use ccache to cache compiler invocations"
+    )
+    parser.add_argument(
+        "--install-dir", help="The directory to install the toolchain to"
+    )
+    parser.add_argument(
+        "--asan", help="Build with Address Sanitizer", action="store_true"
+    )
+
     subparsers = parser.add_subparsers(dest="command")
+
     test_parser = subparsers.add_parser("test", aliases=["t"], help="Run tests")
     test_parser.add_argument(
         "--silent", "-s", help="Show only the summary", action="store_true"
@@ -60,18 +76,42 @@ def make_arg_parser():
     return parser
 
 
+class BuildConfig(object):
+    __slots__ = ["cc", "asm", "ar", "extra_cflags", "install_dir"]
+
+    def __init__(self, args):
+        if args.toolchain:
+            self.cc = os.path.join(args.toolchain, "ncc")
+            self.asm = os.path.join(args.toolchain, "nas")
+            self.ar = os.path.join(args.toolchain, "nar")
+        else:
+            self.cc = args.cc or [get_cc()]
+            self.asm = args.asm or "nasm"
+            self.ar = args.ar or "ar"
+
+        if not args.no_ccache and program_exists("ccache"):
+            self.cc = ["ccache"] + self.cc
+
+        self.extra_cflags = []
+        if args.asan:
+            self.extra_cflags.append("-fsanitize=address")
+
+        self.install_dir = os.path.abspath(args.install_dir or "build/toolchain")
+
+
 def main(args):
+    build_config = BuildConfig(args)
     if args.command in {"test", "t"}:
-        ret = run_tests(args)
+        ret = run_tests(args, build_config)
     elif args.command in {"build", "b"}:
-        ret = build(args)
+        ret = build(build_config)
     elif args.command in {"check", "c"}:
         ret = check(args)
     sys.exit(ret)
 
 
-def run_tests(args):
-    if (ret := build(args)) != 0:
+def run_tests(args, build_config):
+    if (ret := build(build_config)) != 0:
         return ret
 
     if args.create_testcase:
@@ -320,12 +360,7 @@ def partition(l, pred):
     return true, false
 
 
-def build(args):
-    cc = [get_cc()]
-    ASM = "nasm"
-    AR = "ar"
-    if program_exists("ccache"):
-        cc = ["ccache"] + cc
+def build(build_config):
     COMMON_CFLAGS = [
         "-Isrc",
         "-Ibuild",
@@ -344,8 +379,10 @@ def build(args):
         "-Ilibc/include",
     ]
 
-    if "clang" in cc:
-        COMMON_CFLAGS.append("-fcolor-diagnostics")
+    host_cflags = COMMON_CFLAGS[:]
+    if "clang" in build_config.cc:
+        host_cflags.append("-fcolor-diagnostics")
+    host_cflags.extend(build_config.extra_cflags)
 
     os.makedirs("build/toolchain", exist_ok=True)
     os.makedirs("build/bin", exist_ok=True)
@@ -395,8 +432,8 @@ def build(args):
     for dep in reduce(set.union, map(set, deps_for_bin.values())):
         enqueue_proc(
             procs,
-            cc
-            + COMMON_CFLAGS
+            build_config.cc
+            + host_cflags
             + ["-c"]
             + ["-o", dep.replace("src/", "build/")]
             + [dep.replace(".o", ".c")],
@@ -408,16 +445,24 @@ def build(args):
     for bin, deps in deps_for_bin.items():
         enqueue_proc(
             procs,
-            cc
-            + COMMON_CFLAGS
-            + ["-o", bin.replace("src/bin/", "build/toolchain/")]
+            build_config.cc
+            + host_cflags
+            + ["-o", bin.replace("src/bin/", build_config.install_dir)]
             + [d.replace("src/", "build/") for d in deps],
         )
     if (ret := run_all_procs_printing_failures(procs)) != 0:
         return ret
 
-    shutil.copytree("freestanding", "build/toolchain/freestanding", dirs_exist_ok=True)
-    shutil.copytree("libc/include", "build/toolchain/include", dirs_exist_ok=True)
+    shutil.copytree(
+        "freestanding",
+        os.path.join(build_config.install_dir, "freestanding"),
+        dirs_exist_ok=True,
+    )
+    shutil.copytree(
+        "libc/include",
+        os.path.join(build_config.install_dir, "include"),
+        dirs_exist_ok=True,
+    )
 
     procs = []
     libc_objs = []
@@ -427,7 +472,7 @@ def build(args):
             obj = f"build/{libc_source_file.replace('.c', '.o')}"
             enqueue_proc(
                 procs,
-                ["build/toolchain/ncc"]
+                [os.path.join(build_config.install_dir, "ncc")]
                 + COMMON_CFLAGS
                 + LIBC_CFLAGS
                 + ["-c", "-o", obj, libc_source_file],
@@ -437,7 +482,7 @@ def build(args):
             enqueue_proc(
                 procs,
                 [
-                    ASM,
+                    build_config.asm,
                     "-f",
                     "elf64",
                     "-o",
@@ -453,7 +498,11 @@ def build(args):
         return ret
 
     procs = []
-    enqueue_proc(procs, [AR, "-cr", "build/toolchain/libc.a"] + libc_objs)
+    enqueue_proc(
+        procs,
+        [build_config.ar, "-cr", os.path.join(build_config.install_dir, "libc.a")]
+        + libc_objs,
+    )
     if (ret := run_all_procs_printing_failures(procs)) != 0:
         return ret
 
