@@ -243,7 +243,7 @@ AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset);
 AsmValue asm_imm(u64 value);
 AsmValue asm_fixed_imm(u64 value, u32 width);
 AsmValue asm_symbol(AsmSymbol *symbol);
-AsmValue asm_deref(AsmValue asm_arg);
+AsmValue asm_deref(AsmValue asm_value);
 
 bool is_sign_extending_op(AsmOp op);
 

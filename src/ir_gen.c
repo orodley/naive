@@ -448,7 +448,7 @@ static Term ir_gen_expr(
 
 static IrConst *eval_constant_expr(IrBuilder *builder, Env *env, ASTExpr *expr)
 {
-  u32 num_blocks, num_instrs;
+  u32 num_blocks = 0, num_instrs = 0;
   if (builder->current_function != NULL) {
     num_blocks = builder->current_function->blocks.size;
   }
@@ -1040,7 +1040,8 @@ static IrGlobal *ir_global_for_decl(
     u32 arity = ctype->u.function.arity;
     if (struct_ret) arity++;
 
-    IrType *arg_ir_types = malloc(sizeof(*arg_ir_types) * arity);
+    IrType *arg_ir_types =
+        pool_alloc(&builder->trans_unit->pool, sizeof(*arg_ir_types) * arity);
 
     u32 i = 0;
     u32 j = 0;

@@ -16,14 +16,14 @@ void *mremap(
   void *new_address = NULL;
   if (flags & MREMAP_FIXED) new_address = va_arg(varargs, void *);
 
-  uint64_t ret = __syscall(
+  void *ret = (void *)__syscall(
       25, (uint64_t)old_address, old_size, new_size, flags,
       (uint64_t)new_address, 0);
   if (PTR_IS_ERR(ret)) {
-    errno = -ret;
-    return MAP_FAILED;
+    errno = -(uint64_t)ret;
+    ret = MAP_FAILED;
   }
 
   va_end(varargs);
-  return (void *)ret;
+  return ret;
 }

@@ -292,9 +292,7 @@ typedef struct BinaryTail
 } BinaryTail;
 
 #define CASE2(token, ast_type) \
-  case TOK_##token:            \
-    expr->t = ast_type##_EXPR; \
-    break;
+  case TOK_##token: expr->t = ast_type##_EXPR; break;
 #define CASE1(operator) CASE2(operator, operator)
 
 static ASTExpr *build_binary_head(
@@ -1130,8 +1128,6 @@ static void dump_decl_specifier_list(ASTDeclSpecifier *decl_specifier_list)
 
   pretty_printf(")");
 }
-
-static void dump_declarator(ASTDeclarator *declarator);
 
 static void dump_parameter_decls(ASTParameterDecl *param_decls)
 {

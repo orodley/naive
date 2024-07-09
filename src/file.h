@@ -40,9 +40,9 @@ inline long checked_ftell(FILE *file)
   return ret;
 }
 
-inline void checked_fseek(FILE *stream, long offset, int whence)
+inline void checked_fseek(FILE *file, long offset, int whence)
 {
-  int ret = fseek(stream, offset, whence);
+  int ret = fseek(file, offset, whence);
   if (ret == -1) {
     perror("checked_fseek");
     assert(false);

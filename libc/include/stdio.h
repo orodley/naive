@@ -4,7 +4,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 
-#define EOF -1
+#define EOF (-1)
 
 struct _IO_FILE;
 typedef struct _IO_FILE FILE;

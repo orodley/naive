@@ -415,17 +415,17 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 {
   assert(instr->type.t == IR_INT);
 
-  AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
-  AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
+  AsmValue lhs = asm_value(builder, instr->u.binary_op.arg1);
+  AsmValue rhs = asm_value(builder, instr->u.binary_op.arg2);
 
   AsmValue target = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
   assign_vreg(instr, target);
 
-  emit_instr2(builder, MOV, target, arg1);
+  emit_instr2(builder, MOV, target, lhs);
   emit_instr2(
       builder, op, target,
       maybe_move_const_to_reg(
-          builder, arg2, instr->type.u.bit_width, is_sign_extending_op(op)));
+          builder, rhs, instr->type.u.bit_width, is_sign_extending_op(op)));
 }
 
 static void handle_phi_nodes(
@@ -1103,27 +1103,27 @@ static void asm_gen_instr(
   case OP_SHR: {
     AsmOp op = instr->op == OP_SHL ? SHL : SHR;
 
-    AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
-    AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
+    AsmValue shiftee = asm_value(builder, instr->u.binary_op.arg1);
+    AsmValue shift_amount = asm_value(builder, instr->u.binary_op.arg2);
     u8 width = instr->type.u.bit_width;
 
     AsmValue target = asm_vreg(new_vreg(builder), width);
     assign_vreg(instr, target);
-    emit_instr2(builder, MOV, target, arg1);
+    emit_instr2(builder, MOV, target, shiftee);
 
-    switch (arg2.t) {
-    case ASM_VALUE_CONST: emit_instr2(builder, op, target, arg2); break;
+    switch (shift_amount.t) {
+    case ASM_VALUE_CONST: emit_instr2(builder, op, target, shift_amount); break;
     case ASM_VALUE_REGISTER: {
       AsmValue reg_cl = pre_alloced_vreg(builder, REG_CLASS_C, 8);
 
-      Register arg2_low = arg2.u.reg;
-      arg2_low.width = 8;
+      Register shift_amount_low = shift_amount.u.reg;
+      shift_amount_low.width = 8;
 
       emit_instr2(
           builder, MOV, reg_cl,
           (AsmValue){
               .t = ASM_VALUE_REGISTER,
-              .u.reg = arg2_low,
+              .u.reg = shift_amount_low,
           });
 
       emit_instr2(builder, op, target, reg_cl);
@@ -1143,21 +1143,21 @@ static void asm_gen_instr(
     AsmValue vreg = asm_vreg(new_vreg(builder), width);
     assign_vreg(instr, vreg);
 
-    AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
-    AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
+    AsmValue factor1 = asm_value(builder, instr->u.binary_op.arg1);
+    AsmValue factor2 = asm_value(builder, instr->u.binary_op.arg2);
 
-    if (arg1.t != ASM_VALUE_CONST && arg2.t != ASM_VALUE_CONST) {
-      emit_instr2(builder, MOV, vreg, arg1);
-      emit_instr2(builder, IMUL, vreg, arg2);
+    if (factor1.t != ASM_VALUE_CONST && factor2.t != ASM_VALUE_CONST) {
+      emit_instr2(builder, MOV, vreg, factor1);
+      emit_instr2(builder, IMUL, vreg, factor2);
     } else {
       AsmValue const_arg;
       AsmValue non_const_arg;
-      if (arg1.t == ASM_VALUE_CONST) {
-        const_arg = arg1;
-        non_const_arg = arg2;
+      if (factor1.t == ASM_VALUE_CONST) {
+        const_arg = factor1;
+        non_const_arg = factor2;
       } else {
-        const_arg = arg2;
-        non_const_arg = arg1;
+        const_arg = factor2;
+        non_const_arg = factor1;
       }
       assert(non_const_arg.t != ASM_VALUE_CONST);
 
@@ -1171,31 +1171,32 @@ static void asm_gen_instr(
     assert(instr->type.t == IR_INT);
     u8 width = instr->type.u.bit_width;
 
-    AsmValue arg1 = asm_value(builder, instr->u.binary_op.arg1);
-    AsmValue arg2 = asm_value(builder, instr->u.binary_op.arg2);
+    AsmValue numerator = asm_value(builder, instr->u.binary_op.arg1);
+    AsmValue denominator = asm_value(builder, instr->u.binary_op.arg2);
 
-    AsmValue reg_arg2 = arg2;
-    if (arg2.t == ASM_VALUE_CONST) {
-      reg_arg2 = asm_vreg(new_vreg(builder), width);
-      emit_instr2(builder, MOV, reg_arg2, arg2);
+    AsmValue reg_denominator = denominator;
+    if (denominator.t == ASM_VALUE_CONST) {
+      reg_denominator = asm_vreg(new_vreg(builder), width);
+      emit_instr2(builder, MOV, reg_denominator, denominator);
     }
 
     // @TODO: Precompute liveness.
     AsmValue quotient = pre_alloced_vreg(builder, REG_CLASS_A, width);
     AsmValue remainder = pre_alloced_vreg(builder, REG_CLASS_D, width);
-    emit_instr2(builder, MOV, quotient, arg1);
+    emit_instr2(builder, MOV, quotient, numerator);
 
     AsmOp sign_extend_op;
     switch (width) {
     case 32: sign_extend_op = CDQ; break;
     case 64: sign_extend_op = CQO; break;
+    default: UNIMPLEMENTED;
     }
 
     AsmInstr *sign_extend = emit_instr0(builder, sign_extend_op);
     add_dep(sign_extend, quotient);
     add_dep(sign_extend, remainder);
 
-    AsmInstr *idiv = emit_instr1(builder, IDIV, reg_arg2);
+    AsmInstr *idiv = emit_instr1(builder, IDIV, reg_denominator);
     add_dep(idiv, quotient);
     add_dep(idiv, remainder);
 

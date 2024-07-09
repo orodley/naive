@@ -216,7 +216,7 @@ i64 read_char_in_literal(Reader *reader, SourceLoc *start_source_loc)
       return -1;
     }
   } else {
-    value = c;
+    value = (unsigned char)c;
   }
 
   if (value > 0xFF) {

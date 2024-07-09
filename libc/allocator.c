@@ -30,7 +30,7 @@ static uint8_t *ptr_for_header(HeapEntryHeader *header)
 
 static HeapEntryHeader *header_for_ptr(void *ptr)
 {
-  return (HeapEntryHeader *)((uintptr_t)ptr - sizeof(HeapEntryHeader));
+  return (HeapEntryHeader *)((uint8_t *)ptr - sizeof(HeapEntryHeader));
 }
 
 void *malloc(size_t size)

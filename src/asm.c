@@ -240,10 +240,7 @@ static bool is_const_and_fits(
 static char *asm_op_names[] = {ASM_OPS};
 #undef X
 
-#define X(x, b, d, w, o) \
-  {                      \
-    b, d, w, o           \
-  }
+#define X(x, b, d, w, o) {b, d, w, o}
 static char *physical_register_names[][4] = {REG_CLASSES};
 #undef X
 
@@ -619,6 +616,8 @@ static void encode_instr(
     u8 opcode[], bool reg_and_rm, i32 opcode_extension, i32 immediate_size,
     bool reg_in_opcode, FixupType fixup_type)
 {
+  assert(instr != NULL);
+
   EncodedInstr encoded_instr;
   ZERO_STRUCT(&encoded_instr);
   encoded_instr.displacement_size = -1;

@@ -1,5 +1,5 @@
 ---
-Checks: 'bugprone-*,clang-analyzer-*,performance-*,portability-*,readability-*,-readability-braces-around-statements,-readability-magic-numbers,-readability-identifier-list,-bugprone-implicit-widening-of-multiplication-result,-readability-identifier-length,-readability-function-cognitive-complexity,-readability-isolate-declaration,-bugprone-easily-swappable-parameters,-bugprone-narrowing-conversions,-readability-else-after-return,-bugprone-branch-clone,-bugprone-reserved-identifier,-readability-non-const-parameter'
+Checks: 'bugprone-*,clang-analyzer-*,performance-*,portability-*,readability-*,-readability-braces-around-statements,-readability-magic-numbers,-readability-identifier-list,-bugprone-implicit-widening-of-multiplication-result,-readability-identifier-length,-readability-function-cognitive-complexity,-readability-isolate-declaration,-bugprone-easily-swappable-parameters,-bugprone-narrowing-conversions,-readability-else-after-return,-bugprone-branch-clone,-bugprone-reserved-identifier,-readability-non-const-parameter,-bugprone-suspicious-realloc-usage,-performance-no-int-to-ptr'
 CheckOptions:
   - key: 'bugprone-sizeof-expression.WarnOnSizeOfPointerToAggregate'
     value: false
