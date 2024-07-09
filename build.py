@@ -340,6 +340,9 @@ def build(args):
         "-Ilibc/include",
     ]
 
+    if "clang" in cc:
+        COMMON_CFLAGS.append("-fcolor-diagnostics")
+
     os.makedirs("build/toolchain", exist_ok=True)
     os.makedirs("build/bin", exist_ok=True)
     os.makedirs("build/libc", exist_ok=True)
