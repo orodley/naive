@@ -126,7 +126,8 @@ def run_tests(args, build_config):
         if len(args.tests) == 0:
             print("Must specify a list of tests if passing '-c'")
             return
-        map(create_test_files, args.tests)
+        for t in args.tests:
+            create_test_files(t)
         return 0
 
     test_names = args.tests
@@ -238,10 +239,10 @@ def create_test_files(test_dir):
     )
     compile_stdout, compile_stderr = cc_proc.communicate()
 
-    run_stdout = ""
-    run_stderr = ""
+    run_stdout = b""
+    run_stderr = b""
     binary_path = os.path.abspath(testcase.binary)
-    if testcase.cc_proc.returncode == 0 and os.path.exists(binary_path):
+    if cc_proc.returncode == 0 and os.path.exists(binary_path):
         program_proc = subprocess.Popen(
             binary_path,
             stdout=subprocess.PIPE,
@@ -253,9 +254,9 @@ def create_test_files(test_dir):
         os.remove(binary_path)
 
     def create_file(contents, filename):
-        if contents != "":
+        if contents != b"":
             with open(os.path.join(test_dir, filename), "w") as f:
-                f.write(contents)
+                f.write(contents.decode())
 
     create_file(compile_stdout, "compile_stdout")
     create_file(compile_stderr, "compile_stderr")
