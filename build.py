@@ -2,6 +2,7 @@
 
 import argparse
 import fnmatch
+import glob
 import json
 import multiprocessing
 import os
@@ -498,6 +499,8 @@ def check(args):
     if files == []:
         for command in compile_commands:
             files.append(command["file"])
+        files.extend(glob.glob("src/**/*.h"))
+        files.extend(glob.glob("libc/**/*.h"))
     for f in files:
         enqueue_proc(procs, ["clang-tidy", "--use-color", "-p", ".", f])
 
