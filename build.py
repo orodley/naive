@@ -2,6 +2,7 @@
 
 import argparse
 import fnmatch
+import json
 import multiprocessing
 import os
 import shutil
@@ -70,7 +71,6 @@ def run_tests(args):
     testcases = list(map(make_testcase, test_names))
 
     num_tests = len(testcases)
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     print("Running %d tests:" % num_tests)
 
@@ -326,7 +326,6 @@ def build(args):
         "-Ilibc/include",
     ]
 
-    os.chdir(os.path.dirname(os.path.realpath(__file__)))
     os.makedirs("build/toolchain", exist_ok=True)
     os.makedirs("build/bin", exist_ok=True)
     os.makedirs("build/libc", exist_ok=True)
@@ -437,11 +436,40 @@ def build(args):
     if (ret := run_all_procs_printing_failures(procs)) != 0:
         return ret
 
+    dump_compile_commands()
+
     return 0
 
 
 def enqueue_proc(procs, cmdline, *proc_info, **kwargs):
     procs.append((cmdline, proc_info, kwargs))
+
+
+compile_commands = []
+
+
+def add_compile_command(cmdline, cwd):
+    arguments = cmdline[:]
+    if arguments[0] == "ccache":
+        arguments.pop(0)
+    if os.path.basename(arguments[0]) not in {"ncc", "gcc", "clang", get_cc()}:
+        return
+    if not arguments[-1].endswith(".c"):
+        return
+
+    filename = arguments[-1]
+    compile_commands.append(
+        {
+            "directory": cwd,
+            "arguments": arguments,
+            "file": filename,
+        }
+    )
+
+
+def dump_compile_commands():
+    with open("compile_commands.json", "w") as f:
+        json.dump(compile_commands, f)
 
 
 def run_all_procs(procs):
@@ -465,6 +493,7 @@ def run_all_procs(procs):
                     proc_info,
                 )
             )
+            add_compile_command(cmdline, kwargs.get("cwd", os.getcwd()))
 
         if len(done) == 0:
             time.sleep(0.05)
@@ -509,4 +538,5 @@ def sigint_handler(signal, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, sigint_handler)
+    os.chdir(os.path.dirname(os.path.realpath(__file__)))
     main(make_arg_parser().parse_args())

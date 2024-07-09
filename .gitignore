@@ -2,6 +2,7 @@
 /nar
 /nas
 /build
+/compile_commands.json
 
 *.o
 *.a
