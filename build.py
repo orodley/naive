@@ -71,6 +71,9 @@ def main(args):
 
 
 def run_tests(args):
+    if (ret := build(args)) != 0:
+        return ret
+
     if args.create_testcase:
         if len(args.tests) == 0:
             print("Must specify a list of tests if passing '-c'")
@@ -173,7 +176,7 @@ def make_testcase(test_dir):
 
     testcase.binary = os.path.abspath(os.path.join(test_dir, "a.out.tmp"))
     testcase.cmdline = (
-        [os.path.abspath(get_cc()), "-o", testcase.binary]
+        [os.path.abspath("build/toolchain/ncc"), "-o", testcase.binary]
         + extra_flags
         + test_filenames
     )
