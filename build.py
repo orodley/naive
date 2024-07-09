@@ -455,7 +455,7 @@ def build(build_config):
             procs,
             build_config.cc
             + host_cflags
-            + ["-o", bin.replace("src/bin/", build_config.install_dir)]
+            + ["-o", bin.replace("src/bin", build_config.install_dir)]
             + [d.replace("src/", "build/") for d in deps],
         )
     if (ret := run_all_procs_printing_failures(procs)) != 0:
