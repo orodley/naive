@@ -65,7 +65,10 @@ int main(int argc, char *argv[])
   for (i32 i = 1; i < argc; i++) {
     char *arg = argv[i];
     if (arg[0] == '-') {
-      if (streq(arg, "-E")) {
+      if (streq(arg, "--version")) {
+        puts("Naive C Compiler version 1.0");
+        return 0;
+      } else if (streq(arg, "-E")) {
         preprocess_only = true;
       } else if (streq(arg, "-dump-tokens")) {
         flag_dump_tokens = true;
