@@ -487,7 +487,9 @@ def dump_compile_commands():
 
 
 def check(args):
-    build(args)
+    if (ret := build(args)) != 0:
+        return ret
+
     files = args.files
     procs = []
     if files == []:
