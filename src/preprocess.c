@@ -276,19 +276,8 @@ static char *look_up_include_path(
 static bool preprocess_file(
     PP *pp, char *input_filename, SourceLoc blame_source_loc);
 
-static bool eval_pp_condition(PP *pp)
+static bool eval_pp_condition_str(PP *pp, char *condition_str)
 {
-  Reader *reader = &pp->reader;
-  skip_whitespace_and_comments(pp, false);
-
-  Array(char) condition_chars;
-  ARRAY_INIT(&condition_chars, char, 10);
-  while (peek_char(reader) != '\n')
-    *ARRAY_APPEND(&condition_chars, char) = read_char(reader);
-  *ARRAY_APPEND(&condition_chars, char) = '\0';
-  char *condition_str = (char *)condition_chars.elements;
-
-  bool cond;
   if (strneq(condition_str, "defined", 7)) {
     u32 i = 7;
     while (condition_str[i] == ' ' || condition_str[i] == '\t') {
@@ -320,15 +309,20 @@ static bool eval_pp_condition(PP *pp)
     }
 
     String macro_name = {condition_str + i, len};
-    cond = look_up_macro(&pp->macro_env, macro_name) != NULL;
+    return look_up_macro(&pp->macro_env, macro_name) != NULL;
+  } else if (condition_str[0] == '!') {
+    do {
+      condition_str++;
+    } while (condition_str[0] == ' ' || condition_str[0] == '\t');
+    return !eval_pp_condition_str(pp, condition_str);
   } else {
     condition_str = macroexpand(pp, condition_str);
 
     // For now we only handle #if 0, #if 1, and #if defined <...>
     if (streq(condition_str, "0")) {
-      cond = false;
+      return false;
     } else if (streq(condition_str, "1")) {
-      cond = true;
+      return true;
     } else {
       fprintf(
           stderr,
@@ -338,9 +332,23 @@ static bool eval_pp_condition(PP *pp)
       exit(1);
     }
   }
+}
+
+static bool eval_pp_condition(PP *pp)
+{
+  Reader *reader = &pp->reader;
+  skip_whitespace_and_comments(pp, false);
+
+  Array(char) condition_chars;
+  ARRAY_INIT(&condition_chars, char, 10);
+  while (peek_char(reader) != '\n')
+    *ARRAY_APPEND(&condition_chars, char) = read_char(reader);
+  *ARRAY_APPEND(&condition_chars, char) = '\0';
+  char *condition_str = (char *)condition_chars.elements;
+
+  bool cond = eval_pp_condition_str(pp, condition_str);
 
   array_free(&condition_chars);
-
   return cond;
 }
 
