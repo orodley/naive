@@ -499,14 +499,17 @@ def check(args):
         for command in compile_commands:
             files.append(command["file"])
     for f in files:
-        enqueue_proc(procs, ["clang-tidy", "--quiet", "--use-color", "-p", ".", f])
+        enqueue_proc(procs, ["clang-tidy", "--use-color", "-p", ".", f])
 
     total_warnings = 0
     for _, stdout, stderr, _ in run_all_procs(procs):
-        if match := re.match(r"(\d) warnings? generated", stderr.decode()):
+        stdout, stderr = stdout.decode(), stderr.decode()
+        if match := re.search(r"(\d+) warnings? generated", stderr):
             total_warnings += int(match.group(1))
+        if match := re.search(r"Suppressed (\d+) warnings?", stderr):
+            total_warnings -= int(match.group(1))
         if stdout:
-            print(stdout.decode())
+            print(stdout)
 
     if total_warnings != 0:
         print(f"{total_warnings} warnings")
