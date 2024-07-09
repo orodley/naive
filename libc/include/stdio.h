@@ -24,6 +24,7 @@ int fclose(FILE *fp);
 int fseek(FILE *stream, long offset, int whence);
 long ftell(FILE *stream);
 int feof(FILE *stream);
+int ferror(FILE *stream);
 
 int fputc(int c, FILE *stream);
 int fputs(const char *s, FILE *stream);

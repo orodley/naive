@@ -7,6 +7,7 @@ struct _IO_FILE
 {
   int fd;
   bool eof;
+	bool error;
 };
 
 #endif
