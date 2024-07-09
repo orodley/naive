@@ -50,6 +50,11 @@ def make_arg_parser():
         aliases=["c"],
         help="Run static checks",
     )
+    check_parser.add_argument(
+        "files",
+        help="The set of files to check (empty = all)",
+        nargs="*",
+    )
 
     return parser
 
@@ -483,11 +488,13 @@ def dump_compile_commands():
 
 def check(args):
     build(args)
+    files = args.files
     procs = []
-    for command in compile_commands:
-        enqueue_proc(
-            procs, ["clang-tidy", "--quiet", "--use-color", "-p", ".", command["file"]]
-        )
+    if files == []:
+        for command in compile_commands:
+            files.append(command["file"])
+    for f in files:
+        enqueue_proc(procs, ["clang-tidy", "--quiet", "--use-color", "-p", ".", f])
 
     total_warnings = 0
     for _, stdout, stderr, _ in run_all_procs(procs):
