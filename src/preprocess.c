@@ -237,8 +237,7 @@ static char *look_up_include_path(
   // Try relative to the including file
   u32 including_file_length = strlen(including_file);
   i32 i = including_file_length - 1;
-  for (; i >= 0 && including_file[i] != '/'; i--)
-    ;
+  for (; i >= 0 && including_file[i] != '/'; i--);
 
   char *base_path;
   u32 base_length;
@@ -447,8 +446,7 @@ static bool handle_pp_directive(PP *pp)
 
       char terminator = c == '<' ? '>' : '"';
       u32 start_index = reader->position;
-      while (!at_end(reader) && read_char(reader) != terminator)
-        ;
+      while (!at_end(reader) && read_char(reader) != terminator);
 
       if (at_end(reader)) {
         issue_error(&include_path_source_loc, "Unterminated include path");
@@ -982,6 +980,15 @@ static bool preprocess_aux(PP *pp)
   return true;
 }
 
+void add_predefined_macro(Array(Macro) *macro_env, char *name, char *value)
+{
+  *ARRAY_APPEND(macro_env, Macro) = (Macro){
+      .arg_names = EMPTY_ARRAY,
+      .name = STRING(name),
+      .value = value,
+  };
+}
+
 bool preprocess(
     char *input_filename, Array(char *) *include_dirs,
     Array(char) *preprocessed, Array(Adjustment) *adjustments)
@@ -996,6 +1003,7 @@ bool preprocess(
       .macro_env = EMPTY_ARRAY,
       .curr_macro_params = EMPTY_ARRAY,
   };
+  add_predefined_macro(&pp.macro_env, "__STDC__", "1");
 
   bool ret = preprocess_file(&pp, input_filename, (SourceLoc){NULL, 0, 0});
 

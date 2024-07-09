@@ -23,6 +23,7 @@ typedef struct String
 
 #define INVALID_STRING ((String){NULL, -1})
 #define EMPTY_STRING ((String){NULL, 0})
+#define STRING(s) ((String){(s), strlen(s)})
 
 inline bool is_valid(String str)
 {
