@@ -31,6 +31,9 @@ def make_arg_parser():
     parser.add_argument(
         "--asan", help="Build with Address Sanitizer", action="store_true"
     )
+    parser.add_argument(
+        "--msan", help="Build with Memory Sanitizer", action="store_true"
+    )
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -95,6 +98,11 @@ class BuildConfig(object):
         self.extra_cflags = []
         if args.asan:
             self.extra_cflags.append("-fsanitize=address")
+        if args.msan:
+            self.extra_cflags += [
+                "-fsanitize=memory",
+                "-fsanitize-memory-track-origins=2",
+            ]
 
         self.install_dir = os.path.abspath(args.install_dir or "build/toolchain")
 
