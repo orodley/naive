@@ -518,7 +518,7 @@ static bool handle_pp_directive(PP *pp)
             if (!is_valid(arg_name)) {
               issue_error(
                   &reader->source_loc,
-                  "Unexpected charater while processing "
+                  "Unexpected character while processing "
                   "macro argument list");
               return false;
             }
