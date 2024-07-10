@@ -14,6 +14,7 @@ typedef struct Macro
   String name;
   char *value;
   Array(String) arg_names;
+  bool variadic;
 } Macro;
 
 static Macro *look_up_macro(Array(Macro) *macro_env, String name)
@@ -502,6 +503,7 @@ static bool handle_pp_directive(PP *pp)
       }
 
       Array(String) arg_names;
+      bool variadic = false;
       ARRAY_INIT(&arg_names, String, 0);
       if (peek_char(reader) == '(') {
         advance(reader);
@@ -512,6 +514,23 @@ static bool handle_pp_directive(PP *pp)
             issue_error(
                 &reader->source_loc,
                 "Unexpected newline in macro definition argument list");
+            return false;
+          } else if (c == '.') {
+            advance(reader);
+            if (read_char(reader) != '.' || read_char(reader) != '.') {
+              issue_error(
+                  &reader->source_loc,
+                  "Unexpected char in variadic macro argument list");
+              return false;
+            }
+
+            skip_whitespace_and_comments(pp, false);
+            if (read_char(reader) == ')') break;
+
+            issue_error(
+                &reader->source_loc,
+                "Unexpected char after ellipsis in variadic macro argument "
+                "list");
             return false;
           } else {
             String arg_name = read_symbol(reader);
@@ -559,6 +578,7 @@ static bool handle_pp_directive(PP *pp)
       macro->name = macro_name;
       macro->value = macro_value;
       macro->arg_names = arg_names;
+      macro->variadic = variadic;
     } else if (strneq(directive.chars, "undef", directive.len)) {
       skip_whitespace_and_comments(pp, false);
 
