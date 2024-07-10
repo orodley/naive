@@ -2,6 +2,11 @@
 
 cd "$(dirname "$0")/.."
 
+clear
+cmd="./build.py "$@""
+echo Running command "$cmd"
+$cmd
+
 inotifywait -m -r -q -e modify,create,move \
     --include '^./(src|libc|freestanding|meta|tests).*\.(c|h|peg|enc|py)$' . |
   while read -r dir action file; do
@@ -14,7 +19,6 @@ inotifywait -m -r -q -e modify,create,move \
 		# second to "debounce" it.
 		timeout 1 cat > /dev/null
 
-	  cmd="./build.py "$@""
 		echo Running command "$cmd"
 		$cmd
 		echo Done
