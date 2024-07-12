@@ -28,6 +28,8 @@ def make_arg_parser():
     parser.add_argument(
         "--install-dir", help="The directory to install the toolchain to"
     )
+
+    parser.add_argument("--dbg", help="Build with debug symbols", action="store_true")
     parser.add_argument(
         "--asan", help="Build with Address Sanitizer", action="store_true"
     )
@@ -103,6 +105,8 @@ class BuildConfig(object):
                 "-fsanitize=memory",
                 "-fsanitize-memory-track-origins=2",
             ]
+        if args.dbg:
+            self.extra_cflags.append("-g")
 
         self.install_dir = os.path.abspath(args.install_dir or "build/toolchain")
 
