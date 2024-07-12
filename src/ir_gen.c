@@ -1,3 +1,5 @@
+#include "ir_gen.h"
+
 #include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>

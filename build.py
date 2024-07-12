@@ -118,7 +118,7 @@ def main(args):
     elif args.command in {"build", "b"}:
         ret = build(build_config)
     elif args.command in {"check", "c"}:
-        ret = check(args)
+        ret = check(args, build_config)
     sys.exit(ret)
 
 
@@ -555,8 +555,8 @@ def dump_compile_commands():
         json.dump(compile_commands, f)
 
 
-def check(args):
-    if (ret := build(args)) != 0:
+def check(args, build_config):
+    if (ret := build(build_config)) != 0:
         return ret
 
     files = args.files

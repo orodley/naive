@@ -1,4 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
+#include "preprocess.h"
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>

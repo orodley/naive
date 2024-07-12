@@ -1,4 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
+#include "elf.h"
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,7 +144,7 @@ typedef enum ELFSymbolType
 
 #define ELF64_SYMBOL_TYPE_AND_BINDING(t, b) (((b) << 4) | (t))
 #define ELF64_SYMBOL_BINDING(x) ((x) >> 4)
-#define ELF64_SYMBOL_TYPE(x) ((x)&0xF)
+#define ELF64_SYMBOL_TYPE(x) ((x) & 0xF)
 
 typedef struct ELF64Rela
 {
@@ -151,9 +153,9 @@ typedef struct ELF64Rela
   i64 addend;
 } __attribute__((packed)) ELF64Rela;
 
-#define ELF64_RELA_TYPE_AND_SYMBOL(t, s) (((u64)(s) << 32) | ((t)&0xFFFFFFFF))
+#define ELF64_RELA_TYPE_AND_SYMBOL(t, s) (((u64)(s) << 32) | ((t) & 0xFFFFFFFF))
 #define ELF64_RELA_SYMBOL(x) ((x) >> 32)
-#define ELF64_RELA_TYPE(x) ((x)&0xFFFFFFFF)
+#define ELF64_RELA_TYPE(x) ((x) & 0xFFFFFFFF)
 
 // @NOTE: These are defined in the System V x86-64 spec. They basically
 // correspond to the entries in the ELF spec, but with the R_X86_64 prefix
