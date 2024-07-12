@@ -140,9 +140,9 @@ static void add_adjustment(PP *pp, AdjustmentType type)
   add_adjustment_to(pp, type, pp->reader.source_loc);
 }
 
-static void skip_whitespace_and_comments(PP *pp, bool skip_newline)
+static void skip_whitespace_and_comments_from_reader(
+    Reader *reader, Array(char) *out_chars, bool skip_newline)
 {
-  Reader *reader = &pp->reader;
   while (!at_end(reader)) {
     switch (peek_char(reader)) {
     case '\n':
@@ -153,7 +153,9 @@ static void skip_whitespace_and_comments(PP *pp, bool skip_newline)
       // Retain any newlines - we need them in the output so that the
       // tokeniser can correctly track source location without needing
       // an adjustment for every single line in the source.
-      *ARRAY_APPEND(&pp->out_chars, char) = '\n';
+      if (out_chars != NULL) {
+        *ARRAY_APPEND(out_chars, char) = '\n';
+      }
 
       break;
     case ' ':
@@ -188,6 +190,12 @@ static void skip_whitespace_and_comments(PP *pp, bool skip_newline)
   }
 }
 
+static void skip_whitespace_and_comments(PP *pp, bool skip_newline)
+{
+  skip_whitespace_and_comments_from_reader(
+      &pp->reader, &pp->out_chars, skip_newline);
+}
+
 static bool append_string_or_char_literal(
     Reader *reader, char start_char, Array(char) *out_chars)
 {
@@ -209,9 +217,11 @@ static bool append_string_or_char_literal(
   }
   advance(reader);
 
-  ARRAY_APPEND_ELEMS(
-      out_chars, char, reader->position - literal_start,
-      reader->buffer.chars + literal_start);
+  if (out_chars != NULL) {
+    ARRAY_APPEND_ELEMS(
+        out_chars, char, reader->position - literal_start,
+        reader->buffer.chars + literal_start);
+  }
   return true;
 }
 
@@ -523,6 +533,7 @@ static bool handle_pp_directive(PP *pp)
                   "Unexpected char in variadic macro argument list");
               return false;
             }
+            variadic = true;
 
             skip_whitespace_and_comments(pp, false);
             if (read_char(reader) == ')') break;
@@ -638,23 +649,21 @@ static bool handle_pp_directive(PP *pp)
 
 static bool substitute_macro_params(PP *pp, Macro *macro)
 {
-  bool ret;
   Reader *reader = &pp->reader;
   SourceLoc start_source_loc = pp->reader.source_loc;
 
-  Array(Macro) new_macro_params = EMPTY_ARRAY;
-
-  Array(char) arg_chars;
-  ARRAY_INIT(&arg_chars, char, 20);
-  u32 args_processed = 0;
+  // First, find the span which contains all the arguments to this function-like
+  // macro.
+  // @TODO: Might make sense to merge this with the next pass.
+  Array(char) macro_args_str = EMPTY_ARRAY;
   while (!at_end(reader)) {
     char c = read_char(reader);
     switch (c) {
     case '(': {
       u32 bracket_depth = 1;
-      *ARRAY_APPEND(&arg_chars, char) = c;
+      *ARRAY_APPEND(&macro_args_str, char) = c;
 
-      while (bracket_depth != 0) {
+      while (bracket_depth != 0 && !at_end(reader)) {
         char c = read_char(reader);
         switch (c) {
         case '(': bracket_depth++; break;
@@ -662,70 +671,134 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
         }
 
         // @TODO: Append all at once with ARRAY_APPEND_ELEMS instead.
-        *ARRAY_APPEND(&arg_chars, char) = c;
+        *ARRAY_APPEND(&macro_args_str, char) = c;
       }
       break;
     }
     case '"':
     case '\'':
-      if (!append_string_or_char_literal(reader, c, &arg_chars)) return false;
-
+      if (!append_string_or_char_literal(reader, c, &macro_args_str))
+        return false;
       break;
-    case ')':
-    case ',': {
-      if (args_processed == macro->arg_names.size) {
-        issue_error(
-            &reader->source_loc,
-            "Too many parameters to function-like macro"
-            " (expected %u)",
-            macro->arg_names.size);
-        ret = false;
-        goto cleanup;
-      }
-      Macro *arg_macro = ARRAY_APPEND(&new_macro_params, Macro);
-      arg_macro->name = *ARRAY_REF(&macro->arg_names, String, args_processed);
-
-      char *macro_value = strndup((char *)arg_chars.elements, arg_chars.size);
-      arg_macro->value = macroexpand(pp, macro_value);
-      free(macro_value);
-
-      if (arg_macro->value == NULL) {
-        ret = false;
-        goto cleanup;
-      }
-
-      arg_macro->arg_names = EMPTY_ARRAY;
-      array_clear(&arg_chars);
-      args_processed++;
-
-      if (c == ')') {
-        ret = true;
-        if (args_processed != macro->arg_names.size) {
-          issue_error(
-              &reader->source_loc,
-              "Not enough parameters to function-like macro"
-              " (expected %u, got %u)",
-              macro->arg_names.size, args_processed);
-          ret = false;
-        }
-
-        goto cleanup;
-      } else {
-        skip_whitespace_and_comments(pp, false);
-      }
-      break;
-    }
-    default: *ARRAY_APPEND(&arg_chars, char) = c;
+    case ')': goto finished_span;
+    default: *ARRAY_APPEND(&macro_args_str, char) = c;
     }
   }
 
-  issue_error(&start_source_loc, "Unterminated macro-like function invocation");
-  ret = false;
+  // If we're here, we reached the end of the reader without finding a
+  // terminating ')'.
+  issue_error(&start_source_loc, "Unterminated function-like macro invocation");
+  array_free(&macro_args_str);
+  return false;
+
+finished_span:;
+  // Take the resulting string and divide it up into arguments.
+  Reader args_reader;
+  reader_init(
+      &args_reader,
+      (String){
+          .chars = (char *)macro_args_str.elements, .len = macro_args_str.size},
+      EMPTY_ARRAY, false, "??");
+
+  Array(char *) arg_values = EMPTY_ARRAY;
+  u32 curr_arg_start = 0;
+  for (;;) {
+    skip_whitespace_and_comments_from_reader(&args_reader, NULL, false);
+    char c = read_char(&args_reader);
+    switch (c) {
+    case '(': {
+      u32 bracket_depth = 1;
+
+      while (bracket_depth != 0 && !at_end(&args_reader)) {
+        c = read_char(&args_reader);
+        switch (c) {
+        case '(': bracket_depth++; break;
+        case ')': bracket_depth--; break;
+        }
+      }
+      break;
+    }
+    case '\'':
+    case '"':
+      if (!append_string_or_char_literal(&args_reader, c, NULL)) {
+        array_free(&macro_args_str);
+        return false;
+      }
+      break;
+    case EOF:
+    case ',': {
+      u32 curr_arg_end = args_reader.position - 1;
+      if (curr_arg_end != curr_arg_start) {
+        String arg_value = {
+            .chars = args_reader.buffer.chars + curr_arg_start,
+            .len = curr_arg_end - curr_arg_start,
+        };
+        char *arg_value_str = strndup(arg_value.chars, arg_value.len);
+        char *expanded = macroexpand(pp, arg_value_str);
+        free(arg_value_str);
+        *ARRAY_APPEND(&arg_values, char *) = expanded;
+      }
+
+      if (c == EOF) {
+        goto got_all_args;
+      }
+
+      skip_whitespace_and_comments_from_reader(&args_reader, NULL, false);
+      curr_arg_start = args_reader.position;
+      break;
+    }
+    }
+  }
+
+got_all_args:
+  array_free(&macro_args_str);
+  bool ret = true;
+
+  if ((!macro->variadic && arg_values.size != macro->arg_names.size)
+      || (macro->variadic && arg_values.size < macro->arg_names.size)) {
+    issue_error(
+        &reader->source_loc,
+        "Wrong number of parameters to function-like macro '%.*s'"
+        " (expected %u%s, got %u)",
+        macro->name.len, macro->name.chars, macro->arg_names.size,
+        macro->variadic ? "+" : "", arg_values.size);
+    ret = false;
+    goto cleanup;
+  }
+
+  // Finally, assign each argument to its associated parameter name.
+  Array(Macro) new_macro_params;
+  ARRAY_INIT(
+      &new_macro_params, Macro, arg_values.size + (macro->variadic ? 1 : 0));
+  for (u32 i = 0; i < macro->arg_names.size; i++) {
+    char *arg_value = *ARRAY_REF(&arg_values, char *, i);
+    Macro *arg_macro = ARRAY_APPEND(&new_macro_params, Macro);
+    arg_macro->arg_names = EMPTY_ARRAY;
+    arg_macro->variadic = false;
+    arg_macro->name = *ARRAY_REF(&macro->arg_names, String, i);
+    arg_macro->value = arg_value;
+  }
+  // All extra args get assigned to __VA_ARGS__, with a comma in between each.
+  if (arg_values.size > macro->arg_names.size) {
+    Array(char) va_args_value = EMPTY_ARRAY;
+    for (u32 i = macro->arg_names.size; i < arg_values.size; i++) {
+      char *arg_value = *ARRAY_REF(&arg_values, char *, i);
+      ARRAY_APPEND_ELEMS(&va_args_value, char, strlen(arg_value), arg_value);
+      if (i != arg_values.size - 1) {
+        *ARRAY_APPEND(&va_args_value, char) = ',';
+      }
+    }
+
+    Macro *va_args_macro = ARRAY_APPEND(&new_macro_params, Macro);
+    va_args_macro->arg_names = EMPTY_ARRAY;
+    va_args_macro->variadic = false;
+    va_args_macro->name = STRING("__VA_ARGS__");
+    va_args_macro->value =
+        strndup((char *)va_args_value.elements, va_args_value.size);
+  }
 
 cleanup:
   if (ret) pp->curr_macro_params = new_macro_params;
-
-  array_free(&arg_chars);
   return ret;
 }
 
@@ -890,15 +963,9 @@ static bool preprocess_aux(PP *pp)
           return false;
         }
 
-        // The only whitespace we should only ever be preceded by is at
-        // most one ' '. It's only valid in a macro definition, so it
-        // can't contain newlines, and skip_comments_and_whitespace
-        // will produce at most one space.
-        if (pp->out_chars.size >= 1) {
-          char prev_char = *ARRAY_LAST(&pp->out_chars, char);
-          if (prev_char == ' ') {
-            pp->out_chars.size--;
-          }
+        while (pp->out_chars.size >= 1
+               && *ARRAY_LAST(&pp->out_chars, char) == ' ') {
+          pp->out_chars.size--;
         }
 
         skip_whitespace_and_comments(pp, false);
@@ -965,7 +1032,7 @@ static bool preprocess_aux(PP *pp)
 
         if (macro == NULL) {
           ARRAY_APPEND_ELEMS(&pp->out_chars, char, symbol.len, symbol.chars);
-        } else if (macro->arg_names.size == 0) {
+        } else if (macro->arg_names.size == 0 && !macro->variadic) {
           Array(Macro) old_params = pp->curr_macro_params;
           pp->curr_macro_params = EMPTY_ARRAY;
           add_adjustment_to(pp, BEGIN_MACRO_ADJUSTMENT, start_source_loc);
@@ -987,6 +1054,12 @@ static bool preprocess_aux(PP *pp)
             Array(Macro) old_params = pp->curr_macro_params;
             add_adjustment_to(pp, BEGIN_MACRO_ADJUSTMENT, start_source_loc);
             if (!substitute_macro_params(pp, macro)) return false;
+
+            // @TODO: This isn't quite correct - we need to do a separate pass
+            // over the body first where we just replace macro params with their
+            // values. Either that or have some special logic which pre-expands
+            // only macro params before dividing up into arguments. Not doing
+            // this yet because it's giving me a headache.
 
             if (!preprocess_string(pp, macro->value)) return false;
 
