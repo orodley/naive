@@ -252,6 +252,11 @@ void block_init(IrBlock *block, char *name, u32 id);
 IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global);
 IrBlock *add_block_to_function(
     TransUnit *trans_unit, IrFunction *function, char *name);
+inline IrBlock *add_block(IrBuilder *builder, char *name)
+{
+  return add_block_to_function(
+      builder->trans_unit, builder->current_function, name);
+}
 
 bool ir_type_eq(IrType *a, IrType *b);
 u32 size_of_ir_type(IrType type);

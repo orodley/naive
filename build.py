@@ -420,6 +420,7 @@ def build(build_config):
             "src/file.o",
             "src/ir.o",
             "src/ir_gen.o",
+            "src/c_type.o",
             "src/parse.o",
             "src/pool.o",
             "src/preprocess.o",

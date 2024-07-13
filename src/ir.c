@@ -10,6 +10,8 @@
 #include "misc.h"
 #include "util.h"
 
+extern inline IrBlock *add_block(IrBuilder *builder, char *name);
+
 void block_init(IrBlock *block, char *name, u32 id)
 {
   block->name = name;
