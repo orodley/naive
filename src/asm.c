@@ -90,6 +90,13 @@ AsmValue asm_deref(AsmValue asm_value)
   return asm_value;
 }
 
+Register *value_reg(AsmValue *arg)
+{
+  if (arg->t == ASM_VALUE_REGISTER) return &arg->u.reg;
+  if (arg->t == ASM_VALUE_OFFSET_REGISTER) return &arg->u.offset_register.reg;
+  return NULL;
+}
+
 AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset)
 {
   if (offset.t == ASM_CONST_IMMEDIATE && offset.u.immediate == 0) {

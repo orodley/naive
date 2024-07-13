@@ -245,6 +245,8 @@ AsmValue asm_fixed_imm(u64 value, u32 width);
 AsmValue asm_symbol(AsmSymbol *symbol);
 AsmValue asm_deref(AsmValue asm_value);
 
+Register *value_reg(AsmValue *arg);
+
 bool is_sign_extending_op(AsmOp op);
 
 void dump_asm_instr(AsmInstr *instr);

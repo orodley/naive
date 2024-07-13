@@ -414,6 +414,7 @@ def build(build_config):
             "src/array.o",
             "src/asm.o",
             "src/asm_gen.o",
+            "src/reg_alloc.o",
             "src/bit_set.o",
             "src/diagnostics.o",
             "src/elf.o",
