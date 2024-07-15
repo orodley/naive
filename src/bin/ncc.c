@@ -314,7 +314,12 @@ static int compile_file(
   }
 
   Array(SourceToken) tokens;
-  if (!tokenise(&tokens, &preprocessed, &adjustments)) return 11;
+  if (!tokenise(
+          &tokens,
+          (String){
+              .chars = (char *)preprocessed.elements, .len = preprocessed.size},
+          &adjustments))
+    return 11;
 
   array_free(&preprocessed);
   array_free(&adjustments);

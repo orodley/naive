@@ -31,16 +31,13 @@ static Token *append_token(
 static bool tokenise_aux(Tokeniser *tokeniser);
 
 bool tokenise(
-    Array(SourceToken) *tokens, Array(char) *text,
-    Array(Adjustment) *adjustments)
+    Array(SourceToken) *tokens, String text, Array(Adjustment) *adjustments)
 {
   ARRAY_INIT(tokens, SourceToken, 500);
 
   Tokeniser tokeniser;
   tokeniser.tokens = tokens;
-  reader_init(
-      &tokeniser.reader, (String){(char *)text->elements, text->size},
-      *adjustments, false, NULL);
+  reader_init(&tokeniser.reader, text, *adjustments, false, NULL);
 
   // @TODO: It feels like there should be a nicer way of doing this such that
   // we don't need a special case here. Maybe reader_init should do the

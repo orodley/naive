@@ -91,8 +91,7 @@ typedef struct SourceToken
 extern char *token_type_names[];
 
 bool tokenise(
-    Array(SourceToken) *tokens, Array(char) *text,
-    Array(Adjustment) *adjustments);
+    Array(SourceToken) *tokens, String text, Array(Adjustment) *adjustments);
 void dump_token(Token *token);
 
 #endif

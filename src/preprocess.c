@@ -8,7 +8,9 @@
 
 #include "array.h"
 #include "diagnostics.h"
+#include "parse.h"
 #include "reader.h"
+#include "tokenise.h"
 #include "util.h"
 
 typedef struct Macro
@@ -289,80 +291,181 @@ static char *look_up_include_path(
 static bool preprocess_file(
     PP *pp, char *input_filename, SourceLoc blame_source_loc);
 
-static bool eval_pp_condition_str(PP *pp, char *condition_str)
-{
-  if (strneq(condition_str, "defined", 7)) {
-    u32 i = 7;
-    while (condition_str[i] == ' ' || condition_str[i] == '\t') {
-      i++;
-    }
+static long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay);
 
-    bool saw_bracket = false;
-    if (condition_str[i] == '(') {
-      saw_bracket = true;
-      i++;
-
-      while (condition_str[i] == ' ' || condition_str[i] == '\t') {
-        i++;
-      }
-    }
-    assert(condition_str[i] != '\0');
-
-    u32 len = 0;
-    while (ident_char(condition_str[i + len])) len++;
-
-    if (saw_bracket) {
-      u32 j = i + len;
-
-      while (condition_str[j] == ' ' || condition_str[j] == '\t') {
-        j++;
-      }
-
-      assert(condition_str[j] == ')');
-    }
-
-    String macro_name = {condition_str + i, len};
-    return look_up_macro(&pp->macro_env, macro_name) != NULL;
-  } else if (condition_str[0] == '!') {
-    do {
-      condition_str++;
-    } while (condition_str[0] == ' ' || condition_str[0] == '\t');
-    return !eval_pp_condition_str(pp, condition_str);
-  } else {
-    condition_str = macroexpand(pp, condition_str);
-
-    // For now we only handle #if 0, #if 1, and #if defined <...>
-    if (streq(condition_str, "0")) {
-      return false;
-    } else if (streq(condition_str, "1")) {
-      return true;
-    } else {
-      fprintf(
-          stderr,
-          "Preprocessor condition expanded to something other than 0 or 1: "
-          "%s\n",
-          condition_str);
-      exit(1);
-    }
-  }
-}
-
-static bool eval_pp_condition(PP *pp)
+static bool eval_pp_condition(PP *pp, bool *result)
 {
   Reader *reader = &pp->reader;
+  SourceLoc start_source_loc = reader->source_loc;
   skip_whitespace_and_comments(pp, false);
 
   Array(char) condition_chars;
   ARRAY_INIT(&condition_chars, char, 10);
-  while (peek_char(reader) != '\n')
-    *ARRAY_APPEND(&condition_chars, char) = read_char(reader);
+
+  for (;;) {
+    skip_whitespace_and_comments_from_reader(reader, &condition_chars, false);
+    char c = peek_char(reader);
+    if (initial_ident_char(c)) {
+      String ident = read_symbol(reader);
+      if (strneq("defined", ident.chars, ident.len)) {
+        skip_whitespace_and_comments_from_reader(reader, NULL, false);
+        bool bracketed = false;
+        if (peek_char(reader) == '(') {
+          bracketed = true;
+          advance(reader);
+          skip_whitespace_and_comments_from_reader(reader, NULL, false);
+        }
+        String macro_name = read_symbol(reader);
+
+        if (bracketed) {
+          skip_whitespace_and_comments_from_reader(reader, NULL, false);
+
+          if (peek_char(reader) == ')') {
+            advance(reader);
+          } else {
+            issue_error(
+                &reader->source_loc,
+                "Unexpected char '%c' in `defined' in preprocessor condition",
+                peek_char(reader));
+            return false;
+          }
+        }
+
+        char result;
+        if (look_up_macro(&pp->macro_env, macro_name) == NULL) {
+          result = '0';
+        } else {
+          result = '1';
+        }
+        *ARRAY_APPEND(&condition_chars, char) = result;
+        *ARRAY_APPEND(&condition_chars, char) = ' ';
+      } else {
+        for (u32 i = 0; i < ident.len; i++) {
+          *ARRAY_APPEND(&condition_chars, char) = ident.chars[i];
+        }
+      }
+    } else if (c == '\'' || c == '"') {
+      advance(reader);
+      if (!append_string_or_char_literal(reader, c, &condition_chars)) {
+        return false;
+      }
+    } else if (c == '\n') {
+      // Leave the reader pointing at the newline, as that's what
+      // handle_pp_directive expects.
+      break;
+    } else {
+      advance(reader);
+      *ARRAY_APPEND(&condition_chars, char) = c;
+    }
+  }
   *ARRAY_APPEND(&condition_chars, char) = '\0';
   char *condition_str = (char *)condition_chars.elements;
 
-  bool cond = eval_pp_condition_str(pp, condition_str);
-
+  char *expanded = macroexpand(pp, condition_str);
   array_free(&condition_chars);
-  return cond;
+
+  Array(SourceToken) tokens = EMPTY_ARRAY;
+  Array(Adjustment) adjustments = EMPTY_ARRAY;
+  *ARRAY_APPEND(&adjustments, Adjustment) = (Adjustment){
+      .location = 0,
+      .new_source_loc = start_source_loc,
+      .type = NORMAL_ADJUSTMENT,
+  };
+  tokenise(&tokens, STRING(expanded), &adjustments);
+
+  Pool ast_pool;
+  pool_init(&ast_pool, 256);
+  ASTExpr *expr;
+  if (!parse_expr(&tokens, &ast_pool, &expr)) {
+    pool_free(&ast_pool);
+    return false;
+  }
+
+  bool okay = true;
+  long integer_result = eval_pp_expr(pp, expr, &okay);
+  pool_free(&ast_pool);
+
+  *result = integer_result != 0;
+
+  return okay;
+}
+
+static long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay)
+{
+  switch (expr->t) {
+  case INT_LITERAL_EXPR: return expr->u.int_literal.value;
+  case UNARY_PLUS_EXPR: return eval_pp_expr(pp, expr->u.unary_arg, okay);
+  case UNARY_MINUS_EXPR: return -eval_pp_expr(pp, expr->u.unary_arg, okay);
+  case BIT_NOT_EXPR: return ~eval_pp_expr(pp, expr->u.unary_arg, okay);
+  case LOGICAL_NOT_EXPR: return !eval_pp_expr(pp, expr->u.unary_arg, okay);
+  case MULTIPLY_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           * eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case DIVIDE_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           / eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case MODULO_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           % eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case ADD_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           + eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case MINUS_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           - eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case LEFT_SHIFT_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           << eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case RIGHT_SHIFT_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           >> eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case LESS_THAN_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           < eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case GREATER_THAN_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           > eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case LESS_THAN_OR_EQUAL_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           <= eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case GREATER_THAN_OR_EQUAL_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           >= eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case EQUAL_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           == eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case NOT_EQUAL_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           != eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case BIT_AND_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           & eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case BIT_XOR_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           ^ eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case BIT_OR_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           | eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case LOGICAL_AND_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           && eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case LOGICAL_OR_EXPR:
+    return eval_pp_expr(pp, expr->u.binary_op.arg1, okay)
+           || eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case COMMA_EXPR: return eval_pp_expr(pp, expr->u.binary_op.arg2, okay);
+  case CONDITIONAL_EXPR:
+    return eval_pp_expr(pp, expr->u.ternary_op.arg1, okay)
+               ? eval_pp_expr(pp, expr->u.ternary_op.arg2, okay)
+               : eval_pp_expr(pp, expr->u.ternary_op.arg3, okay);
+  default:
+    // @TODO: This isn't accurate as we don't attach SourceLoc to ASTExpr.
+    // @TODO: Include the expr type.
+    issue_error(
+        &pp->reader.source_loc,
+        "Unsupported operation in preprocessor conditional");
+    *okay = false;
+    return 1;
+  }
 }
 
 static bool handle_pp_directive(PP *pp)
@@ -397,7 +500,7 @@ static bool handle_pp_directive(PP *pp)
       }
       cond = false;
     } else {
-      cond = eval_pp_condition(pp);
+      if (!eval_pp_condition(pp, &cond)) return false;
     }
 
     start_pp_if(pp, cond);
@@ -429,7 +532,9 @@ static bool handle_pp_directive(PP *pp)
 
     PPCondScope *top_scope = ARRAY_LAST(&pp->pp_scope_stack, PPCondScope);
     if (!top_scope->condition) {
-      if (top_scope->position == THEN && eval_pp_condition(pp)) {
+      bool cond;
+      if (!eval_pp_condition(pp, &cond)) return false;
+      if (top_scope->position == THEN && cond) {
         ARRAY_LAST(&pp->pp_scope_stack, PPCondScope)->condition = true;
       }
     } else {

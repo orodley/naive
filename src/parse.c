@@ -704,6 +704,28 @@ bool parse_toplevel(
   return true;
 }
 
+bool parse_expr(Array(SourceToken) *tokens, Pool *ast_pool, ASTExpr **out_expr)
+{
+  Parser parser = {ast_pool, tokens, 0, {EMPTY_ARRAY}};
+
+  ParserResult result = expr(&parser);
+  if (parser.position != tokens->size) {
+    if (_unexpected_token.t != TOK_INVALID) {
+      issue_error(
+          &_longest_parse_pos, "Unexpected token %s",
+          token_type_names[_unexpected_token.t]);
+    } else {
+      SourceLoc s = {"<unknown>", 0, 0};
+      issue_error(&s, "Unknown error while parsing");
+    }
+
+    return false;
+  }
+
+  *out_expr = result.result;
+  return true;
+}
+
 static int indent_level = 0;
 
 static void print_indent(void)
