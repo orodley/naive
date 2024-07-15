@@ -37,7 +37,7 @@ def make_arg_parser():
         "--msan", help="Build with Memory Sanitizer", action="store_true"
     )
 
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     test_parser = subparsers.add_parser("test", aliases=["t"], help="Run tests")
     test_parser.add_argument(
