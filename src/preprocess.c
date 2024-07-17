@@ -147,6 +147,7 @@ static void add_adjustment(PP *pp, AdjustmentType type)
 static void skip_whitespace_and_comments_from_reader(
     Reader *reader, Array(char) *out_chars, bool skip_newline)
 {
+  bool initially_at_start_of_line = reader->at_start_of_line;
   while (!at_end(reader)) {
     switch (peek_char(reader)) {
     case '\n':
@@ -160,6 +161,8 @@ static void skip_whitespace_and_comments_from_reader(
       if (out_chars != NULL) {
         *ARRAY_APPEND(out_chars, char) = '\n';
       }
+
+      initially_at_start_of_line = true;
 
       break;
     case ' ':
@@ -186,10 +189,13 @@ static void skip_whitespace_and_comments_from_reader(
           issue_error(&reader->source_loc, "Unterminated /* comment");
 
         break;
-      default: back_up(reader); return;
+      default:
+        back_up(reader);
+        reader->at_start_of_line = initially_at_start_of_line;
+        return;
       }
       break;
-    default: return;
+    default: reader->at_start_of_line = initially_at_start_of_line; return;
     }
   }
 }
@@ -252,7 +258,8 @@ static char *look_up_include_path(
   // Try relative to the including file
   u32 including_file_length = strlen(including_file);
   i32 i = including_file_length - 1;
-  for (; i >= 0 && including_file[i] != '/'; i--);
+  for (; i >= 0 && including_file[i] != '/'; i--)
+    ;
 
   char *base_path;
   u32 base_length;
@@ -577,7 +584,8 @@ static bool handle_pp_directive(PP *pp)
 
       char terminator = c == '<' ? '>' : '"';
       u32 start_index = reader->position;
-      while (!at_end(reader) && read_char(reader) != terminator);
+      while (!at_end(reader) && read_char(reader) != terminator)
+        ;
 
       if (at_end(reader)) {
         issue_error(&include_path_source_loc, "Unterminated include path");
@@ -981,22 +989,24 @@ static void skip_to_next_directive(Reader *reader)
 {
   // handle_pp_directive puts us at the beginning of the next line,
   // so we start out ready for another directive.
-  bool expecting_directive = true;
   while (!at_end(reader)) {
+    bool at_start_of_line = reader->at_start_of_line;
+
+    // @TODO: This doesn't work if there's a comment in between the start of the
+    // line and the directive.
     switch (peek_char(reader)) {
+    case ' ':
+    case '\t':
+      advance(reader);
+      reader->at_start_of_line = at_start_of_line;
+      break;
     case '#':
-      if (expecting_directive) {
+      if (reader->at_start_of_line) {
         return;
       }
-
-      break;
-    case ' ':
-    case '\t': break;
-    case '\n': expecting_directive = true; break;
-    default: expecting_directive = false; break;
+      // fallthrough
+    default: advance(reader); break;
     }
-
-    advance(reader);
   }
 }
 
