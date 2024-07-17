@@ -228,8 +228,10 @@ def make_testcase(test_dir):
     assert test_filenames != []
 
     testcase.binary = os.path.abspath(os.path.join(test_dir, "a.out.tmp"))
+    output_flags = [] if "-E" in extra_flags else ["-o", testcase.binary]
     testcase.cmdline = (
-        [os.path.abspath("build/toolchain/ncc"), "-o", testcase.binary]
+        [os.path.abspath("build/toolchain/ncc")]
+        + output_flags
         + extra_flags
         + test_filenames
     )

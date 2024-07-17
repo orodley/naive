@@ -191,7 +191,9 @@ int main(int argc, char *argv[])
     char *source_input_filename =
         *ARRAY_REF(&source_input_filenames, char *, i);
     char *object_filename = NULL;
-    if (!syntax_only && !preprocess_only) {
+    if (preprocess_only) {
+      object_filename = output_filename;
+    } else if (!syntax_only) {
       if (do_link) {
         // In this mode we compile all given sources files to temporary
         // object files, link the result with libc and any other object
@@ -288,7 +290,18 @@ static int compile_file(
 
   if (preprocess_only) {
     *ARRAY_APPEND(&preprocessed, char) = '\0';
-    fputs((char *)preprocessed.elements, stdout);
+    if (output_filename == NULL || streq(output_filename, "-")) {
+      fputs((char *)preprocessed.elements, stdout);
+    } else {
+      FILE *output = fopen(output_filename, "w");
+      if (output == NULL) {
+        perror("Unable to open output file");
+        return 14;
+      }
+
+      fputs((char *)preprocessed.elements, output);
+      fclose(output);
+    }
 
 #if 0
     for (u32 i = 0; i < adjustments.size; i++) {
