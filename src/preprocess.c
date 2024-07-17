@@ -758,7 +758,7 @@ static bool handle_pp_directive(PP *pp)
 
   skip_whitespace_and_comments(pp, false);
 
-  if (!ignoring_chars(pp) && peek_char(reader) != '\n') {
+  if (!ignoring_chars(pp) && !at_end(reader) && peek_char(reader) != '\n') {
     issue_error(
         &reader->source_loc, "Extraneous text after preprocessing directive");
     return false;
