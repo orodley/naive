@@ -13,6 +13,16 @@
 #include "tokenise.h"
 #include "util.h"
 
+// @TODO: This whole thing is getting pretty overdue for a rewrite. Doing
+// everything character-by-character without lexing into preprocessor tokens
+// gets very verbose and hard to manage. It also means we have to handle
+// comments and whitespace all over the place. We can't lex everything up-front
+// because false conditions can contain invalid stuff (unterminated strings for
+// instance). But perhaps we can lex it one line at a time? We should also be
+// more consistent about using Strings pointing into the file where possible
+// rather than allocating and copying all over the place, and be more principled
+// with ownership in general.
+
 typedef struct Macro
 {
   String name;
