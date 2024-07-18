@@ -308,7 +308,7 @@ static char *look_up_include_path(
 static bool preprocess_file(
     PP *pp, char *input_filename, SourceLoc blame_source_loc);
 
-static long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay);
+static unsigned long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay);
 
 static bool eval_pp_condition(PP *pp, bool *result)
 {
@@ -399,7 +399,7 @@ static bool eval_pp_condition(PP *pp, bool *result)
   }
 
   bool okay = true;
-  long integer_result = eval_pp_expr(pp, expr, &okay);
+  unsigned long integer_result = eval_pp_expr(pp, expr, &okay);
   pool_free(&ast_pool);
 
   *result = integer_result != 0;
@@ -407,7 +407,7 @@ static bool eval_pp_condition(PP *pp, bool *result)
   return okay;
 }
 
-static long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay)
+static unsigned long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay)
 {
   switch (expr->t) {
   case INT_LITERAL_EXPR: return expr->u.int_literal.value;
