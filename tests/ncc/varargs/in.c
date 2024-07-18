@@ -9,7 +9,7 @@ void foo(int a, int b, ...)
   assert(a == 0);
   assert(b == 1);
   assert(va_arg(args, int) == 2);
-  assert(va_arg(args, int) == 3);
+  assert(va_arg(args, const int) == 3);
   assert(va_arg(args, int) == 4);
   assert(va_arg(args, int) == 5);
   assert(va_arg(args, int) == 6);

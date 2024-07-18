@@ -369,7 +369,7 @@ constant =
 		or(TOK_INT_LITERAL, TOK_STRING_LITERAL))
 
 postfix_expr =
-    or(seq(build_builtin_va_arg, keyword(__builtin_va_arg), TOK_LROUND, expr,
+    or(seq(build_builtin_va_arg, keyword(__builtin_va_arg), TOK_LROUND, assignment_expr,
 			TOK_COMMA, type_name, TOK_RROUND),
 		fold(build_postfix_expr,
 			primary_expr,
