@@ -6,7 +6,12 @@ int main()
   for (; i != 10;) i = i + 1;
   assert(i == 10);
 
-  // @TODO: Test for empty expression once we've implemented break.
+  int n = 0;
+  for (;;) {
+    if (n > 20) break;
+    n++;
+  }
+  assert(n == 21);
 
   return 0;
 }
