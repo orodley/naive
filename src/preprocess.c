@@ -300,8 +300,6 @@ static char *look_up_include_path(
     free(potential_path);
   }
 
-  // @TODO: Support -I flag.
-
   return NULL;
 }
 
@@ -1187,6 +1185,11 @@ static bool preprocess_aux(PP *pp)
             // values. Either that or have some special logic which pre-expands
             // only macro params before dividing up into arguments. Not doing
             // this yet because it's giving me a headache.
+            //
+            // I think the real solution here is to process the body of the
+            // macro up-front, locating all the params. Then the replacement
+            // string can omit them, and we can have a separate list of places
+            // to insert arguments (potentially as a string).
 
             if (!preprocess_string(pp, macro->value)) return false;
 

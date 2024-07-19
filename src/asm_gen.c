@@ -605,8 +605,6 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
     return asm_offset_reg(
         REG_CLASS_IP, 64, asm_const_symbol(pointer.u.global->asm_symbol));
   }
-  // @TODO: Handle globals. This is essentially the same as OP_LOCAL, but
-  // RIP-relative rather than RSP-relative.
   default: return asm_value(builder, pointer);
   }
 }
