@@ -37,7 +37,7 @@ def make_arg_parser():
         "--msan", help="Build with Memory Sanitizer", action="store_true"
     )
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     test_parser = subparsers.add_parser("test", aliases=["t"], help="Run tests")
     test_parser.add_argument(
@@ -113,11 +113,12 @@ class BuildConfig(object):
 
 def main(args):
     build_config = BuildConfig(args)
-    if args.command in {"test", "t"}:
+    command = args.command or "build"
+    if command in {"test", "t"}:
         ret = run_tests(args, build_config)
-    elif args.command in {"build", "b"}:
+    elif command in {"build", "b"}:
         ret = build(build_config)
-    elif args.command in {"check", "c"}:
+    elif command in {"check", "c"}:
         ret = check(args, build_config)
     sys.exit(ret)
 
