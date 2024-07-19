@@ -248,7 +248,6 @@ static CType *decl_specifier_list_to_c_type(
     ASTEnumerator *enumerator_list =
         type_spec->u.enum_specifier.enumerator_list;
 
-    // @TODO: Pick the type based on the largest member
     CType *ctype = &type_env->int_type;
 
     CType *existing_type = NULL;
@@ -437,11 +436,12 @@ static void decl_to_cdecl(
   }
 
   switch (declarator->t) {
-  case POINTER_DECLARATOR:
+  case POINTER_DECLARATOR: {
     decl_to_cdecl(
         builder, env, pointer_type(&env->type_env, ident_type),
         declarator->u.pointer_declarator.pointee, cdecl);
     break;
+  }
   case DIRECT_DECLARATOR:
     direct_declarator_to_cdecl(
         builder, env, ident_type, declarator->u.direct_declarator, cdecl);
@@ -573,6 +573,8 @@ static IrGlobal *ir_global_for_decl(
     ASTDeclarator *declarator, ASTInitializer *initializer,
     CType **result_c_type)
 {
+  assert(declarator != NULL);
+
   CType *decl_spec_type =
       decl_specifier_list_to_c_type(builder, env, decl_specifier_list);
   CDecl cdecl;
@@ -604,6 +606,7 @@ static IrGlobal *ir_global_for_decl(
 
     IrGlobal *global = NULL;
     Array(IrGlobal *) *globals = &builder->trans_unit->globals;
+    assert(cdecl.name != NULL);
     for (u32 i = 0; i < globals->size; i++) {
       IrGlobal *curr_global = *ARRAY_REF(globals, IrGlobal *, i);
       if (streq(curr_global->name, cdecl.name)) {
@@ -1136,8 +1139,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
 
   while (toplevel != NULL) {
     IrGlobal *global = NULL;
-    CType *global_type;
-    ZERO_STRUCT(&global_type);
+    CType *global_type = NULL;
 
     switch (toplevel->t) {
     case FUNCTION_DEF: {
