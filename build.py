@@ -39,6 +39,12 @@ def make_arg_parser():
 
     subparsers = parser.add_subparsers(dest="command")
 
+    build_parser = subparsers.add_parser(
+        "build",
+        aliases=["b"],
+        help="Build the toolchain",
+    )
+
     test_parser = subparsers.add_parser("test", aliases=["t"], help="Run tests")
     test_parser.add_argument(
         "--silent", "-s", help="Show only the summary", action="store_true"
@@ -61,11 +67,11 @@ def make_arg_parser():
         nargs="*",
     )
 
-    build_parser = subparsers.add_parser(
-        "build",
-        aliases=["b"],
-        help="Build the toolchain",
+    run_parser = subparsers.add_parser(
+        "run", aliases=["r"], help="Build and run the given binary"
     )
+    run_parser.add_argument("binary", help="The binary to run", nargs=1)
+    run_parser.add_argument("args", help="The args to pass to the binary", nargs="*")
 
     check_parser = subparsers.add_parser(
         "check",
@@ -114,10 +120,12 @@ class BuildConfig(object):
 def main(args):
     build_config = BuildConfig(args)
     command = args.command or "build"
-    if command in {"test", "t"}:
-        ret = run_tests(args, build_config)
-    elif command in {"build", "b"}:
+    if command in {"build", "b"}:
         ret = build(build_config)
+    elif command in {"test", "t"}:
+        ret = run_tests(args, build_config)
+    elif command in {"run", "r"}:
+        ret = run_binary(args, build_config)
     elif command in {"check", "c"}:
         ret = check(args, build_config)
     sys.exit(ret)
@@ -558,6 +566,11 @@ def add_compile_command(cmdline, cwd):
 def dump_compile_commands():
     with open("compile_commands.json", "w") as f:
         json.dump(compile_commands, f)
+
+
+def run_binary(args, build_config):
+    build(build_config)
+    return subprocess.run([f"build/toolchain/{args.binary[0]}"] + args.args).returncode
 
 
 def check(args, build_config):
