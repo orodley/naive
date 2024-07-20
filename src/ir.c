@@ -21,17 +21,17 @@ void block_init(IrBlock *block, char *name, u32 id)
 
 static void block_free(IrBlock *block) { array_free(&block->instrs); }
 
-void trans_unit_init(TransUnit *trans_unit)
+void ir_module_init(IrModule *module)
 {
-  ARRAY_INIT(&trans_unit->globals, IrGlobal *, 10);
-  ARRAY_INIT(&trans_unit->types, IrGlobal *, 5);
-  pool_init(&trans_unit->pool, 512);
+  ARRAY_INIT(&module->globals, IrGlobal *, 10);
+  ARRAY_INIT(&module->types, IrGlobal *, 5);
+  pool_init(&module->pool, 512);
 }
 
-void trans_unit_free(TransUnit *trans_unit)
+void ir_module_free(IrModule *module)
 {
-  for (u32 i = 0; i < trans_unit->globals.size; i++) {
-    IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
+  for (u32 i = 0; i < module->globals.size; i++) {
+    IrGlobal *global = *ARRAY_REF(&module->globals, IrGlobal *, i);
     if (global->type.t == IR_FUNCTION) {
       if (global->initializer != NULL) {
         IrFunction *func = &global->initializer->u.function;
@@ -44,36 +44,35 @@ void trans_unit_free(TransUnit *trans_unit)
     }
   }
 
-  array_free(&trans_unit->globals);
-  array_free(&trans_unit->types);
-  pool_free(&trans_unit->pool);
+  array_free(&module->globals);
+  array_free(&module->types);
+  pool_free(&module->pool);
 }
 
 IrBlock *add_block_to_function(
-    TransUnit *trans_unit, IrFunction *function, char *name)
+    IrModule *module, IrFunction *function, char *name)
 {
-  IrBlock *block = pool_alloc(&trans_unit->pool, sizeof *block);
+  IrBlock *block = pool_alloc(&module->pool, sizeof *block);
   *ARRAY_APPEND(&function->blocks, IrBlock *) = block;
   block_init(block, name, function->blocks.size - 1);
 
   return block;
 }
 
-IrGlobal *trans_unit_add_function(
-    TransUnit *trans_unit, char *name, IrType return_type, u32 arity,
+IrGlobal *ir_module_add_function(
+    IrModule *module, char *name, IrType return_type, u32 arity,
     bool variable_arity, IrType *arg_types)
 {
-  IrGlobal *new_global = pool_alloc(&trans_unit->pool, sizeof *new_global);
-  *ARRAY_APPEND(&trans_unit->globals, IrGlobal *) = new_global;
+  IrGlobal *new_global = pool_alloc(&module->pool, sizeof *new_global);
+  *ARRAY_APPEND(&module->globals, IrGlobal *) = new_global;
   ZERO_STRUCT(new_global);
 
   new_global->name = name;
 
-  IrType *return_type_ptr =
-      pool_alloc(&trans_unit->pool, sizeof *return_type_ptr);
+  IrType *return_type_ptr = pool_alloc(&module->pool, sizeof *return_type_ptr);
   *return_type_ptr = return_type;
   IrType *arg_types_ptr =
-      pool_alloc(&trans_unit->pool, arity * sizeof *arg_types_ptr);
+      pool_alloc(&module->pool, arity * sizeof *arg_types_ptr);
   memcpy(arg_types_ptr, arg_types, arity * sizeof *arg_types_ptr);
 
   IrType function_type = {
@@ -88,9 +87,9 @@ IrGlobal *trans_unit_add_function(
   return new_global;
 }
 
-IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global)
+IrConst *add_init_to_function(IrModule *module, IrGlobal *global)
 {
-  IrConst *initializer = pool_alloc(&trans_unit->pool, sizeof *initializer);
+  IrConst *initializer = pool_alloc(&module->pool, sizeof *initializer);
   initializer->type = global->type;
   IrFunction *function = &initializer->u.function;
 
@@ -98,15 +97,15 @@ IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global)
 
   ARRAY_INIT(&function->blocks, IrBlock *, 5);
   function->curr_instr_id = 0;
-  add_block_to_function(trans_unit, function, "entry");
+  add_block_to_function(module, function, "entry");
 
   return initializer;
 }
 
-IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type)
+IrGlobal *ir_module_add_var(IrModule *module, char *name, IrType type)
 {
-  IrGlobal *new_global = pool_alloc(&trans_unit->pool, sizeof *new_global);
-  *ARRAY_APPEND(&trans_unit->globals, IrGlobal *) = new_global;
+  IrGlobal *new_global = pool_alloc(&module->pool, sizeof *new_global);
+  *ARRAY_APPEND(&module->globals, IrGlobal *) = new_global;
   ZERO_STRUCT(new_global);
 
   new_global->name = name;
@@ -116,10 +115,10 @@ IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type)
   return new_global;
 }
 
-IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields)
+IrType *ir_module_add_struct(IrModule *module, char *name, u32 num_fields)
 {
-  IrType *new_type = pool_alloc(&trans_unit->pool, sizeof *new_type);
-  *ARRAY_APPEND(&trans_unit->types, IrType *) = new_type;
+  IrType *new_type = pool_alloc(&module->pool, sizeof *new_type);
+  *ARRAY_APPEND(&module->types, IrType *) = new_type;
 
   if (name == NULL) {
     char fmt[] = "__anon_struct_%x";
@@ -128,15 +127,15 @@ IrType *trans_unit_add_struct(TransUnit *trans_unit, char *name, u32 num_fields)
     // sizeof(u32) * 2 is the max length of globals.size in hex
     // + 1 for the null terminator
     u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
-    name = pool_alloc(&trans_unit->pool, name_max_length);
-    snprintf(name, name_max_length, fmt, trans_unit->types.size);
+    name = pool_alloc(&module->pool, name_max_length);
+    snprintf(name, name_max_length, fmt, module->types.size);
   }
 
   new_type->t = IR_STRUCT;
   new_type->u.strukt.name = name;
   new_type->u.strukt.num_fields = num_fields;
   IrStructField *fields =
-      pool_alloc(&trans_unit->pool, num_fields * sizeof *fields);
+      pool_alloc(&module->pool, num_fields * sizeof *fields);
   new_type->u.strukt.fields = fields;
   new_type->u.strukt.total_size = 0;
 
@@ -394,10 +393,10 @@ static void dump_const(IrConst *konst)
   }
 }
 
-void dump_trans_unit(TransUnit *trans_unit)
+void dump_ir_module(IrModule *module)
 {
-  for (u32 i = 0; i < trans_unit->types.size; i++) {
-    IrType *type = *ARRAY_REF(&trans_unit->types, IrType *, i);
+  for (u32 i = 0; i < module->types.size; i++) {
+    IrType *type = *ARRAY_REF(&module->types, IrType *, i);
     assert(type->t == IR_STRUCT);
 
     printf("struct $%s\n{\n", type->u.strukt.name);
@@ -410,8 +409,8 @@ void dump_trans_unit(TransUnit *trans_unit)
   }
   putchar('\n');
 
-  for (u32 i = 0; i < trans_unit->globals.size; i++) {
-    IrGlobal *global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
+  for (u32 i = 0; i < module->globals.size; i++) {
+    IrGlobal *global = *ARRAY_REF(&module->globals, IrGlobal *, i);
     printf("%s ", global->name);
     dump_ir_type(global->type);
 
@@ -421,13 +420,13 @@ void dump_trans_unit(TransUnit *trans_unit)
     }
 
     putchar('\n');
-    if (i != trans_unit->globals.size - 1) putchar('\n');
+    if (i != module->globals.size - 1) putchar('\n');
   }
 }
 
-void builder_init(IrBuilder *builder, TransUnit *trans_unit)
+void builder_init(IrBuilder *builder, IrModule *module)
 {
-  builder->trans_unit = trans_unit;
+  builder->module = module;
   builder->current_function = NULL;
   builder->current_block = NULL;
 }
@@ -436,7 +435,7 @@ static IrInstr *append_instr(IrBuilder *builder)
 {
   IrBlock *block = builder->current_block;
 
-  IrInstr *instr = pool_alloc(&builder->trans_unit->pool, sizeof *instr);
+  IrInstr *instr = pool_alloc(&builder->module->pool, sizeof *instr);
   instr->id = builder->current_function->curr_instr_id++;
   instr->vreg_number = -1;
   *ARRAY_APPEND(&block->instrs, IrInstr *) = instr;
@@ -706,8 +705,8 @@ IrValue build_phi(IrBuilder *builder, IrType type, u32 arity)
   instr->op = OP_PHI;
   instr->type = type;
   instr->u.phi.arity = arity;
-  instr->u.phi.params = pool_alloc(
-      &builder->trans_unit->pool, arity * sizeof *instr->u.phi.params);
+  instr->u.phi.params =
+      pool_alloc(&builder->module->pool, arity * sizeof *instr->u.phi.params);
 
   return value_instr(instr);
 }
@@ -756,7 +755,7 @@ IrValue value_global(IrGlobal *global)
 
 IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value)
 {
-  IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);
+  IrConst *konst = pool_alloc(&builder->module->pool, sizeof *konst);
   konst->type = int_type;
   konst->u.integer = value;
 
@@ -765,7 +764,7 @@ IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value)
 
 IrConst *add_global_const(IrBuilder *builder, IrGlobal *global)
 {
-  IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);
+  IrConst *konst = pool_alloc(&builder->module->pool, sizeof *konst);
   konst->type = (IrType){.t = IR_POINTER};
   konst->u.global_pointer = global;
 
@@ -774,21 +773,20 @@ IrConst *add_global_const(IrBuilder *builder, IrGlobal *global)
 
 IrConst *add_array_const(IrBuilder *builder, IrType type)
 {
-  IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);
+  IrConst *konst = pool_alloc(&builder->module->pool, sizeof *konst);
   konst->type = type;
   konst->u.array_elems = pool_alloc(
-      &builder->trans_unit->pool,
-      type.u.array.size * sizeof *konst->u.array_elems);
+      &builder->module->pool, type.u.array.size * sizeof *konst->u.array_elems);
 
   return konst;
 }
 
 IrConst *add_struct_const(IrBuilder *builder, IrType type)
 {
-  IrConst *konst = pool_alloc(&builder->trans_unit->pool, sizeof *konst);
+  IrConst *konst = pool_alloc(&builder->module->pool, sizeof *konst);
   konst->type = type;
   konst->u.struct_fields = pool_alloc(
-      &builder->trans_unit->pool,
+      &builder->module->pool,
       type.u.strukt.num_fields * sizeof *konst->u.struct_fields);
 
   return konst;
@@ -799,13 +797,13 @@ static IrValue builtin_function(
     IrBuilder *builder, char *name, u32 arity, IrType return_type,
     IrType *arg_types)
 {
-  for (u32 i = 0; i < builder->trans_unit->globals.size; i++) {
-    IrGlobal *global = *ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, i);
+  for (u32 i = 0; i < builder->module->globals.size; i++) {
+    IrGlobal *global = *ARRAY_REF(&builder->module->globals, IrGlobal *, i);
     if (streq(global->name, name)) return value_global(global);
   }
 
-  return value_global(trans_unit_add_function(
-      builder->trans_unit, name, return_type, arity, false, arg_types));
+  return value_global(ir_module_add_function(
+      builder->module, name, return_type, arity, false, arg_types));
 }
 
 IrValue builtin_memcpy(IrBuilder *builder)

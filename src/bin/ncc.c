@@ -366,21 +366,21 @@ static int compile_file(
     return 0;
   }
 
-  TransUnit tu = ir_gen_toplevel(ast);
+  IrModule ir_module = ir_gen_toplevel(ast);
 
   array_free(&tokens);
   pool_free(&ast_pool);
 
   if (flag_dump_ir) {
     if (flag_dump_tokens || flag_dump_ast) puts("\n");
-    dump_trans_unit(&tu);
+    dump_ir_module(&ir_module);
   }
 
   AsmBuilder asm_builder;
   init_asm_builder(&asm_builder, input_filename);
-  generate_asm_module(&asm_builder, &tu);
+  generate_asm_module(&asm_builder, &ir_module);
 
-  trans_unit_free(&tu);
+  ir_module_free(&ir_module);
 
   if (flag_dump_asm) {
     if (flag_dump_tokens || flag_dump_ast || flag_dump_ir) puts("\n");

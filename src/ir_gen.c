@@ -203,8 +203,8 @@ static IrGlobal *ir_global_for_decl(
     u32 arity = ctype->u.function.arity;
     if (struct_ret) arity++;
 
-    IrType *arg_ir_types = pool_alloc(
-        &ctx->builder->trans_unit->pool, sizeof(*arg_ir_types) * arity);
+    IrType *arg_ir_types =
+        pool_alloc(&ctx->builder->module->pool, sizeof(*arg_ir_types) * arity);
 
     u32 i = 0;
     u32 j = 0;
@@ -218,7 +218,7 @@ static IrGlobal *ir_global_for_decl(
     }
 
     IrGlobal *global = NULL;
-    Array(IrGlobal *) *globals = &ctx->builder->trans_unit->globals;
+    Array(IrGlobal *) *globals = &ctx->builder->module->globals;
     assert(cdecl.name != NULL);
     for (u32 i = 0; i < globals->size; i++) {
       IrGlobal *curr_global = *ARRAY_REF(globals, IrGlobal *, i);
@@ -234,8 +234,8 @@ static IrGlobal *ir_global_for_decl(
           struct_ret ? (IrType){.t = IR_VOID}
                      : c_type_to_ir_type(ctype->u.function.return_type);
 
-      global = trans_unit_add_function(
-          ctx->builder->trans_unit, cdecl.name, return_type, arity,
+      global = ir_module_add_function(
+          ctx->builder->module, cdecl.name, return_type, arity,
           ctype->u.function.variable_arity, arg_ir_types);
     }
 
@@ -245,7 +245,7 @@ static IrGlobal *ir_global_for_decl(
     return global;
   } else {
     IrGlobal *global = NULL;
-    Array(IrGlobal *) *globals = &ctx->builder->trans_unit->globals;
+    Array(IrGlobal *) *globals = &ctx->builder->module->globals;
     for (u32 i = 0; i < globals->size; i++) {
       IrGlobal *curr_global = *ARRAY_REF(globals, IrGlobal *, i);
       if (streq(curr_global->name, cdecl.name)) {
@@ -256,8 +256,8 @@ static IrGlobal *ir_global_for_decl(
     }
 
     if (global == NULL) {
-      global = trans_unit_add_var(
-          ctx->builder->trans_unit, cdecl.name, c_type_to_ir_type(ctype));
+      global = ir_module_add_var(
+          ctx->builder->module, cdecl.name, c_type_to_ir_type(ctype));
     }
 
     *result_c_type = cdecl.type;
@@ -266,13 +266,13 @@ static IrGlobal *ir_global_for_decl(
   }
 }
 
-TransUnit ir_gen_toplevel(ASTToplevel *toplevel)
+IrModule ir_gen_toplevel(ASTToplevel *toplevel)
 {
-  TransUnit tu;
-  trans_unit_init(&tu);
+  IrModule ir_module;
+  ir_module_init(&ir_module);
 
   IrBuilder builder;
-  builder_init(&builder, &tu);
+  builder_init(&builder, &ir_module);
 
   Scope global_scope;
   global_scope.parent_scope = NULL;
@@ -282,9 +282,9 @@ TransUnit ir_gen_toplevel(ASTToplevel *toplevel)
   // This is used for sizeof expr. We switch to this function, ir_gen the
   // expression, and then switch back, keeping only the type of the resulting
   // Term.
-  IrGlobal *scratch_function = trans_unit_add_function(
-      builder.trans_unit, "__scratch", (IrType){.t = IR_VOID}, 0, false, NULL);
-  add_init_to_function(builder.trans_unit, scratch_function);
+  IrGlobal *scratch_function = ir_module_add_function(
+      builder.module, "__scratch", (IrType){.t = IR_VOID}, 0, false, NULL);
+  add_init_to_function(builder.module, scratch_function);
 
   IrGenContext ctx;
   ctx.builder = &builder;
@@ -502,10 +502,9 @@ TransUnit ir_gen_toplevel(ASTToplevel *toplevel)
     assert(fixup->instr->u.target_block != NULL);
   }
 
-  IrGlobal *first_global =
-      *ARRAY_REF(&builder.trans_unit->globals, IrGlobal *, 0);
+  IrGlobal *first_global = *ARRAY_REF(&builder.module->globals, IrGlobal *, 0);
   assert(streq(first_global->name, "__scratch"));
-  ARRAY_REMOVE(&builder.trans_unit->globals, IrGlobal *, 0);
+  ARRAY_REMOVE(&builder.module->globals, IrGlobal *, 0);
 
   pool_free(&ctx.type_env.pool);
   array_free(&ctx.goto_labels);
@@ -516,7 +515,7 @@ TransUnit ir_gen_toplevel(ASTToplevel *toplevel)
   array_free(&ctx.type_env.typedef_types);
   array_free(global_bindings);
 
-  return tu;
+  return ir_module;
 }
 
 static void ir_gen_function(
@@ -524,7 +523,7 @@ static void ir_gen_function(
     ASTFunctionDef *function_def)
 {
   IrBuilder *builder = ctx->builder;
-  IrConst *konst = add_init_to_function(builder->trans_unit, global);
+  IrConst *konst = add_init_to_function(builder->module, global);
   IrFunction *function = &konst->u.function;
 
   builder->current_function = function;
@@ -735,7 +734,7 @@ static void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
       if (label->is_default) {
         default_index = i;
       } else {
-        IrBlock *next = pool_alloc(&builder->trans_unit->pool, sizeof *next);
+        IrBlock *next = pool_alloc(&builder->module->pool, sizeof *next);
         block_init(next, "switch.cmp", builder->current_function->blocks.size);
 
         IrValue cmp = build_cmp(
@@ -805,7 +804,7 @@ static void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     // This is because we need it to exist as break_target while ir_gen'ing
     // the body, but we want it to be after the body, so the blocks are
     // laid out better.
-    IrBlock *after = pool_alloc(&builder->trans_unit->pool, sizeof *after);
+    IrBlock *after = pool_alloc(&builder->module->pool, sizeof *after);
 
     ASTExpr *condition_expr = statement->u.expr_and_statement.expr;
     ASTStatement *body_statement = statement->u.expr_and_statement.statement;
@@ -875,8 +874,8 @@ static void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     // This is because we need them to exist as break_target and
     // continue_target while ir_gen'ing the body, but we want them to be
     // after the body so the blocks are laid out better.
-    IrBlock *update = pool_alloc(&builder->trans_unit->pool, sizeof *update);
-    IrBlock *after = pool_alloc(&builder->trans_unit->pool, sizeof *after);
+    IrBlock *update = pool_alloc(&builder->module->pool, sizeof *update);
+    IrBlock *after = pool_alloc(&builder->module->pool, sizeof *after);
 
     Scope init_scope;
     Scope *prev_scope = ctx->scope;
@@ -1081,8 +1080,8 @@ static Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     // sizeof(u32) * 2 is the max length of globals.size in hex
     // + 1 for the null terminator
     u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
-    char *name = pool_alloc(&builder->trans_unit->pool, name_max_length);
-    snprintf(name, name_max_length, fmt, builder->trans_unit->globals.size);
+    char *name = pool_alloc(&builder->module->pool, name_max_length);
+    snprintf(name, name_max_length, fmt, builder->module->globals.size);
 
     String string = expr->u.string_literal;
     u32 length = string.len + 1;
@@ -1090,7 +1089,7 @@ static Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
         array_type(builder, &ctx->type_env, &ctx->type_env.char_type);
     set_array_type_length(result_type, length);
     IrType ir_type = c_type_to_ir_type(result_type);
-    IrGlobal *global = trans_unit_add_var(builder->trans_unit, name, ir_type);
+    IrGlobal *global = ir_module_add_var(builder->module, name, ir_type);
     global->linkage = IR_LOCAL_LINKAGE;
 
     IrConst *konst = add_array_const(builder, ir_type);
@@ -1226,7 +1225,7 @@ static Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
 
     CType *return_type = callee.ctype->u.function.return_type;
     IrValue *arg_array =
-        pool_alloc(&builder->trans_unit->pool, call_arity * sizeof(*arg_array));
+        pool_alloc(&builder->module->pool, call_arity * sizeof(*arg_array));
 
     // If we have a struct return, then the IR parameters and the C
     // parameters are off by one. So we track "out_index" and "i"
@@ -1443,9 +1442,8 @@ static Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     assert(arg_type->t == INTEGER_TYPE || arg_type->t == POINTER_TYPE);
 
     IrGlobal *global_builtin_va_arg_int = NULL;
-    for (u32 i = 0; i < builder->trans_unit->globals.size; i++) {
-      IrGlobal *global =
-          *ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, i);
+    for (u32 i = 0; i < builder->module->globals.size; i++) {
+      IrGlobal *global = *ARRAY_REF(&builder->module->globals, IrGlobal *, i);
       if (streq(global->name, "__builtin_va_arg_uint64")) {
         global_builtin_va_arg_int = global;
         break;
@@ -1488,7 +1486,7 @@ static Term ir_gen_assign_op(
     assert(c_type_eq(left.ctype, right.ctype));
 
     IrValue *memcpy_args =
-        pool_alloc(&ctx->builder->trans_unit->pool, 3 * sizeof *memcpy_args);
+        pool_alloc(&ctx->builder->module->pool, 3 * sizeof *memcpy_args);
     memcpy_args[0] = left.value;
     memcpy_args[1] = right.value;
     memcpy_args[2] = value_const(
@@ -1864,7 +1862,7 @@ static void ir_gen_initializer(
 
   if (!is_full_initializer(&c_init)) {
     IrValue *memset_args =
-        pool_alloc(&ctx->builder->trans_unit->pool, 3 * sizeof *memset_args);
+        pool_alloc(&ctx->builder->module->pool, 3 * sizeof *memset_args);
     memset_args[0] = to_init.value;
     memset_args[1] = value_const(c_type_to_ir_type(&ctx->type_env.int_type), 0);
     memset_args[2] = value_const(
@@ -2113,8 +2111,8 @@ static void direct_declarator_to_cdecl(
 
     params = first_param;
 
-    CType **arg_c_types = pool_alloc(
-        &ctx->builder->trans_unit->pool, sizeof(*arg_c_types) * arity);
+    CType **arg_c_types =
+        pool_alloc(&ctx->builder->module->pool, sizeof(*arg_c_types) * arity);
 
     bool variable_arity = false;
     for (u32 i = 0; params != NULL; i++) {
@@ -2155,7 +2153,7 @@ static void direct_declarator_to_cdecl(
       arity = 0;
     }
 
-    CType *ctype = pool_alloc(&ctx->builder->trans_unit->pool, sizeof *ctype);
+    CType *ctype = pool_alloc(&ctx->builder->module->pool, sizeof *ctype);
     ctype->t = FUNCTION_TYPE;
     ctype->u.function.arity = arity;
     ctype->u.function.variable_arity = variable_arity;
@@ -2247,7 +2245,7 @@ static CType *decl_specifier_list_to_c_type(
     }
 
     IrType *ir_struct =
-        trans_unit_add_struct(ctx->builder->trans_unit, name, fields->size);
+        ir_module_add_struct(ctx->builder->module, name, fields->size);
     u32 current_offset = 0;
     u32 max_field_size = 0;
     u32 max_field_align = 0;
@@ -2608,7 +2606,7 @@ static void ir_gen_c_init(
     // Struct values can be initialized with expressions.
     case C_INIT_LEAF: {
       IrValue *memcpy_args =
-          pool_alloc(&builder->trans_unit->pool, 3 * sizeof *memcpy_args);
+          pool_alloc(&builder->module->pool, 3 * sizeof *memcpy_args);
       memcpy_args[0] = build_binary_instr(
           builder, OP_ADD, base_ptr,
           value_const(

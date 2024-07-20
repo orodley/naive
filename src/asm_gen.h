@@ -41,6 +41,6 @@ typedef struct AsmBuilder
 
 void init_asm_builder(AsmBuilder *builder, char *input_file_name);
 void free_asm_builder(AsmBuilder *builder);
-void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit);
+void generate_asm_module(AsmBuilder *builder, IrModule *module);
 
 #endif

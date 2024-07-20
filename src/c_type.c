@@ -217,7 +217,7 @@ CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
   array_type->u.array.incomplete = true;
 
   IrType *ir_array_type =
-      pool_alloc(&builder->trans_unit->pool, sizeof *ir_array_type);
+      pool_alloc(&builder->module->pool, sizeof *ir_array_type);
   ir_array_type->t = IR_ARRAY;
   ir_array_type->u.array.size = 0;
 
@@ -228,7 +228,7 @@ CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
     ir_elem_type = elem_type.u.array.elem_type;
     ir_array_type->u.array.size = elem_type.u.array.size;
   } else {
-    ir_elem_type = pool_alloc(&builder->trans_unit->pool, sizeof *ir_elem_type);
+    ir_elem_type = pool_alloc(&builder->module->pool, sizeof *ir_elem_type);
     *ir_elem_type = c_type_to_ir_type(type);
   }
   ir_array_type->u.array.elem_type = ir_elem_type;

@@ -6,13 +6,13 @@
 #include "misc.h"
 #include "pool.h"
 
-typedef struct TransUnit
+typedef struct IrModule
 {
   Array(IrGlobal *) globals;
   Array(IrType *) types;
 
   Pool pool;
-} TransUnit;
+} IrModule;
 
 typedef struct IrType
 {
@@ -117,7 +117,7 @@ typedef struct IrGlobal
 
 typedef struct IrBuilder
 {
-  TransUnit *trans_unit;
+  IrModule *module;
   IrFunction *current_function;
   IrBlock *current_block;
 } IrBuilder;
@@ -238,24 +238,23 @@ typedef struct IrInstr
   } u;
 } IrInstr;
 
-void trans_unit_init(TransUnit *trans_unit);
-void trans_unit_free(TransUnit *trans_unit);
-IrGlobal *trans_unit_add_function(
-    TransUnit *trans_unit, char *name, IrType return_type, u32 arity,
+void ir_module_init(IrModule *module);
+void ir_module_free(IrModule *module);
+IrGlobal *ir_module_add_function(
+    IrModule *module, char *name, IrType return_type, u32 arity,
     bool variable_arity, IrType *arg_types);
-IrGlobal *trans_unit_add_var(TransUnit *trans_unit, char *name, IrType type);
-IrType *trans_unit_add_struct(
-    TransUnit *trans_unit, char *name, u32 num_fields);
+IrGlobal *ir_module_add_var(IrModule *module, char *name, IrType type);
+IrType *ir_module_add_struct(IrModule *module, char *name, u32 num_fields);
 
 void block_init(IrBlock *block, char *name, u32 id);
 
-IrConst *add_init_to_function(TransUnit *trans_unit, IrGlobal *global);
+IrConst *add_init_to_function(IrModule *module, IrGlobal *global);
 IrBlock *add_block_to_function(
-    TransUnit *trans_unit, IrFunction *function, char *name);
+    IrModule *module, IrFunction *function, char *name);
 inline IrBlock *add_block(IrBuilder *builder, char *name)
 {
   return add_block_to_function(
-      builder->trans_unit, builder->current_function, name);
+      builder->module, builder->current_function, name);
 }
 
 bool ir_type_eq(IrType *a, IrType *b);
@@ -263,9 +262,9 @@ u32 size_of_ir_type(IrType type);
 u32 align_of_ir_type(IrType type);
 void dump_ir_type(IrType type);
 
-void dump_trans_unit(TransUnit *trans_unit);
+void dump_ir_module(IrModule *module);
 
-void builder_init(IrBuilder *builder, TransUnit *trans_unit);
+void builder_init(IrBuilder *builder, IrModule *module);
 IrInstr *build_branch(IrBuilder *builder, IrBlock *block);
 IrInstr *build_cond(
     IrBuilder *builder, IrValue condition, IrBlock *then_block,

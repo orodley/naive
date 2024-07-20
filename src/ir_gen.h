@@ -4,6 +4,6 @@
 #include "ir.h"
 #include "parse.h"
 
-TransUnit ir_gen_toplevel(ASTToplevel *toplevel);
+IrModule ir_gen_toplevel(ASTToplevel *toplevel);
 
 #endif

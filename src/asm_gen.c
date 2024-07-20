@@ -1586,13 +1586,13 @@ static bool is_zero(IrConst *konst)
   UNREACHABLE;
 }
 
-void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
+void generate_asm_module(AsmBuilder *builder, IrModule *module)
 {
   AsmModule *asm_module = &builder->asm_module;
 
   // First do a pass collecting declarations, to support forward references.
-  for (u32 i = 0; i < trans_unit->globals.size; i++) {
-    IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
+  for (u32 i = 0; i < module->globals.size; i++) {
+    IrGlobal *ir_global = *ARRAY_REF(&module->globals, IrGlobal *, i);
 
     Array(AsmSymbol *) *symbols = &asm_module->symbols;
     AsmSymbolSection section;
@@ -1639,8 +1639,8 @@ void generate_asm_module(AsmBuilder *builder, TransUnit *trans_unit)
     }
   }
 
-  for (u32 i = 0; i < trans_unit->globals.size; i++) {
-    IrGlobal *ir_global = *ARRAY_REF(&trans_unit->globals, IrGlobal *, i);
+  for (u32 i = 0; i < module->globals.size; i++) {
+    IrGlobal *ir_global = *ARRAY_REF(&module->globals, IrGlobal *, i);
     AsmSymbol *asm_symbol = ir_global->asm_symbol;
     if (!asm_symbol->defined) continue;
 
