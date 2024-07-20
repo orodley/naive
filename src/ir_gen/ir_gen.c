@@ -178,9 +178,10 @@ IrModule ir_gen_toplevel(ASTToplevel *toplevel)
         }
       } else {
         ASTDeclSpecifier *type_specs = decl_specifier_list;
-        while (type_specs->t == STORAGE_CLASS_SPECIFIER) {
+        while (type_specs != NULL && type_specs->t == STORAGE_CLASS_SPECIFIER) {
           type_specs = type_specs->next;
         }
+        assert(type_specs != NULL);
 
         if (init_declarator == NULL) {
           decl_specifier_list_to_c_type(&ctx, type_specs);
