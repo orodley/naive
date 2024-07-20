@@ -410,6 +410,7 @@ def build(build_config):
 
     os.makedirs("build/toolchain", exist_ok=True)
     os.makedirs("build/bin", exist_ok=True)
+    os.makedirs("build/ir_gen", exist_ok=True)
     os.makedirs("build/libc", exist_ok=True)
 
     # Run the metaprograms
@@ -431,8 +432,8 @@ def build(build_config):
             "src/elf.o",
             "src/file.o",
             "src/ir.o",
-            "src/ir_gen.o",
-            "src/c_type.o",
+            "src/ir_gen/ir_gen.o",
+            "src/ir_gen/c_type.o",
             "src/parse.o",
             "src/pool.o",
             "src/preprocess.o",

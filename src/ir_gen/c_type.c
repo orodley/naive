@@ -1,4 +1,4 @@
-#include "c_type.h"
+#include "ir_gen/c_type.h"
 
 #include <stdarg.h>
 #include <stdbool.h>

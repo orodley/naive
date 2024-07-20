@@ -1,5 +1,5 @@
-#ifndef NAIVE_C_TYPE_H_
-#define NAIVE_C_TYPE_H_
+#ifndef NAIVE_IR_GEN_C_TYPE_H_
+#define NAIVE_IR_GEN_C_TYPE_H_
 
 #include "array.h"
 #include "ir.h"

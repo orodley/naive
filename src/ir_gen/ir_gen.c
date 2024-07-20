@@ -1,4 +1,4 @@
-#include "ir_gen.h"
+#include "ir_gen/ir_gen.h"
 
 #include <assert.h>
 #include <stdarg.h>
@@ -6,9 +6,9 @@
 #include <string.h>
 
 #include "array.h"
-#include "c_type.h"
 #include "diagnostics.h"
 #include "ir.h"
+#include "ir_gen/c_type.h"
 #include "parse.h"
 #include "util.h"
 

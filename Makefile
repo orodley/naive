@@ -62,7 +62,7 @@ tags: ncc
 	@ctags -R --fields=+Sl --langmap=c:+.h
 
 ncc: src/bin/ncc.o src/array.o src/asm.o src/asm_gen.o src/reg_alloc.o src/bit_set.o \
-		src/diagnostics.o src/elf.o src/file.o src/ir.o src/ir_gen.o src/c_type.o \
+		src/diagnostics.o src/elf.o src/file.o src/ir.o src/ir_gen/ir_gen.o src/ir_gen/c_type.o \
 		src/parse.o src/pool.o src/preprocess.o src/reader.o src/tokenise.o \
 		src/util.o
 	@echo 'CC $@'

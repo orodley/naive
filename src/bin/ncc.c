@@ -18,7 +18,7 @@
 #include "asm_gen.h"
 #include "elf.h"
 #include "file.h"
-#include "ir_gen.h"
+#include "ir_gen/ir_gen.h"
 #include "misc.h"
 #include "parse.h"
 #include "preprocess.h"
