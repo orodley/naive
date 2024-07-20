@@ -47,7 +47,6 @@ IrModule ir_gen_toplevel(ASTToplevel *toplevel)
   IrGenContext ctx;
   ctx.builder = &builder;
   init_type_env(&ctx.type_env);
-  ctx.global_scope = &global_scope;
   ctx.scope = &global_scope;
   ctx.current_function_type = NULL;
   ctx.inline_functions = EMPTY_ARRAY;

@@ -55,7 +55,6 @@ typedef struct GotoFixup
 typedef struct IrGenContext
 {
   IrBuilder *builder;
-  Scope *global_scope;
   Scope *scope;
   TypeEnv type_env;
   CType *current_function_type;
