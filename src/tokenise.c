@@ -117,8 +117,7 @@ static IntLiteralSuffix read_int_literal_suffix(Reader *reader)
             "Multiple 'l'/'ll' suffixes on integer literal");
       }
 
-      if (peek_char(reader) == c) {
-        advance(reader);
+      if (expect_char(reader, c)) {
         suffix |= LONG_LONG_SUFFIX;
       } else {
         suffix |= LONG_SUFFIX;
@@ -160,14 +159,15 @@ static bool read_hex_number(Reader *reader, u64 *value)
   bool at_least_one_digit = false;
   for (;;) {
     char c = peek_char(reader);
-    if (c >= 'a' && c <= 'f')
+    if (c >= 'a' && c <= 'f') {
       x = x * 16 + c - 'a' + 10;
-    else if (c >= 'A' && c <= 'F')
+    } else if (c >= 'A' && c <= 'F') {
       x = x * 16 + c - 'A' + 10;
-    else if (c >= '0' && c <= '9')
+    } else if (c >= '0' && c <= '9') {
       x = x * 16 + c - '0';
-    else
+    } else {
       break;
+    }
 
     at_least_one_digit = true;
     advance(reader);
@@ -241,9 +241,7 @@ static bool tokenise_aux(Tokeniser *tokeniser)
       if (at_end(reader)) {
         value = 0;
       } else {
-        char c = peek_char(reader);
-        if (c == 'x') {
-          advance(reader);
+        if (expect_char(reader, 'x')) {
           if (!read_hex_number(reader, &value)) return false;
         } else {
           if (!read_octal_number(reader, &value)) return false;
@@ -327,154 +325,122 @@ static bool tokenise_aux(Tokeniser *tokeniser)
       break;
     }
     case '+':
-      switch (read_char(reader)) {
-      case '+': ADD_TOK(TOK_INCREMENT); break;
-      case '=': ADD_TOK(TOK_PLUS_ASSIGN); break;
-      default:
-        back_up(reader);
+      if (expect_char(reader, '+')) {
+        ADD_TOK(TOK_INCREMENT);
+      } else if (expect_char(reader, '=')) {
+        ADD_TOK(TOK_PLUS_ASSIGN);
+      } else {
         ADD_TOK(TOK_PLUS);
-        break;
       }
-
       break;
     case '-':
-      switch (read_char(reader)) {
-      case '-': ADD_TOK(TOK_DECREMENT); break;
-      case '=': ADD_TOK(TOK_MINUS_ASSIGN); break;
-      case '>': ADD_TOK(TOK_ARROW); break;
-      default:
-        back_up(reader);
+      if (expect_char(reader, '-')) {
+        ADD_TOK(TOK_DECREMENT);
+      } else if (expect_char(reader, '=')) {
+        ADD_TOK(TOK_MINUS_ASSIGN);
+      } else if (expect_char(reader, '>')) {
+        ADD_TOK(TOK_ARROW);
+      } else {
         ADD_TOK(TOK_MINUS);
-        break;
       }
-
       break;
     case '*':
-      if (read_char(reader) == '=') {
+      if (expect_char(reader, '=')) {
         ADD_TOK(TOK_MULTIPLY_ASSIGN);
       } else {
-        back_up(reader);
         ADD_TOK(TOK_ASTERISK);
       }
-
       break;
     case '/':
-      if (read_char(reader) == '=') {
+      if (expect_char(reader, '=')) {
         ADD_TOK(TOK_DIVIDE_ASSIGN);
       } else {
-        back_up(reader);
         ADD_TOK(TOK_DIVIDE);
       }
-
       break;
     case '%':
-      if (read_char(reader) == '=') {
+      if (expect_char(reader, '=')) {
         ADD_TOK(TOK_MODULO_ASSIGN);
       } else {
-        back_up(reader);
         ADD_TOK(TOK_MODULO);
       }
-
       break;
     case '&':
-      switch (read_char(reader)) {
-      case '&': ADD_TOK(TOK_LOGICAL_AND); break;
-      case '=': ADD_TOK(TOK_BIT_AND_ASSIGN); break;
-      default:
-        back_up(reader);
+      if (expect_char(reader, '&')) {
+        ADD_TOK(TOK_LOGICAL_AND);
+      } else if (expect_char(reader, '=')) {
+        ADD_TOK(TOK_BIT_AND_ASSIGN);
+      } else {
         ADD_TOK(TOK_AMPERSAND);
-        break;
       }
-
       break;
     case '|':
-      switch (read_char(reader)) {
-      case '|': ADD_TOK(TOK_LOGICAL_OR); break;
-      case '=': ADD_TOK(TOK_BIT_OR_ASSIGN); break;
-      default:
-        back_up(reader);
+      if (expect_char(reader, '|')) {
+        ADD_TOK(TOK_LOGICAL_OR);
+      } else if (expect_char(reader, '=')) {
+        ADD_TOK(TOK_BIT_OR_ASSIGN);
+      } else {
         ADD_TOK(TOK_BIT_OR);
-        break;
       }
-
       break;
     case '^':
-      if (read_char(reader) == '=') {
+      if (expect_char(reader, '=')) {
         ADD_TOK(TOK_BIT_XOR_ASSIGN);
       } else {
-        back_up(reader);
         ADD_TOK(TOK_BIT_XOR);
       }
-
       break;
     case '=':
-      if (read_char(reader) == '=') {
+      if (expect_char(reader, '=')) {
         ADD_TOK(TOK_EQUAL);
       } else {
-        back_up(reader);
         ADD_TOK(TOK_ASSIGN);
       }
-
       break;
     case '!':
-      if (read_char(reader) == '=') {
+      if (expect_char(reader, '=')) {
         ADD_TOK(TOK_NOT_EQUAL);
       } else {
-        back_up(reader);
         ADD_TOK(TOK_LOGICAL_NOT);
       }
-
       break;
     case '<':
-      switch (read_char(reader)) {
-      case '=': ADD_TOK(TOK_LESS_THAN_OR_EQUAL); break;
-      case '<':
-        if (read_char(reader) == '=') {
+      if (expect_char(reader, '=')) {
+        ADD_TOK(TOK_LESS_THAN_OR_EQUAL);
+      } else if (expect_char(reader, '<')) {
+        if (expect_char(reader, '=')) {
           ADD_TOK(TOK_LEFT_SHIFT_ASSIGN);
         } else {
-          back_up(reader);
           ADD_TOK(TOK_LEFT_SHIFT);
         }
-        break;
-      default:
-        back_up(reader);
+      } else {
         ADD_TOK(TOK_LESS_THAN);
-        break;
       }
-
       break;
     case '>':
-      switch (read_char(reader)) {
-      case '=': ADD_TOK(TOK_GREATER_THAN_OR_EQUAL); break;
-      case '>':
-        if (read_char(reader) == '=') {
+      if (expect_char(reader, '=')) {
+        ADD_TOK(TOK_GREATER_THAN_OR_EQUAL);
+      } else if (expect_char(reader, '>')) {
+        if (expect_char(reader, '=')) {
           ADD_TOK(TOK_RIGHT_SHIFT_ASSIGN);
         } else {
-          back_up(reader);
           ADD_TOK(TOK_RIGHT_SHIFT);
         }
-        break;
-      default:
-        back_up(reader);
+      } else {
         ADD_TOK(TOK_GREATER_THAN);
-        break;
       }
-
       break;
     case '.':
-      if (read_char(reader) == '.') {
-        if (read_char(reader) == '.') {
+      if (expect_char(reader, '.')) {
+        if (expect_char(reader, '.')) {
           ADD_TOK(TOK_ELLIPSIS);
         } else {
-          back_up(reader);
           back_up(reader);
           ADD_TOK(TOK_DOT);
         }
       } else {
-        back_up(reader);
         ADD_TOK(TOK_DOT);
       }
-
       break;
     case '~': ADD_TOK(TOK_BIT_NOT); break;
     case '?': ADD_TOK(TOK_QUESTION_MARK); break;

@@ -117,5 +117,6 @@ String read_symbol(Reader *reader)
 extern inline bool at_end(Reader *reader);
 extern inline char peek_char(Reader *reader);
 extern inline char read_char(Reader *reader);
+extern inline bool expect_char(Reader *reader, char c);
 extern inline bool initial_ident_char(char c);
 extern inline bool ident_char(char c);

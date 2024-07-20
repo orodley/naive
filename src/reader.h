@@ -61,6 +61,15 @@ inline char read_char(Reader *reader)
   return c;
 }
 
+inline bool expect_char(Reader *reader, char c)
+{
+  if (peek_char(reader) == c) {
+    advance(reader);
+    return true;
+  }
+  return false;
+}
+
 inline bool initial_ident_char(char c)
 {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');

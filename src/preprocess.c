@@ -229,10 +229,7 @@ static bool append_string_or_char_literal(
                                          : "Unterminated character literal");
       return false;
     }
-    if (peek_char(reader) == '\\') {
-      advance(reader);
-    }
-
+    expect_char(reader, '\\');
     advance(reader);
   }
   advance(reader);
@@ -268,8 +265,7 @@ static char *look_up_include_path(
   // Try relative to the including file
   u32 including_file_length = strlen(including_file);
   i32 i = including_file_length - 1;
-  for (; i >= 0 && including_file[i] != '/'; i--)
-    ;
+  for (; i >= 0 && including_file[i] != '/'; i--);
 
   char *base_path;
   u32 base_length;
@@ -325,9 +321,8 @@ static bool eval_pp_condition(PP *pp, bool *result)
       if (strneq("defined", ident.chars, ident.len)) {
         skip_whitespace_and_comments_from_reader(reader, NULL, false);
         bool bracketed = false;
-        if (peek_char(reader) == '(') {
+        if (expect_char(reader, '(')) {
           bracketed = true;
-          advance(reader);
           skip_whitespace_and_comments_from_reader(reader, NULL, false);
         }
         String macro_name = read_symbol(reader);
@@ -335,9 +330,7 @@ static bool eval_pp_condition(PP *pp, bool *result)
         if (bracketed) {
           skip_whitespace_and_comments_from_reader(reader, NULL, false);
 
-          if (peek_char(reader) == ')') {
-            advance(reader);
-          } else {
+          if (!expect_char(reader, ')')) {
             issue_error(
                 &reader->source_loc,
                 "Unexpected char '%c' in `defined' in preprocessor condition",
@@ -489,8 +482,7 @@ static bool handle_pp_directive(PP *pp)
 
   skip_whitespace_and_comments(pp, false);
   // Empty directive
-  if (peek_char(reader) == '\n') {
-    advance(reader);
+  if (expect_char(reader, '\n')) {
     return true;
   }
 
@@ -592,8 +584,7 @@ static bool handle_pp_directive(PP *pp)
 
       char terminator = c == '<' ? '>' : '"';
       u32 start_index = reader->position;
-      while (!at_end(reader) && read_char(reader) != terminator)
-        ;
+      while (!at_end(reader) && read_char(reader) != terminator);
 
       if (at_end(reader)) {
         issue_error(&include_path_source_loc, "Unterminated include path");
@@ -638,8 +629,7 @@ static bool handle_pp_directive(PP *pp)
       Array(String) arg_names;
       bool variadic = false;
       ARRAY_INIT(&arg_names, String, 0);
-      if (peek_char(reader) == '(') {
-        advance(reader);
+      if (expect_char(reader, '(')) {
         for (;;) {
           skip_whitespace_and_comments(pp, false);
           char c = peek_char(reader);
@@ -1074,13 +1064,12 @@ static bool preprocess_aux(PP *pp)
       break;
     }
     case '#':
-      if (peek_char(reader) == '#') {
+      if (expect_char(reader, '#')) {
         // Token pasting operator
         // @TODO: Handle empty replacements properly.
         // @TODO: Handle the case where '##' is formed out of pasting
         // other tokens together. In this case it doesn't invoke the
         // token pasting operator.
-        advance(reader);
         if (pp->macro_depth == 0) {
           issue_error(
               &start_source_loc,
@@ -1168,14 +1157,12 @@ static bool preprocess_aux(PP *pp)
           add_adjustment(pp, END_MACRO_ADJUSTMENT);
         } else {
           skip_whitespace_and_comments(pp, true);
-          if (peek_char(reader) != '(') {
+          if (!expect_char(reader, '(')) {
             // This identifier names a function-like macro, but it
             // appears here without arguments. Therefore, we leave
             // it as is.
             ARRAY_APPEND_ELEMS(&pp->out_chars, char, symbol.len, symbol.chars);
           } else {
-            read_char(reader);
-
             Array(Macro) old_params = pp->curr_macro_params;
             add_adjustment_to(pp, BEGIN_MACRO_ADJUSTMENT, start_source_loc);
             if (!substitute_macro_params(pp, macro)) return false;
