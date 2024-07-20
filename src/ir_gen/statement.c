@@ -16,9 +16,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
   switch (statement->t) {
   case COMPOUND_STATEMENT: {
     Scope block_scope;
-    block_scope.parent_scope = ctx->scope;
-    ARRAY_INIT(&block_scope.bindings, Binding, 5);
-    ctx->scope = &block_scope;
+    push_scope(ctx, &block_scope);
 
     ASTBlockItem *block_item_list = statement->u.block_item_list;
     while (block_item_list != NULL) {
@@ -35,7 +33,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
       block_item_list = block_item_list->next;
     }
 
-    ctx->scope = ctx->scope->parent_scope;
+    pop_scope(ctx);
 
     break;
   }
@@ -290,17 +288,11 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     IrBlock *after = pool_alloc(&builder->module->pool, sizeof *after);
 
     Scope init_scope;
-    Scope *prev_scope = ctx->scope;
+    push_scope(ctx, &init_scope);
 
     ASTForStatement *f = &statement->u.for_statement;
     if (f->init_type == FOR_INIT_DECL) {
-      init_scope.parent_scope = ctx->scope;
-      ARRAY_INIT(&init_scope.bindings, Binding, 1);
-      ctx->scope = &init_scope;
       add_decl_to_scope(ctx, f->init.decl);
-      ctx->scope = ctx->scope->parent_scope;
-
-      ctx->scope = &init_scope;
     } else {
       assert(f->init_type == FOR_INIT_EXPR);
       if (f->init.expr != NULL) ir_gen_expr(ctx, f->init.expr, RVALUE_CONTEXT);
@@ -343,7 +335,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
     build_branch(builder, pre_header);
 
-    ctx->scope = prev_scope;
+    pop_scope(ctx);
     builder->current_block = after;
 
     *ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = after;

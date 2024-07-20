@@ -24,6 +24,8 @@ typedef struct Scope
   struct Scope *parent_scope;
 } Scope;
 
+Binding *binding_for_name(Scope *scope, char *name);
+
 typedef struct InlineFunction
 {
   IrGlobal *global;
@@ -50,8 +52,6 @@ typedef struct GotoFixup
   IrInstr *instr;
 } GotoFixup;
 
-Binding *binding_for_name(Scope *scope, char *name);
-
 typedef struct IrGenContext
 {
   IrBuilder *builder;
@@ -67,5 +67,8 @@ typedef struct IrGenContext
   IrBlock *continue_target;
   IrFunction *scratch_function;
 } IrGenContext;
+
+void push_scope(IrGenContext *ctx, Scope *scope);
+void pop_scope(IrGenContext *ctx);
 
 #endif

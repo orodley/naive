@@ -288,11 +288,8 @@ static void ir_gen_function(
   builder->current_function = function;
   builder->current_block = *ARRAY_REF(&function->blocks, IrBlock *, 0);
 
-  Scope scope;
-  scope.parent_scope = ctx->scope;
-  Array(Binding) *param_bindings = &scope.bindings;
-  *param_bindings = EMPTY_ARRAY;
-  ctx->scope = &scope;
+  Scope function_scope;
+  push_scope(ctx, &function_scope);
 
   ctx->current_function_type = function_type;
 
@@ -320,7 +317,7 @@ static void ir_gen_function(
       break;
     }
 
-    Binding *binding = ARRAY_APPEND(param_bindings, Binding);
+    Binding *binding = ARRAY_APPEND(&ctx->scope->bindings, Binding);
 
     // @HACK: We have to do this because decl_to_cdecl does extra stuff to
     // adjust parameter types when it knows that the declarator is for a
@@ -352,8 +349,7 @@ static void ir_gen_function(
     build_nullary_instr(builder, OP_RET_VOID, (IrType){.t = IR_VOID});
   }
 
-  ctx->scope = ctx->scope->parent_scope;
-  array_free(param_bindings);
+  pop_scope(ctx);
 }
 
 static ASTParameterDecl *params_for_function_declarator(
