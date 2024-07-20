@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import filecmp
 import fnmatch
 import glob
 import json
@@ -84,6 +85,10 @@ def make_arg_parser():
         nargs="*",
     )
 
+    self_host_parser = subparsers.add_parser(
+        "self_host", aliases=["s"], help="Bootstrap a self-hosted compiler"
+    )
+
     return parser
 
 
@@ -92,9 +97,7 @@ class BuildConfig(object):
 
     def __init__(self, args):
         if args.toolchain:
-            self.cc = os.path.join(args.toolchain, "ncc")
-            self.asm = os.path.join(args.toolchain, "nas")
-            self.ar = os.path.join(args.toolchain, "nar")
+            self.set_toolchain(args.toolchain)
         else:
             self.cc = args.cc or [get_cc()]
             self.asm = args.asm or "nasm"
@@ -116,6 +119,11 @@ class BuildConfig(object):
 
         self.install_dir = os.path.abspath(args.install_dir or "build/toolchain")
 
+    def set_toolchain(self, toolchain):
+        self.cc = [os.path.join(toolchain, "ncc")]
+        self.asm = os.path.join(toolchain, "nas")
+        self.ar = os.path.join(toolchain, "nar")
+
 
 def main(args):
     build_config = BuildConfig(args)
@@ -128,6 +136,8 @@ def main(args):
         ret = run_binary(args, build_config)
     elif command in {"check", "c"}:
         ret = check(args, build_config)
+    elif command in {"self_host", "s"}:
+        ret = self_host(build_config)
     sys.exit(ret)
 
 
@@ -408,6 +418,7 @@ def build(build_config):
         host_cflags.append("-fcolor-diagnostics")
     host_cflags.extend(build_config.extra_cflags)
 
+    os.makedirs(build_config.install_dir, exist_ok=True)
     os.makedirs("build/toolchain", exist_ok=True)
     os.makedirs("build/bin", exist_ok=True)
     os.makedirs("build/ir_gen", exist_ok=True)
@@ -602,6 +613,41 @@ def check(args, build_config):
         print(f"{total_warnings} warnings")
         return 1
     return 0
+
+
+# The usual bootstrap self-consistency check is three stages, but because of
+# having our own libc as well we actually need four stages:
+#
+# host - completely different compiler
+# ncc1 - ncc source compiled with host, linked against system libc
+# ncc2 - ncc source compiled with ncc + system libc, linked against naive libc
+# ncc3 - ncc source compiled with ncc + naive libc, linked against naive libc
+# ncc4 - ncc source compiled with ncc + naive libc, linked against naive libc
+#
+# ncc2 and ncc3 might be different, because the libc of the compiler they were
+# compiled with is different. For example, the stability of qsort can be
+# different between the two, which can affect register allocation.
+def self_host(build_config):
+    for stage in range(1, 5):
+        if stage > 1:
+            build_config.set_toolchain(f"/tmp/naive{stage - 1}")
+        build_config.install_dir = f"/tmp/naive{stage}"
+        if (ret := build(build_config)) != 0:
+            return ret
+        print(f"Compiled stage {stage}")
+
+    any_different = False
+    for filename in ["ncc", "nar", "nas", "libc.a"]:
+        if not filecmp.cmp(
+            f"/tmp/naive3/{filename}", f"/tmp/naive4/{filename}", shallow=False
+        ):
+            print(f"Stage 3/4 {filename} are different")
+
+    if any_different:
+        return 1
+    else:
+        print("Bootstap completed successfully - stage 3 and 4 are consistent")
+        return 0
 
 
 def run_all_procs(procs):
