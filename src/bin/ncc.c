@@ -366,7 +366,7 @@ static int compile_file(
     return 0;
   }
 
-  IrModule ir_module = ir_gen_toplevel(ast);
+  IrModule ir_module = ir_gen(ast);
 
   array_free(&tokens);
   pool_free(&ast_pool);

@@ -18,13 +18,14 @@
 #include "parse.h"
 #include "util.h"
 
+static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel);
 static void ir_gen_function(
     IrGenContext *ctx, IrGlobal *global, CType *function_type,
     ASTFunctionDef *function_def);
 static ASTParameterDecl *params_for_function_declarator(
     ASTDeclarator *declarator);
 
-IrModule ir_gen_toplevel(ASTToplevel *toplevel)
+IrModule ir_gen(ASTToplevel *toplevel)
 {
   IrModule ir_module;
   ir_module_init(&ir_module);
@@ -58,189 +59,7 @@ IrModule ir_gen_toplevel(ASTToplevel *toplevel)
   ctx.scratch_function = &scratch_function->initializer->u.function;
 
   while (toplevel != NULL) {
-    IrGlobal *global = NULL;
-    CType *global_type = NULL;
-
-    switch (toplevel->t) {
-    case FUNCTION_DEF: {
-      ASTFunctionDef *func = toplevel->u.function_def;
-      ASTDeclSpecifier *decl_specifier_list = func->decl_specifier_list;
-
-      IrLinkage linkage = IR_GLOBAL_LINKAGE;
-      while (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER) {
-        switch (decl_specifier_list->u.storage_class_specifier) {
-        case STATIC_SPECIFIER: linkage = IR_LOCAL_LINKAGE; break;
-        default: UNIMPLEMENTED;
-        }
-
-        decl_specifier_list = decl_specifier_list->next;
-      }
-
-      bool is_inline = false;
-      while (decl_specifier_list != NULL
-             && decl_specifier_list->t == FUNCTION_SPECIFIER
-             && decl_specifier_list->u.function_specifier == INLINE_SPECIFIER) {
-        is_inline = true;
-        decl_specifier_list = decl_specifier_list->next;
-      }
-
-      ASTDeclarator *declarator = func->declarator;
-
-      global = ir_global_for_decl(
-          &ctx, decl_specifier_list, declarator, NULL, &global_type);
-      global->linkage = linkage;
-
-      Binding *binding = ARRAY_APPEND(global_bindings, Binding);
-      binding->name = global->name;
-      binding->constant = false;
-      binding->term.ctype = global_type;
-      binding->term.value = value_global(global);
-
-      if (is_inline) {
-        *ARRAY_APPEND(&ctx.inline_functions, InlineFunction) = (InlineFunction){
-            .global = global,
-            .function_type = global_type,
-            .function_def =
-                {
-                    .decl_specifier_list = decl_specifier_list,
-                    .declarator = declarator,
-                    .old_style_param_decl_list =
-                        func->old_style_param_decl_list,
-                    .body = func->body,
-                },
-        };
-      } else {
-        ir_gen_function(&ctx, global, global_type, func);
-      }
-
-      break;
-    }
-    case DECL: {
-      ASTDecl *decl = toplevel->u.decl;
-      ASTDeclSpecifier *decl_specifier_list = decl->decl_specifier_list;
-      ASTInitDeclarator *init_declarator = decl->init_declarators;
-      assert(decl_specifier_list != NULL);
-
-      if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
-          && decl_specifier_list->u.storage_class_specifier == EXTERN_SPECIFIER
-          && decl_specifier_list->next != NULL
-          && decl_specifier_list->next->t == FUNCTION_SPECIFIER
-          && decl_specifier_list->next->u.function_specifier
-                 == INLINE_SPECIFIER) {
-        decl_specifier_list = decl_specifier_list->next->next;
-
-        CType *decl_spec_type =
-            decl_specifier_list_to_c_type(&ctx, decl_specifier_list);
-        CDecl cdecl;
-        decl_to_cdecl(
-            &ctx, decl_spec_type, init_declarator->declarator, &cdecl);
-
-        InlineFunction *matching = NULL;
-
-        for (u32 i = 0; i < ctx.inline_functions.size; i++) {
-          InlineFunction *inline_function =
-              ARRAY_REF(&ctx.inline_functions, InlineFunction, i);
-          if (streq(inline_function->global->name, cdecl.name)) {
-            assert(c_type_eq(cdecl.type, inline_function->function_type));
-            matching = inline_function;
-            break;
-          }
-        }
-        assert(matching != NULL);
-
-        ir_gen_function(
-            &ctx, matching->global, matching->function_type,
-            &matching->function_def);
-      } else if (
-          decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
-          && decl_specifier_list->u.storage_class_specifier
-                 == TYPEDEF_SPECIFIER) {
-        assert(init_declarator != NULL);
-        decl_specifier_list = decl_specifier_list->next;
-        CType *decl_spec_type =
-            decl_specifier_list_to_c_type(&ctx, decl_specifier_list);
-
-        while (init_declarator != NULL) {
-          assert(init_declarator->initializer == NULL);
-          CDecl cdecl;
-          decl_to_cdecl(
-              &ctx, decl_spec_type, init_declarator->declarator, &cdecl);
-
-          TypeEnvEntry *new_type_alias =
-              pool_alloc(&ctx.type_env.pool, sizeof *new_type_alias);
-          *ARRAY_APPEND(&ctx.type_env.typedef_types, TypeEnvEntry *) =
-              new_type_alias;
-          new_type_alias->name = cdecl.name;
-          new_type_alias->type = *cdecl.type;
-
-          init_declarator = init_declarator->next;
-        }
-      } else {
-        ASTDeclSpecifier *type_specs = decl_specifier_list;
-        while (type_specs != NULL && type_specs->t == STORAGE_CLASS_SPECIFIER) {
-          type_specs = type_specs->next;
-        }
-        assert(type_specs != NULL);
-
-        if (init_declarator == NULL) {
-          decl_specifier_list_to_c_type(&ctx, type_specs);
-        } else {
-          assert(init_declarator->next == NULL);
-          ASTDeclarator *declarator = init_declarator->declarator;
-
-          // @TODO: Multiple declarators in one global decl.
-          global = ir_global_for_decl(
-              &ctx, type_specs, declarator, init_declarator->initializer,
-              &global_type);
-          bool is_extern = global_type->t == FUNCTION_TYPE;
-
-          Binding *binding = ARRAY_APPEND(global_bindings, Binding);
-          binding->name = global->name;
-          binding->constant = false;
-          binding->term.ctype = global_type;
-          binding->term.value = value_global(global);
-
-          global->linkage = IR_GLOBAL_LINKAGE;
-          while (decl_specifier_list != type_specs) {
-            assert(decl_specifier_list->t == STORAGE_CLASS_SPECIFIER);
-            ASTStorageClassSpecifier storage_class =
-                decl_specifier_list->u.storage_class_specifier;
-            if (storage_class == STATIC_SPECIFIER)
-              global->linkage = IR_LOCAL_LINKAGE;
-            else if (storage_class == EXTERN_SPECIFIER)
-              is_extern = true;
-            else
-              UNIMPLEMENTED;
-
-            decl_specifier_list = decl_specifier_list->next;
-          }
-
-          ASTInitializer *init = init_declarator->initializer;
-          if (init == NULL) {
-            if (!is_extern) {
-              global->initializer = zero_initializer(&builder, global_type);
-            }
-          } else {
-            assert(!is_extern);
-
-            Pool c_init_pool;
-            pool_init(&c_init_pool, sizeof(CInitializer) * 5);
-
-            CInitializer c_init;
-            make_c_initializer(
-                &ctx, &c_init_pool, global_type, init, true, &c_init);
-            assert(c_type_eq(c_init.type, global_type));
-
-            global->initializer = const_gen_c_init(&builder, &c_init);
-            pool_free(&c_init_pool);
-          }
-        }
-      }
-
-      break;
-    }
-    }
-
+    ir_gen_toplevel(&ctx, toplevel);
     toplevel = toplevel->next;
   }
 
@@ -274,6 +93,188 @@ IrModule ir_gen_toplevel(ASTToplevel *toplevel)
   array_free(global_bindings);
 
   return ir_module;
+}
+
+static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
+{
+  switch (toplevel->t) {
+  case FUNCTION_DEF: {
+    ASTFunctionDef *func = toplevel->u.function_def;
+    ASTDeclSpecifier *decl_specifier_list = func->decl_specifier_list;
+
+    IrLinkage linkage = IR_GLOBAL_LINKAGE;
+    while (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER) {
+      switch (decl_specifier_list->u.storage_class_specifier) {
+      case STATIC_SPECIFIER: linkage = IR_LOCAL_LINKAGE; break;
+      default: UNIMPLEMENTED;
+      }
+
+      decl_specifier_list = decl_specifier_list->next;
+    }
+
+    bool is_inline = false;
+    while (decl_specifier_list != NULL
+           && decl_specifier_list->t == FUNCTION_SPECIFIER
+           && decl_specifier_list->u.function_specifier == INLINE_SPECIFIER) {
+      is_inline = true;
+      decl_specifier_list = decl_specifier_list->next;
+    }
+
+    ASTDeclarator *declarator = func->declarator;
+
+    CType *global_type;
+    IrGlobal *global = ir_global_for_decl(
+        ctx, decl_specifier_list, declarator, NULL, &global_type);
+    global->linkage = linkage;
+
+    Binding *binding = ARRAY_APPEND(&ctx->scope->bindings, Binding);
+    binding->name = global->name;
+    binding->constant = false;
+    binding->term.ctype = global_type;
+    binding->term.value = value_global(global);
+
+    if (is_inline) {
+      *ARRAY_APPEND(&ctx->inline_functions, InlineFunction) = (InlineFunction){
+          .global = global,
+          .function_type = global_type,
+          .function_def =
+              {
+                  .decl_specifier_list = decl_specifier_list,
+                  .declarator = declarator,
+                  .old_style_param_decl_list = func->old_style_param_decl_list,
+                  .body = func->body,
+              },
+      };
+    } else {
+      ir_gen_function(ctx, global, global_type, func);
+    }
+
+    break;
+  }
+  case DECL: {
+    ASTDecl *decl = toplevel->u.decl;
+    ASTDeclSpecifier *decl_specifier_list = decl->decl_specifier_list;
+    ASTInitDeclarator *init_declarator = decl->init_declarators;
+    assert(decl_specifier_list != NULL);
+
+    if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
+        && decl_specifier_list->u.storage_class_specifier == EXTERN_SPECIFIER
+        && decl_specifier_list->next != NULL
+        && decl_specifier_list->next->t == FUNCTION_SPECIFIER
+        && decl_specifier_list->next->u.function_specifier
+               == INLINE_SPECIFIER) {
+      decl_specifier_list = decl_specifier_list->next->next;
+
+      CType *decl_spec_type =
+          decl_specifier_list_to_c_type(ctx, decl_specifier_list);
+      CDecl cdecl;
+      decl_to_cdecl(ctx, decl_spec_type, init_declarator->declarator, &cdecl);
+
+      InlineFunction *matching = NULL;
+
+      for (u32 i = 0; i < ctx->inline_functions.size; i++) {
+        InlineFunction *inline_function =
+            ARRAY_REF(&ctx->inline_functions, InlineFunction, i);
+        if (streq(inline_function->global->name, cdecl.name)) {
+          assert(c_type_eq(cdecl.type, inline_function->function_type));
+          matching = inline_function;
+          break;
+        }
+      }
+      assert(matching != NULL);
+
+      ir_gen_function(
+          ctx, matching->global, matching->function_type,
+          &matching->function_def);
+    } else if (
+        decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
+        && decl_specifier_list->u.storage_class_specifier
+               == TYPEDEF_SPECIFIER) {
+      assert(init_declarator != NULL);
+      decl_specifier_list = decl_specifier_list->next;
+      CType *decl_spec_type =
+          decl_specifier_list_to_c_type(ctx, decl_specifier_list);
+
+      while (init_declarator != NULL) {
+        assert(init_declarator->initializer == NULL);
+        CDecl cdecl;
+        decl_to_cdecl(ctx, decl_spec_type, init_declarator->declarator, &cdecl);
+
+        TypeEnvEntry *new_type_alias =
+            pool_alloc(&ctx->type_env.pool, sizeof *new_type_alias);
+        *ARRAY_APPEND(&ctx->type_env.typedef_types, TypeEnvEntry *) =
+            new_type_alias;
+        new_type_alias->name = cdecl.name;
+        new_type_alias->type = *cdecl.type;
+
+        init_declarator = init_declarator->next;
+      }
+    } else {
+      ASTDeclSpecifier *type_specs = decl_specifier_list;
+      while (type_specs != NULL && type_specs->t == STORAGE_CLASS_SPECIFIER) {
+        type_specs = type_specs->next;
+      }
+      assert(type_specs != NULL);
+
+      if (init_declarator == NULL) {
+        decl_specifier_list_to_c_type(ctx, type_specs);
+      } else {
+        assert(init_declarator->next == NULL);
+        ASTDeclarator *declarator = init_declarator->declarator;
+
+        // @TODO: Multiple declarators in one global decl.
+        CType *global_type;
+        IrGlobal *global = ir_global_for_decl(
+            ctx, type_specs, declarator, init_declarator->initializer,
+            &global_type);
+        bool is_extern = global_type->t == FUNCTION_TYPE;
+
+        Binding *binding = ARRAY_APPEND(&ctx->scope->bindings, Binding);
+        binding->name = global->name;
+        binding->constant = false;
+        binding->term.ctype = global_type;
+        binding->term.value = value_global(global);
+
+        global->linkage = IR_GLOBAL_LINKAGE;
+        while (decl_specifier_list != type_specs) {
+          assert(decl_specifier_list->t == STORAGE_CLASS_SPECIFIER);
+          ASTStorageClassSpecifier storage_class =
+              decl_specifier_list->u.storage_class_specifier;
+          if (storage_class == STATIC_SPECIFIER)
+            global->linkage = IR_LOCAL_LINKAGE;
+          else if (storage_class == EXTERN_SPECIFIER)
+            is_extern = true;
+          else
+            UNIMPLEMENTED;
+
+          decl_specifier_list = decl_specifier_list->next;
+        }
+
+        ASTInitializer *init = init_declarator->initializer;
+        if (init == NULL) {
+          if (!is_extern) {
+            global->initializer = zero_initializer(ctx->builder, global_type);
+          }
+        } else {
+          assert(!is_extern);
+
+          Pool c_init_pool;
+          pool_init(&c_init_pool, sizeof(CInitializer) * 5);
+
+          CInitializer c_init;
+          make_c_initializer(
+              ctx, &c_init_pool, global_type, init, true, &c_init);
+          assert(c_type_eq(c_init.type, global_type));
+
+          global->initializer = const_gen_c_init(ctx->builder, &c_init);
+          pool_free(&c_init_pool);
+        }
+      }
+    }
+
+    break;
+  }
+  }
 }
 
 static void ir_gen_function(
