@@ -15,7 +15,5 @@ Includes:
 Build-time dependencies:
 
 * A C compiler
-* Python 3
-* make
 * nasm
-* ctags
+* Python 3
