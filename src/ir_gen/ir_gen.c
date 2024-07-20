@@ -9,41 +9,9 @@
 #include "diagnostics.h"
 #include "ir.h"
 #include "ir_gen/c_type.h"
+#include "ir_gen/context.h"
 #include "parse.h"
 #include "util.h"
-
-typedef struct Term
-{
-  CType *ctype;
-  IrValue value;
-} Term;
-
-typedef struct Binding
-{
-  char *name;
-  bool constant;
-  Term term;
-} Binding;
-
-typedef struct Scope
-{
-  Array(Binding) bindings;
-  struct Scope *parent_scope;
-} Scope;
-
-Binding *binding_for_name(Scope *scope, char *name)
-{
-  for (u32 i = 0; i < scope->bindings.size; i++) {
-    Binding *binding = ARRAY_REF(&scope->bindings, Binding, i);
-    if (streq(binding->name, name)) return binding;
-  }
-
-  if (scope->parent_scope != NULL) {
-    return binding_for_name(scope->parent_scope, name);
-  } else {
-    return NULL;
-  }
-}
 
 // @TODO: We should special-case zero-initializers, so that we don't need huge
 // amounts of memory to store large zeroed arrays.
@@ -89,22 +57,6 @@ typedef struct InlineFunction
   CType *function_type;
   ASTFunctionDef function_def;
 } InlineFunction;
-
-typedef struct IrGenContext
-{
-  IrBuilder *builder;
-  Scope *global_scope;
-  Scope *scope;
-  TypeEnv type_env;
-  CType *current_function_type;
-  Array(InlineFunction) inline_functions;
-  Array(SwitchCase) case_labels;
-  Array(GotoLabel) goto_labels;
-  Array(GotoFixup) goto_fixups;
-  IrBlock *break_target;
-  IrBlock *continue_target;
-  IrFunction *scratch_function;
-} IrGenContext;
 
 typedef enum ExprContext
 {

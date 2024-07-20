@@ -445,6 +445,7 @@ def build(build_config):
             "src/ir.o",
             "src/ir_gen/ir_gen.o",
             "src/ir_gen/c_type.o",
+            "src/ir_gen/context.o",
             "src/parse.o",
             "src/pool.o",
             "src/preprocess.o",
