@@ -24,6 +24,32 @@ typedef struct Scope
   struct Scope *parent_scope;
 } Scope;
 
+typedef struct InlineFunction
+{
+  IrGlobal *global;
+  CType *function_type;
+  ASTFunctionDef function_def;
+} InlineFunction;
+
+typedef struct SwitchCase
+{
+  bool is_default;
+  IrConst *value;
+  IrBlock *block;
+} SwitchCase;
+
+typedef struct GotoLabel
+{
+  char *name;
+  IrBlock *block;
+} GotoLabel;
+
+typedef struct GotoFixup
+{
+  char *label_name;
+  IrInstr *instr;
+} GotoFixup;
+
 Binding *binding_for_name(Scope *scope, char *name);
 
 typedef struct IrGenContext
