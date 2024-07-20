@@ -266,8 +266,14 @@ static IrGlobal *ir_global_for_decl(
   }
 }
 
-void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
+TransUnit ir_gen_toplevel(ASTToplevel *toplevel)
 {
+  TransUnit tu;
+  trans_unit_init(&tu);
+
+  IrBuilder builder;
+  builder_init(&builder, &tu);
+
   Scope global_scope;
   global_scope.parent_scope = NULL;
   Array(Binding) *global_bindings = &global_scope.bindings;
@@ -277,11 +283,11 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
   // expression, and then switch back, keeping only the type of the resulting
   // Term.
   IrGlobal *scratch_function = trans_unit_add_function(
-      builder->trans_unit, "__scratch", (IrType){.t = IR_VOID}, 0, false, NULL);
-  add_init_to_function(builder->trans_unit, scratch_function);
+      builder.trans_unit, "__scratch", (IrType){.t = IR_VOID}, 0, false, NULL);
+  add_init_to_function(builder.trans_unit, scratch_function);
 
   IrGenContext ctx;
-  ctx.builder = builder;
+  ctx.builder = &builder;
   init_type_env(&ctx.type_env);
   ctx.global_scope = &global_scope;
   ctx.scope = &global_scope;
@@ -454,7 +460,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
           ASTInitializer *init = init_declarator->initializer;
           if (init == NULL) {
             if (!is_extern) {
-              global->initializer = zero_initializer(builder, global_type);
+              global->initializer = zero_initializer(&builder, global_type);
             }
           } else {
             assert(!is_extern);
@@ -467,7 +473,7 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
                 &ctx, &c_init_pool, global_type, init, true, &c_init);
             assert(c_type_eq(c_init.type, global_type));
 
-            global->initializer = const_gen_c_init(builder, &c_init);
+            global->initializer = const_gen_c_init(&builder, &c_init);
             pool_free(&c_init_pool);
           }
         }
@@ -497,9 +503,9 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
   }
 
   IrGlobal *first_global =
-      *ARRAY_REF(&builder->trans_unit->globals, IrGlobal *, 0);
+      *ARRAY_REF(&builder.trans_unit->globals, IrGlobal *, 0);
   assert(streq(first_global->name, "__scratch"));
-  ARRAY_REMOVE(&builder->trans_unit->globals, IrGlobal *, 0);
+  ARRAY_REMOVE(&builder.trans_unit->globals, IrGlobal *, 0);
 
   pool_free(&ctx.type_env.pool);
   array_free(&ctx.goto_labels);
@@ -509,6 +515,8 @@ void ir_gen_toplevel(IrBuilder *builder, ASTToplevel *toplevel)
   array_free(&ctx.type_env.enum_types);
   array_free(&ctx.type_env.typedef_types);
   array_free(global_bindings);
+
+  return tu;
 }
 
 static void ir_gen_function(

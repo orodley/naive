@@ -366,12 +366,7 @@ static int compile_file(
     return 0;
   }
 
-  TransUnit tu;
-  trans_unit_init(&tu);
-  IrBuilder builder;
-  builder_init(&builder, &tu);
-
-  ir_gen_toplevel(&builder, ast);
+  TransUnit tu = ir_gen_toplevel(ast);
 
   array_free(&tokens);
   pool_free(&ast_pool);
