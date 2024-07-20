@@ -1,11 +1,4 @@
-/ncc
-/nar
-/nas
 /build
 /compile_commands.json
 
-*.o
-*.a
-*.inc
 *.tmp
-tags
