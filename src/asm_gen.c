@@ -1507,17 +1507,33 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   array_free(&body);
 }
 
+static void write_int_bytes(Array(u8) *out, u64 bytes, u32 size)
+{
+  for (u32 n = 0; n < size; n++) {
+    u8 byte = (bytes >> (n * 8)) & 0xFF;
+    *ARRAY_APPEND(out, u8) = byte;
+  }
+}
+
 static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out)
 {
   switch (konst->type.t) {
   case IR_INT:
-    for (u32 n = 0; n < size_of_ir_type(konst->type); n++) {
-      u8 byte = (konst->u.integer >> (n * 8)) & 0xFF;
-      *ARRAY_APPEND(out, u8) = byte;
-    }
+    write_int_bytes(out, konst->u.integer, size_of_ir_type(konst->type));
     break;
   // @FLOAT_IMPL
-  case IR_FLOAT: UNIMPLEMENTED;
+  case IR_FLOAT:
+    if (konst->type.u.bit_width == 32) {
+      u32 raw_bits = float_to_raw_bits((float)konst->u.floatt);
+      write_int_bytes(out, raw_bits, 4);
+    } else if (konst->type.u.bit_width == 64) {
+      u64 raw_bits = double_to_raw_bits(konst->u.floatt);
+      write_int_bytes(out, raw_bits, 8);
+    } else {
+      // 80-bit long double
+      UNIMPLEMENTED;
+    }
+    break;
   case IR_POINTER: {
     IrGlobal *global = konst->u.global_pointer;
     if (global != NULL) {
@@ -1570,8 +1586,7 @@ static bool is_zero(IrConst *konst)
 {
   switch (konst->type.t) {
   case IR_INT: return konst->u.integer == 0;
-  // @FLOAT_IMPL
-  case IR_FLOAT: UNIMPLEMENTED;
+  case IR_FLOAT: return konst->u.floatt == 0.0;
   case IR_POINTER: return false;
   case IR_ARRAY:
     for (u32 n = 0; n < konst->type.u.array.size; n++) {

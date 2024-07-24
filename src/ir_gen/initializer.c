@@ -153,6 +153,11 @@ void make_c_initializer(
         assert(type->t == INTEGER_TYPE);
         value = value_const_int(konst->type, konst->u.integer);
         break;
+      case FLOAT_TYPE:
+        assert(konst->type.t == IR_FLOAT);
+        assert(type->t == FLOAT_TYPE);
+        value = value_const_float(konst->type, konst->u.floatt);
+        break;
       case POINTER_TYPE: {
         assert(konst->type.t == IR_POINTER);
         value = value_global(konst->u.global_pointer);
@@ -368,6 +373,12 @@ IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
     assert(value.type.t == IR_INT);
     return add_int_const(builder, c_type_to_ir_type(type), value.u.const_int);
   }
+  case FLOAT_TYPE: {
+    IrValue value = c_init->u.leaf_value;
+    assert(value.type.t == IR_FLOAT);
+    return add_float_const(
+        builder, c_type_to_ir_type(type), value.u.const_float);
+  }
   case POINTER_TYPE: {
     IrValue value = c_init->u.leaf_value;
     assert(value.t == IR_VALUE_GLOBAL);
@@ -412,6 +423,8 @@ IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
 {
   switch (ctype->t) {
   case INTEGER_TYPE: return add_int_const(builder, c_type_to_ir_type(ctype), 0);
+  case FLOAT_TYPE:
+    return add_float_const(builder, c_type_to_ir_type(ctype), 0.0);
   case POINTER_TYPE: return add_global_const(builder, NULL);
   case ARRAY_TYPE: {
     assert(!ctype->u.array.incomplete);

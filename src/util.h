@@ -106,6 +106,26 @@ inline u32 align_to(u32 n, u32 align)
   return (n + x) & ~x;
 }
 
+inline u32 float_to_raw_bits(float f)
+{
+  union
+  {
+    float f;
+    u32 x;
+  } u = {.f = f};
+  return u.x;
+}
+
+inline u64 double_to_raw_bits(double f)
+{
+  union
+  {
+    double f;
+    u64 x;
+  } u = {.f = f};
+  return u.x;
+}
+
 String map_file_into_memory(char *filename);
 void unmap_file(String buffer);
 

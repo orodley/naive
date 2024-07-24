@@ -21,6 +21,9 @@ extern inline u32 bit_count(u32 x);
 
 extern inline u32 align_to(u32 n, u32 align);
 
+extern inline u32 float_to_raw_bits(float f);
+extern inline u64 double_to_raw_bits(double f);
+
 char *nconcat(char *str_a, u32 len_a, char *str_b, u32 len_b)
 {
   u32 result_length = len_a + len_b;
