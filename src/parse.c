@@ -215,6 +215,10 @@ static ASTExpr *build_constant(Parser *parser, Token *token)
     expr->t = INT_LITERAL_EXPR;
     expr->u.int_literal = token->u.int_literal;
     break;
+  case TOK_FLOAT_LITERAL:
+    expr->t = FLOAT_LITERAL_EXPR;
+    expr->u.float_literal = token->u.float_literal;
+    break;
   case TOK_STRING_LITERAL:
     expr->t = STRING_LITERAL_EXPR;
     expr->u.string_literal = token->u.string_literal;
@@ -290,7 +294,9 @@ typedef struct BinaryTail
 } BinaryTail;
 
 #define CASE2(token, ast_type) \
-  case TOK_##token: expr->t = ast_type##_EXPR; break;
+  case TOK_##token:            \
+    expr->t = ast_type##_EXPR; \
+    break;
 #define CASE1(operator) CASE2(operator, operator)
 
 static ASTExpr *build_binary_head(
@@ -755,6 +761,10 @@ static void pretty_printf(char *fmt, ...)
         uint64_t x = va_arg(varargs, uint64_t);
         printf("%" PRIu64, x);
         break;
+      case 'f':;
+        double d = va_arg(varargs, double);
+        printf("%f", d);
+        break;
       default: UNIMPLEMENTED;
       }
       break;
@@ -811,23 +821,34 @@ static char *expr_type_names[] = {AST_EXPR_TYPES};
 
 static void dump_initializer_element_list(ASTInitializerElement *element_list);
 
+static void dump_numeric_suffix(NumericSuffix suffix)
+{
+  if ((suffix & UNSIGNED_SUFFIX) != 0) {
+    pretty_printf("U");
+  }
+  if ((suffix & LONG_SUFFIX) != 0) {
+    pretty_printf("L");
+  }
+  if ((suffix & LONG_LONG_SUFFIX) != 0) {
+    pretty_printf("LL");
+  }
+  if ((suffix & FLOAT_SUFFIX) != 0) {
+    pretty_printf("F");
+  }
+}
+
 static void dump_expr(ASTExpr *expr)
 {
   pretty_printf("%s(", expr_type_names[expr->t]);
   switch (expr->t) {
   case INT_LITERAL_EXPR: {
-    pretty_printf("%8", expr->u.int_literal);
-
-    IntLiteralSuffix suffix = expr->u.int_literal.suffix;
-    if ((suffix & UNSIGNED_SUFFIX) != 0) {
-      pretty_printf("U");
-    }
-    if ((suffix & LONG_SUFFIX) != 0) {
-      pretty_printf("L");
-    }
-    if ((suffix & LONG_LONG_SUFFIX) != 0) {
-      pretty_printf("LL");
-    }
+    pretty_printf("%8", expr->u.int_literal.value);
+    dump_numeric_suffix(expr->u.int_literal.suffix);
+    break;
+  }
+  case FLOAT_LITERAL_EXPR: {
+    pretty_printf("%f", expr->u.float_literal.value);
+    dump_numeric_suffix(expr->u.float_literal.suffix);
     break;
   }
   case STRING_LITERAL_EXPR:
