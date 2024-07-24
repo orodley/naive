@@ -587,7 +587,9 @@ def dump_compile_commands():
 
 
 def run_binary(args, build_config):
-    build(build_config)
+    if (ret := build(build_config)) != 0:
+        return ret
+
     return subprocess.run([f"build/toolchain/{args.binary[0]}"] + args.args).returncode
 
 
