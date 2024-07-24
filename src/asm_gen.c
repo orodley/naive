@@ -139,7 +139,9 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr);
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
   switch (value.t) {
-  case IR_VALUE_CONST: return asm_imm(value.u.constant);
+  // @FLOAT_IMPL
+  case IR_VALUE_CONST_FLOAT: UNIMPLEMENTED;
+  case IR_VALUE_CONST_INT: return asm_imm(value.u.const_int);
   case IR_VALUE_INSTR: {
     IrInstr *instr = value.u.instr;
 
@@ -276,7 +278,7 @@ static AsmValue maybe_move_const_to_reg(
 
 static IrCmp maybe_flip_conditional(IrCmp cmp, IrValue *arg1, IrValue *arg2)
 {
-  if (arg1->t != IR_VALUE_CONST) return cmp;
+  if (arg1->t != IR_VALUE_CONST_INT) return cmp;
 
   // The only form of comparison between a register and an immediate has the
   // immediate on the RHS. So we need to swap the LHS and RHS if the
@@ -318,13 +320,13 @@ static bool get_inner_cmp(AsmBuilder *builder, IrInstr *instr, IrInstr **out)
 
   u64 c;
   IrValue non_const_arg;
-  if (arg1.t == IR_VALUE_CONST) {
-    assert(arg2.t != IR_VALUE_CONST);
-    c = arg1.u.constant;
+  if (arg1.t == IR_VALUE_CONST_INT) {
+    assert(arg2.t != IR_VALUE_CONST_INT);
+    c = arg1.u.const_int;
     non_const_arg = arg2;
-  } else if (arg2.t == IR_VALUE_CONST) {
-    assert(arg1.t != IR_VALUE_CONST);
-    c = arg2.u.constant;
+  } else if (arg2.t == IR_VALUE_CONST_INT) {
+    assert(arg1.t != IR_VALUE_CONST_INT);
+    c = arg2.u.const_int;
     non_const_arg = arg1;
   } else {
     *out = instr;
@@ -494,6 +496,8 @@ static CallSeq classify_arguments(u32 arity, IrType *arg_types)
         curr_offset += 8;
       }
       break;
+    // @FLOAT_IMPL
+    case IR_FLOAT: UNIMPLEMENTED;
     case IR_STRUCT: {
       arg_class->t = ARG_CLASS_MEM;
       u32 size = size_of_ir_type(*arg_type);
@@ -695,11 +699,11 @@ static void asm_gen_instr(
     break;
   case OP_COND: {
     IrValue condition = instr->u.cond.condition;
-    if (condition.t == IR_VALUE_CONST) {
-      IrBlock *block = condition.u.constant ? instr->u.cond.then_block
-                                            : instr->u.cond.else_block;
-      IrBlock *other_block = condition.u.constant ? instr->u.cond.else_block
-                                                  : instr->u.cond.then_block;
+    if (condition.t == IR_VALUE_CONST_INT) {
+      IrBlock *block = condition.u.const_int ? instr->u.cond.then_block
+                                             : instr->u.cond.else_block;
+      IrBlock *other_block = condition.u.const_int ? instr->u.cond.else_block
+                                                   : instr->u.cond.then_block;
 
       handle_phi_nodes(builder, curr_block, block);
       emit_instr1(builder, JMP, asm_symbol(block->label));
@@ -1256,8 +1260,8 @@ static void asm_gen_instr(
   }
   case OP_BUILTIN_VA_ARG: {
     AsmValue va_list_ptr = asm_value(builder, instr->u.binary_op.arg1);
-    assert(instr->u.binary_op.arg2.t == IR_VALUE_CONST);
-    u64 size = instr->u.binary_op.arg2.u.constant;
+    assert(instr->u.binary_op.arg2.t == IR_VALUE_CONST_INT);
+    u64 size = instr->u.binary_op.arg2.u.const_int;
     assert(size <= 8);
 
     u32 vreg = new_vreg(builder);
@@ -1512,6 +1516,8 @@ static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out)
       *ARRAY_APPEND(out, u8) = byte;
     }
     break;
+  // @FLOAT_IMPL
+  case IR_FLOAT: UNIMPLEMENTED;
   case IR_POINTER: {
     IrGlobal *global = konst->u.global_pointer;
     if (global != NULL) {
@@ -1564,6 +1570,8 @@ static bool is_zero(IrConst *konst)
 {
   switch (konst->type.t) {
   case IR_INT: return konst->u.integer == 0;
+  // @FLOAT_IMPL
+  case IR_FLOAT: UNIMPLEMENTED;
   case IR_POINTER: return false;
   case IR_ARRAY:
     for (u32 n = 0; n < konst->type.u.array.size; n++) {

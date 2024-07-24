@@ -148,6 +148,7 @@ bool ir_type_eq(IrType *a, IrType *b)
 
   switch (a->t) {
   case IR_INT: return a->u.bit_width == b->u.bit_width;
+  case IR_FLOAT: return a->u.float_bits == b->u.float_bits;
   case IR_VOID:
   case IR_POINTER:
   case IR_FUNCTION: return true;
@@ -164,6 +165,7 @@ u32 size_of_ir_type(IrType type)
 {
   switch (type.t) {
   case IR_INT: return type.u.bit_width / 8;
+  case IR_FLOAT: return type.u.float_bits == 80 ? 16 : type.u.float_bits;
   case IR_POINTER:
   case IR_FUNCTION: return 8;
   case IR_STRUCT: return type.u.strukt.total_size;
@@ -190,6 +192,7 @@ void dump_ir_type(IrType type)
   switch (type.t) {
   case IR_VOID: fputs("void", stdout); break;
   case IR_INT: printf("i%d", type.u.bit_width); break;
+  case IR_FLOAT: printf("f%d", type.u.float_bits); break;
   case IR_POINTER: putchar('*'); break;
   case IR_FUNCTION:
     putchar('(');
@@ -217,7 +220,8 @@ void dump_ir_type(IrType type)
 static void dump_value(IrValue value)
 {
   switch (value.t) {
-  case IR_VALUE_CONST: printf("%" PRId64, value.u.constant); break;
+  case IR_VALUE_CONST_INT: printf("%" PRId64, value.u.const_int); break;
+  case IR_VALUE_CONST_FLOAT: printf("%e", value.u.const_float); break;
   case IR_VALUE_ARG: printf("@%d", value.u.arg_index); break;
   case IR_VALUE_INSTR: printf("#%d", value.u.instr->id); break;
   case IR_VALUE_GLOBAL: printf("$%s", value.u.global->name); break;
@@ -332,6 +336,7 @@ static void dump_const(IrConst *konst)
 {
   switch (konst->type.t) {
   case IR_INT: printf("%lu", konst->u.integer); break;
+  case IR_FLOAT: printf("%e", konst->u.floatt); break;
   case IR_POINTER: {
     IrGlobal *global = konst->u.global_pointer;
     if (global == NULL) {
@@ -610,8 +615,8 @@ IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg)
 {
   IrType type = arg.type;
 
-  if (arg.t == IR_VALUE_CONST && constant_foldable(op)) {
-    return value_const(type, constant_fold_unary_op(op, arg.u.constant));
+  if (arg.t == IR_VALUE_CONST_INT && constant_foldable(op)) {
+    return value_const_int(type, constant_fold_unary_op(op, arg.u.const_int));
   }
 
   IrInstr *instr = append_instr(builder);
@@ -632,10 +637,10 @@ IrValue build_binary_instr(
   assert(ir_type_eq(&arg1.type, &arg2.type));
   IrType type = arg1.type;
 
-  if (arg1.t == IR_VALUE_CONST && arg2.t == IR_VALUE_CONST
+  if (arg1.t == IR_VALUE_CONST_INT && arg2.t == IR_VALUE_CONST_INT
       && constant_foldable(op)) {
-    return value_const(
-        type, constant_fold_binary_op(op, arg1.u.constant, arg2.u.constant));
+    return value_const_int(
+        type, constant_fold_binary_op(op, arg1.u.const_int, arg2.u.const_int));
   }
 
   IrInstr *instr = append_instr(builder);
@@ -652,9 +657,9 @@ IrValue build_cmp(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2)
   assert(ir_type_eq(&arg1.type, &arg2.type));
   IrType type = (IrType){.t = IR_INT, .u.bit_width = 32};
 
-  if (arg1.t == IR_VALUE_CONST && arg2.t == IR_VALUE_CONST) {
-    return value_const(
-        type, constant_fold_cmp(cmp, arg1.u.constant, arg2.u.constant));
+  if (arg1.t == IR_VALUE_CONST_INT && arg2.t == IR_VALUE_CONST_INT) {
+    return value_const_int(
+        type, constant_fold_cmp(cmp, arg1.u.const_int, arg2.u.const_int));
   }
 
   IrInstr *instr = append_instr(builder);
@@ -687,8 +692,8 @@ IrValue build_type_instr(
 {
   if (ir_type_eq(&value.type, &result_type)) return value;
 
-  if (value.t == IR_VALUE_CONST) {
-    return value_const(result_type, value.u.constant);
+  if (value.t == IR_VALUE_CONST_INT) {
+    return value_const_int(result_type, value.u.const_int);
   }
 
   IrInstr *instr = append_instr(builder);
@@ -720,15 +725,22 @@ void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value)
   param->value = value;
 }
 
-IrValue value_const(IrType type, u64 constant)
+IrValue value_const_int(IrType type, u64 constant)
 {
-  IrValue value = {
-      .t = IR_VALUE_CONST,
+  return (IrValue){
+      .t = IR_VALUE_CONST_INT,
       .type = type,
-      .u.constant = constant,
+      .u.const_int = constant,
   };
+}
 
-  return value;
+IrValue value_const_float(IrType type, double constant)
+{
+  return (IrValue){
+      .t = IR_VALUE_CONST_FLOAT,
+      .type = type,
+      .u.const_float = constant,
+  };
 }
 
 IrValue value_arg(u32 arg_index, IrType type)
@@ -757,6 +769,15 @@ IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value)
 {
   IrConst *konst = pool_alloc(&builder->module->pool, sizeof *konst);
   konst->type = int_type;
+  konst->u.integer = value;
+
+  return konst;
+}
+
+IrConst *add_float_const(IrBuilder *builder, IrType float_type, double value)
+{
+  IrConst *konst = pool_alloc(&builder->module->pool, sizeof *konst);
+  konst->type = float_type;
   konst->u.integer = value;
 
   return konst;

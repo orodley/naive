@@ -17,6 +17,7 @@ bool c_type_eq(CType *a, CType *b)
   case INTEGER_TYPE:
     return a->u.integer.type == b->u.integer.type
            && a->u.integer.is_signed == b->u.integer.is_signed;
+  case FLOAT_TYPE: return a->u.floatt == b->u.floatt;
   case FUNCTION_TYPE:
     if (a->u.function.arity != b->u.function.arity) return false;
     if (!c_type_eq(a->u.function.return_type, b->u.function.return_type))
@@ -80,6 +81,15 @@ IrType c_type_to_ir_type(CType *ctype)
         .t = IR_INT,
         .u.bit_width = bit_width,
     };
+  }
+  case FLOAT_TYPE: {
+    u32 float_bits;
+    switch (ctype->u.floatt) {
+    case FLOAT: float_bits = 32; break;
+    case DOUBLE: float_bits = 64; break;
+    case LONG_DOUBLE: float_bits = 80; break;
+    }
+    return (IrType){.t = IR_FLOAT, .u.float_bits = float_bits};
   }
   case POINTER_TYPE: return (IrType){.t = IR_POINTER};
   case ARRAY_TYPE: return *ctype->u.array.ir_type;
@@ -178,6 +188,19 @@ void init_type_env(TypeEnv *type_env)
 
   type_env->size_type = &type_env->unsigned_long_type;
   type_env->int_ptr_type = &type_env->unsigned_long_type;
+
+  type_env->float_type = (CType){
+      .t = FLOAT_TYPE,
+      .u.floatt = FLOAT,
+  };
+  type_env->double_type = (CType){
+      .t = FLOAT_TYPE,
+      .u.floatt = DOUBLE,
+  };
+  type_env->long_double_type = (CType){
+      .t = FLOAT_TYPE,
+      .u.floatt = LONG_DOUBLE,
+  };
 }
 
 CType *search(Array(TypeEnvEntry *) *types, char *name)
@@ -364,6 +387,17 @@ CType *type_of_int_literal(TypeEnv *type_env, IntLiteral int_literal)
     // The cases above should cover everything.
     UNREACHABLE;
   }
+}
+
+CType *type_of_float_literal(TypeEnv *type_env, FloatLiteral float_literal)
+{
+  NumericSuffix suffix = float_literal.suffix;
+  if (suffix == FLOAT_SUFFIX) {
+    return &type_env->float_type;
+  } else if (suffix == LONG_SUFFIX) {
+    return &type_env->long_double_type;
+  }
+  return &type_env->double_type;
 }
 
 static bool matches_sequence(

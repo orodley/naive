@@ -134,9 +134,16 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     CType *result_type =
         type_of_int_literal(&ctx->type_env, expr->u.int_literal);
 
-    IrValue value =
-        value_const(c_type_to_ir_type(result_type), expr->u.int_literal.value);
+    IrValue value = value_const_int(
+        c_type_to_ir_type(result_type), expr->u.int_literal.value);
 
+    return (Term){.ctype = result_type, .value = value};
+  }
+  case FLOAT_LITERAL_EXPR: {
+    CType *result_type =
+        type_of_float_literal(&ctx->type_env, expr->u.float_literal);
+    IrValue value = value_const_float(
+        c_type_to_ir_type(result_type), expr->u.float_literal.value);
     return (Term){.ctype = result_type, .value = value};
   }
   case STRING_LITERAL_EXPR: {
@@ -192,7 +199,7 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     Term inner = ir_gen_expr(ctx, expr->u.unary_arg, RVALUE_CONTEXT);
     Term zero = {
         .ctype = result_type,
-        .value = value_const(c_type_to_ir_type(result_type), 0),
+        .value = value_const_int(c_type_to_ir_type(result_type), 0),
     };
     return ir_gen_cmp(ctx, inner, zero, CMP_EQ);
   }
@@ -265,7 +272,7 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
         // value, and give it void type to ensure it's not used.
         return (Term){
             .ctype = &ctx->type_env.void_type,
-            .value = value_const((IrType){.t = IR_VOID}, 0),
+            .value = value_const_int((IrType){.t = IR_VOID}, 0),
         };
       }
     }
@@ -348,8 +355,8 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
 
     CType *result_type = ctx->type_env.size_type;
 
-    IrValue value =
-        value_const(c_type_to_ir_type(result_type), c_type_size(cdecl.type));
+    IrValue value = value_const_int(
+        c_type_to_ir_type(result_type), c_type_size(cdecl.type));
 
     return (Term){.ctype = result_type, .value = value};
   }
@@ -378,7 +385,7 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     assert(rhs.ctype->t == INTEGER_TYPE);
     IrValue rhs_as_bool = build_cmp(
         builder, CMP_NEQ, rhs.value,
-        value_const(c_type_to_ir_type(rhs.ctype), 0));
+        value_const_int(c_type_to_ir_type(rhs.ctype), 0));
     build_branch(builder, after_block);
 
     // ir_gen'ing the RHS expr may have changed the current block.
@@ -389,7 +396,8 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
         build_phi(builder, c_type_to_ir_type(&ctx->type_env.int_type), 2);
     phi_set_param(
         phi, 0, lhs_resultant_block,
-        value_const(c_type_to_ir_type(&ctx->type_env.int_type), is_or ? 1 : 0));
+        value_const_int(
+            c_type_to_ir_type(&ctx->type_env.int_type), is_or ? 1 : 0));
     phi_set_param(phi, 1, rhs_resultant_block, rhs_as_bool);
 
     return (Term){.ctype = &ctx->type_env.int_type, .value = phi};
@@ -483,7 +491,7 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     u64 size = c_type_size(term.ctype);
 
     CType *result_type = ctx->type_env.size_type;
-    IrValue value = value_const(c_type_to_ir_type(result_type), size);
+    IrValue value = value_const_int(c_type_to_ir_type(result_type), size);
     return (Term){.ctype = result_type, .value = value};
   }
   case CAST_EXPR: {
@@ -555,7 +563,7 @@ Term ir_gen_assign_op(
         pool_alloc(&ctx->builder->module->pool, 3 * sizeof *memcpy_args);
     memcpy_args[0] = left.value;
     memcpy_args[1] = right.value;
-    memcpy_args[2] = value_const(
+    memcpy_args[2] = value_const_int(
         c_type_to_ir_type(ctx->type_env.int_ptr_type),
         size_of_ir_type(*left.ctype->u.strukt.ir_type));
 
@@ -671,14 +679,15 @@ static Term ir_gen_cmp(IrGenContext *ctx, Term left, Term right, IrCmp cmp)
       // "ptr <cmp> !ptr" is only valid if "!ptr" is zero, as a constant
       // zero integer expression is a null pointer constant.
       assert(other_term->ctype->t == INTEGER_TYPE);
-      assert(other_term->value.t == IR_VALUE_CONST);
-      assert(other_term->value.u.constant == 0);
+      assert(other_term->value.t == IR_VALUE_CONST_INT);
+      assert(other_term->value.u.const_int == 0);
 
       // Constant fold tautological comparisons between a global and NULL.
       if (ptr_term->value.t == IR_VALUE_GLOBAL) {
         return (Term){
             .ctype = int_type,
-            .value = value_const(c_type_to_ir_type(int_type), cmp == CMP_NEQ),
+            .value =
+                value_const_int(c_type_to_ir_type(int_type), cmp == CMP_NEQ),
         };
       }
 
@@ -688,7 +697,7 @@ static Term ir_gen_cmp(IrGenContext *ctx, Term left, Term right, IrCmp cmp)
       // Constant fold tautological comparisons between global.
       return (Term){
           .ctype = int_type,
-          .value = value_const(c_type_to_ir_type(int_type), cmp == CMP_NEQ),
+          .value = value_const_int(c_type_to_ir_type(int_type), cmp == CMP_NEQ),
       };
     }
   } else {
@@ -770,8 +779,8 @@ static Term ir_gen_add(IrGenContext *ctx, Term left, Term right)
     CType *pointee_type = result_type->u.pointee_type;
 
     // @TODO: Extend OP_FIELD to non-constant field numbers?
-    if (other.value.t == IR_VALUE_CONST) {
-      u64 offset = other.value.u.constant;
+    if (other.value.t == IR_VALUE_CONST_INT) {
+      u64 offset = other.value.u.const_int;
       if (pointee_type->t == ARRAY_TYPE) {
         // @NOTE: We have to use the IR type size in case the inner
         // elem is itself an array of arrays.
@@ -795,7 +804,7 @@ static Term ir_gen_add(IrGenContext *ctx, Term left, Term right)
         ctx->builder, OP_CAST, pointer.value, pointer_int_type);
     IrValue addend = build_binary_instr(
         ctx->builder, OP_MUL, zext,
-        value_const(pointer_int_type, c_type_size(pointee_type)));
+        value_const_int(pointer_int_type, c_type_size(pointee_type)));
 
     IrValue sum = build_binary_instr(ctx->builder, OP_ADD, ptr_to_int, addend);
     IrValue int_to_ptr = build_type_instr(
@@ -848,7 +857,7 @@ static Term ir_gen_sub(IrGenContext *ctx, Term left, Term right)
         ctx->builder, OP_CAST, diff, c_type_to_ir_type(result_c_type));
     IrValue scaled = build_binary_instr(
         ctx->builder, OP_DIV, cast,
-        value_const(cast.type, c_type_size(pointee_type)));
+        value_const_int(cast.type, c_type_size(pointee_type)));
 
     return (Term){
         .ctype = result_c_type,
@@ -871,7 +880,7 @@ static Term ir_gen_sub(IrGenContext *ctx, Term left, Term right)
         build_type_instr(ctx->builder, OP_CAST, left.value, pointer_int_type);
     IrValue subtrahend = build_binary_instr(
         ctx->builder, OP_MUL, zext,
-        value_const(pointer_int_type, c_type_size(pointee_type)));
+        value_const_int(pointer_int_type, c_type_size(pointee_type)));
 
     IrValue sum =
         build_binary_instr(ctx->builder, OP_SUB, ptr_to_int, subtrahend);
@@ -903,7 +912,7 @@ static Term ir_gen_inc_dec(IrGenContext *ctx, ASTExpr *expr)
   // @TODO: Correct type
   CType *one_type = &ctx->type_env.int_type;
   Term one = (Term){
-      .value = value_const(c_type_to_ir_type(one_type), 1),
+      .value = value_const_int(c_type_to_ir_type(one_type), 1),
       .ctype = one_type,
   };
   Term pre_assign_value;
@@ -938,9 +947,12 @@ IrConst *eval_constant_expr(IrGenContext *ctx, ASTExpr *expr)
   }
 
   switch (term.value.t) {
-  case IR_VALUE_CONST:
+  case IR_VALUE_CONST_INT:
     return add_int_const(
-        ctx->builder, c_type_to_ir_type(term.ctype), term.value.u.constant);
+        ctx->builder, c_type_to_ir_type(term.ctype), term.value.u.const_int);
+  case IR_VALUE_CONST_FLOAT:
+    return add_float_const(
+        ctx->builder, c_type_to_ir_type(term.ctype), term.value.u.const_float);
   case IR_VALUE_GLOBAL:
     return add_global_const(ctx->builder, term.value.u.global);
   case IR_VALUE_ARG:

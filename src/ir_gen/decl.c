@@ -382,7 +382,7 @@ CType *decl_specifier_list_to_c_type(
       binding->constant = true;
       binding->term.ctype = ctype;
       binding->term.value =
-          value_const(c_type_to_ir_type(ctype), curr_enum_value++);
+          value_const_int(c_type_to_ir_type(ctype), curr_enum_value++);
 
       enumerator_list = enumerator_list->next;
     }

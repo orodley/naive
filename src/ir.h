@@ -20,6 +20,7 @@ typedef struct IrType
   {
     IR_VOID,
     IR_INT,
+    IR_FLOAT,
     IR_POINTER,
     IR_ARRAY,
     IR_FUNCTION,
@@ -29,6 +30,12 @@ typedef struct IrType
   union
   {
     u8 bit_width;
+    enum
+    {
+      IR_FLOAT_32 = 32,
+      IR_FLOAT_64 = 64,
+      IR_FLOAT_80 = 80,
+    } float_bits;
     struct
     {
       // @TODO: This field probably shouldn't be here.
@@ -88,6 +95,7 @@ typedef struct IrConst
   union
   {
     u64 integer;
+    double floatt;
     struct IrGlobal *global_pointer;
     struct IrConst *array_elems;
     struct IrConst *struct_fields;
@@ -126,7 +134,8 @@ typedef struct IrValue
 {
   enum
   {
-    IR_VALUE_CONST,
+    IR_VALUE_CONST_INT,
+    IR_VALUE_CONST_FLOAT,
     IR_VALUE_ARG,
     IR_VALUE_INSTR,
     IR_VALUE_GLOBAL,
@@ -138,8 +147,9 @@ typedef struct IrValue
 
   union
   {
-    // @TODO: Replace with an IrConst?
-    u64 constant;
+    // @TODO: Replace these two with an IrConst?
+    u64 const_int;
+    double const_float;
     struct IrInstr *instr;
     u32 arg_index;
     IrGlobal *global;
@@ -187,7 +197,7 @@ typedef struct IrInstr
 
   union
   {
-    u64 constant;
+    u64 const_int;
     IrValue arg;
     struct
     {
@@ -270,11 +280,13 @@ IrInstr *build_cond(
     IrBuilder *builder, IrValue condition, IrBlock *then_block,
     IrBlock *else_block);
 
-IrValue value_const(IrType type, u64 constant);
+IrValue value_const_int(IrType type, u64 constant);
+IrValue value_const_float(IrType type, double constant);
 IrValue value_arg(u32 arg_index, IrType type);
 IrValue value_global(IrGlobal *global);
 
 IrConst *add_int_const(IrBuilder *builder, IrType int_type, u64 value);
+IrConst *add_float_const(IrBuilder *builder, IrType float_type, double value);
 IrConst *add_global_const(IrBuilder *builder, IrGlobal *global);
 IrConst *add_array_const(IrBuilder *builder, IrType type);
 IrConst *add_struct_const(IrBuilder *builder, IrType type);

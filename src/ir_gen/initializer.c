@@ -32,7 +32,7 @@ void make_c_initializer(
           .t = C_INIT_LEAF,
           .type = char_type,
           .u.leaf_value =
-              value_const(c_type_to_ir_type(char_type), str.chars[i]),
+              value_const_int(c_type_to_ir_type(char_type), str.chars[i]),
       };
     }
 
@@ -151,7 +151,7 @@ void make_c_initializer(
       case INTEGER_TYPE:
         assert(konst->type.t == IR_INT);
         assert(type->t == INTEGER_TYPE);
-        value = value_const(konst->type, konst->u.integer);
+        value = value_const_int(konst->type, konst->u.integer);
         break;
       case POINTER_TYPE: {
         assert(konst->type.t == IR_POINTER);
@@ -183,8 +183,9 @@ void ir_gen_initializer(IrGenContext *ctx, Term to_init, ASTInitializer *init)
     IrValue *memset_args =
         pool_alloc(&ctx->builder->module->pool, 3 * sizeof *memset_args);
     memset_args[0] = to_init.value;
-    memset_args[1] = value_const(c_type_to_ir_type(&ctx->type_env.int_type), 0);
-    memset_args[2] = value_const(
+    memset_args[1] =
+        value_const_int(c_type_to_ir_type(&ctx->type_env.int_type), 0);
+    memset_args[2] = value_const_int(
         c_type_to_ir_type(ctx->type_env.size_type), c_type_size(to_init.ctype));
 
     // @TODO: Open-code this for small sizes
@@ -282,10 +283,10 @@ static void ir_gen_c_init(
           pool_alloc(&builder->module->pool, 3 * sizeof *memcpy_args);
       memcpy_args[0] = build_binary_instr(
           builder, OP_ADD, base_ptr,
-          value_const(
+          value_const_int(
               c_type_to_ir_type(type_env->int_ptr_type), current_offset));
       memcpy_args[1] = c_init->u.leaf_value;
-      memcpy_args[2] = value_const(
+      memcpy_args[2] = value_const_int(
           c_type_to_ir_type(type_env->size_type), c_type_size(type));
 
       // @TODO: Open-code this for small sizes
@@ -301,7 +302,8 @@ static void ir_gen_c_init(
 
     IrType int_ptr_type = c_type_to_ir_type(type_env->int_ptr_type);
     IrValue field_ptr = build_binary_instr(
-        builder, OP_ADD, base_ptr, value_const(int_ptr_type, current_offset));
+        builder, OP_ADD, base_ptr,
+        value_const_int(int_ptr_type, current_offset));
     build_store(builder, field_ptr, c_init->u.leaf_value);
     break;
   }
@@ -364,7 +366,7 @@ IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
   case INTEGER_TYPE: {
     IrValue value = c_init->u.leaf_value;
     assert(value.type.t == IR_INT);
-    return add_int_const(builder, c_type_to_ir_type(type), value.u.constant);
+    return add_int_const(builder, c_type_to_ir_type(type), value.u.const_int);
   }
   case POINTER_TYPE: {
     IrValue value = c_init->u.leaf_value;

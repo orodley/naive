@@ -149,7 +149,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
         IrValue cmp = build_cmp(
             builder, CMP_EQ, switch_value.value,
-            value_const(switch_value.value.type, label->value->u.integer));
+            value_const_int(switch_value.value.type, label->value->u.integer));
         build_cond(builder, cmp, label->block, next);
         builder->current_block = next;
 
@@ -305,7 +305,8 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
       condition_term = ir_gen_expr(ctx, f->condition, RVALUE_CONTEXT);
     } else {
       condition_term = (Term){
-          .value = value_const(c_type_to_ir_type(&ctx->type_env.int_type), 1),
+          .value =
+              value_const_int(c_type_to_ir_type(&ctx->type_env.int_type), 1),
           .ctype = &ctx->type_env.int_type,
       };
     }

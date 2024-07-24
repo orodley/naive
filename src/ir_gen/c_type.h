@@ -11,6 +11,7 @@ typedef enum CKind
 {
   VOID_TYPE,
   INTEGER_TYPE,
+  FLOAT_TYPE,
   FUNCTION_TYPE,
   STRUCT_TYPE,
   POINTER_TYPE,
@@ -36,6 +37,12 @@ typedef struct CType
       } type;
       bool is_signed;
     } integer;
+    enum
+    {
+      FLOAT,
+      DOUBLE,
+      LONG_DOUBLE,
+    } floatt;
     struct
     {
       struct CType *return_type;
@@ -104,6 +111,10 @@ typedef struct TypeEnv
 
   CType *size_type;
   CType *int_ptr_type;
+
+  CType float_type;
+  CType double_type;
+  CType long_double_type;
 } TypeEnv;
 
 void init_type_env(TypeEnv *type_env);
@@ -120,6 +131,7 @@ CType *struct_type(TypeEnv *type_env, char *name);
 u32 c_type_num_fields(CType *type);
 
 CType *type_of_int_literal(TypeEnv *type_env, IntLiteral int_literal);
+CType *type_of_float_literal(TypeEnv *type_env, FloatLiteral float_literal);
 CType *named_type_specifier_to_ctype(
     TypeEnv *type_env, ASTDeclSpecifier *decl_specifier_list);
 
