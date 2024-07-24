@@ -165,7 +165,7 @@ u32 size_of_ir_type(IrType type)
 {
   switch (type.t) {
   case IR_INT: return type.u.bit_width / 8;
-  case IR_FLOAT: return type.u.float_bits == 80 ? 16 : type.u.float_bits;
+  case IR_FLOAT: return type.u.float_bits == 80 ? 16 : type.u.float_bits / 8;
   case IR_POINTER:
   case IR_FUNCTION: return 8;
   case IR_STRUCT: return type.u.strukt.total_size;
@@ -778,7 +778,7 @@ IrConst *add_float_const(IrBuilder *builder, IrType float_type, double value)
 {
   IrConst *konst = pool_alloc(&builder->module->pool, sizeof *konst);
   konst->type = float_type;
-  konst->u.integer = value;
+  konst->u.floatt = value;
 
   return konst;
 }
