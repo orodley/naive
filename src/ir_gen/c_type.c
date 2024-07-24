@@ -319,7 +319,7 @@ static CType *type_that_fits(CType **types, u32 num_types, u64 value)
 CType *type_of_int_literal(TypeEnv *type_env, IntLiteral int_literal)
 {
   u64 value = int_literal.value;
-  IntLiteralSuffix suffix = int_literal.suffix;
+  NumericSuffix suffix = int_literal.suffix;
   bool u_suffix = (suffix & UNSIGNED_SUFFIX) != 0;
   bool l_suffix = (suffix & LONG_SUFFIX) != 0;
   bool ll_suffix = (suffix & LONG_LONG_SUFFIX) != 0;

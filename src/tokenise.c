@@ -2,6 +2,8 @@
 #include "tokenise.h"
 
 #include <assert.h>
+#include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +31,12 @@ static Token *append_token(
 }
 
 static bool tokenise_aux(Tokeniser *tokeniser);
+static bool read_numeric_literal(Reader *reader, Token *token);
+static void classify_numeric_literal(
+    Reader *reader, TokenType *token_type, int *out_radix);
+static Token read_int_literal(Reader *reader, int radix);
+static Token read_float_literal(Reader *reader, int radix);
+static int char_to_digit(char c, int radix);
 
 bool tokenise(
     Array(SourceToken) *tokens, String text, Array(Adjustment) *adjustments)
@@ -93,9 +101,14 @@ bool tokenise(
   return ret;
 }
 
-static IntLiteralSuffix read_int_literal_suffix(Reader *reader)
+static bool is_numeric_suffix_char(char c)
 {
-  IntLiteralSuffix suffix = NO_SUFFIX;
+  return c == 'u' || c == 'U' || c == 'l' || c == 'L' || c == 'f' || c == 'F';
+}
+
+static NumericSuffix read_numeric_suffix(Reader *reader)
+{
+  NumericSuffix suffix = NO_SUFFIX;
 
   while (!at_end(reader)) {
     char c = read_char(reader);
@@ -104,7 +117,7 @@ static IntLiteralSuffix read_int_literal_suffix(Reader *reader)
     case 'U':
       if ((suffix & UNSIGNED_SUFFIX) != 0) {
         issue_error(
-            &reader->source_loc, "Multiple 'u' suffixes on integer literal");
+            &reader->source_loc, "Multiple 'u' suffixes on numeric literal");
       }
 
       suffix |= UNSIGNED_SUFFIX;
@@ -114,7 +127,7 @@ static IntLiteralSuffix read_int_literal_suffix(Reader *reader)
       if (((suffix & (LONG_SUFFIX | LONG_LONG_SUFFIX)) != 0)) {
         issue_error(
             &reader->source_loc,
-            "Multiple 'l'/'ll' suffixes on integer literal");
+            "Multiple 'l'/'ll' suffixes on numeric literal");
       }
 
       if (expect_char(reader, c)) {
@@ -123,6 +136,16 @@ static IntLiteralSuffix read_int_literal_suffix(Reader *reader)
         suffix |= LONG_SUFFIX;
       }
       break;
+    case 'f':
+    case 'F':
+      if (((suffix & FLOAT_SUFFIX) != 0)) {
+        issue_error(
+            &reader->source_loc, "Multiple 'f' suffixes on numeric literal");
+      }
+
+      suffix |= FLOAT_SUFFIX;
+      break;
+
     default: back_up(reader); return suffix;
     }
   }
@@ -234,27 +257,7 @@ static bool tokenise_aux(Tokeniser *tokeniser)
 #define ADD_TOK(t) (append_token(tokeniser, start_source_loc, t))
 
     switch (read_char(reader)) {
-    case '0': {
-      IntLiteralSuffix suffix = NO_SUFFIX;
-      u64 value;
-
-      if (at_end(reader)) {
-        value = 0;
-      } else {
-        if (expect_char(reader, 'x')) {
-          if (!read_hex_number(reader, &value)) return false;
-        } else {
-          if (!read_octal_number(reader, &value)) return false;
-        }
-
-        suffix = read_int_literal_suffix(reader);
-      }
-
-      Token *token = ADD_TOK(TOK_INT_LITERAL);
-      token->u.int_literal.value = value;
-      token->u.int_literal.suffix = suffix;
-      break;
-    }
+    case '0':
     case '1':
     case '2':
     case '3':
@@ -265,23 +268,10 @@ static bool tokenise_aux(Tokeniser *tokeniser)
     case '8':
     case '9': {
       back_up(reader);
-      u64 value = 0;
 
-      for (;;) {
-        char c = peek_char(reader);
-        if (!(c >= '0' && c <= '9')) break;
-
-        value *= 10;
-        value += c - '0';
-        advance(reader);
-      }
-
-      IntLiteralSuffix suffix = read_int_literal_suffix(reader);
-
-      Token *token = ADD_TOK(TOK_INT_LITERAL);
-      token->u.int_literal.value = value;
-      token->u.int_literal.suffix = suffix;
-
+      SourceToken *token = ARRAY_APPEND(tokeniser->tokens, SourceToken);
+      if (!read_numeric_literal(reader, (Token *)token)) return false;
+      token->source_loc = start_source_loc;
       break;
     }
     case '"': {
@@ -438,6 +428,9 @@ static bool tokenise_aux(Tokeniser *tokeniser)
           back_up(reader);
           ADD_TOK(TOK_DOT);
         }
+      } else if (isdigit(peek_char(reader))) {
+        back_up(reader);
+        *ADD_TOK(TOK_FLOAT_LITERAL) = read_float_literal(reader, 10);
       } else {
         ADD_TOK(TOK_DOT);
       }
@@ -488,9 +481,271 @@ static bool tokenise_aux(Tokeniser *tokeniser)
   return true;
 }
 
+static bool read_numeric_literal(Reader *reader, Token *token)
+{
+  SourceLoc start_source_loc = reader->source_loc;
+  u32 start_pos = reader->position;
+
+  TokenType type;
+  int radix;
+  classify_numeric_literal(reader, &type, &radix);
+
+  reader->source_loc = start_source_loc;
+  reader->position = start_pos;
+
+  if (radix == 16) {
+    // Skip past the "0x" we know is there
+    advance(reader);
+    advance(reader);
+  }
+
+  if (type == TOK_INT_LITERAL) {
+    *token = read_int_literal(reader, radix);
+  } else {
+    assert(type == TOK_FLOAT_LITERAL);
+    *token = read_float_literal(reader, radix);
+  }
+
+  return true;
+}
+
+static void skip_digits(Reader *reader, int radix);
+
+static void classify_numeric_literal(
+    Reader *reader, TokenType *token_type, int *out_radix)
+{
+  int radix = 10;
+  if (expect_char(reader, '0')) {
+    if (!at_end(reader)) {
+      if (expect_char(reader, 'x')) {
+        radix = 16;
+      } else if (isdigit(peek_char(reader))) {
+        radix = 8;
+      }
+    }
+  }
+
+  *out_radix = radix;
+
+  skip_digits(reader, radix);
+
+  if (radix == 8) {
+    *token_type = TOK_INT_LITERAL;
+    return;
+  }
+
+  if (expect_char(reader, '.')) {
+    *token_type = TOK_FLOAT_LITERAL;
+    return;
+  }
+
+  if (radix == 10 && (expect_char(reader, 'e') || expect_char(reader, 'E'))) {
+    *token_type = TOK_FLOAT_LITERAL;
+    return;
+  }
+
+  if (radix == 16 && (expect_char(reader, 'p') || expect_char(reader, 'P'))) {
+    *token_type = TOK_FLOAT_LITERAL;
+    return;
+  }
+
+  *token_type = TOK_INT_LITERAL;
+  return;
+}
+
+static void skip_digits(Reader *reader, int radix)
+{
+  for (;;) {
+    char c = peek_char(reader);
+    if (char_to_digit(c, radix) != -1) {
+      advance(reader);
+    } else {
+      break;
+    }
+  }
+}
+
+static Token read_int_literal(Reader *reader, int radix)
+{
+  u64 value = 0;
+  for (;;) {
+    int digit = char_to_digit(peek_char(reader), radix);
+    if (digit == -1) break;
+
+    value = value * radix + digit;
+    advance(reader);
+  }
+
+  NumericSuffix suffix = NO_SUFFIX;
+  if (is_numeric_suffix_char(peek_char(reader))) {
+    suffix = read_numeric_suffix(reader);
+  }
+
+  return (Token){
+      .t = TOK_INT_LITERAL,
+      .u.int_literal.value = value,
+      .u.int_literal.suffix = suffix,
+  };
+}
+
+double double_from_decimal_exponent(u64 significand, i32 exponent);
+
+// @TODO: There are things we need to do differently for float literals for
+// double literals. For now we just treat everything as double.
+static Token read_float_literal(Reader *reader, int radix)
+{
+  u32 extra_exponent = 0;
+  u64 significand = 0;
+  int significand_digit_count = 0;
+  int decimal_point_position = -1;
+
+  // For hex literals, the significand is base 16 but the exponent is
+  // base 2. So every digit past the decimal point shifts the exponent by 4,
+  // not 2.
+  u32 exponent_per_digit = radix == 10 ? 1 : 4;
+
+  for (;;) {
+    char c = peek_char(reader);
+    if (c == '.') {
+      decimal_point_position = significand_digit_count;
+      advance(reader);
+      continue;
+    }
+
+    int digit = char_to_digit(c, radix);
+    if (digit == -1) break;
+
+    significand_digit_count += 1;
+    if (significand < 1UL << 52) {
+      significand = significand * radix + digit;
+    } else {
+      // If the significand is too large, we can't represent it as an integer,
+      // but we still want to get the magnitude correct. So we do this by just
+      // dropping significant digits and increasing the exponent.
+      extra_exponent += exponent_per_digit;
+    }
+    advance(reader);
+  }
+
+  i32 exponent = 0;
+  char c = peek_char(reader);
+  if ((radix == 10 && (c == 'e' || c == 'E'))
+      || (radix == 16 && (c == 'p' || c == 'P'))) {
+    advance(reader);
+    bool negative = false;
+    if (!expect_char(reader, '+')) negative = expect_char(reader, '-');
+    for (;;) {
+      char c = peek_char(reader);
+
+      // Exponents are always written in base 10, even for hex float literals.
+      // The base to which the exponent is raised is different, but the literal
+      // expressing the exponent is always base 10.
+      int digit = char_to_digit(c, 10);
+      if (digit == -1) break;
+
+      exponent = exponent * 10 + digit;
+      advance(reader);
+    }
+
+    if (negative) exponent = -exponent;
+  }
+
+  NumericSuffix suffix = NO_SUFFIX;
+  if (is_numeric_suffix_char(peek_char(reader))) {
+    suffix = read_numeric_suffix(reader);
+  }
+
+  exponent += extra_exponent;
+  if (decimal_point_position != -1) {
+    u32 digits_past_decimal_point =
+        significand_digit_count - decimal_point_position;
+    exponent -= exponent_per_digit * digits_past_decimal_point;
+  }
+
+  // We store the result in a double regardless of whether it's a float or
+  // double, as floats can be losslessly converted into doubles.
+  double value;
+  if (radix == 16) {
+    // Hex float literals are easy: the significand is guaranteed to be exactly
+    // representable as a double, and the exponent is already base 2.
+    value = ldexp((double)significand, exponent);
+  } else {
+    // @TODO: There are some edge cases where parsing as a double and converting
+    // to a float gives a different result from parsing to a float directly. We
+    // ignore these for now.
+    value = double_from_decimal_exponent(significand, exponent);
+  }
+
+  return (Token){
+      .t = TOK_FLOAT_LITERAL,
+      .u.float_literal.value = value,
+      .u.float_literal.suffix = suffix,
+  };
+}
+
+static int char_to_digit(char c, int radix)
+{
+  if (radix == 16 && c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  } else if (radix == 16 && c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  } else if (radix >= 10 && c >= '8' && c <= '9') {
+    return c - '0';
+  } else if (c >= '0' && c <= '7') {
+    return c - '0';
+  } else {
+    return -1;
+  }
+}
+
+double positive_powers_of_ten[] = {
+    1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,  1e8,  1e9,  1e10, 1e11,
+    1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+};
+
+double negative_powers_of_ten[] = {
+    1e-0,  1e-1,  1e-2,  1e-3,  1e-4,  1e-5,  1e-6,  1e-7,
+    1e-8,  1e-9,  1e-10, 1e-11, 1e-12, 1e-13, 1e-14, 1e-15,
+    1e-16, 1e-17, 1e-18, 1e-19, 1e-20, 1e-21, 1e-22,
+};
+
+double double_from_decimal_exponent(u64 significand, i32 exponent)
+{
+  if (abs(exponent) <= 22) {
+    // This is the easy case.
+    // Powers of ten from -22 to 22 can be exactly represented as doubles. The
+    // significand can also be exactly represented, and double multiplication is
+    // correctly rounded by definition, so we can just convert the significand
+    // to a double and multiply and we're done.
+    double x = (double)significand;
+    double y =
+        (exponent < 0 ? negative_powers_of_ten
+                      : positive_powers_of_ten)[abs(exponent)];
+    return x * y;
+  }
+
+  UNIMPLEMENTED;
+}
+
 #define X(x) #x
 char *token_type_names[] = {TOKEN_TYPES};
 #undef X
+
+void dump_numeric_suffix(NumericSuffix suffix)
+{
+  if ((suffix & UNSIGNED_SUFFIX) != 0) {
+    putchar('U');
+  }
+  if ((suffix & LONG_SUFFIX) != 0) {
+    putchar('L');
+  }
+  if ((suffix & LONG_LONG_SUFFIX) != 0) {
+    fputs("LL", stdout);
+  }
+  if ((suffix & FLOAT_SUFFIX) != 0) {
+    fputs("F", stdout);
+  }
+}
 
 void dump_token(Token *token)
 {
@@ -498,18 +753,13 @@ void dump_token(Token *token)
   switch (token->t) {
   case TOK_INT_LITERAL: {
     printf("(%" PRIu64, token->u.int_literal.value);
-
-    IntLiteralSuffix suffix = token->u.int_literal.suffix;
-    if ((suffix & UNSIGNED_SUFFIX) != 0) {
-      putchar('U');
-    }
-    if ((suffix & LONG_SUFFIX) != 0) {
-      putchar('L');
-    }
-    if ((suffix & LONG_LONG_SUFFIX) != 0) {
-      fputs("LL", stdout);
-    }
-
+    dump_numeric_suffix(token->u.int_literal.suffix);
+    putchar(')');
+    break;
+  }
+  case TOK_FLOAT_LITERAL: {
+    printf("(%e", token->u.float_literal.value);
+    dump_numeric_suffix(token->u.float_literal.suffix);
     putchar(')');
     break;
   }

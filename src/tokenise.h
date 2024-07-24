@@ -9,7 +9,8 @@
 #define TOKEN_TYPES                                                          \
   X(TOK_INVALID),                                                            \
                                                                              \
-      X(TOK_INT_LITERAL), X(TOK_STRING_LITERAL), X(TOK_SYMBOL),              \
+      X(TOK_INT_LITERAL), X(TOK_FLOAT_LITERAL), X(TOK_STRING_LITERAL),       \
+      X(TOK_SYMBOL),                                                         \
                                                                              \
       X(TOK_PLUS), X(TOK_INCREMENT), X(TOK_PLUS_ASSIGN),                     \
                                                                              \
@@ -54,19 +55,26 @@ typedef enum TokenType
 } TokenType;
 #undef X
 
-typedef enum IntLiteralSuffix
+typedef enum NumericSuffix
 {
   NO_SUFFIX = 0,
   UNSIGNED_SUFFIX = 1,
   LONG_SUFFIX = 2,
   LONG_LONG_SUFFIX = 4,
-} IntLiteralSuffix;
+  FLOAT_SUFFIX = 8,
+} NumericSuffix;
 
 typedef struct IntLiteral
 {
   u64 value;
-  IntLiteralSuffix suffix;
+  NumericSuffix suffix;
 } IntLiteral;
+
+typedef struct FloatLiteral
+{
+  double value;
+  NumericSuffix suffix;
+} FloatLiteral;
 
 typedef struct Token
 {
@@ -75,6 +83,7 @@ typedef struct Token
   union
   {
     IntLiteral int_literal;
+    FloatLiteral float_literal;
     char *symbol;
     String string_literal;
   } u;

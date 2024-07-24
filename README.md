@@ -1,6 +1,8 @@
 C compiler toolchain targeting Linux x64, written from scratch in C. Many
 features are missing, but it is complete enough to self-host.
 
+(Self hosting is temporarily broken while working on float support)
+
 Includes:
 
 * libc
