@@ -495,6 +495,15 @@ CType *named_type_specifier_to_ctype(
           decl_specifier_list, 4, "unsigned", "long", "long", "int")) {
     return &type_env->unsigned_long_long_type;
   }
+  if (matches_sequence(decl_specifier_list, 1, "float")) {
+    return &type_env->float_type;
+  }
+  if (matches_sequence(decl_specifier_list, 1, "double")) {
+    return &type_env->double_type;
+  }
+  if (matches_sequence(decl_specifier_list, 2, "long", "double")) {
+    return &type_env->long_double_type;
+  }
 
   // Phew
 
