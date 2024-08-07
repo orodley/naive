@@ -3,7 +3,7 @@
 
 #include "ir_gen/c_type.h"
 #include "ir_gen/context.h"
-#include "parse.h"
+#include "syntax/parse.h"
 
 IrGlobal *ir_global_for_decl(
     IrGenContext *ctx, ASTDeclSpecifier *decl_specifier_list,

@@ -3,8 +3,8 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
-#include "parse.h"
-#include "tokenise.h"
+#include "syntax/parse.h"
+#include "syntax/tokenise.h"
 
 extern inline u32 c_type_size(CType *type);
 

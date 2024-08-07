@@ -1,5 +1,5 @@
-#ifndef NAIVE_READER_H_
-#define NAIVE_READER_H_
+#ifndef NAIVE_SYNTAX_READER_H_
+#define NAIVE_SYNTAX_READER_H_
 
 #include <stdio.h>
 

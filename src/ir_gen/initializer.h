@@ -3,7 +3,7 @@
 
 #include "ir_gen/c_type.h"
 #include "ir_gen/context.h"
-#include "parse.h"
+#include "syntax/parse.h"
 
 // @TODO: We should special-case zero-initializers, so that we don't need huge
 // amounts of memory to store large zeroed arrays.

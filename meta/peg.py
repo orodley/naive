@@ -123,7 +123,7 @@ class CWriter(object):
 #include <stddef.h>
 
 #include "misc.h"
-#include "parse.h"
+#include "syntax/parse.h"
 
 
 static u32 _longest_parse_length;

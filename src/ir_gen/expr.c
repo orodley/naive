@@ -7,7 +7,7 @@
 #include "ir_gen/convert.h"
 #include "ir_gen/decl.h"
 #include "ir_gen/initializer.h"
-#include "parse.h"
+#include "syntax/parse.h"
 
 static Term ir_gen_assign_expr(IrGenContext *ctx, ASTExpr *expr, IrOp ir_op);
 static Term ir_gen_struct_field(

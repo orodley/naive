@@ -8,7 +8,7 @@
 #include "elf.h"
 #include "misc.h"
 #include "pool.h"
-#include "reader.h"
+#include "syntax/reader.h"
 #include "util.h"
 
 // @NOTE: This doesn't skip newlines, because newlines aren't allowed in the

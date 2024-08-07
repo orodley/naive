@@ -20,9 +20,9 @@
 #include "file.h"
 #include "ir_gen/ir_gen.h"
 #include "misc.h"
-#include "parse.h"
-#include "preprocess.h"
-#include "tokenise.h"
+#include "syntax/parse.h"
+#include "syntax/preprocess.h"
+#include "syntax/tokenise.h"
 #include "util.h"
 
 int __lsan_is_turned_off(void) { return 1; }

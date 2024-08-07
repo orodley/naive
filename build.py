@@ -423,10 +423,13 @@ def build(build_config):
     os.makedirs("build/bin", exist_ok=True)
     os.makedirs("build/ir_gen", exist_ok=True)
     os.makedirs("build/libc", exist_ok=True)
+    os.makedirs("build/syntax", exist_ok=True)
 
     # Run the metaprograms
     procs = []
-    enqueue_proc(procs, ["meta/peg.py", "src/parse.peg", "build/parse.inc"], "PEG")
+    enqueue_proc(
+        procs, ["meta/peg.py", "src/syntax/parse.peg", "build/syntax/parse.inc"], "PEG"
+    )
     enqueue_proc(procs, ["meta/enc.py", "src/x64.enc", "build/x64.inc"], "INC")
     if (ret := run_all_procs_printing_failures(procs)) != 0:
         return ret
@@ -451,16 +454,16 @@ def build(build_config):
             "src/ir_gen/expr.o",
             "src/ir_gen/initializer.o",
             "src/ir_gen/statement.o",
-            "src/parse.o",
             "src/pool.o",
-            "src/preprocess.o",
-            "src/reader.o",
-            "src/tokenise.o",
+            "src/syntax/parse.o",
+            "src/syntax/preprocess.o",
+            "src/syntax/reader.o",
+            "src/syntax/tokenise.o",
             "src/util.o",
         ],
         "src/bin/nas": [
             "src/bin/nas.o",
-            "src/reader.o",
+            "src/syntax/reader.o",
             "src/util.o",
             "src/diagnostics.o",
             "src/asm.o",

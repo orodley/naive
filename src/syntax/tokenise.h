@@ -1,5 +1,5 @@
-#ifndef NAIVE_TOKENISE_H
-#define NAIVE_TOKENISE_H
+#ifndef NAIVE_SYNTAX_TOKENISE_H
+#define NAIVE_SYNTAX_TOKENISE_H
 
 #include "array.h"
 #include "diagnostics.h"

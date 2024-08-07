@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "preprocess.h"
+#include "syntax/preprocess.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -9,7 +9,7 @@
 #include "array.h"
 #include "diagnostics.h"
 #include "parse.h"
-#include "reader.h"
+#include "syntax/reader.h"
 #include "tokenise.h"
 #include "util.h"
 
@@ -265,7 +265,8 @@ static char *look_up_include_path(
   // Try relative to the including file
   u32 including_file_length = strlen(including_file);
   i32 i = including_file_length - 1;
-  for (; i >= 0 && including_file[i] != '/'; i--);
+  for (; i >= 0 && including_file[i] != '/'; i--)
+    ;
 
   char *base_path;
   u32 base_length;
@@ -584,7 +585,8 @@ static bool handle_pp_directive(PP *pp)
 
       char terminator = c == '<' ? '>' : '"';
       u32 start_index = reader->position;
-      while (!at_end(reader) && read_char(reader) != terminator);
+      while (!at_end(reader) && read_char(reader) != terminator)
+        ;
 
       if (at_end(reader)) {
         issue_error(&include_path_source_loc, "Unterminated include path");

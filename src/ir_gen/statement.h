@@ -3,7 +3,7 @@
 
 #include "ir.h"
 #include "ir_gen/context.h"
-#include "parse.h"
+#include "syntax/parse.h"
 
 void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement);
 

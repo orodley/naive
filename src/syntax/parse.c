@@ -1,4 +1,4 @@
-#include "parse.h"
+#include "syntax/parse.h"
 
 #include <assert.h>
 #include <stdarg.h>
@@ -10,7 +10,7 @@
 #include "diagnostics.h"
 #include "misc.h"
 #include "pool.h"
-#include "tokenise.h"
+#include "syntax/tokenise.h"
 #include "util.h"
 
 typedef struct TypeTableEntry
@@ -575,7 +575,7 @@ static ParserResult identifier(Parser *parser);
 static ParserResult direct_declarator(Parser *parser);
 static ParserResult direct_abstract_declarator(Parser *parser);
 
-#include "parse.inc"
+#include "syntax/parse.inc"
 
 // In general we prefer not to reject identifiers that are keywords during
 // parsing, because it's easier to provide good error messages by doing so

@@ -4,7 +4,7 @@
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"
 #include "ir_gen/expr.h"
-#include "parse.h"
+#include "syntax/parse.h"
 
 static void ir_gen_c_init(
     IrBuilder *builder, TypeEnv *type_env, IrValue base_ptr,

@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "tokenise.h"
+#include "syntax/tokenise.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -11,7 +11,7 @@
 #include "array.h"
 #include "diagnostics.h"
 #include "misc.h"
-#include "reader.h"
+#include "syntax/reader.h"
 #include "util.h"
 
 typedef struct Tokeniser

@@ -1,10 +1,10 @@
-#ifndef NAIVE_PARSE_H_
-#define NAIVE_PARSE_H_
+#ifndef NAIVE_SYNTAX_PARSE_H_
+#define NAIVE_SYNTAX_PARSE_H_
 
 #include "array.h"
 #include "misc.h"
 #include "pool.h"
-#include "tokenise.h"
+#include "syntax/tokenise.h"
 #include "util.h"
 
 typedef struct ParseError
