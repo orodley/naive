@@ -247,8 +247,11 @@ static bool is_const_and_fits(
 static char *asm_op_names[] = {ASM_OPS};
 #undef X
 
-#define X(x, b, d, w, o) {b, d, w, o}
-static char *physical_register_names[][4] = {REG_CLASSES};
+#define X(x, b, d, w, o, do) \
+  {                          \
+    b, d, w, o, do           \
+  }
+static char *physical_register_names[][5] = {REG_CLASSES};
 #undef X
 
 static void dump_register(Register reg)
@@ -436,6 +439,14 @@ static u32 encoded_register_number(RegClass reg)
   case REG_CLASS_R14: return 14;
   case REG_CLASS_R15: return 15;
   case REG_CLASS_IP: UNIMPLEMENTED;
+  case REG_CLASS_XMM0: return 0;
+  case REG_CLASS_XMM1: return 1;
+  case REG_CLASS_XMM2: return 2;
+  case REG_CLASS_XMM3: return 3;
+  case REG_CLASS_XMM4: return 4;
+  case REG_CLASS_XMM5: return 5;
+  case REG_CLASS_XMM6: return 6;
+  case REG_CLASS_XMM7: return 7;
   }
 
   UNREACHABLE;
