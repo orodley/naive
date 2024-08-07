@@ -72,6 +72,11 @@ MOVZX r32, r/m16       =         [0F B7] /r
 MOVZX r64, r/m8        = REX.W + [0F B6] /r
 MOVZX r64, r/m16       = REX.W + [0F B7] /r
 
+MOVSS xmm1, xmm2/m32   =         [F3 0F 10] /r
+MOVSS xmm2/m32, xmm1   =         [F3 0F 11] /r
+MOVSD xmm1, xmm2/m64   =         [F2 0F 10] /r
+MOVSD xmm1/m64, xmm2   =         [F2 0F 11] /r
+
 NEG r/m32              =         F7 /3
 NEG r/m64              = REX.W + F7 /3
 
