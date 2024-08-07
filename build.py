@@ -425,12 +425,12 @@ def build(build_config):
     os.makedirs("build/libc", exist_ok=True)
     os.makedirs("build/syntax", exist_ok=True)
 
-    # Run the metaprograms
+    # Run the DSL interpreters
     procs = []
     enqueue_proc(
-        procs, ["meta/peg.py", "src/syntax/parse.peg", "build/syntax/parse.inc"], "PEG"
+        procs, ["dsl/peg.py", "src/syntax/parse.peg", "build/syntax/parse.inc"], "PEG"
     )
-    enqueue_proc(procs, ["meta/enc.py", "src/x64.enc", "build/x64.inc"], "INC")
+    enqueue_proc(procs, ["dsl/enc.py", "src/x64.enc", "build/x64.inc"], "INC")
     if (ret := run_all_procs_printing_failures(procs)) != 0:
         return ret
 
