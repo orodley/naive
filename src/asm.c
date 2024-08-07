@@ -69,7 +69,8 @@ AsmValue asm_vreg(u32 vreg_number, u8 width)
       .t = ASM_VALUE_REGISTER,
       .u.reg.width = width,
       .u.reg.t = V_REG,
-      .u.reg.u.vreg_number = vreg_number,
+      .u.reg.u.vreg.number = vreg_number,
+      .u.reg.u.vreg.type = width == 128 ? REG_TYPE_FLOAT : REG_TYPE_INTEGER,
   };
 }
 
@@ -263,7 +264,11 @@ static void dump_register(Register reg)
     for (u32 i = 0; reg_name[i] != '\0'; i++) putchar(tolower(reg_name[i]));
     break;
   }
-  case V_REG: printf("#%u", reg.u.vreg_number); break;
+  case V_REG:
+    printf(
+        "#%u%c", reg.u.vreg.number,
+        reg.u.vreg.type == REG_TYPE_INTEGER ? 'i' : 'f');
+    break;
   }
 }
 

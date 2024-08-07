@@ -10,9 +10,10 @@
 #include "misc.h"
 
 // Reserved for spills and fills.
-#define SPILL_REGISTER REG_CLASS_R12
+#define INT_SPILL_REGISTER REG_CLASS_R12
+#define FLOAT_SPILL_REGISTER REG_CLASS_XMM7
 
-#define ALLOCATION_ORDER                                           \
+#define INT_ALLOCATION_ORDER                                       \
   X(0, REG_CLASS_R13), X(1, REG_CLASS_R14), X(2, REG_CLASS_R15),   \
       X(3, REG_CLASS_B), X(4, REG_CLASS_R11), X(5, REG_CLASS_R10), \
       X(6, REG_CLASS_R9), X(7, REG_CLASS_R8), X(8, REG_CLASS_C),   \
@@ -20,11 +21,24 @@
       X(12, REG_CLASS_A),
 
 #define X(i, x) [i] = x
-static RegClass alloc_index_to_reg[] = {ALLOCATION_ORDER};
+static RegClass int_alloc_index_to_reg[] = {INT_ALLOCATION_ORDER};
 #undef X
 
 #define X(i, x) [x] = i
-static u32 reg_to_alloc_index[] = {ALLOCATION_ORDER};
+static u32 int_reg_to_alloc_index[] = {INT_ALLOCATION_ORDER};
+#undef X
+
+#define FLOAT_ALLOCATION_ORDER                                          \
+  X(0, REG_CLASS_XMM0), X(1, REG_CLASS_XMM1), X(2, REG_CLASS_XMM2),     \
+      X(3, REG_CLASS_XMM3), X(4, REG_CLASS_XMM4), X(5, REG_CLASS_XMM5), \
+      X(6, REG_CLASS_XMM6),
+
+#define X(i, x) [i] = x
+static RegClass float_alloc_index_to_reg[] = {FLOAT_ALLOCATION_ORDER};
+#undef X
+
+#define X(i, x) [x] = i
+static u32 float_reg_to_alloc_index[] = {FLOAT_ALLOCATION_ORDER};
 #undef X
 
 #define CALLER_SAVE_REGS_BITMASK                                   \
@@ -40,35 +54,91 @@ typedef struct Pred
   struct Pred *next;
 } Pred;
 
-static void compute_live_ranges(AsmBuilder *builder);
+static void allocate_registers_of_type(AsmBuilder *builder, RegType type);
+static void find_preds(AsmBuilder *builder, Pool *pool);
+static void compute_live_ranges(AsmBuilder *builder, Array(VReg) *vregs);
 static int compare_live_range_start(const void *a, const void *b);
 static bool is_def(AsmInstr *instr, u32 vreg_num, VReg *vreg);
 static bool is_use(AsmInstr *instr, u32 vreg);
 static bool references_vreg(AsmValue value, u32 vreg);
 
-// @TODO: Save all caller save registers that are live across calls.
 void allocate_registers(AsmBuilder *builder)
 {
-  compute_live_ranges(builder);
+  Pool preds_pool;
+  find_preds(builder, &preds_pool);
+  allocate_registers_of_type(builder, REG_TYPE_INTEGER);
+  allocate_registers_of_type(builder, REG_TYPE_FLOAT);
+  pool_free(&preds_pool);
+
+  for (u32 i = 0; i < builder->int_virtual_registers.size; i++) {
+    VReg *vreg = ARRAY_REF(&builder->int_virtual_registers, VReg, i);
+    assert(vreg->t != UNASSIGNED);
+  }
+  for (u32 i = 0; i < builder->float_virtual_registers.size; i++) {
+    VReg *vreg = ARRAY_REF(&builder->float_virtual_registers, VReg, i);
+    assert(vreg->t != UNASSIGNED);
+  }
+}
+
+typedef struct RegAllocParams
+{
+  u32 allocatable_regs;
+  RegClass *alloc_index_to_reg;
+  u32 *reg_to_alloc_index;
+  Array(VReg) *vregs;
+  RegClass spill_register;
+} RegAllocParams;
+
+RegAllocParams int_reg_alloc_params(AsmBuilder *builder)
+{
+  return (RegAllocParams){
+      .allocatable_regs = STATIC_ARRAY_LENGTH(int_alloc_index_to_reg),
+      .alloc_index_to_reg = int_alloc_index_to_reg,
+      .reg_to_alloc_index = int_reg_to_alloc_index,
+      .vregs = &builder->int_virtual_registers,
+      .spill_register = INT_SPILL_REGISTER,
+  };
+}
+
+RegAllocParams float_reg_alloc_params(AsmBuilder *builder)
+{
+  return (RegAllocParams){
+      .allocatable_regs = STATIC_ARRAY_LENGTH(float_alloc_index_to_reg),
+      .alloc_index_to_reg = float_alloc_index_to_reg,
+      .reg_to_alloc_index = float_reg_to_alloc_index,
+      .vregs = &builder->float_virtual_registers,
+      .spill_register = FLOAT_SPILL_REGISTER,
+  };
+}
+
+// @TODO: Save all caller save registers that are live across calls.
+void allocate_registers_of_type(AsmBuilder *builder, RegType type)
+{
+  RegAllocParams params = type == REG_TYPE_INTEGER
+                              ? int_reg_alloc_params(builder)
+                              : float_reg_alloc_params(builder);
+
+  compute_live_ranges(builder, params.vregs);
 
   Array(AsmInstr) *body = builder->current_block;
 
   u32 free_regs_bitset;
-  assert(STATIC_ARRAY_LENGTH(alloc_index_to_reg) < 8 * sizeof free_regs_bitset);
+  assert(params.allocatable_regs < 8 * sizeof free_regs_bitset);
 
   // Start with all regs free
-  free_regs_bitset = (1 << STATIC_ARRAY_LENGTH(alloc_index_to_reg)) - 1;
+  free_regs_bitset = (1 << params.allocatable_regs) - 1;
 
-  // virtual_registers isn't necessarily sorted by live range start.
+  Array(VReg) *vregs = params.vregs;
+
+  // vregs isn't necessarily sorted by live range start.
   // i.e. if RAX is pre-allocated from a function call and we don't use it
   // until later. Linear scan depends on this ordering, so we sort it first.
   // We can't sort it in place because the indices are used to look vregs up
   // by vreg number.
-  VReg **live_ranges =
-      malloc(builder->virtual_registers.size * sizeof *live_ranges);
+  VReg **live_ranges = malloc(vregs->size * sizeof *live_ranges);
   u32 live_range_out_index = 0;
-  for (u32 i = 0; i < builder->virtual_registers.size; i++) {
-    VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
+  for (u32 i = 0; i < vregs->size; i++) {
+    VReg *vreg = ARRAY_REF(vregs, VReg, i);
     // This indicates that we assigned a vreg to something that wasn't
     // used, e.g. a pre-alloced RAX for the return value of a function.
     if (vreg->live_range_start == -1) {
@@ -84,6 +154,8 @@ void allocate_registers(AsmBuilder *builder)
       live_ranges, num_live_ranges, sizeof *live_ranges,
       compare_live_range_start);
 
+  u32 *reg_to_alloc_index = params.reg_to_alloc_index;
+  u32 *alloc_index_to_reg = params.alloc_index_to_reg;
   Array(VReg *) active_vregs;
   ARRAY_INIT(&active_vregs, VReg *, 16);
   for (u32 i = 0; i < num_live_ranges; i++) {
@@ -185,9 +257,8 @@ void allocate_registers(AsmBuilder *builder)
       // repeatedly shifting down.
       ARRAY_REMOVE(&active_vregs, VReg *, 0);
     }
-    if (vreg_index != builder->virtual_registers.size) {
-      VReg *next_vreg =
-          ARRAY_REF(&builder->virtual_registers, VReg, vreg_index);
+    if (vreg_index != vregs->size) {
+      VReg *next_vreg = ARRAY_REF(vregs, VReg, vreg_index);
       // Pre-alloced vregs aren't counted. Otherwise we'd think we need
       // to spill registers we just used to pass arguments.
       // @TODO: Perhaps this is too weak of a condition? It'd be nice if
@@ -235,9 +306,9 @@ void allocate_registers(AsmBuilder *builder)
   // @TODO: Move register dumping stuff we we can dump the name here rather
   // than just a number
   if (flag_dump_register_assignments) {
-    for (u32 i = 0; i < builder->virtual_registers.size; i++) {
-      VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
-      printf("#%u =", i);
+    for (u32 i = 0; i < vregs->size; i++) {
+      VReg *vreg = ARRAY_REF(vregs, VReg, i);
+      printf("#%u%c =", i, type == REG_TYPE_INTEGER ? 'i' : 'f');
       switch (vreg->t) {
       case IN_REG: printf(" (%d)\n", vreg->u.assigned_register); break;
       case ON_STACK: printf(" [%d]\n", vreg->u.assigned_stack_slot); break;
@@ -260,66 +331,65 @@ void allocate_registers(AsmBuilder *builder)
       curr_sp_diff += c.u.immediate;
     }
 
+    RegClass spill_register = params.spill_register;
     for (u32 j = 0; j < instr->arity; j++) {
       AsmValue *arg = instr->args + j;
       Register *reg = value_reg(arg);
       if (reg == NULL) continue;
+      if (reg->t != V_REG) continue;
+      if (reg->u.vreg.type != type) continue;
 
-      if (reg->t == V_REG) {
-        u32 vreg_number = reg->u.vreg_number;
-        VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, vreg_number);
+      u32 vreg_number = reg->u.vreg.number;
+      VReg *vreg = ARRAY_REF(vregs, VReg, vreg_number);
 
-        switch (vreg->t) {
-        case IN_REG:
-          reg->t = PHYS_REG;
-          reg->u.class = vreg->u.assigned_register;
-          break;
-        case ON_STACK:
-          reg->t = PHYS_REG;
-          reg->u.class = SPILL_REGISTER;
-          // @TODO: Insert all at once, rather than shifting along
-          // every time.
-          // @TODO: Elide this when we just write to the register and
-          // don't use the previous value
-          *ARRAY_INSERT(body, AsmInstr, i) = (AsmInstr){
-              .op = MOV,
-              .arity = 2,
-              .args[0] = asm_phys_reg(SPILL_REGISTER, 64),
-              .args[1] = asm_deref(asm_offset_reg(
-                  REG_CLASS_SP, 64,
-                  asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
-          };
-          // @TODO: Elide this when we just read the register and
-          // don't write anything back.
-          *ARRAY_INSERT(body, AsmInstr, i + 2) = (AsmInstr){
-              .op = MOV,
-              .arity = 2,
-              .args[0] = asm_deref(asm_offset_reg(
-                  REG_CLASS_SP, 64,
-                  asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
-              .args[1] = asm_phys_reg(SPILL_REGISTER, 64),
-          };
-          break;
-        case UNASSIGNED: UNREACHABLE;
-        }
+      switch (vreg->t) {
+      case IN_REG:
+        reg->t = PHYS_REG;
+        reg->u.class = vreg->u.assigned_register;
+        break;
+      case ON_STACK:
+        reg->t = PHYS_REG;
+        reg->u.class = spill_register;
+        // @TODO: Insert all at once, rather than shifting along
+        // every time.
+        // @TODO: Elide this when we just write to the register and
+        // don't use the previous value
+        *ARRAY_INSERT(body, AsmInstr, i) = (AsmInstr){
+            .op = MOV,
+            .arity = 2,
+            .args[0] = asm_phys_reg(spill_register, 64),
+            .args[1] = asm_deref(asm_offset_reg(
+                REG_CLASS_SP, 64,
+                asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
+        };
+        // @TODO: Elide this when we just read the register and
+        // don't write anything back.
+        *ARRAY_INSERT(body, AsmInstr, i + 2) = (AsmInstr){
+            .op = MOV,
+            .arity = 2,
+            .args[0] = asm_deref(asm_offset_reg(
+                REG_CLASS_SP, 64,
+                asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
+            .args[1] = asm_phys_reg(spill_register, 64),
+        };
+        break;
+      case UNASSIGNED: UNREACHABLE;
       }
     }
   }
 }
 
-static void compute_live_ranges(AsmBuilder *builder)
+// Liveness is a backwards analysis, so we need access to predecessors for
+// each instruction. These are stored intrusively on AsmSymbol.
+//
+// @NOTE: I'm not sure if this will still work correctly if we add
+// fallthrough, i.e.: eliminating redundant jumps like:
+//     jmp a
+// a:  ...
+static void find_preds(AsmBuilder *builder, Pool *pool)
 {
+  pool_init(pool, 512);
   Array(AsmInstr) *body = builder->current_block;
-
-  // Liveness is a backwards analysis, so we need access to predecessors for
-  // each instruction. These are stored intrusively on AsmSymbol.
-  //
-  // @NOTE: I'm not sure if this will still work correctly if we add
-  // fallthrough, i.e.: eliminating redundant jumps like:
-  //     jmp a
-  // a:  ...
-  Pool preds_pool;
-  pool_init(&preds_pool, 512);
   for (u32 i = 0; i < body->size; i++) {
     AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
     switch (instr->op) {
@@ -352,7 +422,7 @@ static void compute_live_ranges(AsmBuilder *builder)
         location = &pred->next;
       }
 
-      Pred *new_pred = pool_alloc(&preds_pool, sizeof *pred);
+      Pred *new_pred = pool_alloc(pool, sizeof *pred);
       new_pred->src_offset = i;
       new_pred->dest_offset = target->offset;
       new_pred->next = NULL;
@@ -360,6 +430,11 @@ static void compute_live_ranges(AsmBuilder *builder)
       *location = new_pred;
     }
   }
+}
+
+static void compute_live_ranges(AsmBuilder *builder, Array(VReg) *vregs)
+{
+  Array(AsmInstr) *body = builder->current_block;
 
   // This implements the algorithm described in Mohnen 2002, "A Graph-Free
   // Approach to Data-Flow Analysis". As the name suggests, we do without
@@ -368,15 +443,13 @@ static void compute_live_ranges(AsmBuilder *builder)
   // is backwards and existential, so both of the adaptations in this
   // paragraph are applied to the algorithm in Figure 5. The preprocessing to
   // connect jumps to jump targets is done just above.
-
   BitSet liveness;
   bit_set_init(&liveness, body->size);
   BitSet working_set;
   bit_set_init(&working_set, body->size);
 
-  for (u32 vreg_num = 0; vreg_num < builder->virtual_registers.size;
-       vreg_num++) {
-    VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, vreg_num);
+  for (u32 vreg_num = 0; vreg_num < vregs->size; vreg_num++) {
+    VReg *vreg = ARRAY_REF(vregs, VReg, vreg_num);
     if (vreg->live_range_start != -1 && vreg->live_range_end != -1) continue;
 
     bit_set_clear_all(&liveness);
@@ -513,7 +586,6 @@ static void compute_live_ranges(AsmBuilder *builder)
       vreg->live_range_end = highest;
   }
 
-  pool_free(&preds_pool);
   bit_set_free(&liveness);
   bit_set_free(&working_set);
 
@@ -525,9 +597,11 @@ static void compute_live_ranges(AsmBuilder *builder)
       dump_asm_instr(instr);
     }
 
-    for (u32 i = 0; i < builder->virtual_registers.size; i++) {
-      VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
-      printf("#%u: [%d, %d]", i, vreg->live_range_start, vreg->live_range_end);
+    for (u32 i = 0; i < vregs->size; i++) {
+      VReg *vreg = ARRAY_REF(vregs, VReg, i);
+      printf(
+          "#%u%c: [%d, %d]", i, vreg->type == REG_TYPE_INTEGER ? 'i' : 'f',
+          vreg->live_range_start, vreg->live_range_end);
       switch (vreg->t) {
       // @TODO: Move register dumping stuff we we can dump the name here
       // rather than just a number
@@ -612,5 +686,5 @@ bool references_vreg(AsmValue value, u32 vreg)
   default: return false;
   }
 
-  return reg.t == V_REG && reg.u.vreg_number == vreg;
+  return reg.t == V_REG && reg.u.vreg.number == vreg;
 }

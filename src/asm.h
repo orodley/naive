@@ -41,6 +41,12 @@ typedef enum RegClass
 } RegClass;
 #undef X
 
+typedef enum RegType
+{
+  REG_TYPE_INTEGER,
+  REG_TYPE_FLOAT,
+} RegType;
+
 typedef struct Register
 {
   u8 width;
@@ -53,7 +59,11 @@ typedef struct Register
 
   union
   {
-    u32 vreg_number;
+    struct
+    {
+      RegType type;
+      u32 number;
+    } vreg;
     RegClass class;
   } u;
 } Register;

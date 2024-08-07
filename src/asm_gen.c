@@ -16,15 +16,19 @@ void init_asm_builder(AsmBuilder *builder, char *input_file_name)
 
   builder->local_stack_usage = 0;
   builder->curr_sp_diff = 0;
-  builder->virtual_registers = EMPTY_ARRAY;
+  builder->int_virtual_registers = EMPTY_ARRAY;
+  builder->float_virtual_registers = EMPTY_ARRAY;
+  builder->global_temp_floats = 0;
 }
 
 void free_asm_builder(AsmBuilder *builder)
 {
   free_asm_module(&builder->asm_module);
 
-  if (ARRAY_IS_VALID(&builder->virtual_registers))
-    array_free(&builder->virtual_registers);
+  if (ARRAY_IS_VALID(&builder->int_virtual_registers))
+    array_free(&builder->int_virtual_registers);
+  if (ARRAY_IS_VALID(&builder->float_virtual_registers))
+    array_free(&builder->float_virtual_registers);
 }
 
 AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
@@ -96,17 +100,29 @@ static void add_dep(AsmInstr *instr, AsmValue dep)
   assert(dep.t == ASM_VALUE_REGISTER);
   assert(dep.u.reg.t == V_REG);
 
-  instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg_number;
+  instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg.number;
 }
 
 static u32 new_vreg(AsmBuilder *builder)
 {
-  VReg *vreg = ARRAY_APPEND(&builder->virtual_registers, VReg);
+  VReg *vreg = ARRAY_APPEND(&builder->int_virtual_registers, VReg);
   vreg->t = UNASSIGNED;
+  vreg->type = REG_TYPE_INTEGER;
   vreg->live_range_start = vreg->live_range_end = -1;
   vreg->pre_alloced = false;
 
-  return builder->virtual_registers.size - 1;
+  return builder->int_virtual_registers.size - 1;
+}
+
+static u32 new_float_vreg(AsmBuilder *builder)
+{
+  VReg *vreg = ARRAY_APPEND(&builder->float_virtual_registers, VReg);
+  vreg->t = UNASSIGNED;
+  vreg->type = REG_TYPE_FLOAT;
+  vreg->live_range_start = vreg->live_range_end = -1;
+  vreg->pre_alloced = false;
+
+  return builder->float_virtual_registers.size - 1;
 }
 
 // @TODO: We could use the return value to rewrite some stuff of the form:
@@ -123,7 +139,7 @@ static AsmValue assign_vreg(IrInstr *instr, AsmValue vreg)
   assert(vreg.t == ASM_VALUE_REGISTER);
   assert(vreg.u.reg.t == V_REG);
 
-  instr->vreg_number = vreg.u.reg.u.vreg_number;
+  instr->vreg_number = vreg.u.reg.u.vreg.number;
   return vreg;
 }
 
@@ -131,7 +147,7 @@ static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 {
   u32 vreg_number = new_vreg(builder);
 
-  VReg *vreg = ARRAY_LAST(&builder->virtual_registers, VReg);
+  VReg *vreg = ARRAY_LAST(&builder->int_virtual_registers, VReg);
   vreg->t = IN_REG;
   vreg->u.assigned_register = class;
   vreg->pre_alloced = true;
@@ -847,7 +863,7 @@ static void asm_gen_instr(
     // version of the register.
     if (value.t == ASM_VALUE_REGISTER) {
       assert(value.u.reg.t == V_REG);
-      instr->vreg_number = value.u.reg.u.vreg_number;
+      instr->vreg_number = value.u.reg.u.vreg.number;
     } else {
       UNIMPLEMENTED;
     }
@@ -933,10 +949,11 @@ static void asm_gen_instr(
       case ARG_CLASS_REG: {
         AsmValue arg_target_reg =
             pre_alloced_vreg(builder, arg_class->u.reg.reg, 64);
-        *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
         emit_mov(builder, arg_target_reg, arg);
+        *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg.number;
         VReg *vreg = ARRAY_REF(
-            &builder->virtual_registers, VReg, *ARRAY_LAST(&arg_vregs, u32));
+            &builder->int_virtual_registers, VReg,
+            *ARRAY_LAST(&arg_vregs, u32));
         vreg->live_range_start = builder->current_block->size - 1;
         break;
       }
@@ -1045,7 +1062,7 @@ static void asm_gen_instr(
     // start and end already.
     for (u32 i = 0; i < arg_vregs.size; i++) {
       u32 arg_vreg = *ARRAY_REF(&arg_vregs, u32, i);
-      VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, arg_vreg);
+      VReg *vreg = ARRAY_REF(&builder->int_virtual_registers, VReg, arg_vreg);
       vreg->live_range_end = builder->current_block->size - 1;
     }
 
@@ -1325,9 +1342,12 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   };
   builder->ret_label = ret_label;
 
-  if (ARRAY_IS_VALID(&builder->virtual_registers))
-    array_free(&builder->virtual_registers);
-  ARRAY_INIT(&builder->virtual_registers, VReg, 20);
+  if (ARRAY_IS_VALID(&builder->int_virtual_registers))
+    array_free(&builder->int_virtual_registers);
+  if (ARRAY_IS_VALID(&builder->float_virtual_registers))
+    array_free(&builder->float_virtual_registers);
+  ARRAY_INIT(&builder->int_virtual_registers, VReg, 20);
+  builder->float_virtual_registers = EMPTY_ARRAY;
   IrType return_type = *ir_global->type.u.function.return_type;
   assert(
       return_type.t == IR_INT || return_type.t == IR_POINTER
@@ -1398,8 +1418,9 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
   if (flag_print_pre_regalloc_stats) {
     printf(
-        "%s: %u instrs, %u vregs\n", ir_global->name, body.size,
-        builder->virtual_registers.size);
+        "%s: %u instrs, %u int vregs, %u float vregs\n", ir_global->name,
+        body.size, builder->int_virtual_registers.size,
+        builder->float_virtual_registers.size);
   }
 
   allocate_registers(builder);
