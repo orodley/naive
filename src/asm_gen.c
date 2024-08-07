@@ -816,6 +816,7 @@ static void asm_gen_instr(
     IrValue ir_value = instr->u.binary_op.arg2;
     IrType type = ir_value.type;
     u32 bit_width = size_of_ir_type(type) * 8;
+    if (type.t == IR_FLOAT) bit_width = 128;
 
     AsmValue value = asm_value(builder, ir_value);
     switch (value.t) {
@@ -845,11 +846,19 @@ static void asm_gen_instr(
     }
 
     AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
-
     if (ir_pointer.t == IR_VALUE_GLOBAL) {
       AsmValue rip_relative_addr = asm_offset_reg(
           REG_CLASS_IP, 64, asm_const_symbol(ir_pointer.u.global->asm_symbol));
-      emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
+      pointer = rip_relative_addr;
+    }
+
+    if (type.t == IR_FLOAT) {
+      if (type.u.float_bits == 32) {
+        emit_instr2(builder, MOVSS, asm_deref(pointer), value);
+      } else {
+        assert(type.u.float_bits == 64);
+        emit_instr2(builder, MOVSD, asm_deref(pointer), value);
+      }
     } else {
       emit_mov(builder, asm_deref(pointer), value);
     }
