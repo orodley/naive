@@ -36,14 +36,14 @@ static u64 read_integer(Reader *reader)
   return imm;
 }
 
-#define X(c, b, w, d, o) \
-  {                      \
-    c, { b, w, d, o }    \
+#define X(c, b, w, d, o, do) \
+  {                          \
+    c, { b, w, d, o, do }    \
   }
 static struct
 {
   RegClass class;
-  char *names[4];
+  char *names[5];
 } registers[] = {REG_CLASSES};
 #undef X
 
