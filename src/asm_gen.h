@@ -39,6 +39,7 @@ typedef struct AsmBuilder
   u32 local_stack_usage;
   u32 register_save_area_size;
   u32 curr_sp_diff;
+  u32 global_temp_floats;
 
   Array(Fixup *) fixups;
 } AsmBuilder;

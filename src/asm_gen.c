@@ -10,6 +10,8 @@
 #include "reg_alloc.h"
 #include "util.h"
 
+static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out);
+
 void init_asm_builder(AsmBuilder *builder, char *input_file_name)
 {
   init_asm_module(&builder->asm_module, input_file_name);
@@ -171,8 +173,44 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr);
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
   switch (value.t) {
-  // @FLOAT_IMPL
-  case IR_VALUE_CONST_FLOAT: UNIMPLEMENTED;
+  case IR_VALUE_CONST_FLOAT: {
+    char name[32];
+    i32 len = snprintf(name, sizeof name, "__f%d", builder->global_temp_floats);
+    builder->global_temp_floats++;
+
+    char *name_copy = pool_alloc(&builder->asm_module.pool, len + 1);
+    strncpy(name_copy, name, len);
+    name_copy[len] = '\0';
+
+    AsmSymbol *symbol = add_asm_symbol(builder);
+    symbol->name = name_copy;
+    symbol->defined = true;
+    symbol->section = DATA_SECTION;
+    symbol->ir_global = NULL;
+    symbol->size = size_of_ir_type(value.type);
+
+    IrConst konst = {
+        .type = value.type,
+        .u.floatt = value.u.const_float,
+    };
+
+    Array(u8) *data = &builder->asm_module.data;
+    // @TODO: Alignment
+    symbol->offset = data->size;
+    write_const(&builder->asm_module, &konst, data);
+
+    AsmValue rip_relative_addr =
+        asm_offset_reg(REG_CLASS_IP, 64, asm_const_symbol(symbol));
+    AsmValue vreg = asm_vreg(new_float_vreg(builder), 128);
+    if (size_of_ir_type(value.type) == 32) {
+      emit_instr2(builder, MOVSS, vreg, asm_deref(rip_relative_addr));
+    } else {
+      emit_instr2(builder, MOVSD, vreg, asm_deref(rip_relative_addr));
+    }
+    return vreg;
+
+    break;
+  }
   case IR_VALUE_CONST_INT: return asm_imm(value.u.const_int);
   case IR_VALUE_INSTR: {
     IrInstr *instr = value.u.instr;
