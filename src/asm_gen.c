@@ -61,12 +61,6 @@ AsmInstr *emit_instr2(
   instr->num_deps = 0;
   instr->label = NULL;
 
-  if (op == MOV && arg1.t == ASM_VALUE_REGISTER && arg2.t == ASM_VALUE_REGISTER
-      && arg1.u.reg.width != arg2.u.reg.width && !arg1.is_deref
-      && !arg2.is_deref) {
-    assert(!"Bad MOV! Registers are different sizes.");
-  }
-
   return instr;
 }
 
@@ -83,6 +77,17 @@ AsmInstr *emit_instr3(
   instr->label = NULL;
 
   return instr;
+}
+
+AsmInstr *emit_mov(AsmBuilder *builder, AsmValue dest, AsmValue src)
+{
+  if (dest.t == ASM_VALUE_REGISTER && src.t == ASM_VALUE_REGISTER
+      && dest.u.reg.width != src.u.reg.width && !dest.is_deref
+      && !src.is_deref) {
+    assert(!"Bad MOV! Registers are different sizes.");
+  }
+
+  return emit_instr2(builder, MOV, dest, src);
 }
 
 static void add_dep(AsmInstr *instr, AsmValue dep)
@@ -160,7 +165,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
     // OP_FIELD instrs.
     case OP_LOCAL: {
       AsmValue vreg = asm_vreg(new_vreg(builder), 64);
-      emit_instr2(builder, MOV, vreg, asm_phys_reg(REG_CLASS_SP, 64));
+      emit_mov(builder, vreg, asm_phys_reg(REG_CLASS_SP, 64));
       emit_instr2(
           builder, ADD, vreg,
           asm_imm(instr->u.local.stack_offset + builder->curr_sp_diff));
@@ -184,7 +189,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
         break;
       default: UNREACHABLE;
       }
-      emit_instr2(builder, MOV, temp_vreg, asm_value(builder, ptr));
+      emit_mov(builder, temp_vreg, asm_value(builder, ptr));
       emit_instr2(builder, ADD, temp_vreg, asm_imm(offset));
 
       return temp_vreg;
@@ -226,12 +231,12 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
       u32 vreg = new_vreg(builder);
       AsmValue vreg64 = asm_vreg(vreg, 64);
       if (arg_class->u.mem.remains_in_memory) {
-        emit_instr2(builder, MOV, vreg64, asm_phys_reg(REG_CLASS_BP, 64));
+        emit_mov(builder, vreg64, asm_phys_reg(REG_CLASS_BP, 64));
         emit_instr2(builder, ADD, vreg64, bp_offset);
         return vreg64;
       } else {
-        emit_instr2(
-            builder, MOV, vreg64,
+        emit_mov(
+            builder, vreg64,
             asm_deref(asm_offset_reg(REG_CLASS_BP, 64, bp_offset.u.constant)));
         return asm_vreg(vreg, size_of_ir_type(value.type) * 8);
       }
@@ -267,7 +272,7 @@ static AsmValue maybe_move_const_to_reg(
     // to a register here.
     AsmValue const_spill = asm_vreg(new_vreg(builder), 64);
 
-    emit_instr2(builder, MOV, const_spill, asm_value);
+    emit_mov(builder, const_spill, asm_value);
 
     const_spill.u.reg.width = other_operand_width;
     return const_spill;
@@ -423,7 +428,7 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
   AsmValue target = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
   assign_vreg(instr, target);
 
-  emit_instr2(builder, MOV, target, lhs);
+  emit_mov(builder, target, lhs);
   emit_instr2(
       builder, op, target,
       maybe_move_const_to_reg(
@@ -448,8 +453,8 @@ static void handle_phi_nodes(
          phi_param_index++) {
       IrPhiParam *param = instr->u.phi.params + phi_param_index;
       if (param->block == src_block) {
-        emit_instr2(
-            builder, MOV,
+        emit_mov(
+            builder,
             asm_vreg(instr->vreg_number, size_of_ir_type(instr->type) * 8),
             asm_value(builder, param->value));
 
@@ -572,7 +577,7 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
           AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
           assign_vreg(instr, temp_vreg);
 
-          emit_instr2(builder, MOV, temp_vreg, asm_symbol(reg_offset.u.symbol));
+          emit_mov(builder, temp_vreg, asm_symbol(reg_offset.u.symbol));
           return (AsmValue){
               .t = ASM_VALUE_OFFSET_REGISTER,
               .u.offset_register.reg = temp_vreg.u.reg,
@@ -595,7 +600,7 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
       AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
       assign_vreg(instr, temp_vreg);
 
-      emit_instr2(builder, MOV, temp_vreg, inner);
+      emit_mov(builder, temp_vreg, inner);
       emit_instr2(builder, ADD, temp_vreg, asm_imm(offset));
 
       return asm_value(builder, pointer);
@@ -685,9 +690,8 @@ static void asm_gen_instr(
     IrType *return_type = ir_global->type.u.function.return_type;
     assert(return_type->t == IR_INT || return_type->t == IR_POINTER);
 
-    emit_instr2(
-        builder, MOV,
-        asm_phys_reg(REG_CLASS_A, size_of_ir_type(*return_type) * 8),
+    emit_mov(
+        builder, asm_phys_reg(REG_CLASS_A, size_of_ir_type(*return_type) * 8),
         asm_value(builder, arg));
     emit_instr1(builder, JMP, asm_symbol(builder->ret_label));
 
@@ -755,7 +759,7 @@ static void asm_gen_instr(
       // @TODO: Use maybe_move_const_to_reg instead?
       if (size_of_ir_type(type) == 8) {
         AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
-        emit_instr2(builder, MOV, temp_vreg, value);
+        emit_mov(builder, temp_vreg, value);
         value = temp_vreg;
 
         break;
@@ -782,7 +786,7 @@ static void asm_gen_instr(
           REG_CLASS_IP, 64, asm_const_symbol(ir_pointer.u.global->asm_symbol));
       emit_instr2(builder, MOV, asm_deref(rip_relative_addr), value);
     } else {
-      emit_instr2(builder, MOV, asm_deref(pointer), value);
+      emit_mov(builder, asm_deref(pointer), value);
     }
 
     break;
@@ -798,9 +802,9 @@ static void asm_gen_instr(
     if (ir_pointer.t == IR_VALUE_GLOBAL) {
       AsmValue rip_relative_addr = asm_offset_reg(
           REG_CLASS_IP, 64, asm_const_symbol(ir_pointer.u.global->asm_symbol));
-      emit_instr2(builder, MOV, target, asm_deref(rip_relative_addr));
+      emit_mov(builder, target, asm_deref(rip_relative_addr));
     } else {
-      emit_instr2(builder, MOV, target, asm_deref(pointer));
+      emit_mov(builder, target, asm_deref(pointer));
     }
 
     break;
@@ -815,7 +819,7 @@ static void asm_gen_instr(
       assign_vreg(instr, vreg);
 
       // Implicit zero-extending of MOV 32 -> 32
-      emit_instr2(builder, MOV, vreg, asm_value(builder, instr->u.arg));
+      emit_mov(builder, vreg, asm_value(builder, instr->u.arg));
     } else {
       AsmValue vreg = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
       assign_vreg(instr, vreg);
@@ -929,8 +933,8 @@ static void asm_gen_instr(
       case ARG_CLASS_REG: {
         AsmValue arg_target_reg =
             pre_alloced_vreg(builder, arg_class->u.reg.reg, 64);
-        emit_instr2(builder, MOV, arg_target_reg, arg);
         *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
+        emit_mov(builder, arg_target_reg, arg);
         VReg *vreg = ARRAY_REF(
             &builder->virtual_registers, VReg, *ARRAY_LAST(&arg_vregs, u32));
         vreg->live_range_start = builder->current_block->size - 1;
@@ -952,10 +956,10 @@ static void asm_gen_instr(
           // Need a temp vreg to do an 8-byte store into memory.
           AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
 
-          emit_instr2(builder, MOV, temp_vreg, arg);
-          emit_instr2(
-              builder, MOV,
-              asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)), temp_vreg);
+          emit_mov(builder, temp_vreg, arg);
+          emit_mov(
+              builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)),
+              temp_vreg);
         } else {
           // @TODO: This is essentially a bad open-coding of memcpy.
           // Adding a call to memcpy would be really awkward since
@@ -974,7 +978,7 @@ static void asm_gen_instr(
             // fallthrough
           default: {
             AsmValue src_vreg = asm_vreg(new_vreg(builder), 64);
-            emit_instr2(builder, MOV, src_vreg, arg);
+            emit_mov(builder, src_vreg, arg);
 
             src = src_vreg.u.reg;
             break;
@@ -986,30 +990,28 @@ static void asm_gen_instr(
           u32 i = 0;
           for (; to_copy - i >= 8; i += 8) {
             AsmConst offset = asm_const_imm(location.u.immediate + i);
-            emit_instr2(
-                builder, MOV, asm_vreg(temp_vreg, 64),
+            emit_mov(
+                builder, asm_vreg(temp_vreg, 64),
                 asm_deref((AsmValue){
                     .t = ASM_VALUE_OFFSET_REGISTER,
                     .u.offset_register.reg = src,
                     .u.offset_register.offset = asm_const_imm(i),
                 }));
-            emit_instr2(
-                builder, MOV,
-                asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+            emit_mov(
+                builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
                 asm_vreg(temp_vreg, 64));
           }
           for (; i < to_copy; i++) {
             AsmConst offset = asm_const_imm(location.u.immediate + i);
-            emit_instr2(
-                builder, MOV, asm_vreg(temp_vreg, 64),
+            emit_mov(
+                builder, asm_vreg(temp_vreg, 64),
                 asm_deref((AsmValue){
                     .t = ASM_VALUE_OFFSET_REGISTER,
                     .u.offset_register.reg = src,
                     .u.offset_register.offset = asm_const_imm(i),
                 }));
-            emit_instr2(
-                builder, MOV,
-                asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+            emit_mov(
+                builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
                 asm_vreg(temp_vreg, 8));
           }
         }
@@ -1030,8 +1032,7 @@ static void asm_gen_instr(
     //
     // @TODO: Once we pass args in vector registers, set al appropriately.
     if (gen_new_call_seq) {
-      emit_instr2(
-          builder, MOV, pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_imm(0));
+      emit_mov(builder, pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_imm(0));
 
       // Done with call_seq now
       free(call_seq.arg_classes);
@@ -1062,7 +1063,7 @@ static void asm_gen_instr(
       // might overlap another case where we need to use RAX.
       AsmValue rax_vreg = pre_alloced_vreg(builder, REG_CLASS_A, 64);
       AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
-      emit_instr2(builder, MOV, temp_vreg, rax_vreg);
+      emit_mov(builder, temp_vreg, rax_vreg);
 
       assign_vreg(instr, temp_vreg);
     }
@@ -1080,7 +1081,7 @@ static void asm_gen_instr(
     assign_vreg(instr, vreg);
     AsmValue arg = asm_value(builder, instr->u.arg);
 
-    emit_instr2(builder, MOV, vreg, arg);
+    emit_mov(builder, vreg, arg);
     emit_instr1(builder, NOT, vreg);
 
     break;
@@ -1093,7 +1094,7 @@ static void asm_gen_instr(
     assign_vreg(instr, vreg);
     AsmValue arg = asm_value(builder, instr->u.arg);
 
-    emit_instr2(builder, MOV, vreg, arg);
+    emit_mov(builder, vreg, arg);
     emit_instr1(builder, NEG, vreg);
 
     break;
@@ -1111,7 +1112,7 @@ static void asm_gen_instr(
 
     AsmValue target = asm_vreg(new_vreg(builder), width);
     assign_vreg(instr, target);
-    emit_instr2(builder, MOV, target, shiftee);
+    emit_mov(builder, target, shiftee);
 
     switch (shift_amount.t) {
     case ASM_VALUE_CONST: emit_instr2(builder, op, target, shift_amount); break;
@@ -1121,8 +1122,8 @@ static void asm_gen_instr(
       Register shift_amount_low = shift_amount.u.reg;
       shift_amount_low.width = 8;
 
-      emit_instr2(
-          builder, MOV, reg_cl,
+      emit_mov(
+          builder, reg_cl,
           (AsmValue){
               .t = ASM_VALUE_REGISTER,
               .u.reg = shift_amount_low,
@@ -1149,7 +1150,7 @@ static void asm_gen_instr(
     AsmValue factor2 = asm_value(builder, instr->u.binary_op.arg2);
 
     if (factor1.t != ASM_VALUE_CONST && factor2.t != ASM_VALUE_CONST) {
-      emit_instr2(builder, MOV, vreg, factor1);
+      emit_mov(builder, vreg, factor1);
       emit_instr2(builder, IMUL, vreg, factor2);
     } else {
       AsmValue const_arg;
@@ -1179,13 +1180,13 @@ static void asm_gen_instr(
     AsmValue reg_denominator = denominator;
     if (denominator.t == ASM_VALUE_CONST) {
       reg_denominator = asm_vreg(new_vreg(builder), width);
-      emit_instr2(builder, MOV, reg_denominator, denominator);
+      emit_mov(builder, reg_denominator, denominator);
     }
 
     // @TODO: Precompute liveness.
     AsmValue quotient = pre_alloced_vreg(builder, REG_CLASS_A, width);
     AsmValue remainder = pre_alloced_vreg(builder, REG_CLASS_D, width);
-    emit_instr2(builder, MOV, quotient, numerator);
+    emit_mov(builder, quotient, numerator);
 
     AsmOp sign_extend_op;
     switch (width) {
@@ -1204,7 +1205,7 @@ static void asm_gen_instr(
 
     AsmValue result = instr->op == OP_DIV ? quotient : remainder;
     AsmValue vreg = asm_vreg(new_vreg(builder), width);
-    emit_instr2(builder, MOV, vreg, result);
+    emit_mov(builder, vreg, result);
     assign_vreg(instr, vreg);
 
     break;
@@ -1215,7 +1216,7 @@ static void asm_gen_instr(
   case OP_CMP: break;
   case OP_BUILTIN_VA_START: {
     AsmValue va_list_ptr = asm_vreg(new_vreg(builder), 64);
-    emit_instr2(builder, MOV, va_list_ptr, asm_value(builder, instr->u.arg));
+    emit_mov(builder, va_list_ptr, asm_value(builder, instr->u.arg));
 
     // Initialise as specified in System V x86-64 section 3.5.7
 
@@ -1230,7 +1231,7 @@ static void asm_gen_instr(
     AsmValue starting_offset =
         asm_fixed_imm(48 - builder->register_save_area_size, 32);
 
-    emit_instr2(builder, MOV, asm_deref(va_list_ptr), starting_offset);
+    emit_mov(builder, asm_deref(va_list_ptr), starting_offset);
 
     // Skip next_vector_reg_offset since we don't use vector registers for
     // passing arguments yet.
@@ -1240,9 +1241,9 @@ static void asm_gen_instr(
     // Stack args start at the bottom of the previous stack frame, which is
     // always rbp + 16
     AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
-    emit_instr2(builder, MOV, temp_vreg, asm_phys_reg(REG_CLASS_BP, 64));
+    emit_mov(builder, temp_vreg, asm_phys_reg(REG_CLASS_BP, 64));
     emit_instr2(builder, ADD, temp_vreg, asm_imm(16));
-    emit_instr2(builder, MOV, asm_deref(va_list_ptr), temp_vreg);
+    emit_mov(builder, asm_deref(va_list_ptr), temp_vreg);
 
     emit_instr2(builder, ADD, va_list_ptr, asm_imm(8));
 
@@ -1251,10 +1252,9 @@ static void asm_gen_instr(
     // reasons.
     AsmValue register_save_area = asm_vreg(new_vreg(builder), 64);
 
-    emit_instr2(
-        builder, MOV, register_save_area, asm_phys_reg(REG_CLASS_SP, 64));
+    emit_mov(builder, register_save_area, asm_phys_reg(REG_CLASS_SP, 64));
     emit_instr2(builder, SUB, register_save_area, starting_offset);
-    emit_instr2(builder, MOV, asm_deref(va_list_ptr), register_save_area);
+    emit_mov(builder, asm_deref(va_list_ptr), register_save_area);
 
     break;
   }
@@ -1270,7 +1270,7 @@ static void asm_gen_instr(
     AsmValue vreg_64 = asm_vreg(vreg, 64);
 
     emit_instr2(builder, XOR, vreg_64, vreg_64);
-    emit_instr2(builder, MOV, vreg_32, asm_deref(va_list_ptr));
+    emit_mov(builder, vreg_32, asm_deref(va_list_ptr));
     emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_imm(size));
     emit_instr2(builder, ADD, vreg_64, asm_phys_reg(REG_CLASS_BP, 64));
     break;
@@ -1359,8 +1359,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     ArgClass *arg_class = ir_global->call_seq.arg_classes + i;
     if (arg_class->t == ARG_CLASS_REG) {
       u32 vreg_num = new_vreg(builder);
-      emit_instr2(
-          builder, MOV, asm_vreg(vreg_num, 64),
+      emit_mov(
+          builder, asm_vreg(vreg_num, 64),
           asm_phys_reg(arg_class->u.reg.reg, 64));
       arg_class->u.reg.vreg = vreg_num;
 
@@ -1424,9 +1424,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   AsmInstr *prologue_first_instr =
       emit_instr1(builder, PUSH, asm_phys_reg(REG_CLASS_BP, 64));
   prologue_first_instr->label = entry_label;
-  emit_instr2(
-      builder, MOV, asm_phys_reg(REG_CLASS_BP, 64),
-      asm_phys_reg(REG_CLASS_SP, 64));
+  emit_mov(
+      builder, asm_phys_reg(REG_CLASS_BP, 64), asm_phys_reg(REG_CLASS_SP, 64));
   u32 temp_regs_bitset = used_callee_save_regs_bitset;
   while (temp_regs_bitset != 0) {
     RegClass reg = lowest_set_bit(temp_regs_bitset);
@@ -1471,8 +1470,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     for (u32 i = num_reg_args; i < STATIC_ARRAY_LENGTH(argument_registers);
          i++) {
       AsmConst offset = asm_const_imm((i - num_reg_args) * 8);
-      emit_instr2(
-          builder, MOV, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+      emit_mov(
+          builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
           asm_phys_reg(argument_registers[i], 64));
     }
   }
