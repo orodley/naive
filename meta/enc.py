@@ -46,9 +46,9 @@ def generate_encoder(input_filename, output_filename):
             args = instr_components[1:]
 
             if len(args) >= 2:
-                if args[1].startswith("r/m"):
+                if "/m" in args[1]:
                     arg_order = "RM"
-                elif args[0].startswith("r/m"):
+                elif "/m" in args[0]:
                     arg_order = "MR"
             else:
                 arg_order = "INVALID"
@@ -302,6 +302,28 @@ def arg_conditions(args):
                     + " && !{0}.is_deref)"
                 ).format(arg_str, width)
             )
+        elif arg.startswith("xmm"):
+            if "/m" in arg:
+                width = arg[-2:]
+                check_width(width)
+                ext_width = width
+                conditions.append(
+                    (
+                        "(({0}.t == ASM_VALUE_REGISTER"
+                        + " && {0}.u.reg.width == 128"
+                        + " && !{0}.is_deref)"
+                        + " || ({0}.is_deref"
+                        + " && {0}.u.reg.width == 64))"
+                    ).format(arg_str)
+                )
+            else:
+                conditions.append(
+                    (
+                        "({0}.t == ASM_VALUE_REGISTER"
+                        + " && {0}.u.reg.width == 128"
+                        + " && !{0}.is_deref)"
+                    ).format(arg_str)
+                )
         elif arg.startswith("imm"):
             width = arg[3:]
             check_width(width)
