@@ -206,6 +206,10 @@ typedef struct AsmSymbol
   u32 offset;
   u32 size;
 
+  // Can be NULL if there's no corresponding IR global, e.g. for automatically
+  // generated temporaries.
+  struct IrGlobal *ir_global;
+
   // Used for asm_gen
   struct Pred *pred;
 } AsmSymbol;

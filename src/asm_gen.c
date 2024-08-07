@@ -31,6 +31,17 @@ void free_asm_builder(AsmBuilder *builder)
     array_free(&builder->float_virtual_registers);
 }
 
+AsmSymbol *add_asm_symbol(AsmBuilder *builder)
+{
+  Array(AsmSymbol *) *symbols = &builder->asm_module.symbols;
+  AsmSymbol *asm_symbol =
+      pool_alloc(&builder->asm_module.pool, sizeof *asm_symbol);
+  ZERO_STRUCT(asm_symbol);
+  *ARRAY_APPEND(symbols, AsmSymbol *) = asm_symbol;
+
+  return asm_symbol;
+}
+
 AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 {
   AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
@@ -1637,7 +1648,6 @@ void generate_asm_module(AsmBuilder *builder, IrModule *module)
   for (u32 i = 0; i < module->globals.size; i++) {
     IrGlobal *ir_global = *ARRAY_REF(&module->globals, IrGlobal *, i);
 
-    Array(AsmSymbol *) *symbols = &asm_module->symbols;
     AsmSymbolSection section;
     if (ir_global->initializer == NULL) {
       section = UNKNOWN_SECTION;
@@ -1649,10 +1659,9 @@ void generate_asm_module(AsmBuilder *builder, IrModule *module)
       section = DATA_SECTION;
     }
 
-    AsmSymbol *asm_symbol = pool_alloc(&asm_module->pool, sizeof *asm_symbol);
-    ZERO_STRUCT(asm_symbol);
-    *ARRAY_APPEND(symbols, AsmSymbol *) = asm_symbol;
+    AsmSymbol *asm_symbol = add_asm_symbol(builder);
     ir_global->asm_symbol = asm_symbol;
+    asm_symbol->ir_global = ir_global;
 
     u32 name_len = strlen(ir_global->name);
     char *name_copy = pool_alloc(&builder->asm_module.pool, name_len + 1);
@@ -1682,10 +1691,12 @@ void generate_asm_module(AsmBuilder *builder, IrModule *module)
     }
   }
 
-  for (u32 i = 0; i < module->globals.size; i++) {
-    IrGlobal *ir_global = *ARRAY_REF(&module->globals, IrGlobal *, i);
-    AsmSymbol *asm_symbol = ir_global->asm_symbol;
+  for (u32 i = 0; i < asm_module->symbols.size; i++) {
+    AsmSymbol *asm_symbol = *ARRAY_REF(&asm_module->symbols, AsmSymbol *, i);
     if (!asm_symbol->defined) continue;
+
+    IrGlobal *ir_global = asm_symbol->ir_global;
+    if (ir_global == NULL) continue;
 
     IrConst *konst = ir_global->initializer;
     if (ir_global->type.t == IR_FUNCTION) {
