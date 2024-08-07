@@ -762,7 +762,7 @@ static void asm_gen_instr(
 
     break;
   }
-  case OP_BRANCH:
+  case OP_JUMP:
     handle_phi_nodes(builder, curr_block, instr->u.target_block);
     emit_instr1(builder, JMP, asm_symbol(instr->u.target_block->label));
     break;

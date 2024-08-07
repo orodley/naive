@@ -66,7 +66,7 @@ IrModule ir_gen(ASTToplevel *toplevel)
   // @TODO: Do this once per function and reset size to 0 afterwards.
   for (u32 i = 0; i < ctx.goto_fixups.size; i++) {
     GotoFixup *fixup = ARRAY_REF(&ctx.goto_fixups, GotoFixup, i);
-    assert(fixup->instr->op == OP_BRANCH);
+    assert(fixup->instr->op == OP_JUMP);
     assert(fixup->instr->u.target_block == NULL);
 
     for (u32 j = 0; j < ctx.goto_labels.size; j++) {

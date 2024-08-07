@@ -269,7 +269,7 @@ static void dump_instr(IrInstr *instr)
     fputs(", ", stdout);
     dump_ir_type(instr->type);
     break;
-  case OP_BRANCH: dump_block_name(instr->u.target_block); break;
+  case OP_JUMP: dump_block_name(instr->u.target_block); break;
   case OP_COND:
     dump_value(instr->u.cond.condition);
     fputs(", ", stdout);
@@ -451,7 +451,7 @@ static IrInstr *append_instr(IrBuilder *builder)
 IrInstr *build_branch(IrBuilder *builder, IrBlock *block)
 {
   IrInstr *instr = append_instr(builder);
-  instr->op = OP_BRANCH;
+  instr->op = OP_JUMP;
   instr->type = (IrType){.t = IR_VOID};
   instr->u.target_block = block;
 
@@ -481,7 +481,7 @@ static bool constant_foldable(IrOp op)
   case OP_STORE:
   case OP_CAST:
   case OP_RET:
-  case OP_BRANCH:
+  case OP_JUMP:
   case OP_COND:
   case OP_CALL:
   case OP_ZEXT:

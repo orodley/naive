@@ -161,7 +161,7 @@ typedef struct IrValue
       X(OP_NEG), X(OP_SHL), X(OP_SHR), X(OP_MUL), X(OP_DIV), X(OP_MOD),     \
       X(OP_ADD), X(OP_SUB), X(OP_CMP), X(OP_CALL), X(OP_CAST), X(OP_ZEXT),  \
       X(OP_SEXT), X(OP_TRUNC), X(OP_FIELD), X(OP_LOAD), X(OP_STORE),        \
-      X(OP_LOCAL), X(OP_RET), X(OP_RET_VOID), X(OP_BRANCH), X(OP_COND),     \
+      X(OP_LOCAL), X(OP_RET), X(OP_RET_VOID), X(OP_JUMP), X(OP_COND),       \
       X(OP_PHI), X(OP_BUILTIN_VA_START), X(OP_BUILTIN_VA_ARG),
 
 #define X(x) x
