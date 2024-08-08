@@ -32,10 +32,7 @@ typedef struct AsmBuilder
   Array(AsmInstr) *current_block;
   AsmSymbol *ret_label;
 
-  // @TODO: Not sure I like having two different classes of vreg, rather than
-  // just one with the field on VReg differentiating them.
-  Array(VReg) int_virtual_registers;
-  Array(VReg) float_virtual_registers;
+  Array(VReg) virtual_registers;
   u32 local_stack_usage;
   u32 register_save_area_size;
   u32 curr_sp_diff;

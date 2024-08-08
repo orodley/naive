@@ -41,6 +41,31 @@ static RegClass float_alloc_index_to_reg[] = {FLOAT_ALLOCATION_ORDER};
 static u32 float_reg_to_alloc_index[] = {FLOAT_ALLOCATION_ORDER};
 #undef X
 
+typedef struct RegAllocParams
+{
+  u32 allocatable_regs;
+  RegClass *alloc_index_to_reg;
+  u32 *reg_to_alloc_index;
+  RegClass spill_register;
+} RegAllocParams;
+
+static RegAllocParams reg_alloc_params[] = {
+    [REG_TYPE_INTEGER] =
+        {
+            .allocatable_regs = STATIC_ARRAY_LENGTH(int_alloc_index_to_reg),
+            .alloc_index_to_reg = int_alloc_index_to_reg,
+            .reg_to_alloc_index = int_reg_to_alloc_index,
+            .spill_register = INT_SPILL_REGISTER,
+        },
+    [REG_TYPE_FLOAT] =
+        {
+            .allocatable_regs = STATIC_ARRAY_LENGTH(float_alloc_index_to_reg),
+            .alloc_index_to_reg = float_alloc_index_to_reg,
+            .reg_to_alloc_index = float_reg_to_alloc_index,
+            .spill_register = FLOAT_SPILL_REGISTER,
+        },
+};
+
 #define CALLER_SAVE_REGS_BITMASK                                   \
   ((1 << REG_CLASS_A) | (1 << REG_CLASS_DI) | (1 << REG_CLASS_SI)  \
    | (1 << REG_CLASS_D) | (1 << REG_CLASS_C) | (1 << REG_CLASS_R8) \
@@ -54,7 +79,6 @@ typedef struct Pred
   struct Pred *next;
 } Pred;
 
-static void allocate_registers_of_type(AsmBuilder *builder, RegType type);
 static void find_preds(AsmBuilder *builder, Pool *pool);
 static void compute_live_ranges(AsmBuilder *builder, Array(VReg) *vregs);
 static int compare_live_range_start(const void *a, const void *b);
@@ -62,73 +86,28 @@ static bool is_def(AsmInstr *instr, u32 vreg_num, VReg *vreg);
 static bool is_use(AsmInstr *instr, u32 vreg);
 static bool references_vreg(AsmValue value, u32 vreg);
 
+// @TODO: Save all caller save registers that are live across calls.
 void allocate_registers(AsmBuilder *builder)
 {
   Pool preds_pool;
   find_preds(builder, &preds_pool);
-  allocate_registers_of_type(builder, REG_TYPE_INTEGER);
-  allocate_registers_of_type(builder, REG_TYPE_FLOAT);
-  pool_free(&preds_pool);
 
-  for (u32 i = 0; i < builder->int_virtual_registers.size; i++) {
-    VReg *vreg = ARRAY_REF(&builder->int_virtual_registers, VReg, i);
-    assert(vreg->t != UNASSIGNED);
-  }
-  for (u32 i = 0; i < builder->float_virtual_registers.size; i++) {
-    VReg *vreg = ARRAY_REF(&builder->float_virtual_registers, VReg, i);
-    assert(vreg->t != UNASSIGNED);
-  }
-}
+  Array(VReg) *vregs = &builder->virtual_registers;
 
-typedef struct RegAllocParams
-{
-  u32 allocatable_regs;
-  RegClass *alloc_index_to_reg;
-  u32 *reg_to_alloc_index;
-  Array(VReg) *vregs;
-  RegClass spill_register;
-} RegAllocParams;
-
-RegAllocParams int_reg_alloc_params(AsmBuilder *builder)
-{
-  return (RegAllocParams){
-      .allocatable_regs = STATIC_ARRAY_LENGTH(int_alloc_index_to_reg),
-      .alloc_index_to_reg = int_alloc_index_to_reg,
-      .reg_to_alloc_index = int_reg_to_alloc_index,
-      .vregs = &builder->int_virtual_registers,
-      .spill_register = INT_SPILL_REGISTER,
-  };
-}
-
-RegAllocParams float_reg_alloc_params(AsmBuilder *builder)
-{
-  return (RegAllocParams){
-      .allocatable_regs = STATIC_ARRAY_LENGTH(float_alloc_index_to_reg),
-      .alloc_index_to_reg = float_alloc_index_to_reg,
-      .reg_to_alloc_index = float_reg_to_alloc_index,
-      .vregs = &builder->float_virtual_registers,
-      .spill_register = FLOAT_SPILL_REGISTER,
-  };
-}
-
-// @TODO: Save all caller save registers that are live across calls.
-void allocate_registers_of_type(AsmBuilder *builder, RegType type)
-{
-  RegAllocParams params = type == REG_TYPE_INTEGER
-                              ? int_reg_alloc_params(builder)
-                              : float_reg_alloc_params(builder);
-
-  compute_live_ranges(builder, params.vregs);
+  compute_live_ranges(builder, vregs);
 
   Array(AsmInstr) *body = builder->current_block;
 
-  u32 free_regs_bitset;
-  assert(params.allocatable_regs < 8 * sizeof free_regs_bitset);
+  assert(reg_alloc_params[REG_TYPE_INTEGER].allocatable_regs < 8 * sizeof(u32));
+  assert(reg_alloc_params[REG_TYPE_FLOAT].allocatable_regs < 8 * sizeof(u32));
 
   // Start with all regs free
-  free_regs_bitset = (1 << params.allocatable_regs) - 1;
-
-  Array(VReg) *vregs = params.vregs;
+  u32 free_regs_bitsets[] = {
+      [REG_TYPE_INTEGER] =
+          (1 << reg_alloc_params[REG_TYPE_INTEGER].allocatable_regs) - 1,
+      [REG_TYPE_FLOAT] =
+          (1 << reg_alloc_params[REG_TYPE_FLOAT].allocatable_regs) - 1,
+  };
 
   // vregs isn't necessarily sorted by live range start.
   // i.e. if RAX is pre-allocated from a function call and we don't use it
@@ -154,12 +133,12 @@ void allocate_registers_of_type(AsmBuilder *builder, RegType type)
       live_ranges, num_live_ranges, sizeof *live_ranges,
       compare_live_range_start);
 
-  u32 *reg_to_alloc_index = params.reg_to_alloc_index;
-  u32 *alloc_index_to_reg = params.alloc_index_to_reg;
   Array(VReg *) active_vregs;
   ARRAY_INIT(&active_vregs, VReg *, 16);
   for (u32 i = 0; i < num_live_ranges; i++) {
     VReg *vreg = live_ranges[i];
+    RegAllocParams params = reg_alloc_params[vreg->type];
+    u32 *free_regs_bitset = &free_regs_bitsets[vreg->type];
 
     while (active_vregs.size != 0) {
       VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, 0);
@@ -168,8 +147,9 @@ void allocate_registers_of_type(AsmBuilder *builder, RegType type)
       switch (active_vreg->t) {
       case UNASSIGNED: UNREACHABLE;
       case IN_REG: {
-        u32 alloc_index = reg_to_alloc_index[active_vreg->u.assigned_register];
-        free_regs_bitset |= 1 << alloc_index;
+        u32 alloc_index =
+            params.reg_to_alloc_index[active_vreg->u.assigned_register];
+        *free_regs_bitset |= 1 << alloc_index;
         break;
       }
       case ON_STACK:
@@ -188,10 +168,11 @@ void allocate_registers_of_type(AsmBuilder *builder, RegType type)
         vreg->u.assigned_stack_slot = builder->local_stack_usage;
         builder->local_stack_usage += 8;
       } else {
-        u32 first_free_alloc_index = lowest_set_bit(free_regs_bitset);
+        u32 first_free_alloc_index = lowest_set_bit(*free_regs_bitset);
         vreg->t = IN_REG;
-        vreg->u.assigned_register = alloc_index_to_reg[first_free_alloc_index];
-        free_regs_bitset &= ~(1 << first_free_alloc_index);
+        vreg->u.assigned_register =
+            params.alloc_index_to_reg[first_free_alloc_index];
+        *free_regs_bitset &= ~(1 << first_free_alloc_index);
       }
     } else {
       // This register has already been assigned, e.g. part of a call
@@ -200,8 +181,8 @@ void allocate_registers_of_type(AsmBuilder *builder, RegType type)
       assert(vreg->t == IN_REG);
       assert(vreg->pre_alloced);
 
-      u32 alloc_index = reg_to_alloc_index[vreg->u.assigned_register];
-      if ((free_regs_bitset & (1 << alloc_index)) == 0) {
+      u32 alloc_index = params.reg_to_alloc_index[vreg->u.assigned_register];
+      if ((*free_regs_bitset & (1 << alloc_index)) == 0) {
         // Already allocated to something else. We need to spill the
         // existing value, because we're pre-alloced and we need this
         // specific register.
@@ -228,7 +209,7 @@ void allocate_registers_of_type(AsmBuilder *builder, RegType type)
         existing->u.assigned_stack_slot = builder->local_stack_usage;
         builder->local_stack_usage += 8;
       } else {
-        free_regs_bitset &= ~(1 << alloc_index);
+        *free_regs_bitset &= ~(1 << alloc_index);
       }
     }
 
@@ -308,7 +289,7 @@ void allocate_registers_of_type(AsmBuilder *builder, RegType type)
   if (flag_dump_register_assignments) {
     for (u32 i = 0; i < vregs->size; i++) {
       VReg *vreg = ARRAY_REF(vregs, VReg, i);
-      printf("#%u%c =", i, type == REG_TYPE_INTEGER ? 'i' : 'f');
+      printf("#%u%c =", i, vreg->type == REG_TYPE_INTEGER ? 'i' : 'f');
       switch (vreg->t) {
       case IN_REG: printf(" (%d)\n", vreg->u.assigned_register); break;
       case ON_STACK: printf(" [%d]\n", vreg->u.assigned_stack_slot); break;
@@ -331,13 +312,14 @@ void allocate_registers_of_type(AsmBuilder *builder, RegType type)
       curr_sp_diff += c.u.immediate;
     }
 
-    RegClass spill_register = params.spill_register;
     for (u32 j = 0; j < instr->arity; j++) {
       AsmValue *arg = instr->args + j;
       Register *reg = value_reg(arg);
       if (reg == NULL) continue;
       if (reg->t != V_REG) continue;
-      if (reg->u.vreg.type != type) continue;
+
+      RegClass spill_register =
+          reg_alloc_params[reg->u.vreg.type].spill_register;
 
       u32 vreg_number = reg->u.vreg.number;
       VReg *vreg = ARRAY_REF(vregs, VReg, vreg_number);
@@ -377,6 +359,8 @@ void allocate_registers_of_type(AsmBuilder *builder, RegType type)
       }
     }
   }
+
+  pool_free(&preds_pool);
 }
 
 // Liveness is a backwards analysis, so we need access to predecessors for
