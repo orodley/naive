@@ -188,7 +188,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
     AsmValue rip_relative_addr =
         asm_offset_reg(REG_CLASS_IP, 64, asm_const_symbol(symbol));
     AsmValue vreg = asm_vreg(new_vreg(builder), 128);
-    if (size_of_ir_type(value.type) == 32) {
+    if (size_of_ir_type(value.type) == 4) {
       emit_instr2(builder, MOVSS, vreg, asm_deref(rip_relative_addr));
     } else {
       emit_instr2(builder, MOVSD, vreg, asm_deref(rip_relative_addr));
