@@ -110,7 +110,7 @@ static void add_dep(AsmInstr *instr, AsmValue dep)
   assert(dep.t == ASM_VALUE_REGISTER);
   assert(dep.u.reg.t == V_REG);
 
-  instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg.number;
+  instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg_number;
 }
 
 static u32 new_vreg(AsmBuilder *builder)
@@ -149,7 +149,7 @@ static AsmValue assign_vreg(IrInstr *instr, AsmValue vreg)
   assert(vreg.t == ASM_VALUE_REGISTER);
   assert(vreg.u.reg.t == V_REG);
 
-  instr->vreg_number = vreg.u.reg.u.vreg.number;
+  instr->vreg_number = vreg.u.reg.u.vreg_number;
   return vreg;
 }
 
@@ -918,7 +918,7 @@ static void asm_gen_instr(
     // version of the register.
     if (value.t == ASM_VALUE_REGISTER) {
       assert(value.u.reg.t == V_REG);
-      instr->vreg_number = value.u.reg.u.vreg.number;
+      instr->vreg_number = value.u.reg.u.vreg_number;
     } else {
       UNIMPLEMENTED;
     }
@@ -1005,7 +1005,7 @@ static void asm_gen_instr(
         AsmValue arg_target_reg =
             pre_alloced_vreg(builder, arg_class->u.reg.reg, 64);
         emit_mov(builder, arg_target_reg, arg);
-        *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg.number;
+        *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
         VReg *vreg = ARRAY_REF(
             &builder->virtual_registers, VReg, *ARRAY_LAST(&arg_vregs, u32));
         vreg->live_range_start = builder->current_block->size - 1;

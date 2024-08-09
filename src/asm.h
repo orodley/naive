@@ -59,12 +59,8 @@ typedef struct Register
 
   union
   {
-    struct
-    {
-      RegType type;
-      u32 number;
-    } vreg;
     RegClass class;
+    u32 vreg_number;
   } u;
 } Register;
 

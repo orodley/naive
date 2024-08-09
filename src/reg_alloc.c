@@ -322,7 +322,7 @@ void allocate_registers(AsmBuilder *builder)
       RegClass spill_register =
           reg_alloc_params[reg->u.vreg.type].spill_register;
 
-      u32 vreg_number = reg->u.vreg.number;
+      u32 vreg_number = reg->u.vreg_number;
       VReg *vreg = ARRAY_REF(vregs, VReg, vreg_number);
 
       switch (vreg->t) {
@@ -671,5 +671,5 @@ bool references_vreg(AsmValue value, u32 vreg)
   default: return false;
   }
 
-  return reg.t == V_REG && reg.u.vreg.number == vreg;
+  return reg.t == V_REG && reg.u.vreg_number == vreg;
 }
