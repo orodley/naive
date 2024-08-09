@@ -147,6 +147,7 @@ void allocate_registers(AsmBuilder *builder)
       switch (active_vreg->t) {
       case UNASSIGNED: UNREACHABLE;
       case IN_REG: {
+        RegAllocParams params = reg_alloc_params[active_vreg->type];
         u32 alloc_index =
             params.reg_to_alloc_index[active_vreg->u.assigned_register];
         *free_regs_bitset |= 1 << alloc_index;
