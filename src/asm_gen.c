@@ -124,6 +124,17 @@ static u32 new_vreg(AsmBuilder *builder)
   return builder->virtual_registers.size - 1;
 }
 
+static u32 new_float_vreg(AsmBuilder *builder)
+{
+  VReg *vreg = ARRAY_APPEND(&builder->virtual_registers, VReg);
+  vreg->t = UNASSIGNED;
+  vreg->type = REG_TYPE_FLOAT;
+  vreg->live_range_start = vreg->live_range_end = -1;
+  vreg->pre_alloced = false;
+
+  return builder->virtual_registers.size - 1;
+}
+
 // @TODO: We could use the return value to rewrite some stuff of the form:
 // AsmValue vreg = ...;
 // assign_vreg(instr, vreg);
@@ -187,7 +198,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 
     AsmValue rip_relative_addr =
         asm_offset_reg(REG_CLASS_IP, 64, asm_const_symbol(symbol));
-    AsmValue vreg = asm_vreg(new_vreg(builder), 128);
+    AsmValue vreg = asm_vreg(new_float_vreg(builder), 128);
     if (size_of_ir_type(value.type) == 4) {
       emit_instr2(builder, MOVSS, vreg, asm_deref(rip_relative_addr));
     } else {
