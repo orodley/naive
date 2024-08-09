@@ -93,12 +93,41 @@ AsmInstr *emit_instr3(
   return instr;
 }
 
+static bool asm_value_is_float(AsmBuilder *builder, AsmValue v)
+{
+  if (v.is_deref || v.t != ASM_VALUE_REGISTER) return false;
+
+  Register r = v.u.reg;
+  if (r.t == PHYS_REG) return r.width == 128;
+  assert(r.t == V_REG);
+
+  VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, r.u.vreg_number);
+  return vreg->type == REG_TYPE_FLOAT;
+}
+
 AsmInstr *emit_mov(AsmBuilder *builder, AsmValue dest, AsmValue src)
 {
+  if (dest.t == ASM_VALUE_CONST) {
+    assert(!"Bad MOV! Can't move into a constant");
+  }
   if (dest.t == ASM_VALUE_REGISTER && src.t == ASM_VALUE_REGISTER
       && dest.u.reg.width != src.u.reg.width && !dest.is_deref
       && !src.is_deref) {
     assert(!"Bad MOV! Registers are different sizes.");
+  }
+
+  bool dest_is_float = asm_value_is_float(builder, dest);
+  bool src_is_float = asm_value_is_float(builder, src);
+  if (dest_is_float ^ src_is_float) {
+    u8 value_width;
+    if (dest_is_float)
+      value_width = dest.u.reg.value_width;
+    else
+      value_width = src.u.reg.value_width;
+
+    if (value_width == 32) return emit_instr2(builder, MOVSS, dest, src);
+    if (value_width == 64) return emit_instr2(builder, MOVSD, dest, src);
+    UNIMPLEMENTED;
   }
 
   return emit_instr2(builder, MOV, dest, src);
@@ -165,6 +194,26 @@ static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
   return asm_vreg(vreg_number, width);
 }
 
+static AsmValue asm_vreg_of_type(u32 vreg_number, IrType type)
+{
+  if (type.t == IR_FLOAT) {
+    return asm_float_vreg(vreg_number, size_of_ir_type(type) * 8);
+  }
+  assert(type.t == IR_INT || type.t == IR_POINTER);
+  return asm_vreg(vreg_number, size_of_ir_type(type) * 8);
+}
+
+static AsmValue new_asm_vreg_of_type(AsmBuilder *builder, IrType type)
+{
+  u32 vreg_number;
+  if (type.t == IR_FLOAT) {
+    vreg_number = new_float_vreg(builder);
+  } else {
+    vreg_number = new_vreg(builder);
+  }
+  return asm_vreg_of_type(vreg_number, type);
+}
+
 static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr);
 
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
@@ -198,12 +247,9 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 
     AsmValue rip_relative_addr =
         asm_offset_reg(REG_CLASS_IP, 64, asm_const_symbol(symbol));
-    AsmValue vreg = asm_vreg(new_float_vreg(builder), 128);
-    if (size_of_ir_type(value.type) == 4) {
-      emit_instr2(builder, MOVSS, vreg, asm_deref(rip_relative_addr));
-    } else {
-      emit_instr2(builder, MOVSD, vreg, asm_deref(rip_relative_addr));
-    }
+    AsmValue vreg = asm_float_vreg(
+        new_float_vreg(builder), size_of_ir_type(value.type) * 8);
+    emit_mov(builder, vreg, asm_deref(rip_relative_addr));
     return vreg;
 
     break;
@@ -270,9 +316,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
     default: {
       i32 vreg_number = instr->vreg_number;
       assert(vreg_number != -1);
-
-      assert(value.type.t == IR_INT || value.type.t == IR_POINTER);
-      return asm_vreg(vreg_number, size_of_ir_type(instr->type) * 8);
+      return asm_vreg_of_type(vreg_number, instr->type);
     }
     }
   }
@@ -865,7 +909,8 @@ static void asm_gen_instr(
   case OP_LOAD: {
     IrValue ir_pointer = instr->u.load.pointer;
     IrType type = instr->u.load.type;
-    AsmValue target = asm_vreg(new_vreg(builder), size_of_ir_type(type) * 8);
+
+    AsmValue target = new_asm_vreg_of_type(builder, type);
     assign_vreg(instr, target);
 
     AsmValue pointer = asm_gen_pointer_instr(builder, ir_pointer);
@@ -1349,8 +1394,8 @@ static void asm_gen_instr(
   }
 }
 
-// We deliberately exclude RBP from this list, as we don't support omitting the
-// frame pointer and so we never use it for register allocation.
+// We deliberately exclude RBP from this list, as we don't support omitting
+// the frame pointer and so we never use it for register allocation.
 static RegClass callee_save_registers[] = {
     REG_CLASS_R15, REG_CLASS_R14, REG_CLASS_R13, REG_CLASS_R12, REG_CLASS_B,
 };

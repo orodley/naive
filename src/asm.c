@@ -68,6 +68,19 @@ AsmValue asm_vreg(u32 vreg_number, u8 width)
       .is_deref = false,
       .t = ASM_VALUE_REGISTER,
       .u.reg.width = width,
+      .u.reg.value_width = width,
+      .u.reg.t = V_REG,
+      .u.reg.u.vreg_number = vreg_number,
+  };
+}
+
+AsmValue asm_float_vreg(u32 vreg_number, u8 width)
+{
+  return (AsmValue){
+      .is_deref = false,
+      .t = ASM_VALUE_REGISTER,
+      .u.reg.width = 128,
+      .u.reg.value_width = width,
       .u.reg.t = V_REG,
       .u.reg.u.vreg_number = vreg_number,
   };

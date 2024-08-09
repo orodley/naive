@@ -49,7 +49,13 @@ typedef enum RegType
 
 typedef struct Register
 {
+  // The physical width of the register.
   u8 width;
+
+  // The width of the value stored within. Will be equal to width for all
+  // integer values, but for floats the physical width will be 128 (XMM
+  // register), while this is 32, 64, or 80.
+  u8 value_width;
 
   enum
   {
@@ -256,6 +262,7 @@ AsmConst asm_const_fixed_imm(u64 value, u32 width);
 AsmConst asm_const_symbol(AsmSymbol *symbol);
 
 AsmValue asm_vreg(u32 vreg_number, u8 width);
+AsmValue asm_float_vreg(u32 vreg_number, u8 width);
 AsmValue asm_phys_reg(RegClass reg, u8 width);
 AsmValue asm_offset_reg(RegClass reg, u8 width, AsmConst offset);
 AsmValue asm_imm(u64 value);
