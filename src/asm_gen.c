@@ -1468,9 +1468,17 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   }
 
   if (flag_print_pre_regalloc_stats) {
+    u32 int_count = 0;
+    u32 float_count = 0;
+    for (u32 i = 0; i < builder->virtual_registers.size; i++) {
+      VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, i);
+      if (vreg->type == REG_TYPE_INTEGER) int_count++;
+      if (vreg->type == REG_TYPE_FLOAT) float_count++;
+    }
+
     printf(
-        "%s: %u instrs, %u vregs\n", ir_global->name, body.size,
-        builder->virtual_registers.size);
+        "%s: %u instrs, %u vregs (%u int, %u float)\n", ir_global->name,
+        body.size, builder->virtual_registers.size, int_count, float_count);
   }
 
   allocate_registers(builder);
