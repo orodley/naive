@@ -458,7 +458,7 @@ def build(build_config):
             "src/syntax/parse.o",
             "src/syntax/preprocess.o",
             "src/syntax/reader.o",
-            "src/syntax/tokenise.o",
+            "src/syntax/lex.o",
             "src/util.o",
         ],
         "src/bin/nas": [

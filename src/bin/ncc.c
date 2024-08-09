@@ -20,9 +20,9 @@
 #include "file.h"
 #include "ir_gen/ir_gen.h"
 #include "misc.h"
+#include "syntax/lex.h"
 #include "syntax/parse.h"
 #include "syntax/preprocess.h"
-#include "syntax/tokenise.h"
 #include "util.h"
 
 int __lsan_is_turned_off(void) { return 1; }
@@ -327,7 +327,7 @@ static int compile_file(
   }
 
   Array(SourceToken) tokens;
-  if (!tokenise(
+  if (!lex(
           &tokens,
           (String){
               .chars = (char *)preprocessed.elements, .len = preprocessed.size},

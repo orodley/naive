@@ -4,7 +4,7 @@
 #include "array.h"
 #include "misc.h"
 #include "pool.h"
-#include "syntax/tokenise.h"
+#include "syntax/lex.h"
 #include "util.h"
 
 typedef struct ParseError

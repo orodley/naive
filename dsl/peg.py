@@ -12,7 +12,7 @@ def generate_parsers(input_filename, output_filename):
     with open(input_filename, "r") as f:
         peg = f.read()
 
-    tokens = tokenise(peg)
+    tokens = lex(peg)
     # pp.pprint(tokens)
 
     named_parsers = []
@@ -25,7 +25,7 @@ def generate_parsers(input_filename, output_filename):
     CWriter(named_parsers).write(input_filename, output_filename)
 
 
-def tokenise(peg):
+def lex(peg):
     i = 0
     tokens = []
     while i != len(peg):

@@ -1,5 +1,5 @@
-#ifndef NAIVE_SYNTAX_TOKENISE_H
-#define NAIVE_SYNTAX_TOKENISE_H
+#ifndef NAIVE_SYNTAX_LEX_H
+#define NAIVE_SYNTAX_LEX_H
 
 #include "array.h"
 #include "diagnostics.h"
@@ -99,7 +99,7 @@ typedef struct SourceToken
 
 extern char *token_type_names[];
 
-bool tokenise(
+bool lex(
     Array(SourceToken) *tokens, String text, Array(Adjustment) *adjustments);
 void dump_token(Token *token);
 

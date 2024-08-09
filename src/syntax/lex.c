@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "syntax/tokenise.h"
+#include "syntax/lex.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -14,23 +14,22 @@
 #include "syntax/reader.h"
 #include "util.h"
 
-typedef struct Tokeniser
+typedef struct Lexer
 {
   Reader reader;
   Array(SourceToken) *tokens;
-} Tokeniser;
+} Lexer;
 
-static Token *append_token(
-    Tokeniser *tokeniser, SourceLoc source_loc, TokenType type)
+static Token *append_token(Lexer *lexer, SourceLoc source_loc, TokenType type)
 {
-  SourceToken *source_token = ARRAY_APPEND(tokeniser->tokens, SourceToken);
+  SourceToken *source_token = ARRAY_APPEND(lexer->tokens, SourceToken);
   source_token->token.t = type;
   source_token->source_loc = source_loc;
 
   return (Token *)source_token;
 }
 
-static bool tokenise_aux(Tokeniser *tokeniser);
+static bool lex_aux(Lexer *lexer);
 static bool read_numeric_literal(Reader *reader, Token *token);
 static void classify_numeric_literal(
     Reader *reader, TokenType *token_type, int *out_radix);
@@ -38,14 +37,14 @@ static Token read_int_literal(Reader *reader, int radix);
 static Token read_float_literal(Reader *reader, int radix);
 static int char_to_digit(char c, int radix);
 
-bool tokenise(
+bool lex(
     Array(SourceToken) *tokens, String text, Array(Adjustment) *adjustments)
 {
   ARRAY_INIT(tokens, SourceToken, 500);
 
-  Tokeniser tokeniser;
-  tokeniser.tokens = tokens;
-  reader_init(&tokeniser.reader, text, *adjustments, false, NULL);
+  Lexer lexer;
+  lexer.tokens = tokens;
+  reader_init(&lexer.reader, text, *adjustments, false, NULL);
 
   // @TODO: It feels like there should be a nicer way of doing this such that
   // we don't need a special case here. Maybe reader_init should do the
@@ -56,10 +55,10 @@ bool tokenise(
   assert(first->location == 0);
   assert(first->type == NORMAL_ADJUSTMENT);
 
-  tokeniser.reader.source_loc = first->new_source_loc;
-  tokeniser.reader.next_adjustment++;
+  lexer.reader.source_loc = first->new_source_loc;
+  lexer.reader.next_adjustment++;
 
-  bool ret = tokenise_aux(&tokeniser);
+  bool ret = lex_aux(&lexer);
 
   // Concatentate adjacent string literals
   u32 dest = 0;
@@ -247,14 +246,14 @@ i64 read_char_in_literal(Reader *reader, SourceLoc *start_source_loc)
   return value;
 }
 
-static bool tokenise_aux(Tokeniser *tokeniser)
+static bool lex_aux(Lexer *lexer)
 {
-  Reader *reader = &tokeniser->reader;
+  Reader *reader = &lexer->reader;
 
   while (!at_end(reader)) {
     SourceLoc start_source_loc = reader->source_loc;
 
-#define ADD_TOK(t) (append_token(tokeniser, start_source_loc, t))
+#define ADD_TOK(t) (append_token(lexer, start_source_loc, t))
 
     switch (read_char(reader)) {
     case '0':
@@ -269,7 +268,7 @@ static bool tokenise_aux(Tokeniser *tokeniser)
     case '9': {
       back_up(reader);
 
-      SourceToken *token = ARRAY_APPEND(tokeniser->tokens, SourceToken);
+      SourceToken *token = ARRAY_APPEND(lexer->tokens, SourceToken);
       if (!read_numeric_literal(reader, (Token *)token)) return false;
       token->source_loc = start_source_loc;
       break;

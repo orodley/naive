@@ -5,7 +5,7 @@
 #ifdef FOO
 int foo
 # ifndef FOO
- @@@ awefawef ' " garbage that doesn't even tokenise
+ @@@ awefawef ' " garbage that doesn't even lex
 # else
 = 3;
 # endif

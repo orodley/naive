@@ -8,9 +8,9 @@
 
 #include "array.h"
 #include "diagnostics.h"
-#include "parse.h"
+#include "syntax/lex.h"
+#include "syntax/parse.h"
 #include "syntax/reader.h"
-#include "tokenise.h"
 #include "util.h"
 
 // @TODO: This whole thing is getting pretty overdue for a rewrite. Doing
@@ -166,7 +166,7 @@ static void skip_whitespace_and_comments_from_reader(
       advance(reader);
 
       // Retain any newlines - we need them in the output so that the
-      // tokeniser can correctly track source location without needing
+      // lexer can correctly track source location without needing
       // an adjustment for every single line in the source.
       if (out_chars != NULL) {
         *ARRAY_APPEND(out_chars, char) = '\n';
@@ -380,7 +380,7 @@ static bool eval_pp_condition(PP *pp, bool *result)
       .new_source_loc = start_source_loc,
       .type = NORMAL_ADJUSTMENT,
   };
-  tokenise(&tokens, STRING(expanded), &adjustments);
+  lex(&tokens, STRING(expanded), &adjustments);
 
   Pool ast_pool;
   pool_init(&ast_pool, 256);
@@ -607,7 +607,7 @@ static bool handle_pp_directive(PP *pp)
       }
 
       // @LEAK: We leak includee_path because it gets attached to
-      // SourceLoc's on tokens created by tokenise_file. Given how little
+      // SourceLoc's on tokens created by preprocess_file. Given how little
       // data this should take up in a given compilation this is probably
       // fine.
 

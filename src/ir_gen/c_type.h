@@ -4,8 +4,8 @@
 #include "array.h"
 #include "ir.h"
 #include "misc.h"
+#include "syntax/lex.h"
 #include "syntax/parse.h"
-#include "syntax/tokenise.h"
 
 typedef enum CKind
 {
