@@ -319,9 +319,6 @@ void allocate_registers(AsmBuilder *builder)
       if (reg == NULL) continue;
       if (reg->t != V_REG) continue;
 
-      RegClass spill_register =
-          reg_alloc_params[reg->u.vreg.type].spill_register;
-
       u32 vreg_number = reg->u.vreg_number;
       VReg *vreg = ARRAY_REF(vregs, VReg, vreg_number);
 
@@ -330,7 +327,8 @@ void allocate_registers(AsmBuilder *builder)
         reg->t = PHYS_REG;
         reg->u.class = vreg->u.assigned_register;
         break;
-      case ON_STACK:
+      case ON_STACK: {
+        RegClass spill_register = reg_alloc_params[vreg->type].spill_register;
         reg->t = PHYS_REG;
         reg->u.class = spill_register;
         // @TODO: Insert all at once, rather than shifting along
@@ -356,6 +354,7 @@ void allocate_registers(AsmBuilder *builder)
             .args[1] = asm_phys_reg(spill_register, 64),
         };
         break;
+      }
       case UNASSIGNED: UNREACHABLE;
       }
     }
