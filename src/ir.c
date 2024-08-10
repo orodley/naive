@@ -265,6 +265,7 @@ static void dump_instr(IrInstr *instr)
   case OP_ZEXT:
   case OP_SEXT:
   case OP_TRUNC:
+  case OP_SINT_TO_FLOAT:
     dump_value(instr->u.arg);
     fputs(", ", stdout);
     dump_ir_type(instr->type);
@@ -693,7 +694,11 @@ IrValue build_type_instr(
   if (ir_type_eq(&value.type, &result_type)) return value;
 
   if (value.t == IR_VALUE_CONST_INT) {
-    return value_const_int(result_type, value.u.const_int);
+    if (result_type.t == IR_INT || result_type.t == IR_POINTER)
+      return value_const_int(result_type, value.u.const_int);
+    if (result_type.t == IR_FLOAT)
+      return value_const_float(result_type, (double)value.u.const_int);
+    UNIMPLEMENTED;
   }
 
   IrInstr *instr = append_instr(builder);
