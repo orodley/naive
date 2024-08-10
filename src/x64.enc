@@ -26,6 +26,9 @@ CMP r/m32, r32         =         39 /r
 CMP r/m64, imm32       = REX.W + 81 /7 id
 CMP r/m64, r64         = REX.W + 39 /r
 
+CVTSI2SS xmm1 r/m32    =         [F3 0F 2A] /r
+CVTSI2SD xmm1 r/m32    =         [F2 0F 2A] /r 
+
 IMUL r32, r/m32        =         [0F AF] /r
 IMUL r32, r/m32, imm32 =         69 /r id
 IMUL r64, r/m64        = REX.W + [0F AF] /r

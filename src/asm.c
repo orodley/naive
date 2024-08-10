@@ -760,6 +760,20 @@ static void encode_instr(
     assert((encoded_instr.rex_prefix & REX_B) == 0);
     encoded_instr.rex_prefix |= REX_B;
   }
+
+  // Done with figuring out the encoding, now lets write it.
+
+  opcode_size = encoded_instr.opcode_size;
+  opcode = encoded_instr.opcode;
+  opcode[0] |= encoded_instr.opcode_extension & 7;
+  if (opcode[0] == 0xF2 || opcode[0] == 0xF3 || opcode[0] == 0x66) {
+    // This is a "mandatory prefix", used with some SIMD instructions. It's
+    // listed as part of the opcode, but it must precede any REX prefix, if
+    // present.
+    write_u8(output, opcode[0]);
+    opcode++;
+    opcode_size--;
+  }
   if (encoded_instr.has_oso) {
     write_u8(output, 0x66);
   }
@@ -767,8 +781,7 @@ static void encode_instr(
     encoded_instr.rex_prefix |= REX_HIGH;
     write_u8(output, encoded_instr.rex_prefix);
   }
-  encoded_instr.opcode[0] |= encoded_instr.opcode_extension & 7;
-  write_bytes(output, encoded_instr.opcode_size, encoded_instr.opcode);
+  write_bytes(output, opcode_size, opcode);
   if (encoded_instr.has_modrm) {
     u8 mod = encoded_instr.mod;
     u8 reg = encoded_instr.reg;
