@@ -549,7 +549,6 @@ static void classify_numeric_literal(
   }
 
   *token_type = TOK_INT_LITERAL;
-  return;
 }
 
 static void skip_digits(Reader *reader, int radix)
