@@ -80,16 +80,29 @@ void do_arithmetic_conversions_with_blocks(
     IrBuilder *builder, Term *left, IrBlock *left_block, Term *right,
     IrBlock *right_block)
 {
-  assert(left->ctype->t == INTEGER_TYPE && right->ctype->t == INTEGER_TYPE);
+  assert(is_arithmetic_type(left->ctype) && is_arithmetic_type(right->ctype));
 
   IrBlock *original_block = builder->current_block;
 
-  if (left->ctype->u.integer.is_signed == right->ctype->u.integer.is_signed) {
-    if (c_type_rank(left->ctype) != c_type_rank(right->ctype)) {
+  int left_is_float = left->ctype->t == FLOAT_TYPE;
+  int right_is_float = right->ctype->t == FLOAT_TYPE;
+  if (left_is_float || right_is_float
+      || left->ctype->u.integer.is_signed
+             == right->ctype->u.integer.is_signed) {
+    int left_type_priority;
+    int right_type_priority;
+    if (left_is_float || right_is_float) {
+      left_type_priority = left_is_float ? left->ctype->u.floatt : -1;
+      right_type_priority = right_is_float ? right->ctype->u.floatt : -1;
+    } else {
+      left_type_priority = c_type_rank(left->ctype);
+      right_type_priority = c_type_rank(right->ctype);
+    }
+    if (left_type_priority != right_type_priority) {
       Term *to_convert;
       CType *conversion_type;
       IrBlock *conversion_block;
-      if (c_type_rank(left->ctype) < c_type_rank(right->ctype)) {
+      if (left_type_priority < right_type_priority) {
         to_convert = left;
         conversion_type = right->ctype;
         conversion_block = left_block;

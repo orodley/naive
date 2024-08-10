@@ -135,4 +135,6 @@ CType *type_of_float_literal(TypeEnv *type_env, FloatLiteral float_literal);
 CType *named_type_specifier_to_ctype(
     TypeEnv *type_env, ASTDeclSpecifier *decl_specifier_list);
 
+bool is_arithmetic_type(CType *type);
+
 #endif

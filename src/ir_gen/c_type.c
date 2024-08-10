@@ -511,3 +511,8 @@ CType *named_type_specifier_to_ctype(
   assert(type != NULL);
   return type;
 }
+
+bool is_arithmetic_type(CType *type)
+{
+  return type->t == INTEGER_TYPE || type->t == FLOAT_TYPE;
+}
