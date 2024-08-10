@@ -428,11 +428,12 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
 
     // @TODO: The rest of the conversions specified in C99 6.5.15.
     CType *result_type = then_term.ctype;
-    if (then_term.ctype->t == INTEGER_TYPE
-        && else_term.ctype->t == INTEGER_TYPE) {
+    if (is_arithmetic_type(then_term.ctype)
+        && is_arithmetic_type(else_term.ctype)) {
       do_arithmetic_conversions_with_blocks(
           builder, &then_term, then_resultant_block, &else_term,
           else_resultant_block);
+      result_type = then_term.ctype;
     } else if (
         then_term.ctype->t == POINTER_TYPE && else_term.ctype->t == POINTER_TYPE
         && (then_term.ctype->u.pointee_type->t == VOID_TYPE
