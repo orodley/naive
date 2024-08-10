@@ -1052,6 +1052,26 @@ static void asm_gen_instr(
     }
     break;
   }
+  case OP_FLOAT_TO_SINT: {
+    assert(instr->type.t == IR_INT);
+    assert(instr->u.arg.type.t == IR_FLOAT);
+
+    AsmValue value = asm_value(builder, instr->u.arg);
+
+    if (instr->u.arg.type.u.float_bits == IR_FLOAT_32) {
+      AsmValue vreg = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
+      assign_vreg(instr, vreg);
+      emit_instr2(builder, CVTSS2SI, vreg, value);
+    } else if (instr->u.arg.type.u.float_bits == IR_FLOAT_64) {
+      AsmValue vreg = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
+      assign_vreg(instr, vreg);
+      emit_instr2(builder, CVTSD2SI, vreg, value);
+    } else {
+      UNIMPLEMENTED;
+    }
+
+    break;
+  }
   case OP_CALL: {
     u32 call_arity = instr->u.call.arity;
 

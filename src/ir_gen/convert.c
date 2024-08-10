@@ -25,6 +25,12 @@ Term convert_type(IrBuilder *builder, Term term, CType *target_type)
     assert(term.ctype->u.integer.is_signed);
     converted =
         build_type_instr(builder, OP_SINT_TO_FLOAT, term.value, ir_type);
+  } else if (term.ctype->t == FLOAT_TYPE && target_type->t == INTEGER_TYPE) {
+    IrType ir_type = c_type_to_ir_type(target_type);
+    // @TODO: Handle float to unsigned int conversions.
+    assert(target_type->u.integer.is_signed);
+    converted =
+        build_type_instr(builder, OP_FLOAT_TO_SINT, term.value, ir_type);
   } else if (term.ctype->t == INTEGER_TYPE && target_type->t == POINTER_TYPE) {
     u32 width = c_type_to_ir_type(term.ctype).u.bit_width;
 
