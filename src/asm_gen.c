@@ -551,7 +551,8 @@ static void handle_phi_nodes(
     if (instr->op != OP_PHI) break;
 
     if (instr->vreg_number == -1) {
-      instr->vreg_number = new_vreg(builder);
+      instr->vreg_number = instr->type.t == IR_FLOAT ? new_float_vreg(builder)
+                                                     : new_vreg(builder);
     }
 
     bool encountered_src_block = false;
@@ -559,10 +560,11 @@ static void handle_phi_nodes(
          phi_param_index++) {
       IrPhiParam *param = instr->u.phi.params + phi_param_index;
       if (param->block == src_block) {
-        emit_mov(
-            builder,
-            asm_vreg(instr->vreg_number, size_of_ir_type(instr->type) * 8),
-            asm_value(builder, param->value));
+        u32 size = size_of_ir_type(instr->type) * 8;
+        AsmValue target = instr->type.t == IR_FLOAT
+                              ? asm_float_vreg(instr->vreg_number, size)
+                              : asm_vreg(instr->vreg_number, size);
+        emit_mov(builder, target, asm_value(builder, param->value));
 
         encountered_src_block = true;
         break;
@@ -848,7 +850,10 @@ static void asm_gen_instr(
     // require no codegen in their containing block. All we need to do is
     // make sure we have a vreg assigned, as we might not have visited the
     // incoming blocks yet.
-    if (instr->vreg_number == -1) instr->vreg_number = new_vreg(builder);
+    if (instr->vreg_number == -1) {
+      instr->vreg_number = instr->type.t == IR_FLOAT ? new_float_vreg(builder)
+                                                     : new_vreg(builder);
+    }
 
     break;
   }
