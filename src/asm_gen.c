@@ -118,7 +118,7 @@ AsmInstr *emit_mov(AsmBuilder *builder, AsmValue dest, AsmValue src)
 
   bool dest_is_float = asm_value_is_float(builder, dest);
   bool src_is_float = asm_value_is_float(builder, src);
-  if (dest_is_float ^ src_is_float) {
+  if (dest_is_float || src_is_float) {
     u8 value_width;
     if (dest_is_float)
       value_width = dest.u.reg.value_width;
