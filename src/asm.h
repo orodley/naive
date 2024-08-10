@@ -125,7 +125,7 @@ typedef struct AsmValue
       X(CVTSI2SD), X(CMP), X(SETE), X(SETNE), X(SETG), X(SETGE), X(SETL),     \
       X(SETLE), X(SETA), X(SETAE), X(SETB), X(SETBE), X(TEST), X(JMP), X(JE), \
       X(JNE), X(JG), X(JGE), X(JL), X(JLE), X(JA), X(JAE), X(JB), X(JBE),     \
-      X(ADC), X(SBB), X(SYSCALL),
+      X(ADDSS), X(ADDSD), X(ADC), X(SBB), X(SYSCALL),
 
 #define X(x) x
 typedef enum AsmOp

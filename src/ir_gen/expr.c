@@ -760,15 +760,21 @@ static Term ir_gen_add(IrGenContext *ctx, Term left, Term right)
   bool left_is_pointer = left.ctype->t == POINTER_TYPE;
   bool right_is_pointer = right.ctype->t == POINTER_TYPE;
 
-  if (left.ctype->t == INTEGER_TYPE && right.ctype->t == INTEGER_TYPE) {
+  if (is_arithmetic_type(left.ctype) && is_arithmetic_type(right.ctype)) {
     do_arithmetic_conversions(ctx->builder, &left, &right);
 
-    IrValue value =
-        build_binary_instr(ctx->builder, OP_ADD, left.value, right.value);
-
     // @TODO: Determine type correctly
+    CType *type = left.ctype;
+    IrValue value;
+    if (type->t == INTEGER_TYPE) {
+      value = build_binary_instr(ctx->builder, OP_ADD, left.value, right.value);
+    } else {
+      value =
+          build_binary_instr(ctx->builder, OP_ADDF, left.value, right.value);
+    }
+
     return (Term){
-        .ctype = left.ctype,
+        .ctype = type,
         .value = value,
     };
   } else if (left_is_pointer ^ right_is_pointer) {

@@ -541,6 +541,31 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
           builder, rhs, instr->type.u.bit_width, is_sign_extending_op(op)));
 }
 
+static void asm_gen_binary_float_instr(
+    AsmBuilder *builder, IrInstr *instr, AsmOp float_op, AsmOp double_op)
+{
+  assert(instr->type.t == IR_FLOAT);
+
+  AsmValue lhs = asm_value(builder, instr->u.binary_op.arg1);
+  AsmValue rhs = asm_value(builder, instr->u.binary_op.arg2);
+
+  AsmValue target =
+      asm_float_vreg(new_float_vreg(builder), instr->type.u.float_bits);
+  assign_vreg(instr, target);
+  emit_mov(builder, target, lhs);
+
+  AsmOp op;
+  if (instr->type.u.float_bits == IR_FLOAT_32) {
+    op = float_op;
+  } else if (instr->type.u.float_bits == IR_FLOAT_64) {
+    op = double_op;
+  } else {
+    UNIMPLEMENTED;
+  }
+
+  emit_instr2(builder, op, target, rhs);
+}
+
 // @TODO: This is a very naive translation that produces incorrect results in
 // some situations.
 //
@@ -1383,6 +1408,7 @@ static void asm_gen_instr(
 
     break;
   }
+  case OP_ADDF: asm_gen_binary_float_instr(builder, instr, ADDSS, ADDSD); break;
   // @NOTE: Handled specially for a similar reason to OP_FIELD and OP_LOCAL
   // above. This instruction is mostly used as the argument to OP_COND, so we
   // let OP_COND match them itself in those cases.

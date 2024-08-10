@@ -5,6 +5,9 @@ ADD r/m64, imm8        = REX.W + 83 /0 ib
 ADD r/m64, imm32       = REX.W + 81 /0 id
 ADD r/m64, r64         = REX.W + 01 /r
 
+ADDSS xmm1, xmm2/m32   =         [F3 0F 58] /r
+ADDSD xmm1, xmm2/m32   =         [F2 0F 58] /r
+
 AND r/m32, r32         =         21 /r
 AND r/m32, imm8        =         83 /4 ib
 AND r/m32, imm32       =         81 /4 id

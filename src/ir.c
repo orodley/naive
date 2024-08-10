@@ -322,6 +322,7 @@ static void dump_instr(IrInstr *instr)
   case OP_MOD:
   case OP_ADD:
   case OP_SUB:
+  case OP_ADDF:
   case OP_STORE:
   case OP_BUILTIN_VA_ARG:
     dump_value(instr->u.binary_op.arg1);
