@@ -541,6 +541,39 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
           builder, rhs, instr->type.u.bit_width, is_sign_extending_op(op)));
 }
 
+// @TODO: This is a very naive translation that produces incorrect results in
+// some situations.
+//
+// We unconditionally copy into the phi vreg for all successors, so if the phi
+// vreg is live across the other outgoing branch, we'll have clobbered it:
+//
+// For example:
+// bb0:
+//     #0 = ...
+//     jump(bb1)
+// bb1:
+//     #1 = phi((bb0, #0), (bb1, #2))
+//     #2 = ...
+//     cond(#2, bb1, bb2)
+// bb2:
+//     #3 = add(#1, 1)
+//
+// For this function we'll insert a copy from #2 into the vreg of #1 at the end
+// of bb1. Then if the edge to bb2 is taken instead, #3 will end up using the
+// value of #2 instead of #1 as desired.
+//
+// The other issue is the swap problem -- if a block has multiple phi nodes,
+// they're supposed to all execute concurrently. So if we have two phi nodes
+// that swap values, we'll use sequential copies which don't implement this
+// correctly.
+//
+// We get away with it for now simply because we don't do SSA formation for
+// local variables, so we only emit phi nodes for conditional expressions, which
+// don't have these problems. Once we start doing so, we'll have to fix this.
+//
+// We can fix both of these problems with a better approach, something like the
+// "Unified Approach to Out-of-SSA Translation" given on p.490 of "Engineering a
+// Compiler", 3rd edition.
 static void handle_phi_nodes(
     AsmBuilder *builder, IrBlock *src_block, IrBlock *dest_block)
 {
