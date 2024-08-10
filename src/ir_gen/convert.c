@@ -18,6 +18,13 @@ Term convert_type(IrBuilder *builder, Term term, CType *target_type)
     } else {
       converted = build_type_instr(builder, OP_ZEXT, term.value, ir_type);
     }
+  } else if (term.ctype->t == INTEGER_TYPE && target_type->t == FLOAT_TYPE) {
+    IrType ir_type = c_type_to_ir_type(target_type);
+    // @TODO: Handle unsigned int to float conversions. This is a bit more
+    // complicated on the asm_gen side as there is no instruction for it.
+    assert(term.ctype->u.integer.is_signed);
+    converted =
+        build_type_instr(builder, OP_SINT_TO_FLOAT, term.value, ir_type);
   } else if (term.ctype->t == INTEGER_TYPE && target_type->t == POINTER_TYPE) {
     u32 width = c_type_to_ir_type(term.ctype).u.bit_width;
 
