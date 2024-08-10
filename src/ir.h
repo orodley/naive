@@ -275,7 +275,7 @@ void dump_ir_type(IrType type);
 void dump_ir_module(IrModule *module);
 
 void builder_init(IrBuilder *builder, IrModule *module);
-IrInstr *build_branch(IrBuilder *builder, IrBlock *block);
+IrInstr *build_jump(IrBuilder *builder, IrBlock *block);
 IrInstr *build_cond(
     IrBuilder *builder, IrValue condition, IrBlock *then_block,
     IrBlock *else_block);

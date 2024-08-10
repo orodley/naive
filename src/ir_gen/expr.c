@@ -386,7 +386,7 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     IrValue rhs_as_bool = build_cmp(
         builder, CMP_NEQ, rhs.value,
         value_const_int(c_type_to_ir_type(rhs.ctype), 0));
-    build_branch(builder, after_block);
+    build_jump(builder, after_block);
 
     // ir_gen'ing the RHS expr may have changed the current block.
     IrBlock *rhs_resultant_block = builder->current_block;
@@ -447,9 +447,9 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     // We have to build the branches after doing conversions, since if any
     // conversions occur they may add instructions.
     builder->current_block = then_resultant_block;
-    build_branch(builder, after_block);
+    build_jump(builder, after_block);
     builder->current_block = else_resultant_block;
-    build_branch(builder, after_block);
+    build_jump(builder, after_block);
 
     builder->current_block = after_block;
     IrValue phi = build_phi(builder, then_term.value.type, 2);

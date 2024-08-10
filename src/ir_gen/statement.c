@@ -109,10 +109,10 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     }
 
     builder->current_block = then_resultant_block;
-    build_branch(builder, after_block);
+    build_jump(builder, after_block);
     if (else_statement != NULL) {
       builder->current_block = else_resultant_block;
-      build_branch(builder, after_block);
+      build_jump(builder, after_block);
     }
 
     builder->current_block = after_block;
@@ -130,7 +130,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
     builder->current_block = add_block(builder, "switch.body");
     ir_gen_statement(ctx, statement->u.expr_and_statement.statement);
-    build_branch(builder, after);
+    build_jump(builder, after);
 
     builder->current_block = switch_entry;
     Term switch_value =
@@ -161,11 +161,11 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     }
 
     if (default_index == -1) {
-      build_branch(builder, after);
+      build_jump(builder, after);
     } else {
       SwitchCase *default_case =
           ARRAY_REF(&ctx->case_labels, SwitchCase, default_index);
-      build_branch(builder, default_case->block);
+      build_jump(builder, default_case->block);
     }
     builder->current_block = after;
 
@@ -177,7 +177,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
   case CASE_STATEMENT: {
     // @TODO: Ensure we're inside a switch statement.
     IrBlock *case_block = add_block(builder, "switch.case");
-    build_branch(builder, case_block);
+    build_jump(builder, case_block);
     builder->current_block = case_block;
 
     ir_gen_statement(ctx, statement->u.expr_and_statement.statement);
@@ -192,7 +192,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
   case LABELED_STATEMENT: {
     char *label_name = statement->u.labeled_statement.label_name;
     IrBlock *label_block = add_block(builder, label_name);
-    build_branch(builder, label_block);
+    build_jump(builder, label_block);
     builder->current_block = label_block;
     if (streq(label_name, "default")) {
       SwitchCase *default_case = ARRAY_APPEND(&ctx->case_labels, SwitchCase);
@@ -219,7 +219,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     ASTExpr *condition_expr = statement->u.expr_and_statement.expr;
     ASTStatement *body_statement = statement->u.expr_and_statement.statement;
 
-    build_branch(builder, pre_header);
+    build_jump(builder, pre_header);
     builder->current_block = pre_header;
     Term condition_term = ir_gen_expr(ctx, condition_expr, RVALUE_CONTEXT);
     assert(condition_term.ctype->t == INTEGER_TYPE);
@@ -235,7 +235,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
     ir_gen_statement(ctx, body_statement);
 
-    build_branch(builder, pre_header);
+    build_jump(builder, pre_header);
     ctx->break_target = prev_break_target;
     ctx->continue_target = prev_continue_target;
 
@@ -254,7 +254,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     ASTExpr *condition_expr = statement->u.expr_and_statement.expr;
     ASTStatement *body_statement = statement->u.expr_and_statement.statement;
 
-    build_branch(builder, body);
+    build_jump(builder, body);
     builder->current_block = pre_header;
     Term condition_term = ir_gen_expr(ctx, condition_expr, RVALUE_CONTEXT);
 
@@ -269,7 +269,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
     ir_gen_statement(ctx, body_statement);
 
-    build_branch(builder, pre_header);
+    build_jump(builder, pre_header);
     ctx->break_target = prev_break_target;
     ctx->continue_target = prev_continue_target;
 
@@ -298,7 +298,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
       if (f->init.expr != NULL) ir_gen_expr(ctx, f->init.expr, RVALUE_CONTEXT);
     }
 
-    build_branch(builder, pre_header);
+    build_jump(builder, pre_header);
     builder->current_block = pre_header;
     Term condition_term;
     if (f->condition != NULL) {
@@ -321,7 +321,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     ctx->continue_target = update;
 
     ir_gen_statement(ctx, f->body);
-    build_branch(builder, update);
+    build_jump(builder, update);
     builder->current_block = update;
 
     *ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = update;
@@ -334,7 +334,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     if (f->update_expr != NULL)
       ir_gen_expr(ctx, f->update_expr, RVALUE_CONTEXT);
 
-    build_branch(builder, pre_header);
+    build_jump(builder, pre_header);
 
     pop_scope(ctx);
     builder->current_block = after;
@@ -345,7 +345,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     break;
   }
   case GOTO_STATEMENT: {
-    IrInstr *branch_instr = build_branch(builder, NULL);
+    IrInstr *branch_instr = build_jump(builder, NULL);
     GotoFixup *fixup = ARRAY_APPEND(&ctx->goto_fixups, GotoFixup);
     fixup->label_name = statement->u.goto_label;
     fixup->instr = branch_instr;
@@ -355,11 +355,11 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
   }
   case BREAK_STATEMENT:
     assert(ctx->break_target != NULL);
-    build_branch(builder, ctx->break_target);
+    build_jump(builder, ctx->break_target);
     break;
   case CONTINUE_STATEMENT:
     assert(ctx->continue_target != NULL);
-    build_branch(builder, ctx->continue_target);
+    build_jump(builder, ctx->continue_target);
     break;
   case EMPTY_STATEMENT: break;
   }

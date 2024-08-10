@@ -449,7 +449,7 @@ static IrInstr *append_instr(IrBuilder *builder)
   return instr;
 }
 
-IrInstr *build_branch(IrBuilder *builder, IrBlock *block)
+IrInstr *build_jump(IrBuilder *builder, IrBlock *block)
 {
   IrInstr *instr = append_instr(builder);
   instr->op = OP_JUMP;
