@@ -11,6 +11,7 @@
 #include "util.h"
 
 static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out);
+static void asm_gen_call(AsmBuilder *builder, IrInstr *instr);
 
 void init_asm_builder(AsmBuilder *builder, char *input_file_name)
 {
@@ -1092,226 +1093,7 @@ static void asm_gen_instr(
 
     break;
   }
-  case OP_CALL: {
-    u32 call_arity = instr->u.call.arity;
-
-    CallSeq call_seq;
-
-    bool gen_new_call_seq;
-    if (instr->u.call.callee.t == IR_VALUE_GLOBAL) {
-      IrGlobal *target = instr->u.call.callee.u.global;
-      assert(target->type.t == IR_FUNCTION);
-
-      IrType callee_type = instr->u.call.callee.u.global->type;
-      assert(callee_type.t == IR_FUNCTION);
-
-      u32 callee_arity = callee_type.u.function.arity;
-      assert(
-          call_arity == callee_arity
-          || (call_arity > callee_arity
-              && callee_type.u.function.variable_arity));
-
-      if (!callee_type.u.function.variable_arity) {
-        gen_new_call_seq = false;
-        call_seq = target->call_seq;
-      } else {
-        // We always need to create a new CallSeq for varargs
-        // functions, because they can be called differently at every
-        // callsite.
-        gen_new_call_seq = true;
-      }
-    } else {
-      // We need to create a new CallSeq because with an indirect call we
-      // have no global to grab the pre-generated CallSeq from.
-      gen_new_call_seq = true;
-    }
-
-    if (gen_new_call_seq) {
-      IrType *arg_types = malloc(call_arity * sizeof *arg_types);
-      for (u32 i = 0; i < call_arity; i++)
-        arg_types[i] = instr->u.call.arg_array[i].type;
-
-      call_seq = classify_arguments(call_arity, arg_types);
-
-      free(arg_types);
-    }
-
-    i32 args_stack_space = call_seq.stack_space;
-
-    // As specified by the System V x86-64 ABI, we have to ensure that the
-    // end of our stack frame is aligned to 16 bytes. The end of the
-    // previous stack frame was aligned to 16 bytes, so this amounts to
-    // making sure the size of our stack frame is a multiple of 16. The
-    // prologue ensures that we're correctly aligned before the call, so we
-    // just need to make sure that the space we use for passing arguments
-    // is correctly aligned.
-    //
-    // See the System V x86-64 ABI spec, section 3.2.2
-    u32 args_plus_padding = align_to(args_stack_space, 16);
-    if (args_plus_padding > 0) {
-      emit_instr2(
-          builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
-          asm_imm(args_plus_padding));
-    }
-
-    builder->curr_sp_diff = args_plus_padding;
-
-    Array(u32) arg_vregs;
-    ARRAY_INIT(&arg_vregs, u32, STATIC_ARRAY_LENGTH(int_argument_registers));
-
-    for (u32 i = 0; i < call_arity; i++) {
-      AsmValue arg = asm_value(builder, instr->u.call.arg_array[i]);
-      // Use the largest version of the register, as all argument registers do.
-      u8 value_width = size_of_ir_type(instr->u.call.arg_array[i].type) * 8;
-      if (arg.t == ASM_VALUE_REGISTER) {
-        arg.u.reg.width =
-            instr->u.call.arg_array[i].type.t == IR_FLOAT ? 128 : 64;
-        if (instr->u.call.arg_array[i].type.t != IR_FLOAT) value_width = 64;
-      }
-
-      ArgClass *arg_class = call_seq.arg_classes + i;
-
-      switch (arg_class->t) {
-      case ARG_CLASS_REG: {
-        AsmValue arg_target_reg =
-            pre_alloced_vreg(builder, arg_class->u.reg.reg, value_width);
-        emit_mov(builder, arg_target_reg, arg);
-        *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
-        VReg *vreg = ARRAY_REF(
-            &builder->virtual_registers, VReg, *ARRAY_LAST(&arg_vregs, u32));
-        vreg->live_range_start = builder->current_block->size - 1;
-        break;
-      }
-      case ARG_CLASS_MEM: {
-        AsmConst location = asm_const_imm(arg_class->u.mem.offset);
-        // @TODO: "remains_in_memory" is kind of a proxy for what we
-        // care about here, which is whether the original is in memory.
-        // This is the case for structs, which are always pointers in
-        // the IR. Maybe we should have a field which sets this
-        // explicitly? We should probably just clean up the frontend
-        // codegen for struct calls instead.
-        if (!arg_class->u.mem.remains_in_memory) {
-          // Stack args that don't remain in memory should always be
-          // rounded up to 8 bytes.
-          assert(arg_class->u.mem.size == 8);
-
-          // Need a temp vreg to do an 8-byte store into memory.
-          AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
-
-          emit_mov(builder, temp_vreg, arg);
-          emit_mov(
-              builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)),
-              temp_vreg);
-        } else {
-          // @TODO: This is essentially a bad open-coding of memcpy.
-          // Adding a call to memcpy would be really awkward since
-          // we're in the middle of a call sequence. We should either
-          // make this smarter or somehow make it go through the
-          // regular memcpy code in IR, which we can optimise along
-          // with other uses of memcpy.
-          Register src;
-          switch (arg.t) {
-          case ASM_VALUE_REGISTER: src = arg.u.reg; break;
-          case ASM_VALUE_OFFSET_REGISTER:
-            if (arg.u.offset_register.offset.t == ASM_CONST_IMMEDIATE) {
-              src = arg.u.offset_register.reg;
-              break;
-            }
-            // fallthrough
-          default: {
-            AsmValue src_vreg = asm_vreg(new_vreg(builder), 64);
-            emit_mov(builder, src_vreg, arg);
-
-            src = src_vreg.u.reg;
-            break;
-          }
-          }
-
-          u32 temp_vreg = new_vreg(builder);
-          u32 to_copy = arg_class->u.mem.size;
-          u32 i = 0;
-          for (; to_copy - i >= 8; i += 8) {
-            AsmConst offset = asm_const_imm(location.u.immediate + i);
-            emit_mov(
-                builder, asm_vreg(temp_vreg, 64),
-                asm_deref((AsmValue){
-                    .t = ASM_VALUE_OFFSET_REGISTER,
-                    .u.offset_register.reg = src,
-                    .u.offset_register.offset = asm_const_imm(i),
-                }));
-            emit_mov(
-                builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
-                asm_vreg(temp_vreg, 64));
-          }
-          for (; i < to_copy; i++) {
-            AsmConst offset = asm_const_imm(location.u.immediate + i);
-            emit_mov(
-                builder, asm_vreg(temp_vreg, 64),
-                asm_deref((AsmValue){
-                    .t = ASM_VALUE_OFFSET_REGISTER,
-                    .u.offset_register.reg = src,
-                    .u.offset_register.offset = asm_const_imm(i),
-                }));
-            emit_mov(
-                builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
-                asm_vreg(temp_vreg, 8));
-          }
-        }
-        break;
-      }
-      }
-    }
-
-    // In the case that gen_new_call_seq is true, either this is a call to
-    // a varargs function, or it's an indirect call and we conservatively
-    // assume it could be a varargs function.
-    //
-    // The only difference on the caller side between varargs and regular
-    // functions is that al must be set to (at least) the number of vector
-    // registers used to pass arguments. We never use vector registers to
-    // pass arguments because that isn't implemented yet, so we just set it
-    // to zero.
-    //
-    // @TODO: Once we pass args in vector registers, set al appropriately.
-    if (gen_new_call_seq) {
-      emit_mov(builder, pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_imm(0));
-
-      // Done with call_seq now
-      free(call_seq.arg_classes);
-    }
-
-    emit_instr1(builder, CALL, asm_value(builder, instr->u.call.callee));
-
-    // The live range of arg vregs ends at the call instruction. Liveness
-    // analysis won't be performed for these vregs, since we've set the
-    // start and end already.
-    for (u32 i = 0; i < arg_vregs.size; i++) {
-      u32 arg_vreg = *ARRAY_REF(&arg_vregs, u32, i);
-      VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, arg_vreg);
-      vreg->live_range_end = builder->current_block->size - 1;
-    }
-
-    array_free(&arg_vregs);
-
-    if (args_plus_padding > 0) {
-      emit_instr2(
-          builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
-          asm_imm(args_plus_padding));
-    }
-    builder->curr_sp_diff = 0;
-
-    if (instr->u.call.return_type.t != IR_VOID) {
-      // Move out of RAX into a new vreg. The live range of the result
-      // might overlap another case where we need to use RAX.
-      AsmValue rax_vreg = pre_alloced_vreg(builder, REG_CLASS_A, 64);
-      AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
-      emit_mov(builder, temp_vreg, rax_vreg);
-
-      assign_vreg(instr, temp_vreg);
-    }
-
-    break;
-  }
+  case OP_CALL: asm_gen_call(builder, instr); break;
   case OP_BIT_XOR: asm_gen_binary_instr(builder, instr, XOR); break;
   case OP_BIT_AND: asm_gen_binary_instr(builder, instr, AND); break;
   case OP_BIT_OR: asm_gen_binary_instr(builder, instr, OR); break;
@@ -1518,6 +1300,226 @@ static void asm_gen_instr(
     emit_instr2(builder, ADD, vreg_64, asm_phys_reg(REG_CLASS_BP, 64));
     break;
   }
+  }
+}
+
+static void asm_gen_call(AsmBuilder *builder, IrInstr *instr)
+{
+  u32 call_arity = instr->u.call.arity;
+
+  CallSeq call_seq;
+
+  bool gen_new_call_seq;
+  if (instr->u.call.callee.t == IR_VALUE_GLOBAL) {
+    IrGlobal *target = instr->u.call.callee.u.global;
+    assert(target->type.t == IR_FUNCTION);
+
+    IrType callee_type = instr->u.call.callee.u.global->type;
+    assert(callee_type.t == IR_FUNCTION);
+
+    u32 callee_arity = callee_type.u.function.arity;
+    assert(
+        call_arity == callee_arity
+        || (call_arity > callee_arity
+            && callee_type.u.function.variable_arity));
+
+    if (!callee_type.u.function.variable_arity) {
+      gen_new_call_seq = false;
+      call_seq = target->call_seq;
+    } else {
+      // We always need to create a new CallSeq for varargs
+      // functions, because they can be called differently at every
+      // callsite.
+      gen_new_call_seq = true;
+    }
+  } else {
+    // We need to create a new CallSeq because with an indirect call we
+    // have no global to grab the pre-generated CallSeq from.
+    gen_new_call_seq = true;
+  }
+
+  if (gen_new_call_seq) {
+    IrType *arg_types = malloc(call_arity * sizeof *arg_types);
+    for (u32 i = 0; i < call_arity; i++)
+      arg_types[i] = instr->u.call.arg_array[i].type;
+
+    call_seq = classify_arguments(call_arity, arg_types);
+
+    free(arg_types);
+  }
+
+  i32 args_stack_space = call_seq.stack_space;
+
+  // As specified by the System V x86-64 ABI, we have to ensure that the
+  // end of our stack frame is aligned to 16 bytes. The end of the
+  // previous stack frame was aligned to 16 bytes, so this amounts to
+  // making sure the size of our stack frame is a multiple of 16. The
+  // prologue ensures that we're correctly aligned before the call, so we
+  // just need to make sure that the space we use for passing arguments
+  // is correctly aligned.
+  //
+  // See the System V x86-64 ABI spec, section 3.2.2
+  u32 args_plus_padding = align_to(args_stack_space, 16);
+  if (args_plus_padding > 0) {
+    emit_instr2(
+        builder, SUB, asm_phys_reg(REG_CLASS_SP, 64),
+        asm_imm(args_plus_padding));
+  }
+
+  builder->curr_sp_diff = args_plus_padding;
+
+  Array(u32) arg_vregs;
+  ARRAY_INIT(&arg_vregs, u32, STATIC_ARRAY_LENGTH(int_argument_registers));
+
+  for (u32 i = 0; i < call_arity; i++) {
+    AsmValue arg = asm_value(builder, instr->u.call.arg_array[i]);
+    // Use the largest version of the register, as all argument registers do.
+    u8 value_width = size_of_ir_type(instr->u.call.arg_array[i].type) * 8;
+    if (arg.t == ASM_VALUE_REGISTER) {
+      arg.u.reg.width =
+          instr->u.call.arg_array[i].type.t == IR_FLOAT ? 128 : 64;
+      if (instr->u.call.arg_array[i].type.t != IR_FLOAT) value_width = 64;
+    }
+
+    ArgClass *arg_class = call_seq.arg_classes + i;
+
+    switch (arg_class->t) {
+    case ARG_CLASS_REG: {
+      AsmValue arg_target_reg =
+          pre_alloced_vreg(builder, arg_class->u.reg.reg, value_width);
+      emit_mov(builder, arg_target_reg, arg);
+      *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
+      VReg *vreg = ARRAY_REF(
+          &builder->virtual_registers, VReg, *ARRAY_LAST(&arg_vregs, u32));
+      vreg->live_range_start = builder->current_block->size - 1;
+      break;
+    }
+    case ARG_CLASS_MEM: {
+      AsmConst location = asm_const_imm(arg_class->u.mem.offset);
+      // @TODO: "remains_in_memory" is kind of a proxy for what we
+      // care about here, which is whether the original is in memory.
+      // This is the case for structs, which are always pointers in
+      // the IR. Maybe we should have a field which sets this
+      // explicitly? We should probably just clean up the frontend
+      // codegen for struct calls instead.
+      if (!arg_class->u.mem.remains_in_memory) {
+        // Stack args that don't remain in memory should always be
+        // rounded up to 8 bytes.
+        assert(arg_class->u.mem.size == 8);
+
+        // Need a temp vreg to do an 8-byte store into memory.
+        AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
+
+        emit_mov(builder, temp_vreg, arg);
+        emit_mov(
+            builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, location)),
+            temp_vreg);
+      } else {
+        // @TODO: This is essentially a bad open-coding of memcpy.
+        // Adding a call to memcpy would be really awkward since
+        // we're in the middle of a call sequence. We should either
+        // make this smarter or somehow make it go through the
+        // regular memcpy code in IR, which we can optimise along
+        // with other uses of memcpy.
+        Register src;
+        switch (arg.t) {
+        case ASM_VALUE_REGISTER: src = arg.u.reg; break;
+        case ASM_VALUE_OFFSET_REGISTER:
+          if (arg.u.offset_register.offset.t == ASM_CONST_IMMEDIATE) {
+            src = arg.u.offset_register.reg;
+            break;
+          }
+          // fallthrough
+        default: {
+          AsmValue src_vreg = asm_vreg(new_vreg(builder), 64);
+          emit_mov(builder, src_vreg, arg);
+
+          src = src_vreg.u.reg;
+          break;
+        }
+        }
+
+        u32 temp_vreg = new_vreg(builder);
+        u32 to_copy = arg_class->u.mem.size;
+        u32 i = 0;
+        for (; to_copy - i >= 8; i += 8) {
+          AsmConst offset = asm_const_imm(location.u.immediate + i);
+          emit_mov(
+              builder, asm_vreg(temp_vreg, 64),
+              asm_deref((AsmValue){
+                  .t = ASM_VALUE_OFFSET_REGISTER,
+                  .u.offset_register.reg = src,
+                  .u.offset_register.offset = asm_const_imm(i),
+              }));
+          emit_mov(
+              builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+              asm_vreg(temp_vreg, 64));
+        }
+        for (; i < to_copy; i++) {
+          AsmConst offset = asm_const_imm(location.u.immediate + i);
+          emit_mov(
+              builder, asm_vreg(temp_vreg, 64),
+              asm_deref((AsmValue){
+                  .t = ASM_VALUE_OFFSET_REGISTER,
+                  .u.offset_register.reg = src,
+                  .u.offset_register.offset = asm_const_imm(i),
+              }));
+          emit_mov(
+              builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+              asm_vreg(temp_vreg, 8));
+        }
+      }
+      break;
+    }
+    }
+  }
+
+  // In the case that gen_new_call_seq is true, either this is a call to
+  // a varargs function, or it's an indirect call and we conservatively
+  // assume it could be a varargs function.
+  //
+  // The only difference on the caller side between varargs and regular
+  // functions is that al must be set to (at least) the number of vector
+  // registers used to pass arguments. We never use vector registers to
+  // pass arguments because that isn't implemented yet, so we just set it
+  // to zero.
+  //
+  // @TODO: Once we pass args in vector registers, set al appropriately.
+  if (gen_new_call_seq) {
+    emit_mov(builder, pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_imm(0));
+
+    // Done with call_seq now
+    free(call_seq.arg_classes);
+  }
+
+  emit_instr1(builder, CALL, asm_value(builder, instr->u.call.callee));
+
+  // The live range of arg vregs ends at the call instruction. Liveness
+  // analysis won't be performed for these vregs, since we've set the
+  // start and end already.
+  for (u32 i = 0; i < arg_vregs.size; i++) {
+    u32 arg_vreg = *ARRAY_REF(&arg_vregs, u32, i);
+    VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, arg_vreg);
+    vreg->live_range_end = builder->current_block->size - 1;
+  }
+
+  array_free(&arg_vregs);
+
+  if (args_plus_padding > 0) {
+    emit_instr2(
+        builder, ADD, asm_phys_reg(REG_CLASS_SP, 64),
+        asm_imm(args_plus_padding));
+  }
+  builder->curr_sp_diff = 0;
+
+  if (instr->u.call.return_type.t != IR_VOID) {
+    // Move out of RAX into a new vreg. The live range of the result
+    // might overlap another case where we need to use RAX.
+    AsmValue rax_vreg = pre_alloced_vreg(builder, REG_CLASS_A, 64);
+    AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
+    emit_mov(builder, temp_vreg, rax_vreg);
+
+    assign_vreg(instr, temp_vreg);
   }
 }
 
