@@ -85,6 +85,7 @@ static int compare_live_range_start(const void *a, const void *b);
 static bool is_def(AsmInstr *instr, u32 vreg_num, VReg *vreg);
 static bool is_use(AsmInstr *instr, u32 vreg);
 static bool references_vreg(AsmValue value, u32 vreg);
+static void dump_vregs(Array(VReg) *vregs);
 
 // @TODO: Save all caller save registers that are live across calls.
 void allocate_registers(AsmBuilder *builder)
@@ -285,18 +286,8 @@ void allocate_registers(AsmBuilder *builder)
   }
   array_free(&active_vregs);
 
-  // @TODO: Move register dumping stuff we we can dump the name here rather
-  // than just a number
   if (flag_dump_register_assignments) {
-    for (u32 i = 0; i < vregs->size; i++) {
-      VReg *vreg = ARRAY_REF(vregs, VReg, i);
-      printf("#%u%c =", i, vreg->type == REG_TYPE_INTEGER ? 'i' : 'f');
-      switch (vreg->t) {
-      case IN_REG: printf(" (%d)\n", vreg->u.assigned_register); break;
-      case ON_STACK: printf(" [%d]\n", vreg->u.assigned_stack_slot); break;
-      case UNASSIGNED: UNREACHABLE;
-      }
-    }
+    dump_vregs(vregs);
   }
 
   u32 curr_sp_diff = 0;
@@ -592,21 +583,8 @@ static void compute_live_ranges(AsmBuilder *builder, Array(VReg) *vregs)
       dump_asm_instr(instr);
     }
 
-    for (u32 i = 0; i < vregs->size; i++) {
-      VReg *vreg = ARRAY_REF(vregs, VReg, i);
-      printf(
-          "#%u%c: [%d, %d]", i, vreg->type == REG_TYPE_INTEGER ? 'i' : 'f',
-          vreg->live_range_start, vreg->live_range_end);
-      switch (vreg->t) {
-      // @TODO: Move register dumping stuff we we can dump the name here
-      // rather than just a number
-      case IN_REG: printf(" (%d)", vreg->u.assigned_register); break;
-      case ON_STACK: printf(" [%d]", vreg->u.assigned_stack_slot); break;
-      case UNASSIGNED: break;
-      }
-      putchar('\n');
-    }
     putchar('\n');
+    dump_vregs(vregs);
   }
 }
 
@@ -684,4 +662,30 @@ bool references_vreg(AsmValue value, u32 vreg)
   }
 
   return reg.t == V_REG && reg.u.vreg_number == vreg;
+}
+
+static void dump_vregs(Array(VReg) *vregs)
+{
+  for (u32 i = 0; i < vregs->size; i++) {
+    VReg *vreg = ARRAY_REF(vregs, VReg, i);
+    printf("#%u%c", i, vreg->type == REG_TYPE_INTEGER ? 'i' : 'f');
+
+    if (vreg->live_range_start != -1 && vreg->live_range_end != -1) {
+      printf(": [%d, %d]", vreg->live_range_start, vreg->live_range_end);
+    }
+
+    switch (vreg->t) {
+    case IN_REG: {
+      RegClass reg = vreg->u.assigned_register;
+      u8 width_to_dump = reg_class_is_gpr(reg) ? 64 : 128;
+      fputs(" = (", stdout);
+      dump_phys_reg(reg, width_to_dump);
+      puts(")");
+      break;
+    }
+    case ON_STACK: printf(" = [%d]\n", vreg->u.assigned_stack_slot); break;
+    case UNASSIGNED: putchar('\n'); break;
+    }
+  }
+  putchar('\n');
 }

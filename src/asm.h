@@ -280,6 +280,7 @@ bool is_sign_extending_op(AsmOp op);
 
 void dump_asm_instr(AsmInstr *instr);
 void dump_asm_module(AsmModule *asm_module);
+void dump_phys_reg(RegClass class, u8 width);
 
 void assemble(AsmModule *asm_module);
 

@@ -275,15 +275,16 @@ static char *asm_op_names[] = {ASM_OPS};
 static char *physical_register_names[][5] = {REG_CLASSES};
 #undef X
 
+void dump_phys_reg(RegClass class, u8 width)
+{
+  char *reg_name = physical_register_names[class][lowest_set_bit(width) - 3];
+  for (u32 i = 0; reg_name[i] != '\0'; i++) putchar(tolower(reg_name[i]));
+}
+
 static void dump_register(Register reg)
 {
   switch (reg.t) {
-  case PHYS_REG: {
-    char *reg_name =
-        physical_register_names[reg.u.class][lowest_set_bit(reg.width) - 3];
-    for (u32 i = 0; reg_name[i] != '\0'; i++) putchar(tolower(reg_name[i]));
-    break;
-  }
+  case PHYS_REG: dump_phys_reg(reg.u.class, reg.width); break;
   case V_REG: printf("#%u", reg.u.vreg_number); break;
   }
 }
