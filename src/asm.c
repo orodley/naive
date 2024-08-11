@@ -285,7 +285,7 @@ static void dump_register(Register reg)
 {
   switch (reg.t) {
   case PHYS_REG: dump_phys_reg(reg.u.class, reg.width); break;
-  case V_REG: printf("#%u", reg.u.vreg_number); break;
+  case V_REG: printf("#%u(%u)", reg.u.vreg_number, reg.width); break;
   }
 }
 
