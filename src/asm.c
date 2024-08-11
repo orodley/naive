@@ -94,7 +94,8 @@ AsmValue asm_phys_reg(RegClass reg, u8 width)
   return (AsmValue){
       .is_deref = false,
       .t = ASM_VALUE_REGISTER,
-      .u.reg.width = width,
+      .u.reg.width = reg_class_is_gpr(reg) ? width : 128,
+      .u.reg.value_width = width,
       .u.reg.t = PHYS_REG,
       .u.reg.u.class = reg,
   };

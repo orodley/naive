@@ -219,6 +219,15 @@ static AsmValue new_asm_vreg_of_type(AsmBuilder *builder, IrType type)
   return asm_vreg_of_type(vreg_number, type);
 }
 
+AsmValue return_reg_for_type(AsmBuilder *builder, IrType type)
+{
+  assert(type.t == IR_INT || type.t == IR_FLOAT || type.t == IR_POINTER);
+
+  return pre_alloced_vreg(
+      builder, type.t == IR_FLOAT ? REG_CLASS_XMM0 : REG_CLASS_A,
+      size_of_ir_type(type) * 8);
+}
+
 static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr);
 
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
@@ -874,12 +883,10 @@ static void asm_gen_instr(
     IrValue arg = instr->u.arg;
     assert(ir_global->type.t == IR_FUNCTION);
     assert(ir_type_eq(ir_global->type.u.function.return_type, &arg.type));
-    IrType *return_type = ir_global->type.u.function.return_type;
-    assert(return_type->t == IR_INT || return_type->t == IR_POINTER);
 
-    emit_mov(
-        builder, asm_phys_reg(REG_CLASS_A, size_of_ir_type(*return_type) * 8),
-        asm_value(builder, arg));
+    AsmValue return_reg =
+        return_reg_for_type(builder, *ir_global->type.u.function.return_type);
+    emit_mov(builder, return_reg, asm_value(builder, arg));
     emit_instr1(builder, JMP, asm_symbol(builder->ret_label));
 
     break;
@@ -1515,9 +1522,11 @@ static void asm_gen_call(AsmBuilder *builder, IrInstr *instr)
   if (instr->u.call.return_type.t != IR_VOID) {
     // Move out of RAX into a new vreg. The live range of the result
     // might overlap another case where we need to use RAX.
-    AsmValue rax_vreg = pre_alloced_vreg(builder, REG_CLASS_A, 64);
-    AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
-    emit_mov(builder, temp_vreg, rax_vreg);
+    AsmValue return_vreg =
+        return_reg_for_type(builder, instr->u.call.return_type);
+    AsmValue temp_vreg =
+        new_asm_vreg_of_type(builder, instr->u.call.return_type);
+    emit_mov(builder, temp_vreg, return_vreg);
 
     assign_vreg(instr, temp_vreg);
   }
@@ -1575,8 +1584,8 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   ARRAY_INIT(&builder->virtual_registers, VReg, 20);
   IrType return_type = *ir_global->type.u.function.return_type;
   assert(
-      return_type.t == IR_INT || return_type.t == IR_POINTER
-      || return_type.t == IR_VOID);
+      return_type.t == IR_INT || return_type.t == IR_FLOAT
+      || return_type.t == IR_POINTER || return_type.t == IR_VOID);
 
   for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
     IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
