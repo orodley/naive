@@ -326,9 +326,10 @@ static void dump_symbol(AsmSymbol *symbol)
   printf("%s:\n", name);
 }
 
-void dump_asm_instr(AsmInstr *instr)
+void dump_asm_instr_with_line_number(AsmInstr *instr, i32 line_no)
 {
   if (instr->label != NULL) dump_symbol(instr->label);
+  if (line_no != -1) printf("%u", line_no);
 
   putchar('\t');
   char *op_name = asm_op_names[instr->op];
@@ -353,6 +354,11 @@ void dump_asm_instr(AsmInstr *instr)
     if (arg->is_deref) putchar(']');
   }
   putchar('\n');
+}
+
+void dump_asm_instr(AsmInstr *instr)
+{
+  dump_asm_instr_with_line_number(instr, -1);
 }
 
 void dump_asm_module(AsmModule *asm_module)

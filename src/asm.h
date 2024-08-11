@@ -279,6 +279,7 @@ bool reg_class_is_gpr(RegClass reg_class);
 bool is_sign_extending_op(AsmOp op);
 
 void dump_asm_instr(AsmInstr *instr);
+void dump_asm_instr_with_line_number(AsmInstr *instr, i32 line_no);
 void dump_asm_module(AsmModule *asm_module);
 void dump_phys_reg(RegClass class, u8 width);
 
