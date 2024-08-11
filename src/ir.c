@@ -821,14 +821,21 @@ IrConst *add_struct_const(IrBuilder *builder, IrType type)
 }
 
 // @TODO: Make this not linear in the number of functions in the TU.
+IrGlobal *find_global_by_name(IrModule *module, char *name)
+{
+  for (u32 i = 0; i < module->globals.size; i++) {
+    IrGlobal *global = *ARRAY_REF(&module->globals, IrGlobal *, i);
+    if (streq(global->name, name)) return global;
+  }
+  return NULL;
+}
+
 static IrValue builtin_function(
     IrBuilder *builder, char *name, u32 arity, IrType return_type,
     IrType *arg_types)
 {
-  for (u32 i = 0; i < builder->module->globals.size; i++) {
-    IrGlobal *global = *ARRAY_REF(&builder->module->globals, IrGlobal *, i);
-    if (streq(global->name, name)) return value_global(global);
-  }
+  IrGlobal *existing_global = find_global_by_name(builder->module, name);
+  if (existing_global != NULL) return value_global(existing_global);
 
   return value_global(ir_module_add_function(
       builder->module, name, return_type, arity, false, arg_types));

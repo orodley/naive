@@ -516,14 +516,8 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
 
     assert(arg_type->t == INTEGER_TYPE || arg_type->t == POINTER_TYPE);
 
-    IrGlobal *global_builtin_va_arg_int = NULL;
-    for (u32 i = 0; i < builder->module->globals.size; i++) {
-      IrGlobal *global = *ARRAY_REF(&builder->module->globals, IrGlobal *, i);
-      if (streq(global->name, "__builtin_va_arg_uint64")) {
-        global_builtin_va_arg_int = global;
-        break;
-      }
-    }
+    IrGlobal *global_builtin_va_arg_int =
+        find_global_by_name(builder->module, "__builtin_va_arg_uint64");
     assert(global_builtin_va_arg_int != NULL);
 
     // @PORT: We want "uint64_t" here.

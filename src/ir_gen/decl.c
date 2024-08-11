@@ -46,17 +46,8 @@ IrGlobal *ir_global_for_decl(
       arg_ir_types[i] = c_type_to_ir_type(arg_c_type);
     }
 
-    IrGlobal *global = NULL;
-    Array(IrGlobal *) *globals = &ctx->builder->module->globals;
     assert(cdecl.name != NULL);
-    for (u32 i = 0; i < globals->size; i++) {
-      IrGlobal *curr_global = *ARRAY_REF(globals, IrGlobal *, i);
-      if (streq(curr_global->name, cdecl.name)) {
-        // @TODO: Check C type matches
-        global = curr_global;
-        break;
-      }
-    }
+    IrGlobal *global = find_global_by_name(ctx->builder->module, cdecl.name);
 
     if (global == NULL) {
       IrType return_type =
@@ -68,29 +59,20 @@ IrGlobal *ir_global_for_decl(
           ctype->u.function.variable_arity, arg_ir_types);
     }
 
+    // @TODO: Check C type matches
     assert(global->type.t == IR_FUNCTION);
     *result_c_type = ctype;
-
     return global;
   } else {
-    IrGlobal *global = NULL;
-    Array(IrGlobal *) *globals = &ctx->builder->module->globals;
-    for (u32 i = 0; i < globals->size; i++) {
-      IrGlobal *curr_global = *ARRAY_REF(globals, IrGlobal *, i);
-      if (streq(curr_global->name, cdecl.name)) {
-        // @TODO: Check C type matches
-        global = curr_global;
-        break;
-      }
-    }
-
+    assert(cdecl.name != NULL);
+    IrGlobal *global = find_global_by_name(ctx->builder->module, cdecl.name);
     if (global == NULL) {
       global = ir_module_add_var(
           ctx->builder->module, cdecl.name, c_type_to_ir_type(ctype));
     }
 
+    // @TODO: Check C type matches
     *result_c_type = cdecl.type;
-
     return global;
   }
 }
