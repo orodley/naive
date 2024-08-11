@@ -99,7 +99,7 @@ def make_arg_parser():
 
 
 class BuildConfig(object):
-    __slots__ = ["cc", "asm", "ar", "extra_cflags", "install_dir"]
+    __slots__ = ["cc", "asm", "ar", "install_dir", "asan", "msan", "dbg"]
 
     def __init__(self, args):
         if args.toolchain:
@@ -112,18 +112,25 @@ class BuildConfig(object):
         if not args.no_ccache and program_exists("ccache"):
             self.cc = ["ccache"] + self.cc
 
-        self.extra_cflags = []
-        if args.asan:
-            self.extra_cflags.append("-fsanitize=address")
-        if args.msan:
-            self.extra_cflags += [
+        self.install_dir = os.path.abspath(args.install_dir or "build/toolchain")
+
+        self.asan = args.asan
+        self.msan = args.msan
+        self.dbg = args.dbg
+
+    def extra_cflags(self):
+        cflags = []
+        if self.asan:
+            cflags.append("-fsanitize=address")
+        if self.msan:
+            cflags += [
                 "-fsanitize=memory",
                 "-fsanitize-memory-track-origins=2",
             ]
-        if args.dbg:
-            self.extra_cflags.append("-g")
+        if self.dbg:
+            cflags.append("-g")
 
-        self.install_dir = os.path.abspath(args.install_dir or "build/toolchain")
+        return cflags
 
     def set_toolchain(self, toolchain):
         self.cc = [os.path.join(toolchain, "ncc")]
@@ -424,7 +431,7 @@ def build(build_config):
     host_cflags = COMMON_CFLAGS[:]
     if "clang" in build_config.cc:
         host_cflags.append("-fcolor-diagnostics")
-    host_cflags.extend(build_config.extra_cflags)
+    host_cflags.extend(build_config.extra_cflags())
 
     os.makedirs(build_config.install_dir, exist_ok=True)
     os.makedirs("build/toolchain", exist_ok=True)
@@ -605,6 +612,7 @@ def run_binary(args, build_config):
 
 
 def debug_binary(args, build_config):
+    build_config.dbg = True
     if (ret := build(build_config)) != 0:
         return ret
 
