@@ -704,6 +704,26 @@ static void encode_instr(
     // opcode above there's nothing left to do.
   }
 
+  // Check if we need an empty REX prefix. Registers SPL, BPL, SIL, and DIL are
+  // encoded using the same values as AH, CH, DH, BH (respectively). They are
+  // distinguished by the presence of a REX prefix.
+  for (u32 i = 0; i < instr->arity; i++) {
+    AsmValue *arg = instr->args + i;
+    if (arg->t != ASM_VALUE_REGISTER) {
+      continue;
+    }
+
+    Register reg = arg->u.reg;
+    assert(reg.t == PHYS_REG);
+
+    if (reg.width == 8
+        && (reg.u.class == REG_CLASS_SP || reg.u.class == REG_CLASS_BP
+            || reg.u.class == REG_CLASS_SI || reg.u.class == REG_CLASS_DI)) {
+      encoded_instr.rex_prefix |= REX_HIGH;
+      break;
+    }
+  }
+
   // @TODO: This seems kinda redundant considering we already encode the
   // immediate size in AsmValue.
   if (immediate_size != -1) {
