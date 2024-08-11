@@ -29,9 +29,9 @@ static u32 int_reg_to_alloc_index[] = {INT_ALLOCATION_ORDER};
 #undef X
 
 #define FLOAT_ALLOCATION_ORDER                                          \
-  X(0, REG_CLASS_XMM0), X(1, REG_CLASS_XMM1), X(2, REG_CLASS_XMM2),     \
-      X(3, REG_CLASS_XMM3), X(4, REG_CLASS_XMM4), X(5, REG_CLASS_XMM5), \
-      X(6, REG_CLASS_XMM6),
+  X(0, REG_CLASS_XMM6), X(1, REG_CLASS_XMM5), X(2, REG_CLASS_XMM4),     \
+      X(3, REG_CLASS_XMM3), X(4, REG_CLASS_XMM2), X(5, REG_CLASS_XMM1), \
+      X(6, REG_CLASS_XMM0),
 
 #define X(i, x) [i] = x
 static RegClass float_alloc_index_to_reg[] = {FLOAT_ALLOCATION_ORDER};
