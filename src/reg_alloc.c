@@ -333,12 +333,23 @@ void allocate_registers(AsmBuilder *builder)
         reg->u.class = spill_register;
         // @TODO: Insert all at once, rather than shifting along
         // every time.
+        AsmOp op;
+        if (vreg->type == REG_TYPE_INTEGER) {
+          op = MOV;
+        } else {
+          assert(vreg->type == REG_TYPE_FLOAT);
+          if (arg->u.reg.value_width == 32)
+            op = MOVSS;
+          else
+            op = MOVSD;
+        }
+
         // @TODO: Elide this when we just write to the register and
         // don't use the previous value
         *ARRAY_INSERT(body, AsmInstr, i) = (AsmInstr){
-            .op = MOV,
+            .op = op,
             .arity = 2,
-            .args[0] = asm_phys_reg(spill_register, 64),
+            .args[0] = asm_phys_reg(spill_register, arg->u.reg.width),
             .args[1] = asm_deref(asm_offset_reg(
                 REG_CLASS_SP, 64,
                 asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
@@ -346,12 +357,12 @@ void allocate_registers(AsmBuilder *builder)
         // @TODO: Elide this when we just read the register and
         // don't write anything back.
         *ARRAY_INSERT(body, AsmInstr, i + 2) = (AsmInstr){
-            .op = MOV,
+            .op = op,
             .arity = 2,
             .args[0] = asm_deref(asm_offset_reg(
                 REG_CLASS_SP, 64,
                 asm_const_imm(vreg->u.assigned_stack_slot + curr_sp_diff))),
-            .args[1] = asm_phys_reg(spill_register, 64),
+            .args[1] = asm_phys_reg(spill_register, arg->u.reg.width),
         };
         break;
       }
