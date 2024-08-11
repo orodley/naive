@@ -74,6 +74,12 @@ def make_arg_parser():
     run_parser.add_argument("binary", help="The binary to run", nargs=1)
     run_parser.add_argument("args", help="The args to pass to the binary", nargs="*")
 
+    debug_parser = subparsers.add_parser(
+        "debug", aliases=["d"], help="Build the given binary and run in the debugger"
+    )
+    debug_parser.add_argument("binary", help="The binary to debug", nargs=1)
+    debug_parser.add_argument("args", help="The args to pass to the binary", nargs="*")
+
     check_parser = subparsers.add_parser(
         "check",
         aliases=["c"],
@@ -134,6 +140,8 @@ def main(args):
         ret = run_tests(args, build_config)
     elif command in {"run", "r"}:
         ret = run_binary(args, build_config)
+    elif command in {"debug", "d"}:
+        ret = debug_binary(args, build_config)
     elif command in {"check", "c"}:
         ret = check(args, build_config)
     elif command in {"self_host", "s"}:
@@ -594,6 +602,15 @@ def run_binary(args, build_config):
         return ret
 
     return subprocess.run([f"build/toolchain/{args.binary[0]}"] + args.args).returncode
+
+
+def debug_binary(args, build_config):
+    if (ret := build(build_config)) != 0:
+        return ret
+
+    return subprocess.run(
+        ["gdb", "--args", f"build/toolchain/{args.binary[0]}"] + args.args
+    ).returncode
 
 
 def check(args, build_config):
