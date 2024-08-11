@@ -331,7 +331,7 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 
     switch (arg_class->t) {
     case ARG_CLASS_REG:
-      return asm_vreg(arg_class->u.reg.vreg, size_of_ir_type(value.type) * 8);
+      return asm_vreg_of_type(arg_class->u.reg.vreg, value.type);
     case ARG_CLASS_MEM: {
       // Arguments passed on the stack sit above the previous frame
       // pointer and return address (hence 16 bytes).
@@ -636,9 +636,14 @@ static void handle_phi_nodes(
   }
 }
 
-static RegClass argument_registers[] = {
+static RegClass int_argument_registers[] = {
     REG_CLASS_DI, REG_CLASS_SI, REG_CLASS_D,
     REG_CLASS_C,  REG_CLASS_R8, REG_CLASS_R9,
+};
+
+static RegClass float_argument_registers[] = {
+    REG_CLASS_XMM0, REG_CLASS_XMM1, REG_CLASS_XMM2, REG_CLASS_XMM3,
+    REG_CLASS_XMM4, REG_CLASS_XMM5, REG_CLASS_XMM6, REG_CLASS_XMM7,
 };
 
 // @TODO: This doesn't conform to the ABI, but it's definitely okay as long as
@@ -652,7 +657,8 @@ static CallSeq classify_arguments(u32 arity, IrType *arg_types)
   ArgClass *arg_classes = malloc(arity * sizeof *arg_classes);
 
   u32 curr_offset = 0;
-  u32 curr_reg_index = 0;
+  u32 curr_int_reg_index = 0;
+  u32 curr_float_reg_index = 0;
 
   for (u32 i = 0; i < arity; i++) {
     ArgClass *arg_class = arg_classes + i;
@@ -660,9 +666,9 @@ static CallSeq classify_arguments(u32 arity, IrType *arg_types)
     switch (arg_type->t) {
     case IR_INT:
     case IR_POINTER:
-      if (curr_reg_index < STATIC_ARRAY_LENGTH(argument_registers)) {
+      if (curr_int_reg_index < STATIC_ARRAY_LENGTH(int_argument_registers)) {
         arg_class->t = ARG_CLASS_REG;
-        arg_class->u.reg.reg = argument_registers[curr_reg_index++];
+        arg_class->u.reg.reg = int_argument_registers[curr_int_reg_index++];
       } else {
         arg_class->t = ARG_CLASS_MEM;
         arg_class->u.mem.offset = curr_offset;
@@ -671,8 +677,18 @@ static CallSeq classify_arguments(u32 arity, IrType *arg_types)
         curr_offset += 8;
       }
       break;
-    // @FLOAT_IMPL
-    case IR_FLOAT: UNIMPLEMENTED;
+    case IR_FLOAT:
+      if (curr_float_reg_index
+          < STATIC_ARRAY_LENGTH(float_argument_registers)) {
+        arg_class->t = ARG_CLASS_REG;
+        arg_class->u.reg.reg = float_argument_registers[curr_float_reg_index++];
+      } else {
+        arg_class->t = ARG_CLASS_MEM;
+        arg_class->u.mem.offset = curr_offset;
+        arg_class->u.mem.size = arg_type->u.float_bits / 8;
+        arg_class->u.mem.remains_in_memory = false;
+      }
+      break;
     case IR_STRUCT: {
       arg_class->t = ARG_CLASS_MEM;
       u32 size = size_of_ir_type(*arg_type);
@@ -1141,20 +1157,24 @@ static void asm_gen_instr(
     builder->curr_sp_diff = args_plus_padding;
 
     Array(u32) arg_vregs;
-    ARRAY_INIT(&arg_vregs, u32, STATIC_ARRAY_LENGTH(argument_registers));
+    ARRAY_INIT(&arg_vregs, u32, STATIC_ARRAY_LENGTH(int_argument_registers));
 
     for (u32 i = 0; i < call_arity; i++) {
       AsmValue arg = asm_value(builder, instr->u.call.arg_array[i]);
-      // Use the 64-bit version of the register, as all argument
-      // registers are 64-bit.
-      if (arg.t == ASM_VALUE_REGISTER) arg.u.reg.width = 64;
+      // Use the largest version of the register, as all argument registers do.
+      u8 value_width = size_of_ir_type(instr->u.call.arg_array[i].type) * 8;
+      if (arg.t == ASM_VALUE_REGISTER) {
+        arg.u.reg.width =
+            instr->u.call.arg_array[i].type.t == IR_FLOAT ? 128 : 64;
+        if (instr->u.call.arg_array[i].type.t != IR_FLOAT) value_width = 64;
+      }
 
       ArgClass *arg_class = call_seq.arg_classes + i;
 
       switch (arg_class->t) {
       case ARG_CLASS_REG: {
         AsmValue arg_target_reg =
-            pre_alloced_vreg(builder, arg_class->u.reg.reg, 64);
+            pre_alloced_vreg(builder, arg_class->u.reg.reg, value_width);
         emit_mov(builder, arg_target_reg, arg);
         *ARRAY_APPEND(&arg_vregs, u32) = arg_target_reg.u.reg.u.vreg_number;
         VReg *vreg = ARRAY_REF(
@@ -1581,11 +1601,12 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
     ArgClass *arg_class = ir_global->call_seq.arg_classes + i;
     if (arg_class->t == ARG_CLASS_REG) {
-      u32 vreg_num = new_vreg(builder);
+      AsmValue arg_vreg = new_asm_vreg_of_type(
+          builder, ir_global->type.u.function.arg_types[i]);
       emit_mov(
-          builder, asm_vreg(vreg_num, 64),
-          asm_phys_reg(arg_class->u.reg.reg, 64));
-      arg_class->u.reg.vreg = vreg_num;
+          builder, arg_vreg,
+          asm_phys_reg(arg_class->u.reg.reg, arg_vreg.u.reg.width));
+      arg_class->u.reg.vreg = arg_vreg.u.reg.u.vreg_number;
 
       register_save_area_size -= 8;
     }
@@ -1689,6 +1710,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   // rdi or rsi.
   // See the System V x86-64 ABI spec, figure 3.33
   if (ir_global->type.u.function.variable_arity) {
+    // @FLOAT_IMPL
     u32 num_reg_args = 0;
     for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
       ArgClass *arg_class = ir_global->call_seq.arg_classes + i;
@@ -1698,12 +1720,12 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
       }
     }
 
-    for (u32 i = num_reg_args; i < STATIC_ARRAY_LENGTH(argument_registers);
+    for (u32 i = num_reg_args; i < STATIC_ARRAY_LENGTH(int_argument_registers);
          i++) {
       AsmConst offset = asm_const_imm((i - num_reg_args) * 8);
       emit_mov(
           builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
-          asm_phys_reg(argument_registers[i], 64));
+          asm_phys_reg(int_argument_registers[i], 64));
     }
   }
 
