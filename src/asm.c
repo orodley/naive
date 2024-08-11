@@ -64,6 +64,7 @@ AsmConst asm_const_symbol(AsmSymbol *symbol)
 
 AsmValue asm_vreg(u32 vreg_number, u8 width)
 {
+  assert(width != 0);
   return (AsmValue){
       .is_deref = false,
       .t = ASM_VALUE_REGISTER,
@@ -76,6 +77,7 @@ AsmValue asm_vreg(u32 vreg_number, u8 width)
 
 AsmValue asm_float_vreg(u32 vreg_number, u8 width)
 {
+  assert(width != 0);
   return (AsmValue){
       .is_deref = false,
       .t = ASM_VALUE_REGISTER,
@@ -88,6 +90,7 @@ AsmValue asm_float_vreg(u32 vreg_number, u8 width)
 
 AsmValue asm_phys_reg(RegClass reg, u8 width)
 {
+  assert(width != 0);
   return (AsmValue){
       .is_deref = false,
       .t = ASM_VALUE_REGISTER,
