@@ -274,6 +274,8 @@ AsmValue asm_deref(AsmValue asm_value);
 
 Register *value_reg(AsmValue *arg);
 
+bool reg_class_is_gpr(RegClass reg_class);
+
 bool is_sign_extending_op(AsmOp op);
 
 void dump_asm_instr(AsmInstr *instr);

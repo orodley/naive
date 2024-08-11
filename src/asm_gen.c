@@ -184,14 +184,18 @@ static AsmValue assign_vreg(IrInstr *instr, AsmValue vreg)
 
 static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 {
-  u32 vreg_number = new_vreg(builder);
+  RegType reg_type =
+      reg_class_is_gpr(class) ? REG_TYPE_INTEGER : REG_TYPE_FLOAT;
+  u32 vreg_number = reg_type == REG_TYPE_INTEGER ? new_vreg(builder)
+                                                 : new_float_vreg(builder);
 
   VReg *vreg = ARRAY_LAST(&builder->virtual_registers, VReg);
   vreg->t = IN_REG;
-  vreg->u.assigned_register = class;
   vreg->pre_alloced = true;
+  vreg->u.assigned_register = class;
 
-  return asm_vreg(vreg_number, width);
+  if (vreg->type == REG_TYPE_INTEGER) return asm_vreg(vreg_number, width);
+  return asm_float_vreg(vreg_number, width);
 }
 
 static AsmValue asm_vreg_of_type(u32 vreg_number, IrType type)

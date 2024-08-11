@@ -160,6 +160,11 @@ AsmValue asm_symbol(AsmSymbol *symbol)
   };
 }
 
+bool reg_class_is_gpr(RegClass reg_class)
+{
+  return reg_class >= REG_CLASS_A && reg_class < REG_CLASS_IP;
+}
+
 // Certain instructions sign-extend their immediates. We need to know which
 // ones so that we can correctly determine the width we need for the immediate.
 bool is_sign_extending_op(AsmOp op)
