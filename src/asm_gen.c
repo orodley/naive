@@ -10,6 +10,9 @@
 #include "reg_alloc.h"
 #include "util.h"
 
+#define REGISTER_SAVE_AREA_SIZE \
+  (STATIC_ARRAY_LENGTH(int_argument_registers) * 8)
+
 static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out);
 static void asm_gen_call(AsmBuilder *builder, IrInstr *instr);
 
@@ -1251,19 +1254,18 @@ static void asm_gen_instr(
     emit_mov(builder, va_list_ptr, asm_value(builder, instr->u.arg));
 
     // Initialise as specified in System V x86-64 section 3.5.7
-
-    // We haven't consumed any args yet, so register_save_area +
-    // next_int_reg_offset should point to the start of the register save
-    // area. However, we need to make sure that next_int_reg_offset is 48
-    // when we run out of registers in the register save area, because
-    // that's what the ABI says. So, we set next_int_reg_offset to 48 minus
-    // the size of the register save area, and subtract the same amount
-    // from register_save_area. This way we start out pointing at the
-    // correct place, but still end up at 48 when we're out of space.
-    AsmValue starting_offset =
-        asm_fixed_imm(48 - builder->register_save_area_size, 32);
-
-    emit_mov(builder, asm_deref(va_list_ptr), starting_offset);
+    // The initial int register offset will point past the registers already
+    // used to pass normal int arguments to the function.
+    u32 int_arg_registers_already_used = 0;
+    for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
+      ArgClass *arg_class = ir_global->call_seq.arg_classes + i;
+      if (arg_class->t == ARG_CLASS_REG) {
+        int_arg_registers_already_used++;
+      }
+    }
+    AsmValue initial_int_register_offset =
+        asm_fixed_imm(int_arg_registers_already_used * 8, 32);
+    emit_mov(builder, asm_deref(va_list_ptr), initial_int_register_offset);
 
     // Skip next_vector_reg_offset since we don't use vector registers for
     // passing arguments yet.
@@ -1280,13 +1282,7 @@ static void asm_gen_instr(
     emit_instr2(builder, ADD, va_list_ptr, asm_imm(8));
 
     // The register save area is always at the bottom of our stack frame.
-    // However, as mentioned above, we need to offset this value for ABI
-    // reasons.
-    AsmValue register_save_area = asm_vreg(new_vreg(builder), 64);
-
-    emit_mov(builder, register_save_area, asm_phys_reg(REG_CLASS_SP, 64));
-    emit_instr2(builder, SUB, register_save_area, starting_offset);
-    emit_mov(builder, asm_deref(va_list_ptr), register_save_area);
+    emit_mov(builder, asm_deref(va_list_ptr), asm_phys_reg(REG_CLASS_SP, 64));
 
     break;
   }
@@ -1604,11 +1600,6 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   // Pre-allocate virtual registers for argument registers. This is to avoid
   // spills if this isn't a leaf function, since we'll need to use the same
   // registers for our own calls.
-  // In the same loop we figure out how much space we need for our register
-  // save area if this is a varargs function. It defaults to 48 (6 registers
-  // that are 8 bytes each), but we omit any that were already used for
-  // arguments before the "..."
-  u32 register_save_area_size = 48;
   for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
     ArgClass *arg_class = ir_global->call_seq.arg_classes + i;
     if (arg_class->t == ARG_CLASS_REG) {
@@ -1618,8 +1609,6 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
           builder, arg_vreg,
           asm_phys_reg(arg_class->u.reg.reg, arg_vreg.u.reg.width));
       arg_class->u.reg.vreg = arg_vreg.u.reg.u.vreg_number;
-
-      register_save_area_size -= 8;
     }
   }
 
@@ -1629,8 +1618,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   // as we're not in the process of calling a function. We don't care about
   // that case though, because we only need the location for va_start.
   if (ir_global->type.u.function.variable_arity) {
-    builder->local_stack_usage += register_save_area_size;
-    builder->register_save_area_size = register_save_area_size;
+    builder->local_stack_usage += REGISTER_SAVE_AREA_SIZE;
   }
 
   for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
@@ -1717,10 +1705,14 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   }
 
   // Argument registers are stored in increasing order in the register save
-  // area. We only bother storing the registers that could be used to pass
-  // varargs arguments. e.g.: for "void foo(int a, int b, ...)" we don't save
-  // rdi or rsi.
-  // See the System V x86-64 ABI spec, figure 3.33
+  // area. While the layout of the register save area is always the same (See
+  // the System V x86-64 ABI spec, figure 3.33), we don't always fill it. Only
+  // registers that could have been used to pass varargs arguments need to be
+  // stored.
+  //
+  // For integer registers, those that were used to pass normal
+  // arguments (before the "..." in the argument list) can be elided. e.g.: for
+  // "void foo(int a, int b, ...)" we don't save rdi or rsi.
   if (ir_global->type.u.function.variable_arity) {
     // @FLOAT_IMPL
     u32 num_reg_args = 0;
@@ -1734,7 +1726,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
     for (u32 i = num_reg_args; i < STATIC_ARRAY_LENGTH(int_argument_registers);
          i++) {
-      AsmConst offset = asm_const_imm((i - num_reg_args) * 8);
+      AsmConst offset = asm_const_imm(i * 8);
       emit_mov(
           builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
           asm_phys_reg(int_argument_registers[i], 64));
