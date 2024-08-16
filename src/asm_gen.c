@@ -1300,23 +1300,6 @@ static void asm_gen_instr(
 
     break;
   }
-  case OP_BUILTIN_VA_ARG: {
-    AsmValue va_list_ptr = asm_value(builder, instr->u.binary_op.arg1);
-    assert(instr->u.binary_op.arg2.t == IR_VALUE_CONST_INT);
-    u64 size = instr->u.binary_op.arg2.u.const_int;
-    assert(size <= 8);
-
-    u32 vreg = new_vreg(builder);
-    instr->vreg_number = vreg;
-    AsmValue vreg_32 = asm_vreg(vreg, 32);
-    AsmValue vreg_64 = asm_vreg(vreg, 64);
-
-    emit_instr2(builder, XOR, vreg_64, vreg_64);
-    emit_mov(builder, vreg_32, asm_deref(va_list_ptr));
-    emit_instr2(builder, ADD, asm_deref(va_list_ptr), asm_imm(size));
-    emit_instr2(builder, ADD, vreg_64, asm_phys_reg(REG_CLASS_BP, 64));
-    break;
-  }
   }
 }
 

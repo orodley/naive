@@ -163,7 +163,7 @@ typedef struct IrValue
       X(OP_ZEXT), X(OP_SEXT), X(OP_TRUNC), X(OP_SINT_TO_FLOAT),               \
       X(OP_FLOAT_TO_SINT), X(OP_FIELD), X(OP_LOAD), X(OP_STORE), X(OP_LOCAL), \
       X(OP_RET), X(OP_RET_VOID), X(OP_JUMP), X(OP_COND), X(OP_PHI),           \
-      X(OP_BUILTIN_VA_START), X(OP_BUILTIN_VA_ARG),
+      X(OP_BUILTIN_VA_START),
 
 #define X(x) x
 typedef enum IrOp
@@ -318,7 +318,5 @@ IrValue builtin_memcpy(IrBuilder *builder);
 IrValue builtin_memset(IrBuilder *builder);
 
 IrValue build_builtin_va_start(IrBuilder *builder, IrValue va_list_ptr);
-IrValue build_builtin_va_arg(
-    IrBuilder *builder, IrValue va_list_ptr, IrValue object_size);
 
 #endif

@@ -325,7 +325,6 @@ static void dump_instr(IrInstr *instr)
   case OP_SUB:
   case OP_ADDF:
   case OP_STORE:
-  case OP_BUILTIN_VA_ARG:
     dump_value(instr->u.binary_op.arg1);
     fputs(", ", stdout);
     dump_value(instr->u.binary_op.arg2);
@@ -871,18 +870,6 @@ IrValue build_builtin_va_start(IrBuilder *builder, IrValue va_list_ptr)
   instr->op = OP_BUILTIN_VA_START;
   instr->type = (IrType){.t = IR_VOID};
   instr->u.arg = va_list_ptr;
-
-  return value_instr(instr);
-}
-
-IrValue build_builtin_va_arg(
-    IrBuilder *builder, IrValue va_list_ptr, IrValue object_size)
-{
-  IrInstr *instr = append_instr(builder);
-  instr->op = OP_BUILTIN_VA_ARG;
-  instr->type = (IrType){.t = IR_POINTER};
-  instr->u.binary_op.arg1 = va_list_ptr;
-  instr->u.binary_op.arg2 = object_size;
 
   return value_instr(instr);
 }
