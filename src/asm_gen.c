@@ -1524,6 +1524,12 @@ static void asm_gen_call(AsmBuilder *builder, IrInstr *instr)
         new_asm_vreg_of_type(builder, instr->u.call.return_type);
     emit_mov(builder, temp_vreg, return_vreg);
 
+    VReg *vreg = ARRAY_REF(
+        &builder->virtual_registers, VReg, return_vreg.u.reg.u.vreg_number);
+    // Starts at the call, as that defines it. Ends at the mov into temp_vreg
+    vreg->live_range_start = builder->current_block->size - 2;
+    vreg->live_range_end = builder->current_block->size - 1;
+
     assign_vreg(instr, temp_vreg);
   }
 }
