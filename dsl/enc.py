@@ -200,7 +200,7 @@ static void assemble_instr(Array(u8) *output, AsmModule *asm_module, AsmInstr *i
 
 
 def check_width(width):
-    assert int(width) in [8, 16, 32, 64]
+    assert int(width) in [8, 16, 32, 64, 128]
 
 
 REGISTER_MAP = {
@@ -304,7 +304,7 @@ def arg_conditions(args):
             )
         elif arg.startswith("xmm"):
             if "/m" in arg:
-                width = arg[-2:]
+                width = arg[arg.index("/m") + 2 :]
                 check_width(width)
                 ext_width = width
                 conditions.append(
