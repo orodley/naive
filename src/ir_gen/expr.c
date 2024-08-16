@@ -23,6 +23,8 @@ static Term ir_gen_binary_operator(
 static Term ir_gen_add(IrGenContext *ctx, Term left, Term right);
 static Term ir_gen_sub(IrGenContext *ctx, Term left, Term right);
 static Term ir_gen_inc_dec(IrGenContext *ctx, ASTExpr *expr);
+static Term ir_gen_va_arg(
+    IrGenContext *ctx, Term va_list_term, char *builtin_name, CType *arg_type);
 
 static CType *type_name_to_c_type(IrGenContext *ctx, ASTTypeName *type_name);
 
@@ -514,25 +516,27 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     // @TODO: Search through the type env and asert that the elem type is
     // the same as the type bound to "va_list".
 
-    assert(arg_type->t == INTEGER_TYPE || arg_type->t == POINTER_TYPE);
-
-    IrGlobal *global_builtin_va_arg_int =
-        find_global_by_name(builder->module, "__builtin_va_arg_uint64");
-    assert(global_builtin_va_arg_int != NULL);
-
-    // @PORT: We want "uint64_t" here.
-    IrType unsigned_long_type =
-        c_type_to_ir_type(&ctx->type_env.unsigned_long_type);
-
-    IrValue *args = malloc(sizeof *args * 1);
-    args[0] = va_list_term.value;
-    Term builtin_result = (Term){
-        .ctype = &ctx->type_env.unsigned_long_type,
-        .value = build_call(
-            builder, value_global(global_builtin_va_arg_int),
-            unsigned_long_type, 1, args),
-    };
-    return convert_type(builder, builtin_result, arg_type);
+    if (arg_type->t == INTEGER_TYPE || arg_type->t == POINTER_TYPE) {
+      // @PORT: We want "uint64_t" here.
+      return convert_type(
+          builder,
+          ir_gen_va_arg(
+              ctx, va_list_term, "__builtin_va_arg_uint64",
+              &ctx->type_env.unsigned_long_type),
+          arg_type);
+    } else if (arg_type->t == FLOAT_TYPE) {
+      if (arg_type->u.floatt == FLOAT) {
+        return ir_gen_va_arg(
+            ctx, va_list_term, "__builtin_va_arg_float", arg_type);
+      } else if (arg_type->u.floatt == DOUBLE) {
+        return ir_gen_va_arg(
+            ctx, va_list_term, "__builtin_va_arg_double", arg_type);
+      } else {
+        UNIMPLEMENTED;
+      }
+    } else {
+      UNIMPLEMENTED;
+    }
   }
   default: printf("%d\n", t); UNIMPLEMENTED;
   }
@@ -924,6 +928,23 @@ static Term ir_gen_inc_dec(IrGenContext *ctx, ASTExpr *expr)
   } else {
     return pre_assign_value;
   }
+}
+
+static Term ir_gen_va_arg(
+    IrGenContext *ctx, Term va_list_term, char *builtin_name, CType *arg_type)
+{
+  IrGlobal *global_builtin_va_arg =
+      find_global_by_name(ctx->builder->module, builtin_name);
+  assert(global_builtin_va_arg != NULL);
+
+  IrValue *args = malloc(sizeof *args * 1);
+  args[0] = va_list_term.value;
+  return (Term){
+      .ctype = arg_type,
+      .value = build_call(
+          ctx->builder, value_global(global_builtin_va_arg),
+          c_type_to_ir_type(arg_type), 1, args),
+  };
 }
 
 IrConst *eval_constant_expr(IrGenContext *ctx, ASTExpr *expr)

@@ -30,4 +30,36 @@ static unsigned long __builtin_va_arg_uint64(va_list list)
   return result;
 }
 
+static float __builtin_va_arg_float(va_list list)
+{
+  float result;
+  if (list->next_vector_reg_offset >= 304) {
+    result = *(float *)list->next_stack_arg;
+    list->next_stack_arg = (char *)list->next_stack_arg + 4;
+  } else {
+    result = *(
+        float
+            *)((char *)list->register_save_area + list->next_vector_reg_offset);
+    list->next_vector_reg_offset += 16;
+  }
+
+  return result;
+}
+
+static double __builtin_va_arg_double(va_list list)
+{
+  double result;
+  if (list->next_vector_reg_offset >= 304) {
+    result = *(double *)list->next_stack_arg;
+    list->next_stack_arg = (char *)list->next_stack_arg + 8;
+  } else {
+    result = *(
+        double
+            *)((char *)list->register_save_area + list->next_vector_reg_offset);
+    list->next_vector_reg_offset += 16;
+  }
+
+  return result;
+}
+
 #endif
