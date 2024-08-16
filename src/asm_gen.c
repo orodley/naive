@@ -10,8 +10,9 @@
 #include "reg_alloc.h"
 #include "util.h"
 
-#define REGISTER_SAVE_AREA_SIZE \
-  (STATIC_ARRAY_LENGTH(int_argument_registers) * 8)
+#define REGISTER_SAVE_AREA_SIZE                    \
+  (STATIC_ARRAY_LENGTH(int_argument_registers) * 8 \
+   + STATIC_ARRAY_LENGTH(float_argument_registers) * 16)
 
 static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out);
 static void asm_gen_call(AsmBuilder *builder, IrInstr *instr);
@@ -1253,24 +1254,38 @@ static void asm_gen_instr(
     AsmValue va_list_ptr = asm_vreg(new_vreg(builder), 64);
     emit_mov(builder, va_list_ptr, asm_value(builder, instr->u.arg));
 
-    // Initialise as specified in System V x86-64 section 3.5.7
-    // The initial int register offset will point past the registers already
-    // used to pass normal int arguments to the function.
     u32 int_arg_registers_already_used = 0;
+    u32 float_arg_registers_already_used = 0;
     for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
       ArgClass *arg_class = ir_global->call_seq.arg_classes + i;
       if (arg_class->t == ARG_CLASS_REG) {
-        int_arg_registers_already_used++;
+        if (reg_class_is_gpr(arg_class->u.reg.reg)) {
+          int_arg_registers_already_used++;
+        } else {
+          float_arg_registers_already_used++;
+        }
       }
     }
+
+    // Initialise as specified in System V x86-64 section 3.5.7
+    // The initial int register offset will point past the registers already
+    // used to pass normal int arguments to the function.
     AsmValue initial_int_register_offset =
         asm_fixed_imm(int_arg_registers_already_used * 8, 32);
     emit_mov(builder, asm_deref(va_list_ptr), initial_int_register_offset);
 
-    // Skip next_vector_reg_offset since we don't use vector registers for
-    // passing arguments yet.
+    // @TODO: Support vregs with asm_offset_reg so we don't have to bump
+    // va_list_ptr and can just use const offsets for each field.
+    emit_instr2(builder, ADD, va_list_ptr, asm_imm(4));
 
-    emit_instr2(builder, ADD, va_list_ptr, asm_imm(8));
+    // Similarly, the initial float register offset will point past the
+    // registers already used to pass normal float arguments to the function.
+    AsmValue initial_float_register_offset = asm_fixed_imm(
+        STATIC_ARRAY_LENGTH(int_argument_registers) * 8
+            + float_arg_registers_already_used * 16,
+        32);
+    emit_mov(builder, asm_deref(va_list_ptr), initial_float_register_offset);
+    emit_instr2(builder, ADD, va_list_ptr, asm_imm(4));
 
     // Stack args start at the bottom of the previous stack frame, which is
     // always rbp + 16
@@ -1278,7 +1293,6 @@ static void asm_gen_instr(
     emit_mov(builder, temp_vreg, asm_phys_reg(REG_CLASS_BP, 64));
     emit_instr2(builder, ADD, temp_vreg, asm_imm(16));
     emit_mov(builder, asm_deref(va_list_ptr), temp_vreg);
-
     emit_instr2(builder, ADD, va_list_ptr, asm_imm(8));
 
     // The register save area is always at the bottom of our stack frame.
@@ -1486,10 +1500,18 @@ static void asm_gen_call(AsmBuilder *builder, IrInstr *instr)
   // registers used to pass arguments. We never use vector registers to
   // pass arguments because that isn't implemented yet, so we just set it
   // to zero.
-  //
-  // @TODO: Once we pass args in vector registers, set al appropriately.
   if (gen_new_call_seq) {
-    emit_mov(builder, pre_alloced_vreg(builder, REG_CLASS_A, 8), asm_imm(0));
+    u32 num_reg_float_args = 0;
+    for (u32 i = 0; i < call_arity; i++) {
+      IrValue arg = instr->u.call.arg_array[i];
+      ArgClass *arg_class = call_seq.arg_classes + i;
+      if (arg.type.t == IR_FLOAT && arg_class->t == ARG_CLASS_REG) {
+        num_reg_float_args++;
+      }
+    }
+    emit_mov(
+        builder, pre_alloced_vreg(builder, REG_CLASS_A, 8),
+        asm_imm(num_reg_float_args));
 
     // Done with call_seq now
     free(call_seq.arg_classes);
@@ -1556,11 +1578,11 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   assert(ir_global->type.t == IR_FUNCTION);
   IrFunction *ir_func = &ir_global->initializer->u.function;
 
-  AsmSymbol *asm_symbol = ir_global->asm_symbol;
-  assert(asm_symbol != NULL);
+  AsmSymbol *global_symbol = ir_global->asm_symbol;
+  assert(global_symbol != NULL);
 
-  asm_symbol->defined = ir_global->initializer != NULL;
-  if (!asm_symbol->defined) return;
+  global_symbol->defined = ir_global->initializer != NULL;
+  if (!global_symbol->defined) return;
 
   Array(AsmInstr) body;
   ARRAY_INIT(&body, AsmInstr, 20);
@@ -1719,24 +1741,62 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
   // For integer registers, those that were used to pass normal
   // arguments (before the "..." in the argument list) can be elided. e.g.: for
   // "void foo(int a, int b, ...)" we don't save rdi or rsi.
+  //
+  // For float registers the same thing applies, but also al contains the number
+  // of vector registers used to pass varargs arguments. We just check if it's
+  // zero, and if so skip storing float registers at all.
   if (ir_global->type.u.function.variable_arity) {
-    // @FLOAT_IMPL
-    u32 num_reg_args = 0;
+    u32 num_int_reg_args = 0;
+    u32 num_float_reg_args = 0;
     for (u32 i = 0; i < ir_global->type.u.function.arity; i++) {
       ArgClass *arg_class = ir_global->call_seq.arg_classes + i;
 
       if (arg_class->t == ARG_CLASS_REG) {
-        num_reg_args++;
+        if (reg_class_is_gpr(arg_class->u.reg.reg)) {
+          num_int_reg_args++;
+        } else {
+          num_float_reg_args++;
+        }
       }
     }
 
-    for (u32 i = num_reg_args; i < STATIC_ARRAY_LENGTH(int_argument_registers);
-         i++) {
+    for (u32 i = num_int_reg_args;
+         i < STATIC_ARRAY_LENGTH(int_argument_registers); i++) {
       AsmConst offset = asm_const_imm(i * 8);
       emit_mov(
           builder, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
           asm_phys_reg(int_argument_registers[i], 64));
     }
+
+    // Only save vector registers if any were used. al contains the number of
+    // vector registers used to pass arguments at the callsite. We just check if
+    // it's zero, and if not, we save them. We don't bother checking the exact
+    // number to skip saving some. We do skip those that were already used to
+    // pass normal arguments, as above with int argument registers.
+    AsmSymbol *skip_vector_save =
+        pool_alloc(&builder->asm_module.pool, sizeof *skip_vector_save);
+    *skip_vector_save = (AsmSymbol){
+        .name = "skip_vector_save",
+        .section = TEXT_SECTION,
+        .defined = true,
+        .linkage = ASM_LOCAL_LINKAGE,
+        .pred = NULL,
+    };
+
+    emit_instr2(builder, CMP, asm_phys_reg(REG_CLASS_A, 8), asm_imm(0));
+    emit_instr1(builder, JE, asm_symbol(skip_vector_save));
+    for (u32 i = num_float_reg_args;
+         i < STATIC_ARRAY_LENGTH(float_argument_registers); i++) {
+      AsmConst offset = asm_const_imm(
+          STATIC_ARRAY_LENGTH(int_argument_registers) * 8 + i * 16);
+      emit_instr2(
+          builder, MOVAPS, asm_deref(asm_offset_reg(REG_CLASS_SP, 64, offset)),
+          asm_phys_reg(float_argument_registers[i], 64));
+    }
+
+    // @TODO: Would be better to attach this to whatever the next instruction
+    // happens to be.
+    emit_instr0(builder, NOP)->label = skip_vector_save;
   }
 
   for (u32 j = 0; j < body.size; j++) {
