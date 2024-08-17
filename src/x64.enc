@@ -90,6 +90,9 @@ MOVSD xmm1/m64, xmm2   =         [F2 0F 11] /r
 MOVAPS xmm1, xmm2/m128 =         [0F 28] /r
 MOVAPS xmm2/m128, xmm1 =         [0F 29] /r
 
+MULSS xmm1, xmm2/m128  =         [F3 0F 59] /r
+MULSD xmm1, xmm2/m128  =         [F2 0F 59] /r
+
 NEG r/m32              =         F7 /3
 NEG r/m64              = REX.W + F7 /3
 
