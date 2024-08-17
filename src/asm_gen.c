@@ -232,46 +232,48 @@ AsmValue return_reg_for_type(AsmBuilder *builder, IrType type)
       size_of_ir_type(type) * 8);
 }
 
+static AsmValue asm_const_float(AsmBuilder *builder, u8 bit_width, double value)
+{
+  char name[32];
+  i32 len = snprintf(name, sizeof name, "__f%d", builder->global_temp_floats);
+  builder->global_temp_floats++;
+
+  char *name_copy = pool_alloc(&builder->asm_module.pool, len + 1);
+  strncpy(name_copy, name, len);
+  name_copy[len] = '\0';
+
+  AsmSymbol *symbol = add_asm_symbol(builder);
+  symbol->name = name_copy;
+  symbol->defined = true;
+  symbol->section = DATA_SECTION;
+  symbol->ir_global = NULL;
+  symbol->size = bit_width / 8;
+
+  IrConst konst = {
+      .type = (IrType){.t = IR_FLOAT, .u.float_bits = bit_width},
+      .u.floatt = value,
+  };
+
+  Array(u8) *data = &builder->asm_module.data;
+  // @TODO: Alignment
+  symbol->offset = data->size;
+  write_const(&builder->asm_module, &konst, data);
+
+  AsmValue rip_relative_addr =
+      asm_offset_reg(REG_CLASS_IP, 64, asm_const_symbol(symbol));
+  AsmValue vreg = asm_float_vreg(new_float_vreg(builder), bit_width);
+  emit_mov(builder, vreg, asm_deref(rip_relative_addr));
+  return vreg;
+}
+
 static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr);
 
 static AsmValue asm_value(AsmBuilder *builder, IrValue value)
 {
   switch (value.t) {
-  case IR_VALUE_CONST_FLOAT: {
-    char name[32];
-    i32 len = snprintf(name, sizeof name, "__f%d", builder->global_temp_floats);
-    builder->global_temp_floats++;
-
-    char *name_copy = pool_alloc(&builder->asm_module.pool, len + 1);
-    strncpy(name_copy, name, len);
-    name_copy[len] = '\0';
-
-    AsmSymbol *symbol = add_asm_symbol(builder);
-    symbol->name = name_copy;
-    symbol->defined = true;
-    symbol->section = DATA_SECTION;
-    symbol->ir_global = NULL;
-    symbol->size = size_of_ir_type(value.type);
-
-    IrConst konst = {
-        .type = value.type,
-        .u.floatt = value.u.const_float,
-    };
-
-    Array(u8) *data = &builder->asm_module.data;
-    // @TODO: Alignment
-    symbol->offset = data->size;
-    write_const(&builder->asm_module, &konst, data);
-
-    AsmValue rip_relative_addr =
-        asm_offset_reg(REG_CLASS_IP, 64, asm_const_symbol(symbol));
-    AsmValue vreg = asm_float_vreg(
-        new_float_vreg(builder), size_of_ir_type(value.type) * 8);
-    emit_mov(builder, vreg, asm_deref(rip_relative_addr));
-    return vreg;
-
-    break;
-  }
+  case IR_VALUE_CONST_FLOAT:
+    return asm_const_float(
+        builder, value.type.u.float_bits, value.u.const_float);
   case IR_VALUE_CONST_INT: return asm_imm(value.u.const_int);
   case IR_VALUE_INSTR: {
     IrInstr *instr = value.u.instr;
@@ -1082,6 +1084,73 @@ static void asm_gen_instr(
     } else {
       UNIMPLEMENTED;
     }
+    break;
+  }
+  case OP_UINT_TO_FLOAT: {
+    assert(instr->type.t == IR_FLOAT);
+    assert(instr->u.arg.type.t == IR_INT);
+
+    AsmValue value = asm_value(builder, instr->u.arg);
+    AsmValue result =
+        asm_float_vreg(new_float_vreg(builder), instr->type.u.float_bits);
+    assign_vreg(instr, result);
+
+    // There's no direct conversion from unsigned integer to float, so we have
+    // to do this a bit indirectly. The best approach differs depending on the
+    // size of the input integer, and the size of the output float.
+    if (instr->u.arg.type.u.bit_width < 64) {
+      // Small integers are easy -- we just zero extend them to 64 bits and then
+      // use the 64-bit conversion, since the sign bit will be guaranteed to
+      // be zero.
+      AsmValue extended = asm_vreg(new_vreg(builder), 64);
+      AsmValue matching_width = extended;
+      matching_width.u.reg.width = instr->u.arg.type.u.bit_width;
+      emit_mov(builder, matching_width, value);
+
+      if (instr->type.u.float_bits == IR_FLOAT_32) {
+        emit_instr2(builder, CVTSI2SS, result, extended);
+      } else if (instr->type.u.float_bits == IR_FLOAT_64) {
+        emit_instr2(builder, CVTSI2SD, result, extended);
+      } else {
+        UNIMPLEMENTED;
+      }
+    } else {
+      // 64-bit integers are harder. We shift the high bits down, convert, and
+      // then multiply. Then we convert the low bits, and add them to get the
+      // final result.
+      AsmOp convert_op;
+      AsmOp mul_op;
+      AsmOp add_op;
+      if (instr->type.u.float_bits == IR_FLOAT_32) {
+        convert_op = CVTSI2SS;
+        mul_op = MULSS;
+        add_op = ADDSS;
+      } else if (instr->type.u.float_bits == IR_FLOAT_64) {
+        convert_op = CVTSI2SD;
+        mul_op = MULSD;
+        add_op = ADDSD;
+      } else {
+        UNIMPLEMENTED;
+      }
+      AsmValue shifted = asm_vreg(new_vreg(builder), 64);
+      emit_mov(builder, shifted, value);
+      emit_instr2(builder, SHR, shifted, asm_imm(32));
+      emit_instr2(builder, convert_op, result, shifted);
+
+      AsmValue shift_multiplier =
+          asm_const_float(builder, 64, (double)(1ULL << 32));
+      emit_instr2(builder, mul_op, result, shift_multiplier);
+
+      // Reused shifted, since we don't need it anymore.
+      emit_mov(builder, shifted, value);
+      AsmValue mask = asm_vreg(new_vreg(builder), 64);
+      emit_mov(builder, mask, asm_imm(0xFFFFFFFF));
+      emit_instr2(builder, AND, shifted, mask);
+      AsmValue low_bits = new_asm_vreg_of_type(builder, instr->type);
+      emit_instr2(builder, convert_op, low_bits, shifted);
+      emit_instr2(builder, add_op, result, low_bits);
+    }
+
     break;
   }
   case OP_FLOAT_TO_SINT: {
