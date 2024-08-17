@@ -10,6 +10,7 @@ void *memset(void *s, int c, size_t n);
 size_t strlen(const char *s);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
+char *strncpy(char *dest, const char *src, size_t count);
 
 // @TODO: These should be hidden behind feature test macros.
 char *strndup(const char *s, size_t n);
