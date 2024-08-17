@@ -166,7 +166,7 @@ void allocate_registers(AsmBuilder *builder)
     }
 
     if (vreg->t == UNASSIGNED) {
-      if (free_regs_bitset == 0) {
+      if (*free_regs_bitset == 0) {
         vreg->t = ON_STACK;
         vreg->u.assigned_stack_slot = builder->local_stack_usage;
         builder->local_stack_usage += 8;
