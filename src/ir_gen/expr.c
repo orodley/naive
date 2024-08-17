@@ -1,5 +1,6 @@
 #include "ir_gen/expr.h"
 
+#include <math.h>
 #include <stdlib.h>
 
 #include "ir.h"
@@ -25,6 +26,7 @@ static Term ir_gen_sub(IrGenContext *ctx, Term left, Term right);
 static Term ir_gen_inc_dec(IrGenContext *ctx, ASTExpr *expr);
 static Term ir_gen_va_arg(
     IrGenContext *ctx, Term va_list_term, char *builtin_name, CType *arg_type);
+static bool look_up_builtin_ident(IrGenContext *ctx, char *name, Term *result);
 
 static CType *type_name_to_c_type(IrGenContext *ctx, ASTTypeName *type_name);
 
@@ -67,6 +69,9 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
 
   switch (t) {
   case IDENTIFIER_EXPR: {
+    Term result;
+    if (look_up_builtin_ident(ctx, expr->u.identifier, &result)) return result;
+
     Binding *binding = binding_for_name(ctx->scope, expr->u.identifier);
 
     if (binding == NULL) {
@@ -252,6 +257,9 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
 
     if (callee_expr->t == IDENTIFIER_EXPR) {
       char *name = callee_expr->u.identifier;
+      Term result;
+      if (look_up_builtin_ident(ctx, name, &result)) return result;
+
       if (streq(name, "__builtin_va_start")) {
         assert(call_arity == 1);
 
@@ -945,6 +953,20 @@ static Term ir_gen_va_arg(
           ctx->builder, value_global(global_builtin_va_arg),
           c_type_to_ir_type(arg_type), 1, args),
   };
+}
+
+static bool look_up_builtin_ident(IrGenContext *ctx, char *name, Term *result)
+{
+  if (streq(name, "__builtin_inf")) {
+    *result = (Term){
+        .ctype = &ctx->type_env.float_type,
+        .value = value_const_float(
+            c_type_to_ir_type(&ctx->type_env.float_type), INFINITY),
+    };
+    return true;
+  }
+
+  return false;
 }
 
 IrConst *eval_constant_expr(IrGenContext *ctx, ASTExpr *expr)
