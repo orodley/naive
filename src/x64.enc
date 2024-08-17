@@ -135,6 +135,7 @@ SHR r/m64, CL          = REX.W + D3 /5
 
 SUB r/m32, r32         =         29 /r
 SUB r/m32, imm8        =         83 /5 ib
+SUB r/m32, imm32       =         81 /5 id
 SUB r/m64, r64         = REX.W + 29 /r
 SUB r/m64, imm8        = REX.W + 83 /5 ib
 SUB r/m64, imm32       = REX.W + 81 /5 id
