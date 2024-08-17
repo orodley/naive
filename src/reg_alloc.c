@@ -624,6 +624,10 @@ static bool is_def(AsmInstr *instr, u32 vreg_num, VReg *vreg)
   case MOVSS:
   case MOVSD:
   case MOVAPS:
+  case CVTSD2SI:
+  case CVTSI2SD:
+  case CVTSI2SS:
+  case CVTSS2SI:
   case POP:
   case IMUL:
   case SETE:
