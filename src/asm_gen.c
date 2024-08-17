@@ -245,6 +245,7 @@ static AsmValue asm_const_float(AsmBuilder *builder, u8 bit_width, double value)
   AsmSymbol *symbol = add_asm_symbol(builder);
   symbol->name = name_copy;
   symbol->defined = true;
+  symbol->linkage = ASM_LOCAL_LINKAGE;
   symbol->section = DATA_SECTION;
   symbol->ir_global = NULL;
   symbol->size = bit_width / 8;
