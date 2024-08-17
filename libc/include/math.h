@@ -5,5 +5,6 @@
 #define HUGE_VAL INFINITY
 
 double ldexp(double arg, int exp);
+int abs(int n);
 
 #endif
