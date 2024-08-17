@@ -1067,6 +1067,34 @@ static void asm_gen_instr(
 
     break;
   }
+  case OP_EXTF: {
+    assert(instr->type.t == IR_FLOAT);
+    assert(instr->u.arg.type.t == IR_FLOAT);
+
+    if (instr->type.u.float_bits != IR_FLOAT_64) {
+      UNIMPLEMENTED;
+    }
+
+    AsmValue vreg =
+        asm_float_vreg(new_float_vreg(builder), instr->type.u.float_bits);
+    assign_vreg(instr, vreg);
+    emit_instr2(builder, CVTSS2SD, vreg, asm_value(builder, instr->u.arg));
+    break;
+  }
+  case OP_TRUNCF: {
+    assert(instr->type.t == IR_FLOAT);
+    assert(instr->u.arg.type.t == IR_FLOAT);
+
+    if (instr->type.u.float_bits != IR_FLOAT_32) {
+      UNIMPLEMENTED;
+    }
+
+    AsmValue vreg =
+        asm_float_vreg(new_float_vreg(builder), instr->type.u.float_bits);
+    assign_vreg(instr, vreg);
+    emit_instr2(builder, CVTSD2SS, vreg, asm_value(builder, instr->u.arg));
+    break;
+  }
   case OP_SINT_TO_FLOAT: {
     assert(instr->type.t == IR_FLOAT);
     assert(instr->u.arg.type.t == IR_INT);

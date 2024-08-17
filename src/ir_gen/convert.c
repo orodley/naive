@@ -18,6 +18,14 @@ Term convert_type(IrBuilder *builder, Term term, CType *target_type)
     } else {
       converted = build_type_instr(builder, OP_ZEXT, term.value, ir_type);
     }
+  } else if (term.ctype->t == FLOAT_TYPE && target_type->t == FLOAT_TYPE) {
+    IrType ir_type = c_type_to_ir_type(target_type);
+
+    if (c_type_to_ir_type(term.ctype).u.float_bits > ir_type.u.float_bits) {
+      converted = build_type_instr(builder, OP_TRUNCF, term.value, ir_type);
+    } else {
+      converted = build_type_instr(builder, OP_EXTF, term.value, ir_type);
+    }
   } else if (term.ctype->t == INTEGER_TYPE && target_type->t == FLOAT_TYPE) {
     IrType ir_type = c_type_to_ir_type(target_type);
     IrOp op =

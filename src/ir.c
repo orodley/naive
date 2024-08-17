@@ -265,6 +265,8 @@ static void dump_instr(IrInstr *instr)
   case OP_ZEXT:
   case OP_SEXT:
   case OP_TRUNC:
+  case OP_EXTF:
+  case OP_TRUNCF:
   case OP_SINT_TO_FLOAT:
   case OP_UINT_TO_FLOAT:
   case OP_FLOAT_TO_SINT:
