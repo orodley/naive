@@ -20,11 +20,9 @@ Term convert_type(IrBuilder *builder, Term term, CType *target_type)
     }
   } else if (term.ctype->t == INTEGER_TYPE && target_type->t == FLOAT_TYPE) {
     IrType ir_type = c_type_to_ir_type(target_type);
-    // @TODO: Handle unsigned int to float conversions. This is a bit more
-    // complicated on the asm_gen side as there is no instruction for it.
-    assert(term.ctype->u.integer.is_signed);
-    converted =
-        build_type_instr(builder, OP_SINT_TO_FLOAT, term.value, ir_type);
+    IrOp op =
+        term.ctype->u.integer.is_signed ? OP_SINT_TO_FLOAT : OP_UINT_TO_FLOAT;
+    converted = build_type_instr(builder, op, term.value, ir_type);
   } else if (term.ctype->t == FLOAT_TYPE && target_type->t == INTEGER_TYPE) {
     IrType ir_type = c_type_to_ir_type(target_type);
     // @TODO: Handle float to unsigned int conversions.
