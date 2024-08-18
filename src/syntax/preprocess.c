@@ -727,7 +727,7 @@ static bool handle_pp_directive(PP *pp)
 
       skip_whitespace_and_comments(pp, false);
     } else if (strneq(directive.chars, "line", directive.len)) {
-      UNIMPLEMENTED("#line preprocessor directive", 0);
+      UNIMPLEMENTED("#line preprocessor directive");
     } else if (strneq(directive.chars, "error", directive.len)) {
       advance(reader);
 
@@ -739,7 +739,7 @@ static bool handle_pp_directive(PP *pp)
       emit_error(&directive_start, error);
       return false;
     } else if (strneq(directive.chars, "pragma", directive.len)) {
-      UNIMPLEMENTED("#pragma preprocessor directive", 0);
+      UNIMPLEMENTED("#pragma preprocessor directive");
     } else {
       emit_error(
           &reader->source_loc, "Invalid preprocessor directive: %s", directive);

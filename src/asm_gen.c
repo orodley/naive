@@ -1947,8 +1947,7 @@ static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out)
       write_int_bytes(out, raw_bits, 8);
     } else {
       // 80-bit long double
-      UNIMPLEMENTED(
-          "float constant with bit width %u", konst->type.u.bit_width);
+      UNIMPLEMENTED("long double float constant");
     }
     break;
   case IR_POINTER: {
