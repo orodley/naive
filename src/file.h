@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdio.h>
 
+#include "exit_code.h"
 #include "misc.h"
 
 typedef enum FileType
@@ -34,7 +35,7 @@ inline long checked_ftell(FILE *file)
   long ret = ftell(file);
   if (ret == -1) {
     perror("checked_ftell");
-    assert(false);
+    exit_with_code(EXIT_CODE_IO_ERROR);
   }
 
   return ret;
@@ -45,7 +46,7 @@ inline void checked_fseek(FILE *file, long offset, int whence)
   int ret = fseek(file, offset, whence);
   if (ret == -1) {
     perror("checked_fseek");
-    assert(false);
+    exit_with_code(EXIT_CODE_IO_ERROR);
   }
 }
 
@@ -54,7 +55,7 @@ inline void checked_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
   size_t entries_read = fread(ptr, size, nmemb, stream);
   if (entries_read != nmemb) {
     perror("checked_fread");
-    assert(false);
+    exit_with_code(EXIT_CODE_IO_ERROR);
   }
 }
 
@@ -64,7 +65,7 @@ inline void checked_fwrite(
   size_t entries_written = fwrite(ptr, size, nmemb, stream);
   if (entries_written != nmemb) {
     perror("checked_fwrite");
-    assert(false);
+    exit_with_code(EXIT_CODE_IO_ERROR);
   }
 }
 

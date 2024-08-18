@@ -1,6 +1,8 @@
 #ifndef NAIVE_EXIT_CODE_H_
 #define NAIVE_EXIT_CODE_H_
 
+#include <stdlib.h>
+
 typedef enum ExitCode
 {
   EXIT_CODE_SUCCESS = 0,
@@ -11,5 +13,7 @@ typedef enum ExitCode
   EXIT_CODE_UNIMPLEMENTED = 5,
   EXIT_CODE_INTERNAL_COMPILER_ERROR = 6,
 } ExitCode;
+
+inline void exit_with_code(ExitCode code) { exit((int)code); }
 
 #endif

@@ -459,6 +459,7 @@ def build(build_config):
             "src/bit_set.o",
             "src/diagnostics.o",
             "src/elf.o",
+            "src/exit_code.o",
             "src/file.o",
             "src/ir.o",
             "src/ir_gen/ir_gen.o",
@@ -483,11 +484,18 @@ def build(build_config):
             "src/diagnostics.o",
             "src/asm.o",
             "src/elf.o",
+            "src/exit_code.o",
             "src/pool.o",
             "src/file.o",
             "src/array.o",
         ],
-        "src/bin/nar": ["src/bin/nar.o", "src/array.o", "src/file.o", "src/util.o"],
+        "src/bin/nar": [
+            "src/bin/nar.o",
+            "src/array.o",
+            "src/file.o",
+            "src/exit_code.o",
+            "src/util.o",
+        ],
     }
 
     procs = []
