@@ -46,6 +46,20 @@ AsmSymbol *add_asm_symbol(AsmBuilder *builder)
   return asm_symbol;
 }
 
+AsmSymbol *add_label(AsmBuilder *builder, char *name)
+{
+  AsmSymbol *symbol = add_asm_symbol(builder);
+  *symbol = (AsmSymbol){
+      .name = name,
+      .section = TEXT_SECTION,
+      .defined = true,
+      .linkage = ASM_LOCAL_LINKAGE,
+      .pred = NULL,
+  };
+
+  return symbol;
+}
+
 AsmInstr *emit_instr0(AsmBuilder *builder, AsmOp op)
 {
   AsmInstr *instr = ARRAY_APPEND(builder->current_block, AsmInstr);
@@ -1689,15 +1703,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
   builder->local_stack_usage = 0;
 
-  AsmSymbol *ret_label =
-      pool_alloc(&builder->asm_module.pool, sizeof *ret_label);
-  *ret_label = (AsmSymbol){
-      .name = "ret",
-      .section = TEXT_SECTION,
-      .defined = true,
-      .linkage = ASM_LOCAL_LINKAGE,
-      .pred = NULL,
-  };
+  AsmSymbol *ret_label = add_label(builder, "ret");
   builder->ret_label = ret_label;
 
   if (ARRAY_IS_VALID(&builder->virtual_registers))
@@ -1710,16 +1716,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
   for (u32 block_index = 0; block_index < ir_func->blocks.size; block_index++) {
     IrBlock *block = *ARRAY_REF(&ir_func->blocks, IrBlock *, block_index);
-    AsmSymbol *label = pool_alloc(&builder->asm_module.pool, sizeof *label);
-    block->label = label;
-
-    *label = (AsmSymbol){
-        .name = block->name,
-        .section = TEXT_SECTION,
-        .defined = true,
-        .linkage = ASM_LOCAL_LINKAGE,
-        .pred = NULL,
-    };
+    block->label = add_label(builder, block->name);
   }
 
   // Pre-allocate virtual registers for argument registers. This is to avoid
@@ -1870,16 +1867,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     // it's zero, and if not, we save them. We don't bother checking the exact
     // number to skip saving some. We do skip those that were already used to
     // pass normal arguments, as above with int argument registers.
-    AsmSymbol *skip_vector_save =
-        pool_alloc(&builder->asm_module.pool, sizeof *skip_vector_save);
-    *skip_vector_save = (AsmSymbol){
-        .name = "skip_vector_save",
-        .section = TEXT_SECTION,
-        .defined = true,
-        .linkage = ASM_LOCAL_LINKAGE,
-        .pred = NULL,
-    };
-
+    AsmSymbol *skip_vector_save = add_label(builder, "skip_vector_save");
     emit_instr2(builder, CMP, asm_phys_reg(REG_CLASS_A, 8), asm_imm(0));
     emit_instr1(builder, JE, asm_symbol(skip_vector_save));
     for (u32 i = num_float_reg_args;
