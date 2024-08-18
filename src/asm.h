@@ -118,15 +118,16 @@ typedef struct AsmValue
 
 // @NOTE: Be sure to update compute_live_ranges and allocate_registers if more
 // Jcc instructions are added.
-#define ASM_OPS                                                                \
-  X(NOP), X(MOV), X(MOVSX), X(MOVZX), X(MOVSS), X(MOVSD), X(MOVAPS), X(RET),   \
-      X(CALL), X(XOR), X(AND), X(OR), X(NOT), X(NEG), X(SHL), X(SHR), X(ADD),  \
-      X(SUB), X(PUSH), X(POP), X(IMUL), X(IDIV), X(CDQ), X(CQO), X(CVTSI2SS),  \
-      X(CVTSI2SD), X(CVTSS2SI), X(CVTSD2SI), X(CVTSS2SD), X(CVTSD2SS), X(MULSS), X(MULSD), X(CMP),       \
-      X(SETE), X(SETNE), X(SETG), X(SETGE), X(SETL), X(SETLE), X(SETA),        \
-      X(SETAE), X(SETB), X(SETBE), X(TEST), X(JMP), X(JE), X(JNE), X(JG),      \
-      X(JGE), X(JL), X(JLE), X(JA), X(JAE), X(JB), X(JBE), X(ADDSS), X(ADDSD), \
-      X(ADC), X(SBB), X(SYSCALL),
+#define ASM_OPS                                                               \
+  X(NOP), X(MOV), X(MOVSX), X(MOVZX), X(MOVSS), X(MOVSD), X(MOVAPS), X(RET),  \
+      X(CALL), X(XOR), X(AND), X(OR), X(NOT), X(NEG), X(SHL), X(SHR), X(ADD), \
+      X(SUB), X(PUSH), X(POP), X(IMUL), X(IDIV), X(CDQ), X(CQO), X(CVTSI2SS), \
+      X(CVTSI2SD), X(CVTSS2SI), X(CVTSD2SI), X(CVTSS2SD), X(CVTSD2SS),        \
+      X(MULSS), X(MULSD), X(CMP), X(SETE), X(SETNE), X(SETG), X(SETGE),       \
+      X(SETL), X(SETLE), X(SETA), X(SETAE), X(SETB), X(SETBE), X(TEST),       \
+      X(UCOMISS), X(UCOMISD), X(JMP), X(JE), X(JNE), X(JG), X(JGE), X(JL),    \
+      X(JLE), X(JA), X(JAE), X(JB), X(JBE), X(ADDSS), X(ADDSD), X(ADC),       \
+      X(SBB), X(SYSCALL),
 
 #define X(x) x
 typedef enum AsmOp

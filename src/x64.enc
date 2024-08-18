@@ -148,6 +148,9 @@ SYSCALL                =         [0F 05]
 TEST r/m8, r8          =         84 /r
 TEST r/m32, r32        =         85 /r
 
+UCOMISS xmm1, xmm2/m32 =         [0F 2E] /r
+UCOMISD xmm1, xmm2/m32 =         [66 0F 2E] /r
+
 XOR r/m8, r8           =         30 /r
 XOR r/m32, r32         =         31 /r
 XOR r/m64, r64         = REX.W + 31 /r
