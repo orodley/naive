@@ -182,7 +182,7 @@ int main(int argc, char *argv[])
   String input = map_file_into_memory(input_filename);
   if (!is_valid(input)) {
     fprintf(stderr, "Failed to open input file: '%s'\n", input_filename);
-    return EXIT_CODE_INPUT_IO_ERROR;
+    return EXIT_CODE_IO_ERROR;
   }
 
   Reader _reader;

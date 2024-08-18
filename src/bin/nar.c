@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
   FILE *ar_file = fopen(ar_filename, "wb");
   if (ar_file == NULL) {
     perror("Failed to create archive file");
-    return EXIT_CODE_OUTPUT_IO_ERROR;
+    return EXIT_CODE_IO_ERROR;
   }
 
   checked_fwrite(AR_GLOBAL_HEADER, sizeof AR_GLOBAL_HEADER - 1, 1, ar_file);
@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
     FILE *input_file = fopen(input_filename, "rb");
     if (input_file == NULL) {
       perror("Failed to open input file");
-      return EXIT_CODE_INPUT_IO_ERROR;
+      return EXIT_CODE_IO_ERROR;
     }
 
     checked_fseek(input_file, 0, SEEK_END);
@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
       long bytes_read = fread(read_buf, 1, sizeof read_buf, input_file);
       if (bytes_read != sizeof read_buf && !feof(input_file)) {
         perror("Error reading from input file");
-        return EXIT_CODE_INPUT_IO_ERROR;
+        return EXIT_CODE_IO_ERROR;
       }
       checked_fwrite(read_buf, 1, bytes_read, ar_file);
 

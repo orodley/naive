@@ -651,7 +651,7 @@ ExitCode write_elf_object_file(char *output_file_name, AsmModule *asm_module)
   FILE *output_file = fopen(output_file_name, "wb");
   if (output_file == NULL) {
     perror("Unable to open output file");
-    return EXIT_CODE_OUTPUT_IO_ERROR;
+    return EXIT_CODE_IO_ERROR;
   }
 
   ELFFile _elf_file;
@@ -1046,7 +1046,7 @@ ExitCode link_elf_executable(
   FILE *output_file = fopen(executable_file_name, "wb");
   if (output_file == NULL) {
     perror("Failed to open linker output");
-    return EXIT_CODE_OUTPUT_IO_ERROR;
+    return EXIT_CODE_IO_ERROR;
   }
 
   AsmModule asm_module;
@@ -1062,7 +1062,7 @@ ExitCode link_elf_executable(
     FILE *input_file = fopen(input_filename, "rb");
     if (input_file == NULL) {
       perror("Failed to open linker input");
-      ret = EXIT_CODE_INPUT_IO_ERROR;
+      ret = EXIT_CODE_IO_ERROR;
       goto cleanup;
     }
 

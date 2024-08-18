@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
       FILE *input_file = fopen(input_filename, "rb");
       if (input_file == NULL) {
         perror("Unable to open input file");
-        return EXIT_CODE_INPUT_IO_ERROR;
+        return EXIT_CODE_IO_ERROR;
       }
 
       FileType type = file_type(input_file);
@@ -267,7 +267,7 @@ int main(int argc, char *argv[])
       int ret = remove(temp_filename);
       if (ret != 0) {
         perror("Failed to remove temporary object file");
-        result = EXIT_CODE_OUTPUT_IO_ERROR;
+        result = EXIT_CODE_IO_ERROR;
       }
     }
 
@@ -299,7 +299,7 @@ static int compile_file(
       FILE *output = fopen(output_filename, "w");
       if (output == NULL) {
         perror("Unable to open output file");
-        return EXIT_CODE_OUTPUT_IO_ERROR;
+        return EXIT_CODE_IO_ERROR;
       }
 
       fputs((char *)preprocessed.elements, output);
@@ -438,14 +438,14 @@ static ExitCode make_file_executable(char *filename)
   if (fstat(fd, &status) == -1) {
     perror("Unable to stat output file");
     close(fd);
-    return EXIT_CODE_OUTPUT_IO_ERROR;
+    return EXIT_CODE_IO_ERROR;
   }
 
   mode_t new_mode = (status.st_mode & 07777) | S_IXUSR;
   if (fchmod(fd, new_mode) == -1) {
     perror("Unable to change output file to executable");
     close(fd);
-    return EXIT_CODE_OUTPUT_IO_ERROR;
+    return EXIT_CODE_IO_ERROR;
   }
 
   close(fd);
