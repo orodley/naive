@@ -326,7 +326,8 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
     // @NOTE: Handled specially for a similar reason to OP_FIELD and
     // OP_LOCAL above. These instructions are mostly used as the argument
     // to OP_COND, so we let OP_COND match them itself in those cases.
-    case OP_CMP: return asm_gen_relational_instr(builder, instr);
+    case OP_CMP:
+    case OP_CMPF: return asm_gen_relational_instr(builder, instr);
     case OP_CAST: {
       AsmValue cast_value = asm_value(builder, instr->u.arg);
       if (cast_value.t == ASM_VALUE_REGISTER)
@@ -508,7 +509,7 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
 {
   bool invert = get_inner_cmp(builder, instr, &instr);
 
-  assert(instr->op == OP_CMP);
+  assert(instr->op == OP_CMP || instr->op == OP_CMPF);
   IrValue arg1 = instr->u.cmp.arg1;
   IrValue arg2 = instr->u.cmp.arg2;
   IrCmp cmp = maybe_flip_conditional(instr->u.cmp.cmp, &arg1, &arg2);
@@ -537,8 +538,15 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
   assert(asm_arg1.t == ASM_VALUE_REGISTER);
 
   emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
+  AsmOp cmp_op;
+  if (instr->op == OP_CMP) {
+    cmp_op = CMP;
+  } else {
+    assert(instr->op == OP_CMPF);
+    cmp_op = instr->u.cmp.arg1.type.u.float_bits == 32 ? UCOMISS : UCOMISD;
+  }
   emit_instr2(
-      builder, CMP, asm_arg1,
+      builder, cmp_op, asm_arg1,
       maybe_move_const_to_reg(builder, asm_arg2, asm_arg1.u.reg.width, true));
   emit_instr1(builder, op, asm_vreg(vreg, 8));
 
@@ -830,7 +838,7 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
 
   IrInstr *cond_instr = condition.u.instr;
   bool invert = get_inner_cmp(builder, cond_instr, &cond_instr);
-  if (cond_instr->op != OP_CMP) {
+  if (cond_instr->op != OP_CMP && cond_instr->op != OP_CMPF) {
     return false;
   }
 
@@ -857,7 +865,14 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
   AsmValue arg2_value = maybe_move_const_to_reg(
       builder, asm_value(builder, arg2), size_of_ir_type(arg1.type) * 8, true);
 
-  emit_instr2(builder, CMP, asm_value(builder, arg1), arg2_value);
+  AsmOp op;
+  if (cond_instr->op == OP_CMP) {
+    op = CMP;
+  } else {
+    assert(cond_instr->op == OP_CMPF);
+    op = cond_instr->u.cmp.arg1.type.u.float_bits == 32 ? UCOMISS : UCOMISD;
+  }
+  emit_instr2(builder, op, asm_value(builder, arg1), arg2_value);
   emit_instr1(builder, jcc, asm_symbol(cond->u.cond.then_block->label));
   // The "else" case is handled by the caller.
 
@@ -1347,7 +1362,8 @@ static void asm_gen_instr(
   // @NOTE: Handled specially for a similar reason to OP_FIELD and OP_LOCAL
   // above. This instruction is mostly used as the argument to OP_COND, so we
   // let OP_COND match them itself in those cases.
-  case OP_CMP: break;
+  case OP_CMP:
+  case OP_CMPF: break;
   case OP_BUILTIN_VA_START: {
     AsmValue va_list_ptr = asm_vreg(new_vreg(builder), 64);
     emit_mov(builder, va_list_ptr, asm_value(builder, instr->u.arg));
