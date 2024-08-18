@@ -304,7 +304,8 @@ static void dump_instr(IrInstr *instr)
       dump_value(instr->u.call.arg_array[i]);
     }
     break;
-  case OP_CMP: {
+  case OP_CMP:
+  case OP_CMPF: {
     char *cmp_name = ir_cmp_names[instr->u.cmp.cmp];
     // Start at 4 to skip "CMP_"
     for (u32 i = 4; cmp_name[i] != '\0'; i++) {
@@ -548,6 +549,24 @@ static u32 constant_fold_cmp(IrCmp cmp, u64 arg1, u64 arg2)
   UNREACHABLE;
 }
 
+static u32 constant_fold_cmpf(IrCmp cmp, double arg1, double arg2)
+{
+  switch (cmp) {
+  case CMP_EQ: return arg1 == arg2;
+  case CMP_NEQ: return arg1 != arg2;
+  case CMP_SGT: return arg1 > arg2;
+  case CMP_SGTE: return arg1 >= arg2;
+  case CMP_SLT: return arg1 < arg2;
+  case CMP_SLTE: return arg1 <= arg2;
+  case CMP_UGT: UNREACHABLE;
+  case CMP_UGTE: UNREACHABLE;
+  case CMP_ULT: UNREACHABLE;
+  case CMP_ULTE: UNREACHABLE;
+  }
+
+  UNREACHABLE;
+}
+
 static IrValue value_instr(IrInstr *instr)
 {
   return (IrValue){
@@ -669,6 +688,26 @@ IrValue build_cmp(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2)
 
   IrInstr *instr = append_instr(builder);
   instr->op = OP_CMP;
+  instr->type = type;
+  instr->u.cmp.arg1 = arg1;
+  instr->u.cmp.arg2 = arg2;
+  instr->u.cmp.cmp = cmp;
+
+  return value_instr(instr);
+}
+
+IrValue build_cmpf(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2)
+{
+  assert(ir_type_eq(&arg1.type, &arg2.type));
+  IrType type = (IrType){.t = IR_INT, .u.bit_width = 32};
+
+  if (arg1.t == IR_VALUE_CONST_FLOAT && arg2.t == IR_VALUE_CONST_FLOAT) {
+    return value_const_int(
+        type, constant_fold_cmpf(cmp, arg1.u.const_float, arg2.u.const_float));
+  }
+
+  IrInstr *instr = append_instr(builder);
+  instr->op = OP_CMPF;
   instr->type = type;
   instr->u.cmp.arg1 = arg1;
   instr->u.cmp.arg2 = arg2;
