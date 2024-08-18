@@ -663,6 +663,17 @@ static Term ir_gen_cmp_expr(IrGenContext *ctx, ASTExpr *expr, IrCmp cmp)
       ir_gen_expr(ctx, expr->u.binary_op.arg2, RVALUE_CONTEXT), cmp);
 }
 
+static IrCmp signed_cmp_to_unsigned_cmp(IrCmp cmp)
+{
+  switch (cmp) {
+  case CMP_SGT: return CMP_UGT;
+  case CMP_SGTE: return CMP_UGTE;
+  case CMP_SLT: return CMP_ULT;
+  case CMP_SLTE: return CMP_ULTE;
+  default: return cmp;
+  }
+}
+
 static Term ir_gen_cmp(IrGenContext *ctx, Term left, Term right, IrCmp cmp)
 {
   left.ctype = decay_to_pointer(&ctx->type_env, left.ctype);
@@ -711,21 +722,26 @@ static Term ir_gen_cmp(IrGenContext *ctx, Term left, Term right, IrCmp cmp)
     do_arithmetic_conversions(ctx->builder, &left, &right);
 
     assert(c_type_eq(left.ctype, right.ctype));
-    assert(left.ctype->t == INTEGER_TYPE);
-
-    // @NOTE: We always pass the signed comparison ops to this function.
-    // Not because we specifically want a signed comparison. Just because
-    // all of the IrCmp members have explicit signedness. The caller
-    // expects ir_gen_cmp to adjust as necessary based on the signedness of
-    // the arguments after conversion.
-    if (!left.ctype->u.integer.is_signed) {
-      switch (cmp) {
-      case CMP_SGT: cmp = CMP_UGT; break;
-      case CMP_SGTE: cmp = CMP_UGTE; break;
-      case CMP_SLT: cmp = CMP_ULT; break;
-      case CMP_SLTE: cmp = CMP_ULTE; break;
-      default: break;
+    if (left.ctype->t == INTEGER_TYPE) {
+      // @NOTE: We always pass the signed comparison ops to this function.
+      // Not because we specifically want a signed comparison. Just because
+      // all of the IrCmp members have explicit signedness. The caller
+      // expects ir_gen_cmp to adjust as necessary based on the signedness of
+      // the arguments after conversion.
+      if (!left.ctype->u.integer.is_signed) {
+        cmp = signed_cmp_to_unsigned_cmp(cmp);
       }
+    } else {
+      assert(left.ctype->t == FLOAT_TYPE);
+      CType *result_type = &ctx->type_env.int_type;
+
+      // Always use unsigned comparison ops for floats. Signed vs unsigned
+      // doesn't make sense for floats, so we may as well canonicalise to just
+      // one of them. Unsigned is convenient because it matches how float
+      // comparisons work in x86.
+      cmp = signed_cmp_to_unsigned_cmp(cmp);
+      IrValue value = build_cmpf(ctx->builder, cmp, left.value, right.value);
+      return (Term){.ctype = result_type, .value = value};
     }
   }
 
