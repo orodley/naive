@@ -6,6 +6,7 @@
 #include "asm.h"
 #include "diagnostics.h"
 #include "elf.h"
+#include "exit_code.h"
 #include "misc.h"
 #include "pool.h"
 #include "syntax/reader.h"
@@ -146,24 +147,24 @@ int main(int argc, char *argv[])
       if (streq(arg, "-f")) {
         if (i == argc - 1) {
           fputs("Error: No argument after '-f'\n", stderr);
-          return 1;
+          return EXIT_CODE_BAD_CLI;
         }
 
         char *format = argv[++i];
         if (!streq(format, "elf64")) {
           fprintf(stderr, "Error: Unsupported output format '%s'\n", format);
-          return 1;
+          return EXIT_CODE_UNIMPLEMENTED;
         }
       } else if (streq(arg, "-o")) {
         if (i == argc - 1) {
           fputs("Error: No filename after '-o'\n", stderr);
-          return 1;
+          return EXIT_CODE_BAD_CLI;
         }
         output_filename = argv[++i];
       }
     } else if (input_filename != NULL) {
       fputs("Error: multiple input filenames given\n", stderr);
-      return 1;
+      return EXIT_CODE_BAD_CLI;
     } else {
       input_filename = arg;
     }
@@ -171,17 +172,17 @@ int main(int argc, char *argv[])
 
   if (input_filename == NULL) {
     fputs("Error: no input filename given\n", stderr);
-    return 1;
+    return EXIT_CODE_BAD_CLI;
   }
   if (output_filename == NULL) {
     fputs("Error: no output filename given\n", stderr);
-    return 1;
+    return EXIT_CODE_BAD_CLI;
   }
 
   String input = map_file_into_memory(input_filename);
   if (!is_valid(input)) {
     fprintf(stderr, "Failed to open input file: '%s'\n", input_filename);
-    return 1;
+    return EXIT_CODE_INPUT_IO_ERROR;
   }
 
   Reader _reader;
@@ -208,7 +209,7 @@ int main(int argc, char *argv[])
         issue_error(
             &reader->source_loc, "Unexpected character: '%c'\n",
             peek_char(reader));
-        return 1;
+        return EXIT_CODE_INVALID_SOURCE;
       }
 
       SourceLoc ident_source_loc = reader->source_loc;
@@ -219,7 +220,7 @@ int main(int argc, char *argv[])
       if (strneq(ident.chars, "bits", ident.len)) {
         if (read_char(reader) != '6' || read_char(reader) != '4') {
           issue_error(&reader->source_loc, "Only 64-bit mode is supported");
-          return 1;
+          return EXIT_CODE_UNIMPLEMENTED;
         }
       } else if (strneq(ident.chars, "section", ident.len)) {
         // @HACK: read_symbol doesn't handle '.', but the section names
@@ -234,7 +235,7 @@ int main(int argc, char *argv[])
         String section_name = read_symbol(reader);
         if (!is_valid(section_name)) {
           issue_error(&reader->source_loc, "Bad section name");
-          return 1;
+          return EXIT_CODE_INVALID_SOURCE;
         }
 
         if (starts_with_dot) section_name.chars--;
@@ -248,7 +249,7 @@ int main(int argc, char *argv[])
         String symbol_name = read_symbol(reader);
         if (!is_valid(symbol_name)) {
           issue_error(&reader->source_loc, "Bad symbol name");
-          return 1;
+          return EXIT_CODE_INVALID_SOURCE;
         }
 
         *ARRAY_APPEND(&global_symbols, String) = symbol_name;
@@ -256,7 +257,7 @@ int main(int argc, char *argv[])
         String symbol_name = read_symbol(reader);
         if (!is_valid(symbol_name)) {
           issue_error(&reader->source_loc, "Bad symbol name");
-          return 1;
+          return EXIT_CODE_INVALID_SOURCE;
         }
 
         AsmSymbol *symbol = pool_alloc(&asm_module.pool, sizeof *symbol);
@@ -274,7 +275,7 @@ int main(int argc, char *argv[])
           issue_error(
               &ident_source_loc,
               "Instruction encountered before section directive");
-          return 1;
+          return EXIT_CODE_INVALID_SOURCE;
         }
 
         AsmInstr *instr = ARRAY_APPEND(&asm_module.text.instrs, AsmInstr);
@@ -299,7 +300,7 @@ int main(int argc, char *argv[])
           issue_error(
               &ident_source_loc, "Unknown instruction name '%s'\n",
               strndup(ident.chars, ident.len));
-          return 1;
+          return EXIT_CODE_INVALID_SOURCE;
         }
 
         skip_whitespace(reader);
@@ -308,7 +309,7 @@ int main(int argc, char *argv[])
         while (!at_end(reader) && peek_char(reader) != '\n') {
           if (arg == STATIC_ARRAY_LENGTH(instr->args)) {
             issue_error(&reader->source_loc, "Too many operands");
-            return 1;
+            return EXIT_CODE_INVALID_SOURCE;
           }
 
           instr->args[arg] = read_operand(reader, &asm_module.symbols);
@@ -320,7 +321,7 @@ int main(int argc, char *argv[])
           } else if (!at_end(reader) && peek_char(reader) != '\n') {
             issue_error(
                 &reader->source_loc, "Expected comma or newline after operand");
-            return 1;
+            return EXIT_CODE_INVALID_SOURCE;
           }
 
           arg++;
@@ -333,7 +334,7 @@ int main(int argc, char *argv[])
         if (!in_text_section) {
           issue_error(
               &ident_source_loc, "Symbol encountered before section directive");
-          return 1;
+          return EXIT_CODE_INVALID_SOURCE;
         }
 
         AsmLinkage linkage = ASM_LOCAL_LINKAGE;
@@ -363,5 +364,5 @@ int main(int argc, char *argv[])
   }
 
   assemble(&asm_module);
-  return !write_elf_object_file(output_filename, &asm_module);
+  return write_elf_object_file(output_filename, &asm_module);
 }

@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "array.h"
+#include "exit_code.h"
 #include "file.h"
 #include "misc.h"
 #include "util.h"
@@ -12,13 +13,13 @@ int main(int argc, char *argv[])
 {
   if (argc < 3) {
     fprintf(stderr, "Usage: %s -cr <archive name> <input files>...\n", argv[0]);
-    return 1;
+    return EXIT_CODE_BAD_CLI;
   }
   if (!streq(argv[1], "-cr")) {
     fprintf(
         stderr, "Sorry, we only support '-cr' at the moment, not '%s'\n",
         argv[1]);
-    return 2;
+    return EXIT_CODE_UNIMPLEMENTED;
   }
 
   char *ar_filename = argv[2];
@@ -27,7 +28,7 @@ int main(int argc, char *argv[])
   FILE *ar_file = fopen(ar_filename, "wb");
   if (ar_file == NULL) {
     perror("Failed to create archive file");
-    return 3;
+    return EXIT_CODE_OUTPUT_IO_ERROR;
   }
 
   checked_fwrite(AR_GLOBAL_HEADER, sizeof AR_GLOBAL_HEADER - 1, 1, ar_file);
@@ -45,7 +46,7 @@ int main(int argc, char *argv[])
     FILE *input_file = fopen(input_filename, "rb");
     if (input_file == NULL) {
       perror("Failed to open input file");
-      return 6;
+      return EXIT_CODE_INPUT_IO_ERROR;
     }
 
     checked_fseek(input_file, 0, SEEK_END);
@@ -93,7 +94,7 @@ int main(int argc, char *argv[])
       long bytes_read = fread(read_buf, 1, sizeof read_buf, input_file);
       if (bytes_read != sizeof read_buf && !feof(input_file)) {
         perror("Error reading from input file");
-        return 7;
+        return EXIT_CODE_INPUT_IO_ERROR;
       }
       checked_fwrite(read_buf, 1, bytes_read, ar_file);
 
@@ -121,12 +122,11 @@ int main(int argc, char *argv[])
     if (checked_ftell(ar_file) % 2 == 1) checked_fseek(ar_file, 1, SEEK_CUR);
 
     checked_fwrite(&file_header, sizeof file_header, 1, ar_file);
-
     checked_fwrite(
         too_long_filenames.elements, too_long_filenames.size, 1, ar_file);
   }
 
   fclose(ar_file);
 
-  return 0;
+  return EXIT_CODE_SUCCESS;
 }

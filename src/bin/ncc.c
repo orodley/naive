@@ -17,6 +17,7 @@
 #include "asm.h"
 #include "asm_gen.h"
 #include "elf.h"
+#include "exit_code.h"
 #include "file.h"
 #include "ir_gen/ir_gen.h"
 #include "misc.h"
@@ -39,7 +40,7 @@ static char *make_temp_file(void);
 static int compile_file(
     char *input_filename, char *output_filename, Array(char *) *include_dirs,
     bool syntax_only, bool preprocess_only);
-static int make_file_executable(char *filename);
+static ExitCode make_file_executable(char *filename);
 static char *directory_of_executable(void);
 
 int main(int argc, char *argv[])
@@ -67,7 +68,7 @@ int main(int argc, char *argv[])
     if (arg[0] == '-') {
       if (streq(arg, "--version")) {
         puts("Naive C Compiler version 1.0");
-        return 0;
+        return EXIT_CODE_SUCCESS;
       } else if (streq(arg, "-E")) {
         preprocess_only = true;
       } else if (streq(arg, "-dump-tokens")) {
@@ -109,12 +110,12 @@ int main(int argc, char *argv[])
         char *standard = arg + 5;
         if (!streq(standard, "c99")) {
           fprintf(stderr, "Error: unsupported C standard '%s'\n", standard);
-          return 1;
+          return EXIT_CODE_UNIMPLEMENTED;
         }
       } else if (streq(arg, "-o")) {
         if (i == argc - 1) {
           fputs("Error: No filename after '-o'\n", stderr);
-          return 1;
+          return EXIT_CODE_BAD_CLI;
         }
         output_filename = argv[++i];
       } else if (strneq(arg, "-W", 2)) {
@@ -135,7 +136,7 @@ int main(int argc, char *argv[])
         // Again, this is our default.
       } else {
         fprintf(stderr, "Error: Unknown command-line argument: %s\n", arg);
-        return 1;
+        return EXIT_CODE_BAD_CLI;
       }
     } else {
       char *input_filename = arg;
@@ -143,7 +144,7 @@ int main(int argc, char *argv[])
       FILE *input_file = fopen(input_filename, "rb");
       if (input_file == NULL) {
         perror("Unable to open input file");
-        return 7;
+        return EXIT_CODE_INPUT_IO_ERROR;
       }
 
       FileType type = file_type(input_file);
@@ -160,14 +161,14 @@ int main(int argc, char *argv[])
 
   if (source_input_filenames.size == 0 && linker_input_filenames.size == 0) {
     fputs("Error: no input files given\n", stderr);
-    return 2;
+    return EXIT_CODE_BAD_CLI;
   }
   if (!do_link && output_filename != NULL && source_input_filenames.size > 1) {
     fputs(
         "Cannot specify output filename"
         " when generating multiple output files\n",
         stderr);
-    return 12;
+    return EXIT_CODE_BAD_CLI;
   }
 
   // @LEAK
@@ -253,30 +254,32 @@ int main(int argc, char *argv[])
 
     // @NOTE: Needs to be changed if we support different object file
     // formats.
-    if (!link_elf_executable(executable_filename, &linker_input_filenames)) {
-      puts("Linker error, terminating");
-      return 10;
+    ExitCode linker_result =
+        link_elf_executable(executable_filename, &linker_input_filenames);
+    if (linker_result != EXIT_CODE_SUCCESS) {
+      fputs("Linker error, terminating", stderr);
+      return linker_result;
     }
 
-    int result = 0;
+    ExitCode result = 0;
     for (u32 i = 0; i < temp_filenames.size; i++) {
       char *temp_filename = *ARRAY_REF(&temp_filenames, char *, i);
       int ret = remove(temp_filename);
       if (ret != 0) {
         perror("Failed to remove temporary object file");
-        result = 9;
+        result = EXIT_CODE_OUTPUT_IO_ERROR;
       }
     }
 
-    if (result != 0) return result;
+    if (result != EXIT_CODE_SUCCESS) return result;
 
     result = make_file_executable(executable_filename);
-    if (result != 0) return result;
+    if (result != EXIT_CODE_SUCCESS) return result;
   }
 
   array_free(&linker_input_filenames);
 
-  return 0;
+  return EXIT_CODE_SUCCESS;
 }
 
 static int compile_file(
@@ -286,7 +289,7 @@ static int compile_file(
   Array(char) preprocessed;
   Array(Adjustment) adjustments;
   if (!preprocess(input_filename, include_dirs, &preprocessed, &adjustments))
-    return 13;
+    return EXIT_CODE_INVALID_SOURCE;
 
   if (preprocess_only) {
     *ARRAY_APPEND(&preprocessed, char) = '\0';
@@ -296,7 +299,7 @@ static int compile_file(
       FILE *output = fopen(output_filename, "w");
       if (output == NULL) {
         perror("Unable to open output file");
-        return 14;
+        return EXIT_CODE_OUTPUT_IO_ERROR;
       }
 
       fputs((char *)preprocessed.elements, output);
@@ -323,7 +326,7 @@ static int compile_file(
 
     array_free(&preprocessed);
     array_free(&adjustments);
-    return 0;
+    return EXIT_CODE_SUCCESS;
   }
 
   Array(SourceToken) tokens;
@@ -332,7 +335,7 @@ static int compile_file(
           (String){
               .chars = (char *)preprocessed.elements, .len = preprocessed.size},
           &adjustments))
-    return 11;
+    return EXIT_CODE_INVALID_SOURCE;
 
   array_free(&preprocessed);
   array_free(&adjustments);
@@ -352,7 +355,9 @@ static int compile_file(
   Pool ast_pool;
   pool_init(&ast_pool, 1024);
   ASTToplevel *ast;
-  if (!parse_toplevel(&tokens, &ast_pool, &ast)) return 3;
+  if (!parse_toplevel(&tokens, &ast_pool, &ast)) {
+    return EXIT_CODE_INVALID_SOURCE;
+  }
 
   if (flag_dump_ast) {
     if (flag_dump_tokens) puts("\n");
@@ -363,7 +368,7 @@ static int compile_file(
     array_free(&tokens);
     pool_free(&ast_pool);
 
-    return 0;
+    return EXIT_CODE_SUCCESS;
   }
 
   IrModule ir_module = ir_gen(ast);
@@ -389,12 +394,13 @@ static int compile_file(
 
   assemble(&asm_builder.asm_module);
 
-  if (!write_elf_object_file(output_filename, &asm_builder.asm_module))
-    return 4;
+  ExitCode result =
+      write_elf_object_file(output_filename, &asm_builder.asm_module);
+  if (result != EXIT_CODE_SUCCESS) return result;
 
   free_asm_builder(&asm_builder);
 
-  return 0;
+  return EXIT_CODE_SUCCESS;
 }
 
 // @PORT
@@ -423,7 +429,7 @@ static char *make_temp_file(void)
 }
 
 // @PORT
-static int make_file_executable(char *filename)
+static ExitCode make_file_executable(char *filename)
 {
   int fd = open(filename, O_RDONLY);
   assert(fd != -1);
@@ -432,18 +438,18 @@ static int make_file_executable(char *filename)
   if (fstat(fd, &status) == -1) {
     perror("Unable to stat output file");
     close(fd);
-    return 5;
+    return EXIT_CODE_OUTPUT_IO_ERROR;
   }
 
   mode_t new_mode = (status.st_mode & 07777) | S_IXUSR;
   if (fchmod(fd, new_mode) == -1) {
     perror("Unable to change output file to executable");
     close(fd);
-    return 6;
+    return EXIT_CODE_OUTPUT_IO_ERROR;
   }
 
   close(fd);
-  return 0;
+  return EXIT_CODE_SUCCESS;
 }
 
 // @PORT

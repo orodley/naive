@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "asm.h"
+#include "exit_code.h"
 #include "file.h"
 #include "misc.h"
 #include "util.h"
@@ -144,7 +145,7 @@ typedef enum ELFSymbolType
 
 #define ELF64_SYMBOL_TYPE_AND_BINDING(t, b) (((b) << 4) | (t))
 #define ELF64_SYMBOL_BINDING(x) ((x) >> 4)
-#define ELF64_SYMBOL_TYPE(x) ((x) & 0xF)
+#define ELF64_SYMBOL_TYPE(x) ((x)&0xF)
 
 typedef struct ELF64Rela
 {
@@ -153,9 +154,9 @@ typedef struct ELF64Rela
   i64 addend;
 } __attribute__((packed)) ELF64Rela;
 
-#define ELF64_RELA_TYPE_AND_SYMBOL(t, s) (((u64)(s) << 32) | ((t) & 0xFFFFFFFF))
+#define ELF64_RELA_TYPE_AND_SYMBOL(t, s) (((u64)(s) << 32) | ((t)&0xFFFFFFFF))
 #define ELF64_RELA_SYMBOL(x) ((x) >> 32)
-#define ELF64_RELA_TYPE(x) ((x) & 0xFFFFFFFF)
+#define ELF64_RELA_TYPE(x) ((x)&0xFFFFFFFF)
 
 // @NOTE: These are defined in the System V x86-64 spec. They basically
 // correspond to the entries in the ELF spec, but with the R_X86_64 prefix
@@ -645,12 +646,12 @@ static void finish_strtab_section(ELFFile *elf_file)
   }
 }
 
-bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
+ExitCode write_elf_object_file(char *output_file_name, AsmModule *asm_module)
 {
   FILE *output_file = fopen(output_file_name, "wb");
   if (output_file == NULL) {
     perror("Unable to open output file");
-    return false;
+    return EXIT_CODE_OUTPUT_IO_ERROR;
   }
 
   ELFFile _elf_file;
@@ -704,7 +705,7 @@ bool write_elf_object_file(char *output_file_name, AsmModule *asm_module)
   finish_strtab_section(elf_file);
 
   fclose(output_file);
-  return true;
+  return EXIT_SUCCESS;
 }
 
 typedef struct Relocation
@@ -772,7 +773,7 @@ void process_rela_section(
 // of object files, but archives have different semantics.
 // See http://eli.thegreenplace.net/2013/07/09/library-order-in-static-linking
 // for details.
-static bool process_elf_file(
+static ExitCode process_elf_file(
     FILE *input_file, AsmModule *asm_module, Array(Symbol) *symbol_table)
 {
   u32 initial_location = checked_ftell(input_file);
@@ -807,7 +808,6 @@ static bool process_elf_file(
   u32 sht_offset = file_header.sht_location;
   checked_fseek(input_file, initial_location + sht_offset, SEEK_SET);
 
-  bool ret = true;
   ELFSectionHeader *headers = malloc(sizeof *headers * file_header.sht_entries);
   checked_fread(headers, sizeof *headers, file_header.sht_entries, input_file);
 
@@ -818,6 +818,8 @@ static bool process_elf_file(
       input_file, initial_location + shstrtab_header->section_location,
       SEEK_SET);
   checked_fread(shstrtab, 1, shstrtab_header->section_size, input_file);
+
+  ExitCode ret = EXIT_CODE_SUCCESS;
 
   ELFSectionHeader *text_header = NULL;
   u32 text_section_index = SHN_UNDEF;
@@ -851,6 +853,7 @@ static bool process_elf_file(
             "Relocations for that section are not"
             " supported (found rela section %s)\n",
             section_name);
+        ret = EXIT_CODE_UNIMPLEMENTED;
         goto cleanup1;
       }
     } else if (streq(section_name, ".bss")) {
@@ -864,17 +867,17 @@ static bool process_elf_file(
 
   if (text_header == NULL) {
     fputs("Missing .text section\n", stderr);
-    ret = false;
+    ret = EXIT_CODE_LINKER_ERROR;
     goto cleanup1;
   }
   if (symtab_header == NULL) {
     fputs("Missing .symtab section\n", stderr);
-    ret = false;
+    ret = EXIT_CODE_LINKER_ERROR;
     goto cleanup1;
   }
   if (strtab_header == NULL) {
     fputs("Missing .strtab section\n", stderr);
-    ret = false;
+    ret = EXIT_CODE_LINKER_ERROR;
     goto cleanup1;
   }
 
@@ -990,6 +993,7 @@ static bool process_elf_file(
         symbol = ARRAY_REF(symbol_table, Symbol, found_symbol_index);
         if (symbol->defined) {
           fprintf(stderr, "Multiple definitions of symbol '%s'\n", symbol_name);
+          ret = EXIT_CODE_LINKER_ERROR;
           goto cleanup2;
         }
       }
@@ -1036,15 +1040,13 @@ cleanup1:
 }
 
 // @TODO: Add .note.GNU-STACK section header to prevent executable stack.
-bool link_elf_executable(
+ExitCode link_elf_executable(
     char *executable_file_name, Array(char *) *linker_input_filenames)
 {
-  bool ret = true;
-
   FILE *output_file = fopen(executable_file_name, "wb");
   if (output_file == NULL) {
     perror("Failed to open linker output");
-    return false;
+    return EXIT_CODE_OUTPUT_IO_ERROR;
   }
 
   AsmModule asm_module;
@@ -1053,23 +1055,28 @@ bool link_elf_executable(
   Array(Symbol) symbol_table;
   ARRAY_INIT(&symbol_table, Symbol, 100);
 
+  ExitCode ret = EXIT_CODE_SUCCESS;
+
   for (u32 i = 0; i < linker_input_filenames->size; i++) {
     char *input_filename = *ARRAY_REF(linker_input_filenames, char *, i);
     FILE *input_file = fopen(input_filename, "rb");
     if (input_file == NULL) {
       perror("Failed to open linker input");
-      ret = false;
+      ret = EXIT_CODE_INPUT_IO_ERROR;
       goto cleanup;
     }
 
     FileType type = file_type(input_file);
     switch (type) {
-    case ELF_FILE_TYPE:
-      if (!process_elf_file(input_file, &asm_module, &symbol_table)) {
-        ret = false;
+    case ELF_FILE_TYPE: {
+      ExitCode result =
+          process_elf_file(input_file, &asm_module, &symbol_table);
+      if (result != EXIT_CODE_SUCCESS) {
+        ret = result;
         goto cleanup;
       }
       break;
+    }
     case AR_FILE_TYPE: {
       u32 global_header_length = sizeof AR_GLOBAL_HEADER - 1;
       checked_fseek(input_file, global_header_length, SEEK_SET);
@@ -1111,10 +1118,13 @@ bool link_elf_executable(
         // The file named "//" is used to store filenames longer than
         // 16 bytes. We only care about the name so that we can avoid
         // reading special files, so we don't care about it.
-        if (!streq(filename, "/") && !streq(filename, "//")
-            && !process_elf_file(input_file, &asm_module, &symbol_table)) {
-          ret = false;
-          goto cleanup;
+        if (!streq(filename, "/") && !streq(filename, "//")) {
+          ExitCode result =
+              process_elf_file(input_file, &asm_module, &symbol_table);
+          if (result != EXIT_CODE_SUCCESS) {
+            ret = result;
+            goto cleanup;
+          }
         }
 
         checked_fseek(input_file, file_start + file_size_bytes, SEEK_SET);
@@ -1151,7 +1161,7 @@ bool link_elf_executable(
     if (!symbol->defined) {
       if (symbol->relocs.size != 0) {
         fprintf(stderr, "Undefined symbol '%s'\n", symbol->name);
-        ret = false;
+        ret = EXIT_CODE_LINKER_ERROR;
         goto cleanup;
       }
 
