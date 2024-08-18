@@ -8,6 +8,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
+#include "exit_code.h"
 #include "syntax/lex.h"
 #include "syntax/parse.h"
 #include "syntax/reader.h"
@@ -726,7 +727,7 @@ static bool handle_pp_directive(PP *pp)
 
       skip_whitespace_and_comments(pp, false);
     } else if (strneq(directive.chars, "line", directive.len)) {
-      UNIMPLEMENTED;
+      UNIMPLEMENTED("#line preprocessor directive", 0);
     } else if (strneq(directive.chars, "error", directive.len)) {
       advance(reader);
 
@@ -738,7 +739,7 @@ static bool handle_pp_directive(PP *pp)
       issue_error(&directive_start, error);
       return false;
     } else if (strneq(directive.chars, "pragma", directive.len)) {
-      UNIMPLEMENTED;
+      UNIMPLEMENTED("#pragma preprocessor directive", 0);
     } else {
       issue_error(
           &reader->source_loc, "Invalid preprocessor directive: %s", directive);

@@ -765,7 +765,7 @@ static void pretty_printf(char *fmt, ...)
         double d = va_arg(varargs, double);
         printf("%f", d);
         break;
-      default: UNIMPLEMENTED;
+      default: UNREACHABLE;
       }
       break;
     case '(':
@@ -1016,7 +1016,6 @@ static void dump_statement(ASTStatement *statement)
       dump_expr(statement->u.for_statement.update_expr);
     break;
   case GOTO_STATEMENT: pretty_printf(statement->u.goto_label); break;
-  default: UNIMPLEMENTED;
   }
 
   pretty_printf(")");
@@ -1352,8 +1351,6 @@ void dump_toplevel(ASTToplevel *ast)
       pretty_printf("DECLS(");
       dump_decls(ast->u.decl);
       break;
-
-    default: UNIMPLEMENTED;
     }
 
     pretty_printf(")\n");

@@ -5,6 +5,7 @@
 
 #include "array.h"
 #include "asm.h"
+#include "exit_code.h"
 #include "flags.h"
 #include "ir.h"
 #include "reg_alloc.h"
@@ -146,7 +147,7 @@ AsmInstr *emit_mov(AsmBuilder *builder, AsmValue dest, AsmValue src)
 
     if (value_width == 32) return emit_instr2(builder, MOVSS, dest, src);
     if (value_width == 64) return emit_instr2(builder, MOVSD, dest, src);
-    UNIMPLEMENTED;
+    UNIMPLEMENTED("MOV for %d-bit floats", value_width);
   }
 
   return emit_instr2(builder, MOV, dest, src);
@@ -603,7 +604,8 @@ static void asm_gen_binary_float_instr(
   } else if (instr->type.u.float_bits == IR_FLOAT_64) {
     op = double_op;
   } else {
-    UNIMPLEMENTED;
+    UNIMPLEMENTED(
+        "Binary instruction for %d-bit floats", instr->type.u.float_bits);
   }
 
   emit_instr2(builder, op, target, rhs);
@@ -1092,7 +1094,7 @@ static void asm_gen_instr(
       assert(value.u.reg.t == V_REG);
       instr->vreg_number = value.u.reg.u.vreg_number;
     } else {
-      UNIMPLEMENTED;
+      UNIMPLEMENTED("Truncating value not in a register (type %u)", value.t);
     }
 
     break;
@@ -1102,7 +1104,7 @@ static void asm_gen_instr(
     assert(instr->u.arg.type.t == IR_FLOAT);
 
     if (instr->type.u.float_bits != IR_FLOAT_64) {
-      UNIMPLEMENTED;
+      UNIMPLEMENTED("Extending to %d-bit float", instr->type.u.float_bits);
     }
 
     AsmValue vreg =
@@ -1116,7 +1118,7 @@ static void asm_gen_instr(
     assert(instr->u.arg.type.t == IR_FLOAT);
 
     if (instr->type.u.float_bits != IR_FLOAT_32) {
-      UNIMPLEMENTED;
+      UNIMPLEMENTED("Truncating to %d-bit float", instr->type.u.float_bits);
     }
 
     AsmValue vreg =
@@ -1140,7 +1142,8 @@ static void asm_gen_instr(
       assign_vreg(instr, vreg);
       emit_instr2(builder, CVTSI2SD, vreg, value);
     } else {
-      UNIMPLEMENTED;
+      UNIMPLEMENTED(
+          "Converting signed int to %d-bit float", instr->type.u.float_bits);
     }
     break;
   }
@@ -1170,7 +1173,9 @@ static void asm_gen_instr(
       } else if (instr->type.u.float_bits == IR_FLOAT_64) {
         emit_instr2(builder, CVTSI2SD, result, extended);
       } else {
-        UNIMPLEMENTED;
+        UNIMPLEMENTED(
+            "Converting < 64-bit unsigned int to %d-bit float",
+            instr->type.u.float_bits);
       }
     } else {
       // 64-bit integers are harder. We shift the high bits down, convert, and
@@ -1188,7 +1193,9 @@ static void asm_gen_instr(
         mul_op = MULSD;
         add_op = ADDSD;
       } else {
-        UNIMPLEMENTED;
+        UNIMPLEMENTED(
+            "Converting 64-bit unsigned int to %d-bit float",
+            instr->type.u.float_bits);
       }
       AsmValue shifted = asm_vreg(new_vreg(builder), 64);
       emit_mov(builder, shifted, value);
@@ -1226,7 +1233,9 @@ static void asm_gen_instr(
       assign_vreg(instr, vreg);
       emit_instr2(builder, CVTSD2SI, vreg, value);
     } else {
-      UNIMPLEMENTED;
+      UNIMPLEMENTED(
+          "Converting %d-bit float to signed int",
+          instr->u.arg.type.u.float_bits);
     }
 
     break;
@@ -1354,7 +1363,7 @@ static void asm_gen_instr(
     switch (width) {
     case 32: sign_extend_op = CDQ; break;
     case 64: sign_extend_op = CQO; break;
-    default: UNIMPLEMENTED;
+    default: UNIMPLEMENTED("Modulo with width %u", width);
     }
 
     AsmInstr *sign_extend = emit_instr0(builder, sign_extend_op);
@@ -1938,7 +1947,8 @@ static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out)
       write_int_bytes(out, raw_bits, 8);
     } else {
       // 80-bit long double
-      UNIMPLEMENTED;
+      UNIMPLEMENTED(
+          "float constant with bit width %u", konst->type.u.bit_width);
     }
     break;
   case IR_POINTER: {

@@ -243,7 +243,8 @@ int main(int argc, char *argv[])
         if (strneq(section_name.chars, ".text", section_name.len)) {
           in_text_section = true;
         } else {
-          UNIMPLEMENTED;
+          UNIMPLEMENTED(
+              "Non-text section '%.*s'", section_name.len, section_name.chars);
         }
       } else if (strneq(ident.chars, "global", ident.len)) {
         String symbol_name = read_symbol(reader);

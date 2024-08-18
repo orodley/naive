@@ -1,5 +1,6 @@
 #include "ir_gen/convert.h"
 
+#include "exit_code.h"
 #include "ir.h"
 #include "ir_gen/c_type.h"
 
@@ -72,7 +73,7 @@ Term convert_type(IrBuilder *builder, Term term, CType *target_type)
     // that value is as long as the conversion doesn't cause side effects.
     converted = term.value;
   } else {
-    UNIMPLEMENTED;
+    UNIMPLEMENTED("Conversion from %u to %u", term.ctype->t, target_type->t);
   }
 
   return (Term){
@@ -145,13 +146,10 @@ void do_arithmetic_conversions_with_blocks(
     if (c_type_rank(unsigned_term->ctype) >= c_type_rank(signed_term->ctype)) {
       builder->current_block = signed_block;
       *signed_term = convert_type(builder, *signed_term, unsigned_term->ctype);
-    } else if (
-        c_type_rank(signed_term->ctype) > c_type_rank(unsigned_term->ctype)) {
+    } else {
       builder->current_block = unsigned_block;
       *unsigned_term =
           convert_type(builder, *unsigned_term, signed_term->ctype);
-    } else {
-      UNIMPLEMENTED;
     }
   }
 

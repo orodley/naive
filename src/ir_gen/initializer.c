@@ -1,5 +1,6 @@
 #include "ir_gen/initializer.h"
 
+#include "exit_code.h"
 #include "ir_gen/c_type.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"
@@ -164,7 +165,7 @@ void make_c_initializer(
 
         break;
       }
-      default: UNIMPLEMENTED;
+      default: UNIMPLEMENTED("Expression initializer for type %d", type->t);
       }
     } else {
       Term term = ir_gen_expr(ctx, expr, RVALUE_CONTEXT);
@@ -384,7 +385,7 @@ IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
     assert(value.t == IR_VALUE_GLOBAL);
     return add_global_const(builder, value.u.global);
   }
-  default: UNIMPLEMENTED;
+  default: UNIMPLEMENTED("Const initializer for type %d", type->t);
   }
 }
 
@@ -448,6 +449,6 @@ IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
     }
     return konst;
   }
-  default: UNIMPLEMENTED;
+  default: UNIMPLEMENTED("Zero initializer for type %d", ctype->t);
   }
 }

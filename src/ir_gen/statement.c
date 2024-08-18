@@ -1,5 +1,6 @@
 #include "ir_gen/statement.h"
 
+#include "exit_code.h"
 #include "ir.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"
@@ -79,7 +80,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
           c_type_to_ir_type(int_ptr_type));
       break;
     }
-    default: UNIMPLEMENTED;
+    default: UNIMPLEMENTED("if condition of type %d", condition_term.ctype->t);
     }
     assert(condition_term.ctype->t == INTEGER_TYPE);
 

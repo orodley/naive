@@ -7,6 +7,7 @@
 
 #include "asm.h"
 #include "asm_gen.h"
+#include "exit_code.h"
 #include "misc.h"
 #include "util.h"
 
@@ -217,6 +218,12 @@ void dump_ir_type(IrType type)
   }
 }
 
+#define X(x) #x
+static char *ir_op_names[] = {IR_OPS};
+#undef X
+
+const char *ir_op_name(IrOp op) { return ir_op_names[op]; }
+
 static void dump_value(IrValue value)
 {
   switch (value.t) {
@@ -232,10 +239,6 @@ static void dump_block_name(IrBlock *block)
 {
   printf("%u.%s", block->id, block->name);
 }
-
-#define X(x) #x
-static char *ir_op_names[] = {IR_OPS};
-#undef X
 
 #define X(x) #x
 static char *ir_cmp_names[] = {IR_CMPS};
@@ -509,7 +512,11 @@ static u64 constant_fold_unary_op(IrOp op, u64 arg)
   case OP_SUB: UNREACHABLE;
   case OP_BIT_NOT: return ~arg;
   case OP_NEG: return -arg;
-  default: assert(constant_foldable(op)); UNIMPLEMENTED;
+  default:
+    assert(constant_foldable(op));
+    UNIMPLEMENTED(
+        "Can't constant fold supposedly constant-foldable unary op %s",
+        ir_op_name(op));
   }
 }
 
@@ -527,7 +534,11 @@ static u64 constant_fold_binary_op(IrOp op, u64 arg1, u64 arg2)
   case OP_MOD: return (i64)arg1 % (i64)arg2;
   case OP_ADD: return arg1 + arg2;
   case OP_SUB: return arg1 - arg2;
-  default: assert(constant_foldable(op)); UNIMPLEMENTED;
+  default:
+    assert(constant_foldable(op));
+    UNIMPLEMENTED(
+        "Can't constant fold supposedly constant-foldable binary op %s",
+        ir_op_name(op));
   }
 }
 
@@ -741,7 +752,7 @@ IrValue build_type_instr(
       return value_const_int(result_type, value.u.const_int);
     if (result_type.t == IR_FLOAT)
       return value_const_float(result_type, (double)value.u.const_int);
-    UNIMPLEMENTED;
+    UNREACHABLE;
   }
 
   IrInstr *instr = append_instr(builder);

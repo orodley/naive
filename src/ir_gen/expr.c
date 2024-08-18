@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include "exit_code.h"
 #include "ir.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"
@@ -540,13 +541,13 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
         return ir_gen_va_arg(
             ctx, va_list_term, "__builtin_va_arg_double", arg_type);
       } else {
-        UNIMPLEMENTED;
+        UNIMPLEMENTED("va_arg for float type %u", arg_type->u.floatt);
       }
     } else {
-      UNIMPLEMENTED;
+      UNIMPLEMENTED("va_arg for type kind %u", arg_type->t);
     }
   }
-  default: printf("%d\n", t); UNIMPLEMENTED;
+  default: UNIMPLEMENTED("IR gen for expr type %u", t);
   }
 }
 
@@ -844,7 +845,8 @@ static Term ir_gen_add(IrGenContext *ctx, Term left, Term right)
         .value = int_to_ptr,
     };
   } else {
-    UNIMPLEMENTED;
+    // @TODO: This should be an "invalid source" error.
+    UNREACHABLE;
   }
 }
 
@@ -921,7 +923,10 @@ static Term ir_gen_sub(IrGenContext *ctx, Term left, Term right)
         .value = int_to_ptr,
     };
   } else {
-    UNIMPLEMENTED;
+    // @TODO: After implementing float subtraction, there are no more valid
+    // cases so this should be an "invalid source" error.
+    UNIMPLEMENTED(
+        "Subtraction of types %u and %u", left.ctype->t, right.ctype->t);
   }
 }
 

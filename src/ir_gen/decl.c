@@ -371,7 +371,6 @@ CType *decl_specifier_list_to_c_type(
 
     return ctype;
   }
-  default: UNIMPLEMENTED;
   }
 }
 

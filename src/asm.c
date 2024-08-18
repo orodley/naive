@@ -8,6 +8,7 @@
 
 #include "array.h"
 #include "asm_gen.h"
+#include "exit_code.h"
 #include "file.h"
 #include "util.h"
 
@@ -467,7 +468,7 @@ static u32 encoded_register_number(RegClass reg)
   case REG_CLASS_R13: return 13;
   case REG_CLASS_R14: return 14;
   case REG_CLASS_R15: return 15;
-  case REG_CLASS_IP: UNIMPLEMENTED;
+  case REG_CLASS_IP: UNREACHABLE;
   case REG_CLASS_XMM0: return 0;
   case REG_CLASS_XMM1: return 1;
   case REG_CLASS_XMM2: return 2;
@@ -628,10 +629,10 @@ static void add_mod_rm_arg(
       encoded_instr->displacement_size = 4;
       encoded_instr->displacement = 0;
       break;
-    default: UNIMPLEMENTED;
+    default: UNIMPLEMENTED("mod/rm arg for register class %u", reg);
     }
   } else {
-    UNIMPLEMENTED;
+    UNIMPLEMENTED("mod/rm arg for asm value type %u", asm_value->t);
   }
 }
 

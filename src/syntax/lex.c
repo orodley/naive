@@ -10,6 +10,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
+#include "exit_code.h"
 #include "misc.h"
 #include "syntax/reader.h"
 #include "util.h"
@@ -722,7 +723,7 @@ double double_from_decimal_exponent(u64 significand, i32 exponent)
     return x * y;
   }
 
-  UNIMPLEMENTED;
+  UNIMPLEMENTED("Float parsing with exponent %d (> 22)", exponent);
 }
 
 #define X(x) #x

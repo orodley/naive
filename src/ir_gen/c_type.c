@@ -74,7 +74,6 @@ IrType c_type_to_ir_type(CType *ctype)
     case INT: bit_width = 32; break;
     case LONG:
     case LONG_LONG: bit_width = 64; break;
-    default: UNIMPLEMENTED;
     }
 
     return (IrType){
@@ -331,9 +330,8 @@ static CType *type_that_fits(CType **types, u32 num_types, u64 value)
     }
   }
 
-  // @TODO: Error message for literals that don't fit into any of the types
-  // in their list.
-  UNIMPLEMENTED;
+  // @TODO: This should be an "invalid source" error.
+  UNREACHABLE;
 }
 
 // @TODO: We also need to keep track of whether it's a hex/octal literal -

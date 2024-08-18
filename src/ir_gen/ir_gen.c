@@ -7,6 +7,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
+#include "exit_code.h"
 #include "ir.h"
 #include "ir_gen/c_type.h"
 #include "ir_gen/context.h"
@@ -106,7 +107,10 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
     while (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER) {
       switch (decl_specifier_list->u.storage_class_specifier) {
       case STATIC_SPECIFIER: linkage = IR_LOCAL_LINKAGE; break;
-      default: UNIMPLEMENTED;
+      default:
+        UNIMPLEMENTED(
+            "Storage class specifier %d on toplevel item",
+            decl_specifier_list->u.storage_class_specifier);
       }
 
       decl_specifier_list = decl_specifier_list->next;
@@ -240,12 +244,14 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
           assert(decl_specifier_list->t == STORAGE_CLASS_SPECIFIER);
           ASTStorageClassSpecifier storage_class =
               decl_specifier_list->u.storage_class_specifier;
-          if (storage_class == STATIC_SPECIFIER)
+          if (storage_class == STATIC_SPECIFIER) {
             global->linkage = IR_LOCAL_LINKAGE;
-          else if (storage_class == EXTERN_SPECIFIER)
+          } else if (storage_class == EXTERN_SPECIFIER) {
             is_extern = true;
-          else
-            UNIMPLEMENTED;
+          } else {
+            UNIMPLEMENTED(
+                "Storage class specifier of %d on global decl", storage_class);
+          }
 
           decl_specifier_list = decl_specifier_list->next;
         }

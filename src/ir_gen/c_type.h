@@ -7,6 +7,7 @@
 #include "syntax/lex.h"
 #include "syntax/parse.h"
 
+// @TODO: Use X macros so we can print the names in error messages
 typedef enum CKind
 {
   VOID_TYPE,

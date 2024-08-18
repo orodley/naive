@@ -272,9 +272,10 @@ inline IrBlock *add_block(IrBuilder *builder, char *name)
 bool ir_type_eq(IrType *a, IrType *b);
 u32 size_of_ir_type(IrType type);
 u32 align_of_ir_type(IrType type);
-void dump_ir_type(IrType type);
 
+void dump_ir_type(IrType type);
 void dump_ir_module(IrModule *module);
+const char *ir_op_name(IrOp op);
 
 void builder_init(IrBuilder *builder, IrModule *module);
 IrInstr *build_jump(IrBuilder *builder, IrBlock *block);

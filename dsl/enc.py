@@ -190,7 +190,7 @@ static void assemble_instr(Array(u8) *output, AsmModule *asm_module, AsmInstr *i
 \tfputs("Unimplemented instruction:\\n", stderr);
 \tdump_asm_instr(instr);
 \t
-\tUNIMPLEMENTED;
+\texit_with_code(EXIT_CODE_UNIMPLEMENTED);
 }
 """
     )

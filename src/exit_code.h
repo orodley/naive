@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 
+#include "misc.h"
+
 typedef enum ExitCode
 {
   EXIT_CODE_SUCCESS = 0,
@@ -14,6 +16,11 @@ typedef enum ExitCode
   EXIT_CODE_INTERNAL_COMPILER_ERROR = 6,
 } ExitCode;
 
-inline void exit_with_code(ExitCode code) { exit((int)code); }
+NORETURN inline void exit_with_code(ExitCode code) { exit((int)code); }
+
+#define UNIMPLEMENTED(fmt, ...) \
+  _exit_unimplemented(__FILE__, __LINE__, fmt, __VA_ARGS__)
+NORETURN void _exit_unimplemented(
+    const char *file, int line, const char *format, ...);
 
 #endif
