@@ -17,7 +17,7 @@ static void v_issue_diagnostic(
   putc('\n', stderr);
 }
 
-void issue_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...)
+void emit_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...)
 {
   va_list varargs;
   va_start(varargs, fmt);
@@ -25,7 +25,7 @@ void issue_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...)
   va_end(varargs);
 }
 
-void issue_error(SourceLoc *context, char *fmt, ...)
+void emit_error(SourceLoc *context, char *fmt, ...)
 {
   va_list varargs;
   va_start(varargs, fmt);
@@ -33,7 +33,7 @@ void issue_error(SourceLoc *context, char *fmt, ...)
   va_end(varargs);
 }
 
-void issue_warning(SourceLoc *context, char *fmt, ...)
+void emit_warning(SourceLoc *context, char *fmt, ...)
 {
   va_list varargs;
   va_start(varargs, fmt);

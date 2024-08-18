@@ -197,7 +197,7 @@ static void skip_whitespace_and_comments_from_reader(
         }
 
         if (at_end(reader))
-          issue_error(&reader->source_loc, "Unterminated /* comment");
+          emit_error(&reader->source_loc, "Unterminated /* comment");
 
         break;
       default:
@@ -224,7 +224,7 @@ static bool append_string_or_char_literal(
   SourceLoc literal_start_source_loc = reader->source_loc;
   while (peek_char(reader) != start_char) {
     if (at_end(reader)) {
-      issue_error(
+      emit_error(
           &literal_start_source_loc, start_char == '"'
                                          ? "Unterminated string literal"
                                          : "Unterminated character literal");
@@ -333,7 +333,7 @@ static bool eval_pp_condition(PP *pp, bool *result)
           skip_whitespace_and_comments_from_reader(reader, NULL, false);
 
           if (!expect_char(reader, ')')) {
-            issue_error(
+            emit_error(
                 &reader->source_loc,
                 "Unexpected char '%c' in `defined' in preprocessor condition",
                 peek_char(reader));
@@ -470,7 +470,7 @@ static unsigned long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay)
   default:
     // @TODO: This isn't accurate as we don't attach SourceLoc to ASTExpr.
     // @TODO: Include the expr type.
-    issue_error(
+    emit_error(
         &pp->reader.source_loc,
         "Unsupported operation in preprocessor conditional");
     *okay = false;
@@ -493,7 +493,7 @@ static bool handle_pp_directive(PP *pp)
   String directive = read_symbol(reader);
   if (!is_valid(directive)) {
     // @TODO: Sync to the next newline?
-    issue_error(&reader->source_loc, "Expected preprocessor directive");
+    emit_error(&reader->source_loc, "Expected preprocessor directive");
     return false;
   }
 
@@ -517,7 +517,7 @@ static bool handle_pp_directive(PP *pp)
     skip_whitespace_and_comments(pp, false);
     String macro_name = read_symbol(reader);
     if (!is_valid(macro_name)) {
-      issue_error(&reader->source_loc, "Expected identifier after #ifdef");
+      emit_error(&reader->source_loc, "Expected identifier after #ifdef");
       return false;
     }
 
@@ -527,7 +527,7 @@ static bool handle_pp_directive(PP *pp)
     skip_whitespace_and_comments(pp, false);
     String macro_name = read_symbol(reader);
     if (!is_valid(macro_name)) {
-      issue_error(&reader->source_loc, "Expected identifier after #ifndef");
+      emit_error(&reader->source_loc, "Expected identifier after #ifndef");
       return false;
     }
 
@@ -535,7 +535,7 @@ static bool handle_pp_directive(PP *pp)
     start_pp_if(pp, condition);
   } else if (strneq(directive.chars, "elif", directive.len)) {
     if (pp->pp_scope_stack.size == 0) {
-      issue_error(&directive_start, "#elif without #if");
+      emit_error(&directive_start, "#elif without #if");
       return false;
     }
 
@@ -553,7 +553,7 @@ static bool handle_pp_directive(PP *pp)
   } else if (strneq(directive.chars, "else", directive.len)) {
     PPCondScope *scope = ARRAY_LAST(&pp->pp_scope_stack, PPCondScope);
     if (scope->position == ELSE) {
-      issue_error(
+      emit_error(
           &directive_start,
           "Duplicate #else clause for preprocessor conditional");
       return false;
@@ -568,7 +568,7 @@ static bool handle_pp_directive(PP *pp)
     }
   } else if (strneq(directive.chars, "endif", directive.len)) {
     if (pp->pp_scope_stack.size == 0) {
-      issue_error(&directive_start, "Unmatched #endif");
+      emit_error(&directive_start, "Unmatched #endif");
       return false;
     }
     pp->pp_scope_stack.size--;
@@ -580,7 +580,7 @@ static bool handle_pp_directive(PP *pp)
       char c = read_char(reader);
       if (c != '<' && c != '"') {
         // @TODO: Resync to newline?
-        issue_error(&reader->source_loc, "Expected filename after #include");
+        emit_error(&reader->source_loc, "Expected filename after #include");
         return false;
       }
 
@@ -590,7 +590,7 @@ static bool handle_pp_directive(PP *pp)
         ;
 
       if (at_end(reader)) {
-        issue_error(&include_path_source_loc, "Unterminated include path");
+        emit_error(&include_path_source_loc, "Unterminated include path");
         return false;
       }
 
@@ -602,7 +602,7 @@ static bool handle_pp_directive(PP *pp)
           pp->include_dirs, reader->source_loc.filename, include_path);
 
       if (includee_path == NULL) {
-        issue_error(
+        emit_error(
             &include_path_source_loc, "File not found: '%s'", include_path);
         return false;
       }
@@ -625,7 +625,7 @@ static bool handle_pp_directive(PP *pp)
 
       String macro_name = read_symbol(reader);
       if (!is_valid(macro_name)) {
-        issue_error(&reader->source_loc, "Expected identifier after #define");
+        emit_error(&reader->source_loc, "Expected identifier after #define");
         return false;
       }
 
@@ -637,14 +637,14 @@ static bool handle_pp_directive(PP *pp)
           skip_whitespace_and_comments(pp, false);
           char c = peek_char(reader);
           if (c == '\n') {
-            issue_error(
+            emit_error(
                 &reader->source_loc,
                 "Unexpected newline in macro definition argument list");
             return false;
           } else if (c == '.') {
             advance(reader);
             if (read_char(reader) != '.' || read_char(reader) != '.') {
-              issue_error(
+              emit_error(
                   &reader->source_loc,
                   "Unexpected char in variadic macro argument list");
               return false;
@@ -654,7 +654,7 @@ static bool handle_pp_directive(PP *pp)
             skip_whitespace_and_comments(pp, false);
             if (read_char(reader) == ')') break;
 
-            issue_error(
+            emit_error(
                 &reader->source_loc,
                 "Unexpected char after ellipsis in variadic macro argument "
                 "list");
@@ -662,7 +662,7 @@ static bool handle_pp_directive(PP *pp)
           } else {
             String arg_name = read_symbol(reader);
             if (!is_valid(arg_name)) {
-              issue_error(
+              emit_error(
                   &reader->source_loc,
                   "Unexpected character while processing "
                   "macro argument list");
@@ -675,7 +675,7 @@ static bool handle_pp_directive(PP *pp)
             if (next == ')') {
               break;
             } else if (next != ',') {
-              issue_error(
+              emit_error(
                   &reader->source_loc,
                   "Expected comma after macro argument name");
               return false;
@@ -711,7 +711,7 @@ static bool handle_pp_directive(PP *pp)
 
       String macro_name = read_symbol(reader);
       if (!is_valid(macro_name)) {
-        issue_error(&reader->source_loc, "Expected identifier after #undef");
+        emit_error(&reader->source_loc, "Expected identifier after #undef");
         return false;
       }
 
@@ -736,12 +736,12 @@ static bool handle_pp_directive(PP *pp)
 
       u32 length = reader->position - start;
       char *error = strndup(reader->buffer.chars + start, length);
-      issue_error(&directive_start, error);
+      emit_error(&directive_start, error);
       return false;
     } else if (strneq(directive.chars, "pragma", directive.len)) {
       UNIMPLEMENTED("#pragma preprocessor directive", 0);
     } else {
-      issue_error(
+      emit_error(
           &reader->source_loc, "Invalid preprocessor directive: %s", directive);
       return false;
     }
@@ -750,7 +750,7 @@ static bool handle_pp_directive(PP *pp)
   skip_whitespace_and_comments(pp, false);
 
   if (!ignoring_chars(pp) && !at_end(reader) && peek_char(reader) != '\n') {
-    issue_error(
+    emit_error(
         &reader->source_loc, "Extraneous text after preprocessing directive");
     return false;
   }
@@ -803,7 +803,7 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 
   // If we're here, we reached the end of the reader without finding a
   // terminating ')'.
-  issue_error(&start_source_loc, "Unterminated function-like macro invocation");
+  emit_error(&start_source_loc, "Unterminated function-like macro invocation");
   array_free(&macro_args_str);
   return false;
 
@@ -872,7 +872,7 @@ got_all_args:
 
   if ((!macro->variadic && arg_values.size != macro->arg_names.size)
       || (macro->variadic && arg_values.size < macro->arg_names.size)) {
-    issue_error(
+    emit_error(
         &reader->source_loc,
         "Wrong number of parameters to function-like macro '%.*s'"
         " (expected %u%s, got %u)",
@@ -926,7 +926,7 @@ static bool preprocess_file(
     if (blame_source_loc.filename == NULL) {
       fprintf(stderr, "Failed to open input file: '%s'\n", input_filename);
     } else {
-      issue_error(&blame_source_loc, "File not found: '%s'\n", input_filename);
+      emit_error(&blame_source_loc, "File not found: '%s'\n", input_filename);
     }
 
     return false;
@@ -1030,7 +1030,7 @@ static bool preprocess_aux(PP *pp)
         // @TODO: Keep track of the SourceLoc of the opening directive.
         // Maybe we should store it on PPCondScope?
         SourceLoc s = {"<unknown>", 0, 0};
-        issue_error(&s, "Unterminated preprocessor conditional");
+        emit_error(&s, "Unterminated preprocessor conditional");
         return false;
       }
     } else {
@@ -1074,7 +1074,7 @@ static bool preprocess_aux(PP *pp)
         // other tokens together. In this case it doesn't invoke the
         // token pasting operator.
         if (pp->macro_depth == 0) {
-          issue_error(
+          emit_error(
               &start_source_loc,
               "The '##' operator is only allowed in a macro definition");
           return false;
@@ -1089,7 +1089,7 @@ static bool preprocess_aux(PP *pp)
       } else if (at_start_of_line) {
         if (!handle_pp_directive(pp)) return false;
       } else if (pp->macro_depth == 0) {
-        issue_error(
+        emit_error(
             &start_source_loc,
             "Unexpected preprocessor directive (not at start of line)");
         return false;
@@ -1104,7 +1104,7 @@ static bool preprocess_aux(PP *pp)
         String arg_name = read_symbol(reader);
 
         if (!is_valid(arg_name)) {
-          issue_error(
+          emit_error(
               &expected_arg_name_source_loc,
               "Expected identifier after '#' operator");
           return false;
@@ -1112,7 +1112,7 @@ static bool preprocess_aux(PP *pp)
 
         Macro *macro = look_up_macro(&pp->curr_macro_params, arg_name);
         if (macro == NULL) {
-          issue_error(
+          emit_error(
               &expected_arg_name_source_loc,
               "Argument to '#' does not name a macro parameter");
           return false;

@@ -16,8 +16,8 @@ typedef enum ErrorLevel
   ERROR,
 } ErrorLevel;
 
-void issue_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...);
-void issue_error(SourceLoc *context, char *fmt, ...);
-void issue_warning(SourceLoc *context, char *fmt, ...);
+void emit_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...);
+void emit_error(SourceLoc *context, char *fmt, ...);
+void emit_warning(SourceLoc *context, char *fmt, ...);
 
 #endif

@@ -116,7 +116,7 @@ static NumericSuffix read_numeric_suffix(Reader *reader)
     case 'u':
     case 'U':
       if ((suffix & UNSIGNED_SUFFIX) != 0) {
-        issue_error(
+        emit_error(
             &reader->source_loc, "Multiple 'u' suffixes on numeric literal");
       }
 
@@ -125,7 +125,7 @@ static NumericSuffix read_numeric_suffix(Reader *reader)
     case 'l':
     case 'L':
       if (((suffix & (LONG_SUFFIX | LONG_LONG_SUFFIX)) != 0)) {
-        issue_error(
+        emit_error(
             &reader->source_loc,
             "Multiple 'l'/'ll' suffixes on numeric literal");
       }
@@ -139,7 +139,7 @@ static NumericSuffix read_numeric_suffix(Reader *reader)
     case 'f':
     case 'F':
       if (((suffix & FLOAT_SUFFIX) != 0)) {
-        issue_error(
+        emit_error(
             &reader->source_loc, "Multiple 'f' suffixes on numeric literal");
       }
 
@@ -160,8 +160,7 @@ static bool read_octal_number(Reader *reader, u64 *value)
   while (c >= '0' && c <= '9') {
     if (c == '8' || c == '9') {
       // @TODO: Skip past all numeric characters to resync?
-      issue_error(
-          &reader->source_loc, "Invalid digit '%c' in octal literal", c);
+      emit_error(&reader->source_loc, "Invalid digit '%c' in octal literal", c);
       return false;
     } else {
       x *= 8;
@@ -197,7 +196,7 @@ static bool read_hex_number(Reader *reader, u64 *value)
   }
 
   if (!at_least_one_digit) {
-    issue_error(
+    emit_error(
         &reader->source_loc,
         "Hexadecimal literal must have at least one digit");
     return false;
@@ -232,7 +231,7 @@ i64 read_char_in_literal(Reader *reader, SourceLoc *start_source_loc)
       if (!read_hex_number(reader, &value)) return -1;
       break;
     default:
-      issue_error(start_source_loc, "Invalid escape character '%c'", c);
+      emit_error(start_source_loc, "Invalid escape character '%c'", c);
       return -1;
     }
   } else {
@@ -240,7 +239,7 @@ i64 read_char_in_literal(Reader *reader, SourceLoc *start_source_loc)
   }
 
   if (value > 0xFF) {
-    issue_error(start_source_loc, "Character constant larger than a character");
+    emit_error(start_source_loc, "Character constant larger than a character");
     return -1;
   }
 
@@ -305,7 +304,7 @@ static bool lex_aux(Lexer *lexer)
       if (value == -1) return false;
 
       if (read_char(reader) != '\'') {
-        issue_error(&start_source_loc, "Unterminated character literal");
+        emit_error(&start_source_loc, "Unterminated character literal");
         return false;
       }
 
