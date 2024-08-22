@@ -1,1 +1,1 @@
-#pragma foo
+int foo[];

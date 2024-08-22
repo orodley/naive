@@ -18,8 +18,10 @@ typedef enum ExitCode
 
 NORETURN inline void exit_with_code(ExitCode code) { exit((int)code); }
 
-#define UNIMPLEMENTED(...) _exit_unimplemented(__FILE__, __LINE__, __VA_ARGS__)
-NORETURN void _exit_unimplemented(
-    const char *file, int line, const char *format, ...);
+NORETURN void exit_unimplemented(
+    const char *file, int line, const char *func, const char *format, ...);
+
+NORETURN void exit_internal_compiler_error(
+    const char *file, int line, const char *func, const char *format, ...);
 
 #endif

@@ -3,11 +3,11 @@
 #ifndef NAIVE_UTIL_H_
 #define NAIVE_UTIL_H_
 
-#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "macros.h"
 #include "misc.h"
 
 #define ZERO_STRUCT(s) memset(s, 0, sizeof *(s));
@@ -43,7 +43,7 @@ char *concat(char *str_a, char *str_b);
 
 inline u32 lowest_set_bit(u64 x)
 {
-  assert(x != 0);
+  PRECONDITION(x != 0);
 
   u32 i = 0;
   while ((x & 1UL) != 1) {
@@ -63,7 +63,7 @@ inline u32 lowest_set_bit(u64 x)
 #endif
 inline u32 highest_set_bit(u64 x)
 {
-  assert(x != 0);
+  PRECONDITION(x != 0);
 
 #if HAS_CLZL
   return 63 - __builtin_clzl(x);

@@ -1,8 +1,8 @@
 #include "ir_gen/convert.h"
 
-#include "exit_code.h"
 #include "ir.h"
 #include "ir_gen/c_type.h"
+#include "macros.h"
 
 Term convert_type(IrBuilder *builder, Term term, CType *target_type)
 {
@@ -35,7 +35,9 @@ Term convert_type(IrBuilder *builder, Term term, CType *target_type)
   } else if (term.ctype->t == FLOAT_TYPE && target_type->t == INTEGER_TYPE) {
     IrType ir_type = c_type_to_ir_type(target_type);
     // @TODO: Handle float to unsigned int conversions.
-    assert(target_type->u.integer.is_signed);
+    if (!target_type->u.integer.is_signed) {
+      UNIMPLEMENTED("Float to unsigned int conversion");
+    }
     converted =
         build_type_instr(builder, OP_FLOAT_TO_SINT, term.value, ir_type);
   } else if (term.ctype->t == INTEGER_TYPE && target_type->t == POINTER_TYPE) {
@@ -46,8 +48,8 @@ Term convert_type(IrBuilder *builder, Term term, CType *target_type)
       value = build_type_instr(
           builder, OP_ZEXT, term.value,
           (IrType){.t = IR_INT, .u.bit_width = 64});
-    } else {
-      assert(width == 64);
+    } else if (width != 64) {
+      UNIMPLEMENTED("Pointer conversion from %u-bit integer", width);
     }
 
     converted = build_type_instr(
@@ -60,7 +62,9 @@ Term convert_type(IrBuilder *builder, Term term, CType *target_type)
   } else if (term.ctype->t == ARRAY_TYPE && target_type->t == POINTER_TYPE) {
     // Array values are only ever passed around as pointers to the first
     // element anyway, so this conversion is a no-op that just changes type.
-    assert(term.value.type.t == IR_POINTER);
+    if (term.value.type.t != IR_POINTER) {
+      emit_fatal_error_no_loc("Can't convert array to non-pointer type");
+    }
     converted = term.value;
   } else if (
       target_type->t == POINTER_TYPE && term.ctype->t == FUNCTION_TYPE
@@ -93,7 +97,8 @@ void do_arithmetic_conversions_with_blocks(
     IrBuilder *builder, Term *left, IrBlock *left_block, Term *right,
     IrBlock *right_block)
 {
-  assert(is_arithmetic_type(left->ctype) && is_arithmetic_type(right->ctype));
+  PRECONDITION(
+      is_arithmetic_type(left->ctype) && is_arithmetic_type(right->ctype));
 
   IrBlock *original_block = builder->current_block;
 

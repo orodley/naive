@@ -1,13 +1,12 @@
 #include "ir.h"
 
-#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "asm.h"
 #include "asm_gen.h"
-#include "exit_code.h"
+#include "macros.h"
 #include "misc.h"
 #include "util.h"
 
@@ -171,12 +170,10 @@ u32 size_of_ir_type(IrType type)
   case IR_FUNCTION: return 8;
   case IR_STRUCT: return type.u.strukt.total_size;
   case IR_ARRAY:
-    assert(type.u.array.size != 0);
+    ASSERT(type.u.array.size != 0);
     return type.u.array.size * size_of_ir_type(*type.u.array.elem_type);
   case IR_VOID: UNREACHABLE;
   }
-
-  UNREACHABLE;
 }
 
 u32 align_of_ir_type(IrType type)
@@ -411,7 +408,7 @@ void dump_ir_module(IrModule *module)
 {
   for (u32 i = 0; i < module->types.size; i++) {
     IrType *type = *ARRAY_REF(&module->types, IrType *, i);
-    assert(type->t == IR_STRUCT);
+    ASSERT(type->t == IR_STRUCT);
 
     printf("struct $%s\n{\n", type->u.strukt.name);
     for (u32 i = 0; i < type->u.strukt.num_fields; i++) {
@@ -502,6 +499,7 @@ static bool constant_foldable(IrOp op)
 
 static u64 constant_fold_unary_op(IrOp op, u64 arg)
 {
+  PRECONDITION(constant_foldable(op));
   switch (op) {
   case OP_BIT_XOR:
   case OP_BIT_AND:
@@ -513,7 +511,6 @@ static u64 constant_fold_unary_op(IrOp op, u64 arg)
   case OP_BIT_NOT: return ~arg;
   case OP_NEG: return -arg;
   default:
-    assert(constant_foldable(op));
     UNIMPLEMENTED(
         "Can't constant fold supposedly constant-foldable unary op %s",
         ir_op_name(op));
@@ -522,6 +519,7 @@ static u64 constant_fold_unary_op(IrOp op, u64 arg)
 
 static u64 constant_fold_binary_op(IrOp op, u64 arg1, u64 arg2)
 {
+  PRECONDITION(constant_foldable(op));
   switch (op) {
   case OP_BIT_NOT: UNREACHABLE;
   case OP_BIT_XOR: return arg1 ^ arg2;
@@ -535,7 +533,6 @@ static u64 constant_fold_binary_op(IrOp op, u64 arg1, u64 arg2)
   case OP_ADD: return arg1 + arg2;
   case OP_SUB: return arg1 - arg2;
   default:
-    assert(constant_foldable(op));
     UNIMPLEMENTED(
         "Can't constant fold supposedly constant-foldable binary op %s",
         ir_op_name(op));
@@ -556,8 +553,6 @@ static u32 constant_fold_cmp(IrCmp cmp, u64 arg1, u64 arg2)
   case CMP_ULT: return arg1 < arg2;
   case CMP_ULTE: return arg1 <= arg2;
   }
-
-  UNREACHABLE;
 }
 
 static u32 constant_fold_cmpf(IrCmp cmp, double arg1, double arg2)
@@ -574,8 +569,6 @@ static u32 constant_fold_cmpf(IrCmp cmp, double arg1, double arg2)
   case CMP_ULT: UNREACHABLE;
   case CMP_ULTE: UNREACHABLE;
   }
-
-  UNREACHABLE;
 }
 
 static IrValue value_instr(IrInstr *instr)
@@ -589,8 +582,6 @@ static IrValue value_instr(IrInstr *instr)
 
 IrValue build_local(IrBuilder *builder, IrType type)
 {
-  assert(size_of_ir_type(type) != 0);
-
   IrInstr *instr = append_instr(builder);
   instr->op = OP_LOCAL;
   instr->type = (IrType){.t = IR_POINTER};
@@ -603,7 +594,7 @@ IrValue build_local(IrBuilder *builder, IrType type)
 IrValue build_field(
     IrBuilder *builder, IrValue ptr, IrType type, u32 field_number)
 {
-  assert(type.t == IR_STRUCT || type.t == IR_ARRAY);
+  PRECONDITION(type.t == IR_STRUCT || type.t == IR_ARRAY);
 
   IrInstr *instr = append_instr(builder);
   instr->op = OP_FIELD;
@@ -669,7 +660,7 @@ IrValue build_unary_instr(IrBuilder *builder, IrOp op, IrValue arg)
 IrValue build_binary_instr(
     IrBuilder *builder, IrOp op, IrValue arg1, IrValue arg2)
 {
-  assert(ir_type_eq(&arg1.type, &arg2.type));
+  PRECONDITION(ir_type_eq(&arg1.type, &arg2.type));
   IrType type = arg1.type;
 
   if (arg1.t == IR_VALUE_CONST_INT && arg2.t == IR_VALUE_CONST_INT
@@ -689,7 +680,7 @@ IrValue build_binary_instr(
 
 IrValue build_cmp(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2)
 {
-  assert(ir_type_eq(&arg1.type, &arg2.type));
+  PRECONDITION(ir_type_eq(&arg1.type, &arg2.type));
   IrType type = (IrType){.t = IR_INT, .u.bit_width = 32};
 
   if (arg1.t == IR_VALUE_CONST_INT && arg2.t == IR_VALUE_CONST_INT) {
@@ -709,7 +700,7 @@ IrValue build_cmp(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2)
 
 IrValue build_cmpf(IrBuilder *builder, IrCmp cmp, IrValue arg1, IrValue arg2)
 {
-  assert(ir_type_eq(&arg1.type, &arg2.type));
+  PRECONDITION(ir_type_eq(&arg1.type, &arg2.type));
   IrType type = (IrType){.t = IR_INT, .u.bit_width = 32};
 
   if (arg1.t == IR_VALUE_CONST_FLOAT && arg2.t == IR_VALUE_CONST_FLOAT) {
@@ -777,8 +768,8 @@ IrValue build_phi(IrBuilder *builder, IrType type, u32 arity)
 
 void phi_set_param(IrValue phi, u32 index, IrBlock *source_block, IrValue value)
 {
-  assert(ir_type_eq(&value.type, &phi.type));
-  assert(phi.t == IR_VALUE_INSTR);
+  PRECONDITION(ir_type_eq(&value.type, &phi.type));
+  PRECONDITION(phi.t == IR_VALUE_INSTR);
   IrPhiParam *param = phi.u.instr->u.phi.params + index;
   param->block = source_block;
   param->value = value;

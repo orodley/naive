@@ -3,6 +3,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#include "exit_code.h"
+#include "macros.h"
+
 static void v_issue_diagnostic(
     ErrorLevel err_level, SourceLoc *context, char *fmt, va_list varargs)
 {
@@ -23,6 +26,27 @@ void emit_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...)
   va_start(varargs, fmt);
   v_issue_diagnostic(err_level, context, fmt, varargs);
   va_end(varargs);
+}
+
+NORETURN void emit_fatal_error(SourceLoc *context, char *fmt, ...)
+{
+  va_list varargs;
+  va_start(varargs, fmt);
+  v_issue_diagnostic(ERROR, context, fmt, varargs);
+  va_end(varargs);
+
+  exit_with_code(EXIT_CODE_INTERNAL_COMPILER_ERROR);
+}
+
+NORETURN void emit_fatal_error_no_loc(char *fmt, ...)
+{
+  va_list varargs;
+  va_start(varargs, fmt);
+  SourceLoc context = (SourceLoc){"unknown", 0, 0};
+  v_issue_diagnostic(ERROR, &context, fmt, varargs);
+  va_end(varargs);
+
+  exit_with_code(EXIT_CODE_INTERNAL_COMPILER_ERROR);
 }
 
 void emit_error(SourceLoc *context, char *fmt, ...)

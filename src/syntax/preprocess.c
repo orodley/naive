@@ -8,7 +8,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
-#include "exit_code.h"
+#include "macros.h"
 #include "syntax/lex.h"
 #include "syntax/parse.h"
 #include "syntax/reader.h"
@@ -111,7 +111,7 @@ static void add_adjustment_to(PP *pp, AdjustmentType type, SourceLoc source_loc)
 
     break;
   case END_MACRO_ADJUSTMENT:
-    assert(pp->macro_depth != 0);
+    ASSERT(pp->macro_depth != 0);
     pp->macro_depth--;
     if (pp->macro_depth != 0) return;
 
@@ -697,7 +697,13 @@ static bool handle_pp_directive(PP *pp)
       Macro *macro = look_up_macro(&pp->macro_env, macro_name);
       if (macro != NULL) {
         // @TODO: Proper checks as per C99 6.10.3.2
-        assert(macro->arg_names.size == arg_names.size);
+        if (macro->arg_names.size != arg_names.size) {
+          emit_error(
+              &reader->source_loc,
+              "Redefined macro '%.*s' has different number of arguments",
+              macro_name.len, macro_name.chars);
+          return false;
+        }
       } else {
         macro = ARRAY_APPEND(&pp->macro_env, Macro);
       }

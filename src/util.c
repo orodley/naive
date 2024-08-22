@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "exit_code.h"
 #include "util.h"
 
 extern inline u32 max(u32 a, u32 b);
@@ -64,5 +65,7 @@ String map_file_into_memory(char *filename)
 void unmap_file(String buffer)
 {
   int ret = munmap(buffer.chars, buffer.len);
-  assert(ret == 0);
+  if (ret != 0) {
+    exit_with_code(EXIT_CODE_IO_ERROR);
+  }
 }

@@ -1,6 +1,5 @@
 #include "asm.h"
 
-#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,8 +7,8 @@
 
 #include "array.h"
 #include "asm_gen.h"
-#include "exit_code.h"
 #include "file.h"
+#include "macros.h"
 #include "util.h"
 
 void init_asm_module(AsmModule *asm_module, char *input_file_name)
@@ -65,7 +64,7 @@ AsmConst asm_const_symbol(AsmSymbol *symbol)
 
 AsmValue asm_vreg(u32 vreg_number, u8 width)
 {
-  assert(width != 0);
+  PRECONDITION(width != 0);
   return (AsmValue){
       .is_deref = false,
       .t = ASM_VALUE_REGISTER,
@@ -78,7 +77,7 @@ AsmValue asm_vreg(u32 vreg_number, u8 width)
 
 AsmValue asm_float_vreg(u32 vreg_number, u8 width)
 {
-  assert(width != 0);
+  PRECONDITION(width != 0);
   return (AsmValue){
       .is_deref = false,
       .t = ASM_VALUE_REGISTER,
@@ -91,7 +90,7 @@ AsmValue asm_float_vreg(u32 vreg_number, u8 width)
 
 AsmValue asm_phys_reg(RegClass reg, u8 width)
 {
-  assert(width != 0);
+  PRECONDITION(width != 0);
   return (AsmValue){
       .is_deref = false,
       .t = ASM_VALUE_REGISTER,
@@ -217,7 +216,7 @@ static bool is_sign_extending_instr(AsmInstr *instr)
 static bool is_const_and_fits(
     AsmValue asm_value, u32 ext_width, u32 imm_width, bool sext)
 {
-  assert(ext_width >= imm_width);
+  PRECONDITION(ext_width >= imm_width);
 
   if (asm_value.t != ASM_VALUE_CONST) {
     return false;
@@ -408,7 +407,7 @@ void dump_asm_module(AsmModule *asm_module)
     AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
     if (symbol->section != BSS_SECTION) continue;
 
-    assert(symbol->offset == pos);
+    ASSERT(symbol->offset == pos);
 
     dump_symbol(symbol);
     printf("\tresb 0x%x\n", symbol->size);
@@ -437,14 +436,16 @@ static void write_int(Array(u8) *output, u64 x, u32 size)
 static RegClass get_reg_class(AsmValue *asm_value)
 {
   Register reg;
-  if (asm_value->t == ASM_VALUE_REGISTER) {
-    reg = asm_value->u.reg;
-  } else {
-    assert(asm_value->t == ASM_VALUE_OFFSET_REGISTER);
-    reg = asm_value->u.offset_register.reg;
+  PRECONDITION(
+      asm_value->t == ASM_VALUE_REGISTER
+      || asm_value->t == ASM_VALUE_OFFSET_REGISTER);
+  switch (asm_value->t) {
+  case ASM_VALUE_REGISTER: reg = asm_value->u.reg; break;
+  case ASM_VALUE_OFFSET_REGISTER: reg = asm_value->u.offset_register.reg; break;
+  default: UNREACHABLE;
   }
 
-  assert(reg.t == PHYS_REG);
+  ASSERT(reg.t == PHYS_REG);
   return reg.u.class;
 }
 
@@ -553,13 +554,14 @@ static void add_mod_rm_arg(
       return;
     }
   } else if (asm_value->t == ASM_VALUE_OFFSET_REGISTER) {
-    assert(asm_value->is_deref);
+    ASSERT(asm_value->is_deref);
 
     AsmConst asm_const = asm_value->u.offset_register.offset;
     RegClass reg = get_reg_class(asm_value);
 
     u64 offset;
-    if (asm_const.t == ASM_CONST_SYMBOL) {
+    switch (asm_const.t) {
+    case ASM_CONST_SYMBOL:
       encoded_instr->mod = 2;
 
       // Dummy value, gets patched later.
@@ -574,8 +576,9 @@ static void add_mod_rm_arg(
       fixup->section = TEXT_SECTION;
       fixup->size_bytes = 4;
       fixup->symbol = asm_const.u.symbol;
-    } else {
-      assert(asm_const.t == ASM_CONST_IMMEDIATE);
+      break;
+
+    case ASM_CONST_IMMEDIATE:
       offset = asm_const.u.immediate;
       encoded_instr->displacement = offset;
       if ((i8)offset == (i64)offset) {
@@ -585,8 +588,10 @@ static void add_mod_rm_arg(
         encoded_instr->mod = 2;
         encoded_instr->displacement_size = 4;
       } else {
-        assert(!"Offset too large!");
+        ASSERT_FAIL("Offset too large!");
       }
+      break;
+    default: UNREACHABLE;
     }
 
     switch (reg) {
@@ -664,7 +669,7 @@ static void encode_instr(
     u8 opcode[], bool reg_and_rm, i32 opcode_extension, i32 immediate_size,
     bool reg_in_opcode, FixupType fixup_type)
 {
-  assert(instr != NULL);
+  PRECONDITION(instr != NULL);
 
   EncodedInstr encoded_instr;
   ZERO_STRUCT(&encoded_instr);
@@ -728,7 +733,7 @@ static void encode_instr(
     }
 
     Register reg = arg->u.reg;
-    assert(reg.t == PHYS_REG);
+    ASSERT(reg.t == PHYS_REG);
 
     if (reg.width == 8
         && (reg.u.class == REG_CLASS_SP || reg.u.class == REG_CLASS_BP
@@ -746,11 +751,11 @@ static void encode_instr(
     for (u32 i = 0; i < instr->arity; i++) {
       if (instr->args[i].t == ASM_VALUE_CONST) {
         // Check that we only have one immediate.
-        assert(immediate_arg == NULL);
+        ASSERT(immediate_arg == NULL);
         immediate_arg = instr->args + i;
       }
     }
-    assert(immediate_arg != NULL);
+    ASSERT(immediate_arg != NULL);
 
     if (immediate_arg->t == ASM_VALUE_CONST) {
       AsmConst constant = immediate_arg->u.constant;
@@ -788,13 +793,13 @@ static void encode_instr(
     if (encoded_instr.index >= 8) encoded_instr.rex_prefix |= REX_X;
     if (encoded_instr.base >= 8) {
       // Make sure we didn't already use REX.B for the RM field.
-      assert((encoded_instr.rex_prefix & REX_B) == 0);
+      ASSERT((encoded_instr.rex_prefix & REX_B) == 0);
       encoded_instr.rex_prefix |= REX_B;
     }
   }
   if (encoded_instr.opcode_extension >= 8) {
     // Make sure we didn't already use REX.B for the RM field or SIB.
-    assert((encoded_instr.rex_prefix & REX_B) == 0);
+    ASSERT((encoded_instr.rex_prefix & REX_B) == 0);
     encoded_instr.rex_prefix |= REX_B;
   }
 
@@ -868,8 +873,8 @@ void assemble(AsmModule *asm_module)
 
     AsmSymbol *symbol = instr->label;
     if (symbol != NULL) {
-      assert(symbol->section == TEXT_SECTION);
-      assert(symbol->defined);
+      ASSERT(symbol->section == TEXT_SECTION);
+      ASSERT(symbol->defined);
 
       symbol->offset = instr_start;
     }

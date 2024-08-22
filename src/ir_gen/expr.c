@@ -3,12 +3,12 @@
 #include <math.h>
 #include <stdlib.h>
 
-#include "exit_code.h"
 #include "ir.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"
 #include "ir_gen/decl.h"
 #include "ir_gen/initializer.h"
+#include "macros.h"
 #include "syntax/parse.h"
 
 static Term ir_gen_assign_expr(IrGenContext *ctx, ASTExpr *expr, IrOp ir_op);
@@ -79,25 +79,34 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
       fprintf(stderr, "Unknown identifier '%s'\n", expr->u.identifier);
       exit(1);
     }
-    assert(binding->term.value.type.t == IR_POINTER || binding->constant);
+    ASSERT(binding->term.value.type.t == IR_POINTER || binding->constant);
 
     IrValue value;
 
-    // Functions, arrays, and structs implicitly have their address taken.
-    if (context == LVALUE_CONTEXT || binding->term.ctype->t == FUNCTION_TYPE
+    if (context == LVALUE_CONTEXT) {
+      if (binding->constant) {
+        emit_fatal_error_no_loc("Cannot use constant as lvalue");
+      }
+
+      // For anything in an lvalue context, its address is implicitly taken, so
+      // we just use the binding value, which is already a pointer.
+      value = binding->term.value;
+    } else if (
+        binding->term.ctype->t == FUNCTION_TYPE
         || binding->term.ctype->t == ARRAY_TYPE
         || binding->term.ctype->t == STRUCT_TYPE) {
-      assert(!binding->constant);
+      // Functions, arrays, and structs implicitly have their address taken.
+      value = binding->term.value;
+    } else if (binding->constant) {
       value = binding->term.value;
     } else {
-      if (binding->constant) {
-        value = binding->term.value;
-      } else {
-        assert(context != CONST_CONTEXT);
-        value = build_load(
-            builder, binding->term.value,
-            c_type_to_ir_type(binding->term.ctype));
+      if (context == CONST_CONTEXT) {
+        emit_fatal_error_no_loc(
+            "Cannot refer to non-constant identifier in "
+            "constant context");
       }
+      value = build_load(
+          builder, binding->term.value, c_type_to_ir_type(binding->term.ctype));
     }
 
     return (Term){.ctype = binding->term.ctype, .value = value};
@@ -105,8 +114,14 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
   case STRUCT_ARROW_FIELD_EXPR: {
     ASTExpr *struct_expr = expr->u.struct_field.struct_expr;
     Term struct_term = ir_gen_expr(ctx, struct_expr, RVALUE_CONTEXT);
-    assert(struct_term.ctype->t == POINTER_TYPE);
-    assert(struct_term.ctype->u.pointee_type->t == STRUCT_TYPE);
+
+    if (struct_term.ctype->t != POINTER_TYPE) {
+      emit_fatal_error_no_loc("Cannot use '->' operator on non-pointer type");
+    }
+    if (struct_term.ctype->u.pointee_type->t != STRUCT_TYPE) {
+      emit_fatal_error_no_loc(
+          "Cannot use '->' operator on pointer to non-struct type");
+    }
 
     return ir_gen_struct_field(
         builder, struct_term, expr->u.struct_field.field_name, context);
@@ -114,7 +129,10 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
   case STRUCT_DOT_FIELD_EXPR: {
     ASTExpr *struct_expr = expr->u.struct_field.struct_expr;
     Term struct_term = ir_gen_expr(ctx, struct_expr, RVALUE_CONTEXT);
-    assert(struct_term.ctype->t == STRUCT_TYPE);
+
+    if (struct_term.ctype->t != STRUCT_TYPE) {
+      emit_fatal_error_no_loc("Cannot use '.' operator on non-struct type");
+    }
 
     return ir_gen_struct_field(
         builder, struct_term, expr->u.struct_field.field_name, context);
@@ -135,7 +153,13 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     Term pointer = ir_gen_add(
         ctx, ir_gen_expr(ctx, expr->u.binary_op.arg1, RVALUE_CONTEXT),
         ir_gen_expr(ctx, expr->u.binary_op.arg2, RVALUE_CONTEXT));
-    assert(pointer.ctype->t == POINTER_TYPE);
+
+    // @TODO: This is wrong actually, `a[b]` is equivalent to `*(a + b)`, so the
+    // same type conversions etc should be done as with addition. In particular,
+    // `1[a]` should be valid if `a` is an pointer.
+    if (pointer.ctype->t != POINTER_TYPE) {
+      emit_fatal_error_no_loc("Cannot use '[]' operator on non-pointer type");
+    }
     return ir_gen_deref(builder, &ctx->type_env, pointer, context);
   }
   case INT_LITERAL_EXPR: {
@@ -262,17 +286,25 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
       if (look_up_builtin_ident(ctx, name, &result)) return result;
 
       if (streq(name, "__builtin_va_start")) {
-        assert(call_arity == 1);
+        if (call_arity != 1) {
+          emit_fatal_error_no_loc(
+              "Wrong number of arguments for __builtin_va_start (got %u, "
+              "expected 1)",
+              call_arity);
+        }
 
         Term va_list_ptr = ir_gen_expr(
             ctx, expr->u.function_call.arg_list->expr, RVALUE_CONTEXT);
-        assert(
-            va_list_ptr.ctype->t == ARRAY_TYPE
-            || va_list_ptr.ctype->t == POINTER_TYPE);
-        assert(va_list_ptr.ctype->u.array.elem_type->t == STRUCT_TYPE);
 
-        // @TODO: Search through the type env and asert that the elem
-        // type is the same as the type bound to "va_list".
+        if (va_list_ptr.ctype->t != ARRAY_TYPE
+            && va_list_ptr.ctype->t != POINTER_TYPE
+            && va_list_ptr.ctype->t != STRUCT_TYPE) {
+          // @TODO: This is a very cursory check. We should search through the
+          // type env and check that the elem type is the same as the type
+          // bound to "va_list".
+          emit_fatal_error_no_loc(
+              "Invalid argument type for __builtin_va_start");
+        }
 
         return (Term){
             .ctype = &ctx->type_env.void_type,
@@ -294,9 +326,13 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     // global function it should have type "pointer to F", where F is the
     // type of the function in question.
     if (callee.ctype->t != FUNCTION_TYPE) {
-      assert(callee.ctype->t == POINTER_TYPE);
+      if (callee.ctype->t != POINTER_TYPE) {
+        emit_fatal_error_no_loc("Cannot call non-function type");
+      }
       CType *pointee_type = callee.ctype->u.pointee_type;
-      assert(pointee_type->t == FUNCTION_TYPE);
+      if (pointee_type->t != FUNCTION_TYPE) {
+        emit_fatal_error_no_loc("Cannot call non-function type");
+      }
       callee.ctype = pointee_type;
     }
 
@@ -323,6 +359,7 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
       out_index++;
     }
 
+    // @TODO: Check arg types match.
     arg = expr->u.function_call.arg_list;
     for (u32 i = 0; arg != NULL; i++, out_index++, arg = arg->next) {
       Term arg_term = ir_gen_expr(ctx, arg->expr, RVALUE_CONTEXT);
@@ -382,7 +419,8 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     ASTExpr *rhs_expr = expr->u.binary_op.arg2;
 
     Term lhs = ir_gen_expr(ctx, lhs_expr, RVALUE_CONTEXT);
-    assert(lhs.ctype->t == INTEGER_TYPE);
+    fatal_error_if_not_int(lhs.ctype);
+
     if (is_or) {
       build_cond(builder, lhs.value, after_block, rhs_block);
     } else {
@@ -393,7 +431,8 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
 
     builder->current_block = rhs_block;
     Term rhs = ir_gen_expr(ctx, rhs_expr, RVALUE_CONTEXT);
-    assert(rhs.ctype->t == INTEGER_TYPE);
+    fatal_error_if_not_int(rhs.ctype);
+
     IrValue rhs_as_bool = build_cmp(
         builder, CMP_NEQ, rhs.value,
         value_const_int(c_type_to_ir_type(rhs.ctype), 0));
@@ -420,7 +459,8 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
 
     ASTExpr *condition_expr = expr->u.ternary_op.arg1;
     Term condition_term = ir_gen_expr(ctx, condition_expr, RVALUE_CONTEXT);
-    assert(condition_term.ctype->t == INTEGER_TYPE);
+    fatal_error_if_not_int(condition_term.ctype);
+
     build_cond(builder, condition_term.value, then_block, else_block);
 
     ASTExpr *then_expr = expr->u.ternary_op.arg2;
@@ -452,7 +492,7 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
       // IR pointers are untyped, so this is a no-op conversion.
       result_type = pointer_type(&ctx->type_env, &ctx->type_env.void_type);
     } else {
-      assert(c_type_eq(then_term.ctype, else_term.ctype));
+      fatal_error_if_type_not_eq(then_term.ctype, else_term.ctype);
     }
 
     // We have to build the branches after doing conversions, since if any
@@ -517,13 +557,14 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     CType *arg_type =
         type_name_to_c_type(ctx, expr->u.builtin_va_arg.type_name);
 
-    assert(
-        va_list_term.ctype->t == ARRAY_TYPE
-        || va_list_term.ctype->t == POINTER_TYPE);
-    assert(va_list_term.ctype->u.array.elem_type->t == STRUCT_TYPE);
-
-    // @TODO: Search through the type env and asert that the elem type is
-    // the same as the type bound to "va_list".
+    if (va_list_term.ctype->t != ARRAY_TYPE
+        && va_list_term.ctype->t != POINTER_TYPE
+        && va_list_term.ctype->t != STRUCT_TYPE) {
+      // @TODO: This is a very cursory check. We should search through the
+      // type env and check that the elem type is the same as the type bound
+      // to "va_list".
+      emit_fatal_error_no_loc("Invalid argument type for __builtin_va_start");
+    }
 
     if (arg_type->t == INTEGER_TYPE || arg_type->t == POINTER_TYPE) {
       // @PORT: We want "uint64_t" here.
@@ -565,7 +606,7 @@ Term ir_gen_assign_op(
   Term result = right;
 
   if (left.ctype->t == STRUCT_TYPE || left.ctype->t == ARRAY_TYPE) {
-    assert(c_type_eq(left.ctype, right.ctype));
+    fatal_error_if_type_not_eq(left.ctype, right.ctype);
 
     IrValue *memcpy_args =
         pool_alloc(&ctx->builder->module->pool, 3 * sizeof *memcpy_args);
@@ -601,17 +642,20 @@ Term ir_gen_assign_op(
 static Term ir_gen_struct_field(
     IrBuilder *builder, Term struct_term, char *field_name, ExprContext context)
 {
-  assert(struct_term.value.type.t == IR_POINTER);
+  PRECONDITION(struct_term.value.type.t == IR_POINTER);
 
   CType *ctype = struct_term.ctype;
   if (struct_term.ctype->t == POINTER_TYPE) {
     ctype = ctype->u.pointee_type;
   }
+  PRECONDITION(ctype->t == STRUCT_TYPE);
 
-  assert(ctype->t == STRUCT_TYPE);
+  IrType *struct_ir_type = ctype->u.strukt.ir_type;
+  ASSERT(struct_ir_type->t == IR_STRUCT);
+
   Array(CDecl) *fields = &ctype->u.strukt.fields;
   CDecl *selected_field = NULL;
-  u32 field_number;
+  u32 field_number = 0;
   for (u32 i = 0; i < fields->size; i++) {
     CDecl *field = ARRAY_REF(fields, CDecl, i);
     if (streq(field->name, field_name)) {
@@ -620,12 +664,12 @@ static Term ir_gen_struct_field(
       break;
     }
   }
-  assert(selected_field != NULL);
+  if (selected_field == NULL) {
+    emit_fatal_error_no_loc("Unknown field '%s' in struct", field_name);
+  }
 
   IrValue value = build_field(
       builder, struct_term.value, *ctype->u.strukt.ir_type, field_number);
-  IrType *struct_ir_type = ctype->u.strukt.ir_type;
-  assert(struct_ir_type->t == IR_STRUCT);
   IrType field_type = struct_ir_type->u.strukt.fields[field_number].type;
 
   if (context == RVALUE_CONTEXT && selected_field->type->t != STRUCT_TYPE
@@ -640,7 +684,9 @@ static Term ir_gen_deref(
     IrBuilder *builder, TypeEnv *type_env, Term pointer, ExprContext context)
 {
   CType *pointer_type = decay_to_pointer(type_env, pointer.ctype);
-  assert(pointer_type->t == POINTER_TYPE);
+  if (pointer_type->t != POINTER_TYPE) {
+    emit_fatal_error_no_loc("Cannot dereference non-pointer type");
+  }
   CType *pointee_type = pointer_type->u.pointee_type;
 
   IrValue value;
@@ -649,7 +695,7 @@ static Term ir_gen_deref(
       || pointee_type->t == ARRAY_TYPE) {
     value = pointer.value;
   } else {
-    assert(context == RVALUE_CONTEXT);
+    ASSERT(context == RVALUE_CONTEXT, "Shouldn't deref in const context");
 
     value = build_load(builder, pointer.value, c_type_to_ir_type(pointee_type));
   }
@@ -697,9 +743,12 @@ static Term ir_gen_cmp(IrGenContext *ctx, Term left, Term right, IrCmp cmp)
 
       // "ptr <cmp> !ptr" is only valid if "!ptr" is zero, as a constant
       // zero integer expression is a null pointer constant.
-      assert(other_term->ctype->t == INTEGER_TYPE);
-      assert(other_term->value.t == IR_VALUE_CONST_INT);
-      assert(other_term->value.u.const_int == 0);
+      fatal_error_if_not_int(other_term->ctype);
+      if (other_term->value.t != IR_VALUE_CONST_INT
+          || other_term->value.u.const_int != 0) {
+        emit_fatal_error_no_loc(
+            "Cannot compare pointer to integer other than a constant 0 (NULL)");
+      }
 
       // Constant fold tautological comparisons between a global and NULL.
       if (ptr_term->value.t == IR_VALUE_GLOBAL) {
@@ -721,8 +770,8 @@ static Term ir_gen_cmp(IrGenContext *ctx, Term left, Term right, IrCmp cmp)
     }
   } else {
     do_arithmetic_conversions(ctx->builder, &left, &right);
+    ASSERT(c_type_eq(left.ctype, right.ctype));
 
-    assert(c_type_eq(left.ctype, right.ctype));
     if (left.ctype->t == INTEGER_TYPE) {
       // @NOTE: We always pass the signed comparison ops to this function.
       // Not because we specifically want a signed comparison. Just because
@@ -732,8 +781,7 @@ static Term ir_gen_cmp(IrGenContext *ctx, Term left, Term right, IrCmp cmp)
       if (!left.ctype->u.integer.is_signed) {
         cmp = signed_cmp_to_unsigned_cmp(cmp);
       }
-    } else {
-      assert(left.ctype->t == FLOAT_TYPE);
+    } else if (left.ctype->t == FLOAT_TYPE) {
       CType *result_type = &ctx->type_env.int_type;
 
       // Always use unsigned comparison ops for floats. Signed vs unsigned
@@ -743,6 +791,9 @@ static Term ir_gen_cmp(IrGenContext *ctx, Term left, Term right, IrCmp cmp)
       cmp = signed_cmp_to_unsigned_cmp(cmp);
       IrValue value = build_cmpf(ctx->builder, cmp, left.value, right.value);
       return (Term){.ctype = result_type, .value = value};
+    } else {
+      emit_fatal_error_no_loc(
+          "Comparisons only allowed for ints, floats, and pointers");
     }
   }
 
@@ -803,7 +854,7 @@ static Term ir_gen_add(IrGenContext *ctx, Term left, Term right)
   } else if (left_is_pointer ^ right_is_pointer) {
     Term pointer = left_is_pointer ? left : right;
     Term other = left_is_pointer ? right : left;
-    assert(other.ctype->t == INTEGER_TYPE);
+    fatal_error_if_not_int(other.ctype);
 
     CType *result_type = pointer.ctype;
     CType *pointee_type = result_type->u.pointee_type;
@@ -897,7 +948,7 @@ static Term ir_gen_sub(IrGenContext *ctx, Term left, Term right)
   } else if (left_is_pointer && (right.ctype->t == INTEGER_TYPE)) {
     // @TODO: This block is almost identical to the corresponding block in
     // ir_gen_add, except for OP_SUB instead of OP_ADD. Factor out?
-    assert(right.ctype->t == INTEGER_TYPE);
+    fatal_error_if_not_int(right.ctype);
 
     CType *result_type = left.ctype;
     CType *pointee_type = result_type->u.pointee_type;
@@ -964,7 +1015,7 @@ static Term ir_gen_va_arg(
 {
   IrGlobal *global_builtin_va_arg =
       find_global_by_name(ctx->builder->module, builtin_name);
-  assert(global_builtin_va_arg != NULL);
+  ASSERT(global_builtin_va_arg != NULL);
 
   IrValue *args = malloc(sizeof *args * 1);
   args[0] = va_list_term.value;
@@ -1005,10 +1056,10 @@ IrConst *eval_constant_expr(IrGenContext *ctx, ASTExpr *expr)
   // Quick sanity check - this is a constant expression, so we shouldn't have
   // added any instructions or blocks.
   if (ctx->builder->current_function != NULL) {
-    assert(ctx->builder->current_function->blocks.size == num_blocks);
+    ASSERT(ctx->builder->current_function->blocks.size == num_blocks);
   }
   if (ctx->builder->current_block != NULL) {
-    assert(ctx->builder->current_block->instrs.size == num_instrs);
+    ASSERT(ctx->builder->current_block->instrs.size == num_instrs);
   }
 
   switch (term.value.t) {
@@ -1033,6 +1084,6 @@ static CType *type_name_to_c_type(IrGenContext *ctx, ASTTypeName *type_name)
   CType *decl_spec_type =
       decl_specifier_list_to_c_type(ctx, type_name->decl_specifier_list);
   decl_to_cdecl(ctx, decl_spec_type, type_name->declarator, &cdecl);
-  assert(cdecl.name == NULL);
+  ASSERT(cdecl.name == NULL);
   return cdecl.type;
 }

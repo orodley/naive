@@ -15,7 +15,7 @@ IrGlobal *ir_global_for_decl(
     ASTDeclarator *declarator, ASTInitializer *initializer,
     CType **result_c_type)
 {
-  assert(declarator != NULL);
+  PRECONDITION(declarator != NULL);
 
   CType *decl_spec_type =
       decl_specifier_list_to_c_type(ctx, decl_specifier_list);
@@ -25,6 +25,10 @@ IrGlobal *ir_global_for_decl(
 
   CType *ctype = cdecl.type;
   if (ctype->t == FUNCTION_TYPE) {
+    // It shouldn't be possible, syntactically, to have a function decl with no
+    // name.
+    ASSERT(cdecl.name != NULL);
+
     // Struct returns are handled in the frontend, by adding a pointer
     // parameter at the start, and allocating a local in the caller.
     bool struct_ret = ctype->u.function.return_type->t == STRUCT_TYPE;
@@ -46,7 +50,6 @@ IrGlobal *ir_global_for_decl(
       arg_ir_types[i] = c_type_to_ir_type(arg_c_type);
     }
 
-    assert(cdecl.name != NULL);
     IrGlobal *global = find_global_by_name(ctx->builder->module, cdecl.name);
 
     if (global == NULL) {
@@ -60,11 +63,18 @@ IrGlobal *ir_global_for_decl(
     }
 
     // @TODO: Check C type matches
-    assert(global->type.t == IR_FUNCTION);
+    if (global->type.t != IR_FUNCTION) {
+      emit_fatal_error_no_loc(
+          "Definition of function %s overrides previously declared variable",
+          cdecl.name);
+    }
     *result_c_type = ctype;
     return global;
   } else {
-    assert(cdecl.name != NULL);
+    if (cdecl.name == NULL) {
+      emit_fatal_error_no_loc("Global variable declaration must have a name");
+    }
+
     IrGlobal *global = find_global_by_name(ctx->builder->module, cdecl.name);
     if (global == NULL) {
       global = ir_module_add_var(
@@ -121,9 +131,12 @@ static void direct_declarator_to_cdecl(
     ASTExpr *array_length_expr = declarator->u.array_declarator.array_length;
     if (array_length_expr != NULL) {
       IrConst *length_const = eval_constant_expr(ctx, array_length_expr);
-      assert(length_const->type.t == IR_INT);
-      u64 length = length_const->u.integer;
 
+      if (length_const->type.t != IR_INT) {
+        emit_fatal_error_no_loc("Array length must be an integer constant");
+      }
+
+      u64 length = length_const->u.integer;
       set_array_type_length(array, length);
     }
 
@@ -134,11 +147,17 @@ static void direct_declarator_to_cdecl(
         declarator->u.function_declarator.parameters;
     ASTParameterDecl *params = first_param;
 
+    bool variable_arity = false;
     u32 arity = 0;
     while (params != NULL) {
       switch (params->t) {
       case PARAMETER_DECL: arity++; break;
-      case ELLIPSIS_DECL: assert(params->next == NULL); break;
+      case ELLIPSIS_DECL:
+        if (params->next != NULL) {
+          emit_fatal_error_no_loc("Parameter found after ellipsis");
+        }
+        variable_arity = true;
+        break;
       }
       params = params->next;
     }
@@ -148,7 +167,6 @@ static void direct_declarator_to_cdecl(
     CType **arg_c_types =
         pool_alloc(&ctx->builder->module->pool, sizeof(*arg_c_types) * arity);
 
-    bool variable_arity = false;
     for (u32 i = 0; params != NULL; i++) {
       switch (params->t) {
       case PARAMETER_DECL: {
@@ -158,8 +176,13 @@ static void direct_declarator_to_cdecl(
         decl_to_cdecl(ctx, param_ident_type, params->declarator, &param_cdecl);
 
         if (param_cdecl.type->t == VOID_TYPE) {
-          assert(i == 0);
-          assert(param_cdecl.name == NULL);
+          if (i != 0) {
+            emit_fatal_error_no_loc(
+                "void must be the only parameter if specified");
+          }
+          if (param_cdecl.name != NULL) {
+            emit_fatal_error_no_loc("void parameter cannot have a name");
+          }
         }
 
         // As per 6.7.5.3.7, parameters of array type are adjusted to
@@ -169,11 +192,7 @@ static void direct_declarator_to_cdecl(
         arg_c_types[i] = param_cdecl.type;
         break;
       }
-      case ELLIPSIS_DECL:
-        variable_arity = true;
-        // Can't have more params after an ellipsis.
-        assert(params->next == NULL);
-        break;
+      case ELLIPSIS_DECL: break;
       }
 
       params = params->next;
@@ -182,7 +201,11 @@ static void direct_declarator_to_cdecl(
     // This is a nullary function declaration, using void,
     // e.g. int foo(void);
     if (arity == 1 && arg_c_types[0]->t == VOID_TYPE) {
-      assert(!variable_arity);
+      if (variable_arity) {
+        emit_fatal_error_no_loc(
+            "void cannot be combined with ellipsis in "
+            "function declaration");
+      }
       arg_c_types = NULL;
       arity = 0;
     }
@@ -214,8 +237,9 @@ CType *decl_specifier_list_to_c_type(
     decl_specifier_list = decl_specifier_list->next;
   }
 
-  assert(decl_specifier_list != NULL);
-  assert(decl_specifier_list->t == TYPE_SPECIFIER);
+  if (decl_specifier_list == NULL || decl_specifier_list->t != TYPE_SPECIFIER) {
+    emit_fatal_error_no_loc("Declaration must have a type specifier");
+  }
 
   ASTTypeSpecifier *type_spec = decl_specifier_list->u.type_specifier;
 
@@ -240,20 +264,18 @@ CType *decl_specifier_list_to_c_type(
     }
 
     if (field_list == NULL) {
-      if (name == NULL) {
-        assert(!"Error, no name or fields for struct or union type");
-      } else if (existing_type == NULL) {
-        // Incomplete type
-        return struct_type(type_env, name);
-      } else {
-        return existing_type;
-      }
+      return existing_type != NULL ? existing_type
+                                   : struct_type(type_env, name);
     }
     CType *type;
     if (existing_type != NULL) {
-      assert(existing_type->t == STRUCT_TYPE);
-      if (!existing_type->u.strukt.incomplete)
-        assert(!"Error, redefinition of struct or union type");
+      if (existing_type->t != STRUCT_TYPE) {
+        emit_fatal_error_no_loc(
+            "Redefinition of non-struct/union type as struct/union");
+      }
+      if (!existing_type->u.strukt.incomplete) {
+        emit_fatal_error_no_loc("Error, redefinition of struct or union type");
+      }
 
       type = existing_type;
     } else {
@@ -266,13 +288,18 @@ CType *decl_specifier_list_to_c_type(
           decl_specifier_list_to_c_type(ctx, field_list->decl_specifier_list);
       ASTFieldDeclarator *field_declarator = field_list->field_declarator_list;
       while (field_declarator != NULL) {
-        assert(field_declarator->t == NORMAL_FIELD_DECLARATOR);
-        ASTDeclarator *declarator = field_declarator->u.declarator;
+        switch (field_declarator->t) {
+        case NORMAL_FIELD_DECLARATOR: {
+          ASTDeclarator *declarator = field_declarator->u.declarator;
 
-        CDecl *cdecl = ARRAY_APPEND(fields, CDecl);
-        decl_to_cdecl(ctx, decl_spec_type, declarator, cdecl);
+          CDecl *cdecl = ARRAY_APPEND(fields, CDecl);
+          decl_to_cdecl(ctx, decl_spec_type, declarator, cdecl);
 
-        field_declarator = field_declarator->next;
+          field_declarator = field_declarator->next;
+          break;
+        }
+        case BITFIELD_FIELD_DECLARATOR: UNIMPLEMENTED("Bitfields");
+        }
       }
 
       field_list = field_list->next;
@@ -327,7 +354,7 @@ CType *decl_specifier_list_to_c_type(
 
     if (enumerator_list == NULL) {
       if (tag == NULL) {
-        assert(!"Error, no name or enumerators for enum type");
+        emit_fatal_error_no_loc("Error, no name or enumerators for enum type");
       } else if (existing_type == NULL) {
         // Incomplete type.
         // @TODO: This should be illegal to use, but for now we just
@@ -337,8 +364,9 @@ CType *decl_specifier_list_to_c_type(
         return existing_type;
       }
     }
-    // @TODO: Incomplete enum types.
-    assert(existing_type == NULL);
+    if (existing_type != NULL) {
+      UNIMPLEMENTED("Definition of previously declared incomplete enum type");
+    }
 
     if (tag != NULL) {
       TypeEnvEntry *new_type_alias =
@@ -355,7 +383,9 @@ CType *decl_specifier_list_to_c_type(
 
       if (expr != NULL) {
         IrConst *value = eval_constant_expr(ctx, expr);
-        assert(value->type.t == IR_INT);
+        if (value->type.t != IR_INT) {
+          emit_fatal_error_no_loc("Enum value must be an integer constant");
+        }
         curr_enum_value = value->u.integer;
       }
 

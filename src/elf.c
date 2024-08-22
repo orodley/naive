@@ -1,13 +1,12 @@
 #define _POSIX_C_SOURCE 200809L
 #include "elf.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "asm.h"
-#include "exit_code.h"
 #include "file.h"
+#include "macros.h"
 #include "misc.h"
 #include "util.h"
 
@@ -268,7 +267,7 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
   // @NOTE: In System V, file offsets and base virtual addresses for segments
   // must be congruent modulo the page size.
   text_info->virtual_address = 0x8000000 + text_info->offset;
-  assert(text_info->size == 0 || text_info->contents != NULL);
+  ASSERT(text_info->size == 0 || text_info->contents != NULL);
   checked_fwrite(
       text_info->contents, 1, text_info->size, elf_file->output_file);
 
@@ -283,7 +282,7 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
     }
 
     u32 symtab_index = symbol->symtab_index;
-    assert(symtab_index != 0);
+    ASSERT(symtab_index != 0);
 
     ELF64RelocType reloc_type;
     u32 addend;
@@ -321,7 +320,7 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
   data_info->virtual_address =
       align_to(elf_file->section_info[BSS_INDEX].virtual_address, 0x1000000)
       + data_info->offset;
-  assert(data_info->contents != NULL);
+  ASSERT(data_info->contents != NULL);
   checked_fwrite(
       data_info->contents, 1, data_info->size, elf_file->output_file);
 
@@ -330,11 +329,11 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
     Fixup *fixup = *ARRAY_REF(fixups, Fixup *, i);
     if (fixup->section != DATA_SECTION) continue;
 
-    assert(fixup->type = FIXUP_ABSOLUTE);
+    ASSERT(fixup->type = FIXUP_ABSOLUTE);
 
     AsmSymbol *symbol = fixup->symbol;
     u32 symtab_index = symbol->symtab_index;
-    assert(symtab_index != 0);
+    ASSERT(symtab_index != 0);
 
     // @PORT: Hardcoded pointer size.
     ELF64RelocType reloc_type = R_X86_64_64;
@@ -425,7 +424,7 @@ static void finish_strtab_section(ELFFile *elf_file)
   ZERO_STRUCT(&header);
 
   if (elf_file->type == ET_EXEC) {
-    assert(elf_file->entry_point_virtual_address != -1);
+    ASSERT(elf_file->entry_point_virtual_address != -1);
 
     header.entry_point_virtual_address = elf_file->entry_point_virtual_address;
     header.pht_entries = 3;
@@ -515,7 +514,7 @@ static void finish_strtab_section(ELFFile *elf_file)
   header.sht_entries = NUM_SECTIONS;
   header.shstrtab_index = SHSTRTAB_INDEX;
 
-  assert(checked_ftell(output_file) == 0);
+  ASSERT(checked_ftell(output_file) == 0);
   checked_fwrite(&header, sizeof header, 1, output_file);
 
   checked_fseek(output_file, header.sht_location, SEEK_SET);
@@ -623,7 +622,7 @@ static void finish_strtab_section(ELFFile *elf_file)
     // For symbol tables, this field contains 1 + the index of the last
     // local symbol. We should at least have the STT_FILE symbol (which is
     // local), so this should never be zero.
-    assert(elf_file->last_local_symbol_index != 0);
+    ASSERT(elf_file->last_local_symbol_index != 0);
     symtab_header.misc_info = elf_file->last_local_symbol_index + 1;
     symtab_header.linked_section = STRTAB_INDEX;
     symtab_header.section_location =
@@ -742,30 +741,29 @@ void process_rela_section(
     Array(Symbol) *symbol_table, FILE *input_file, u32 initial_location,
     u32 existing_section_size, u32 corresponding_section_index)
 {
-  if (rela_header != NULL) {
-    assert(rela_header->type == SHT_RELA);
-    assert(rela_header->entry_size == sizeof(ELF64Rela));
+  if (rela_header == NULL) return;
 
-    checked_fseek(
-        input_file, initial_location + rela_header->section_location, SEEK_SET);
-    u32 rela_entries = rela_header->section_size / rela_header->entry_size;
-    for (u32 rela_index = 0; rela_index < rela_entries; rela_index++) {
-      ELF64Rela rela;
-      checked_fread(&rela, sizeof rela, 1, input_file);
+  PRECONDITION(rela_header->type == SHT_RELA);
+  PRECONDITION(rela_header->entry_size == sizeof(ELF64Rela));
 
-      ELF64RelocType type = ELF64_RELA_TYPE(rela.type_and_symbol);
-      u32 symtab_index = ELF64_RELA_SYMBOL(rela.type_and_symbol);
-      Symbol *corresponding_symbol =
-          ARRAY_REF(symbol_table, Symbol, file_symbols[symtab_index]);
-      assert(corresponding_symbol != NULL);
+  checked_fseek(
+      input_file, initial_location + rela_header->section_location, SEEK_SET);
+  u32 rela_entries = rela_header->section_size / rela_header->entry_size;
+  for (u32 rela_index = 0; rela_index < rela_entries; rela_index++) {
+    ELF64Rela rela;
+    checked_fread(&rela, sizeof rela, 1, input_file);
 
-      Relocation *reloc =
-          ARRAY_APPEND(&corresponding_symbol->relocs, Relocation);
-      reloc->type = type;
-      reloc->addend = rela.addend;
-      reloc->section_index = corresponding_section_index;
-      reloc->section_offset = existing_section_size + rela.section_offset;
-    }
+    ELF64RelocType type = ELF64_RELA_TYPE(rela.type_and_symbol);
+    u32 symtab_index = ELF64_RELA_SYMBOL(rela.type_and_symbol);
+    Symbol *corresponding_symbol =
+        ARRAY_REF(symbol_table, Symbol, file_symbols[symtab_index]);
+    ASSERT(corresponding_symbol != NULL);
+
+    Relocation *reloc = ARRAY_APPEND(&corresponding_symbol->relocs, Relocation);
+    reloc->type = type;
+    reloc->addend = rela.addend;
+    reloc->section_index = corresponding_section_index;
+    reloc->section_offset = existing_section_size + rela.section_offset;
   }
 }
 
@@ -788,10 +786,10 @@ static ExitCode process_elf_file(
     perror("Failed to read from ELF file");
     return false;
   }
-  assert(file_header.shstrtab_index < file_header.sht_entries);
+  ASSERT(file_header.shstrtab_index < file_header.sht_entries);
 
   // This should have been checked already
-  assert(strneq(
+  ASSERT(strneq(
       (char *)file_header.identifier,
       "\x7F"
       "ELF",
@@ -803,7 +801,7 @@ static ExitCode process_elf_file(
         file_header.target_architecture, EM_X86_64);
     return false;
   }
-  assert(file_header.section_header_size == sizeof(ELFSectionHeader));
+  ASSERT(file_header.section_header_size == sizeof(ELFSectionHeader));
 
   u32 sht_offset = file_header.sht_location;
   checked_fseek(input_file, initial_location + sht_offset, SEEK_SET);
@@ -812,7 +810,7 @@ static ExitCode process_elf_file(
   checked_fread(headers, sizeof *headers, file_header.sht_entries, input_file);
 
   ELFSectionHeader *shstrtab_header = headers + file_header.shstrtab_index;
-  assert(shstrtab_header->type == SHT_STRTAB);
+  ASSERT(shstrtab_header->type == SHT_STRTAB);
   char *shstrtab = malloc(shstrtab_header->section_size);
   checked_fseek(
       input_file, initial_location + shstrtab_header->section_location,
@@ -881,12 +879,12 @@ static ExitCode process_elf_file(
     goto cleanup1;
   }
 
-  assert(text_header->type == SHT_PROGBITS);
+  ASSERT(text_header->type == SHT_PROGBITS);
 
-  assert(symtab_header->type == SHT_SYMTAB);
-  assert(symtab_header->entry_size == sizeof(ELF64Symbol));
+  ASSERT(symtab_header->type == SHT_SYMTAB);
+  ASSERT(symtab_header->entry_size == sizeof(ELF64Symbol));
 
-  assert(strtab_header->type == SHT_STRTAB);
+  ASSERT(strtab_header->type == SHT_STRTAB);
 
   char *strtab = malloc(strtab_header->section_size);
   checked_fseek(
@@ -1089,12 +1087,12 @@ ExitCode link_elf_executable(
         ArFileHeader header;
         int result = fread(&header, sizeof header, 1, input_file);
         if (result == 0) {
-          assert(feof(input_file));
+          ASSERT(feof(input_file));
           break;
         }
         long file_start = checked_ftell(input_file);
 
-        assert(header.magic[0] == 0x60 && header.magic[1] == 0x0A);
+        ASSERT(header.magic[0] == 0x60 && header.magic[1] == 0x0A);
 
         char filename[sizeof header.name + 1];
         memcpy(filename, header.name, sizeof header.name);
@@ -1211,8 +1209,7 @@ ExitCode link_elf_executable(
         final_value = symbol_mem_location + reloc->addend;
         break;
       default:
-        fprintf(stderr, "Unsupported relocation type: %d\n", (int)reloc->type);
-        assert(false);
+        UNIMPLEMENTED("Unsupported relocation type: %d\n", (int)reloc->type);
       }
 
       // @TODO: We should be writing different numbers of bytes for
@@ -1240,7 +1237,6 @@ ExitCode link_elf_executable(
 #endif
     }
     checked_fseek(output_file, prev_location, SEEK_SET);
-
     array_free(&symbol->relocs);
   }
   finish_symtab_section(elf_file);

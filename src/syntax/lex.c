@@ -1,7 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "syntax/lex.h"
 
-#include <assert.h>
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
@@ -10,7 +9,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
-#include "exit_code.h"
+#include "macros.h"
 #include "misc.h"
 #include "syntax/reader.h"
 #include "util.h"
@@ -51,10 +50,10 @@ bool lex(
   // we don't need a special case here. Maybe reader_init should do the
   // requisite logic from advance to set source_loc properly, but not advance
   // forward a character?
-  assert(adjustments->size != 0);
+  ASSERT(adjustments->size != 0);
   Adjustment *first = ARRAY_REF(adjustments, Adjustment, 0);
-  assert(first->location == 0);
-  assert(first->type == NORMAL_ADJUSTMENT);
+  ASSERT(first->location == 0);
+  ASSERT(first->type == NORMAL_ADJUSTMENT);
 
   lexer.reader.source_loc = first->new_source_loc;
   lexer.reader.next_adjustment++;
@@ -453,7 +452,7 @@ static bool lex_aux(Lexer *lexer)
     default: {
       back_up(reader);
       String symbol = read_symbol(reader);
-      assert(is_valid(symbol));
+      ASSERT(is_valid(symbol));
       // @TODO: These two should be handled in the preprocessor.
       if (strneq(symbol.chars, "__LINE__", symbol.len)) {
         Token *line_number = ADD_TOK(TOK_INT_LITERAL);
@@ -461,14 +460,14 @@ static bool lex_aux(Lexer *lexer)
         line_number->u.int_literal.suffix = NO_SUFFIX;
       } else if (strneq(symbol.chars, "__FILE__", symbol.len)) {
         Token *file_name = ADD_TOK(TOK_STRING_LITERAL);
-        assert(reader->source_loc.filename != NULL);
+        ASSERT(reader->source_loc.filename != NULL);
         file_name->u.string_literal = (String){
             .chars = reader->source_loc.filename,
             .len = strlen(reader->source_loc.filename),
         };
       } else {
         Token *token = ADD_TOK(TOK_SYMBOL);
-        assert(symbol.chars != NULL);
+        ASSERT(symbol.chars != NULL);
         token->u.symbol = strndup(symbol.chars, symbol.len);
       }
 
@@ -501,7 +500,7 @@ static bool read_numeric_literal(Reader *reader, Token *token)
   if (type == TOK_INT_LITERAL) {
     *token = read_int_literal(reader, radix);
   } else {
-    assert(type == TOK_FLOAT_LITERAL);
+    ASSERT(type == TOK_FLOAT_LITERAL);
     *token = read_float_literal(reader, radix);
   }
 

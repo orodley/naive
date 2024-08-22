@@ -29,6 +29,10 @@ void reader_init(
 // track of prev_source_loc + remove some edge cases.
 void back_up(Reader *reader)
 {
+  PRECONDITION(
+      reader->prev_char_source_loc.filename != NULL,
+      "Tried to back up twice in a row");
+
   Adjustment *prev_adjustment =
       ARRAY_REF(&reader->adjustments, Adjustment, reader->next_adjustment - 1);
   if (reader->next_adjustment >= 1
@@ -36,7 +40,6 @@ void back_up(Reader *reader)
     reader->next_adjustment--;
   }
 
-  assert(reader->prev_char_source_loc.filename != NULL);
   reader->source_loc = reader->prev_char_source_loc;
   reader->prev_char_source_loc = (SourceLoc){NULL, 0, 0};
 

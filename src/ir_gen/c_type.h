@@ -138,4 +138,7 @@ CType *named_type_specifier_to_ctype(
 
 bool is_arithmetic_type(CType *type);
 
+void fatal_error_if_not_int(CType *type);
+void fatal_error_if_type_not_eq(CType *actual, CType *expected);
+
 #endif

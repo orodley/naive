@@ -1,12 +1,12 @@
 #include "ir_gen/statement.h"
 
-#include "exit_code.h"
 #include "ir.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"
 #include "ir_gen/decl.h"
 #include "ir_gen/expr.h"
 #include "ir_gen/initializer.h"
+#include "macros.h"
 
 static void add_decl_to_scope(IrGenContext *ctx, ASTDecl *decl);
 
@@ -82,7 +82,9 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     }
     default: UNIMPLEMENTED("if condition of type %d", condition_term.ctype->t);
     }
-    assert(condition_term.ctype->t == INTEGER_TYPE);
+    if (condition_term.ctype->t != INTEGER_TYPE) {
+      emit_fatal_error_no_loc("if condition must be of integer type");
+    }
 
     IrBlock *before_block = builder->current_block;
 
@@ -136,7 +138,9 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     builder->current_block = switch_entry;
     Term switch_value =
         ir_gen_expr(ctx, statement->u.expr_and_statement.expr, RVALUE_CONTEXT);
-    assert(switch_value.ctype->t == INTEGER_TYPE);
+    if (switch_value.ctype->t != INTEGER_TYPE) {
+      emit_fatal_error_no_loc("switch value must be of integer type");
+    }
 
     i32 default_index = -1;
 
@@ -223,7 +227,9 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     build_jump(builder, pre_header);
     builder->current_block = pre_header;
     Term condition_term = ir_gen_expr(ctx, condition_expr, RVALUE_CONTEXT);
-    assert(condition_term.ctype->t == INTEGER_TYPE);
+    if (condition_term.ctype->t != INTEGER_TYPE) {
+      emit_fatal_error_no_loc("while condition must be of integer type");
+    }
 
     IrBlock *body = add_block(builder, "while.body");
     build_cond(builder, condition_term.value, body, after);
@@ -259,7 +265,9 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     builder->current_block = pre_header;
     Term condition_term = ir_gen_expr(ctx, condition_expr, RVALUE_CONTEXT);
 
-    assert(condition_term.ctype->t == INTEGER_TYPE);
+    if (condition_term.ctype->t != INTEGER_TYPE) {
+      emit_fatal_error_no_loc("do-while condition must be of integer type");
+    }
     build_cond(builder, condition_term.value, body, after);
 
     IrBlock *prev_break_target = ctx->break_target;
@@ -292,11 +300,11 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     push_scope(ctx, &init_scope);
 
     ASTForStatement *f = &statement->u.for_statement;
-    if (f->init_type == FOR_INIT_DECL) {
-      add_decl_to_scope(ctx, f->init.decl);
-    } else {
-      assert(f->init_type == FOR_INIT_EXPR);
+    switch (f->init_type) {
+    case FOR_INIT_DECL: add_decl_to_scope(ctx, f->init.decl); break;
+    case FOR_INIT_EXPR:
       if (f->init.expr != NULL) ir_gen_expr(ctx, f->init.expr, RVALUE_CONTEXT);
+      break;
     }
 
     build_jump(builder, pre_header);
@@ -312,7 +320,9 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
       };
     }
 
-    assert(condition_term.ctype->t == INTEGER_TYPE);
+    if (condition_term.ctype->t != INTEGER_TYPE) {
+      emit_fatal_error_no_loc("for condition must be of integer type");
+    }
     build_cond(builder, condition_term.value, body, after);
 
     builder->current_block = body;
@@ -355,11 +365,15 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     break;
   }
   case BREAK_STATEMENT:
-    assert(ctx->break_target != NULL);
+    if (ctx->break_target == NULL) {
+      emit_fatal_error_no_loc("break statement must be within loop or switch");
+    }
     build_jump(builder, ctx->break_target);
     break;
   case CONTINUE_STATEMENT:
-    assert(ctx->continue_target != NULL);
+    if (ctx->continue_target == NULL) {
+      emit_fatal_error_no_loc("continue statement must be within loop");
+    }
     build_jump(builder, ctx->continue_target);
     break;
   case EMPTY_STATEMENT: break;

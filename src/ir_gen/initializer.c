@@ -1,10 +1,10 @@
 #include "ir_gen/initializer.h"
 
-#include "exit_code.h"
 #include "ir_gen/c_type.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"
 #include "ir_gen/expr.h"
+#include "macros.h"
 #include "syntax/parse.h"
 
 static void ir_gen_c_init(
@@ -20,26 +20,73 @@ void make_c_initializer(
 {
   c_init->type = type;
 
-  if (type->t == ARRAY_TYPE && init->t == EXPR_INITIALIZER
-      && init->u.expr->t == STRING_LITERAL_EXPR) {
-    c_init->t = C_INIT_COMPOUND;
+  switch (init->t) {
+  case EXPR_INITIALIZER:
+    if (type->t == ARRAY_TYPE && init->u.expr->t == STRING_LITERAL_EXPR) {
+      // Special case for initialising arrays with string literals.
+      c_init->t = C_INIT_COMPOUND;
 
-    String str = init->u.expr->u.string_literal;
-    CInitializer *init_elems =
-        pool_alloc(pool, (str.len + 1) * sizeof *init_elems);
-    for (u32 i = 0; i < str.len + 1; i++) {
-      CType *char_type = &ctx->type_env.char_type;
-      init_elems[i] = (CInitializer){
-          .t = C_INIT_LEAF,
-          .type = char_type,
-          .u.leaf_value =
-              value_const_int(c_type_to_ir_type(char_type), str.chars[i]),
-      };
+      String str = init->u.expr->u.string_literal;
+      CInitializer *init_elems =
+          pool_alloc(pool, (str.len + 1) * sizeof *init_elems);
+      for (u32 i = 0; i < str.len + 1; i++) {
+        CType *char_type = &ctx->type_env.char_type;
+        init_elems[i] = (CInitializer){
+            .t = C_INIT_LEAF,
+            .type = char_type,
+            .u.leaf_value =
+                value_const_int(c_type_to_ir_type(char_type), str.chars[i]),
+        };
+      }
+
+      c_init->u.sub_elems = init_elems;
+    } else {
+      c_init->t = C_INIT_LEAF;
+
+      ASTExpr *expr = init->u.expr;
+      IrValue value;
+
+      if (const_context) {
+        IrConst *konst = eval_constant_expr(ctx, expr);
+
+        // @TODO: This would be much nicer if IrValue contained IrConst
+        // instead of just a u64.
+        switch (type->t) {
+        case INTEGER_TYPE:
+          if (konst->type.t != IR_INT) {
+            emit_fatal_error_no_loc("Expected integer");
+          }
+          value = value_const_int(konst->type, konst->u.integer);
+          break;
+        case FLOAT_TYPE:
+          if (konst->type.t != IR_FLOAT) {
+            emit_fatal_error_no_loc("Expected float");
+          }
+          value = value_const_float(konst->type, konst->u.floatt);
+          break;
+        case POINTER_TYPE: {
+          if (konst->type.t != IR_POINTER) {
+            emit_fatal_error_no_loc("Expected pointer");
+          }
+          value = value_global(konst->u.global_pointer);
+
+          break;
+        }
+        default: UNIMPLEMENTED("Expression initializer for type %d", type->t);
+        }
+      } else {
+        Term term = ir_gen_expr(ctx, expr, RVALUE_CONTEXT);
+        value = convert_type(ctx->builder, term, type).value;
+      }
+
+      c_init->u.leaf_value = value;
     }
-
-    c_init->u.sub_elems = init_elems;
-  } else if (init->t == BRACE_INITIALIZER) {
-    assert(type->t == STRUCT_TYPE || type->t == ARRAY_TYPE);
+    break;
+  case BRACE_INITIALIZER:
+    if (type->t != STRUCT_TYPE && type->t != ARRAY_TYPE) {
+      emit_fatal_error_no_loc(
+          "Compound initializer can only be used for aggregate types");
+    }
 
     u32 num_fields = c_type_num_fields(type);
 
@@ -59,7 +106,10 @@ void make_c_initializer(
         CType *field_type;
         switch (designator_list->t) {
         case FIELD_DESIGNATOR: {
-          assert(curr_elem->type->t == STRUCT_TYPE);
+          if (curr_elem->type->t == ARRAY_TYPE) {
+            emit_fatal_error_no_loc(
+                "Field designator is invalid for array types");
+          }
           Array(CDecl) *fields = &curr_elem->type->u.strukt.fields;
 
           CDecl *selected_field = NULL;
@@ -72,7 +122,11 @@ void make_c_initializer(
               break;
             }
           }
-          assert(selected_field != NULL);
+          if (selected_field == NULL) {
+            emit_fatal_error_no_loc(
+                "Field '%s' not found in struct type",
+                designator_list->u.field_name);
+          }
 
           field_type = selected_field->type;
           curr_elem_index = field_number;
@@ -80,10 +134,15 @@ void make_c_initializer(
           break;
         }
         case INDEX_DESIGNATOR: {
-          assert(curr_elem->type->t == ARRAY_TYPE);
+          if (curr_elem->type->t != ARRAY_TYPE) {
+            emit_fatal_error_no_loc("Index designator invalid for struct type");
+          }
           IrConst *index =
               eval_constant_expr(ctx, designator_list->u.index_expr);
-          assert(index->type.t == IR_INT);
+          if (index->type.t != IR_INT) {
+            emit_fatal_error_no_loc(
+                "Index designator value must be an integer");
+          }
 
           field_type = curr_elem->type->u.array.elem_type;
           curr_elem_index = index->u.integer;
@@ -135,44 +194,6 @@ void make_c_initializer(
       curr_elem_index++;
       elems = elems->next;
     }
-  } else {
-    assert(init->t == EXPR_INITIALIZER);
-
-    c_init->t = C_INIT_LEAF;
-
-    ASTExpr *expr = init->u.expr;
-    IrValue value;
-
-    if (const_context) {
-      IrConst *konst = eval_constant_expr(ctx, expr);
-
-      // @TODO: This would be much nicer if IrValue contained IrConst
-      // instead of just a u64.
-      switch (type->t) {
-      case INTEGER_TYPE:
-        assert(konst->type.t == IR_INT);
-        assert(type->t == INTEGER_TYPE);
-        value = value_const_int(konst->type, konst->u.integer);
-        break;
-      case FLOAT_TYPE:
-        assert(konst->type.t == IR_FLOAT);
-        assert(type->t == FLOAT_TYPE);
-        value = value_const_float(konst->type, konst->u.floatt);
-        break;
-      case POINTER_TYPE: {
-        assert(konst->type.t == IR_POINTER);
-        value = value_global(konst->u.global_pointer);
-
-        break;
-      }
-      default: UNIMPLEMENTED("Expression initializer for type %d", type->t);
-      }
-    } else {
-      Term term = ir_gen_expr(ctx, expr, RVALUE_CONTEXT);
-      value = convert_type(ctx->builder, term, type).value;
-    }
-
-    c_init->u.leaf_value = value;
   }
 }
 
@@ -194,7 +215,8 @@ void ir_gen_initializer(IrGenContext *ctx, Term to_init, ASTInitializer *init)
     memset_args[2] = value_const_int(
         c_type_to_ir_type(ctx->type_env.size_type), c_type_size(to_init.ctype));
 
-    // @TODO: Open-code this for small sizes
+    // @TODO: Open-code this for small sizes. Or maybe that should be a separate
+    // pass.
     build_call(
         ctx->builder, builtin_memset(ctx->builder), (IrType){.t = IR_POINTER},
         3, memset_args);
@@ -226,10 +248,15 @@ void infer_array_size_from_initializer(
     while (init_elem != NULL) {
       ASTDesignator *designator = init_elem->designator_list;
       if (designator != NULL) {
-        assert(designator->t == INDEX_DESIGNATOR);
+        if (designator->t == FIELD_DESIGNATOR) {
+          emit_fatal_error_no_loc(
+              "Field designator is invalid for array types");
+        }
         IrConst *index_value =
             eval_constant_expr(ctx, designator->u.index_expr);
-        assert(index_value->type.t == IR_INT);
+        if (index_value->type.t != IR_INT) {
+          emit_fatal_error_no_loc("Index designator value must be an integer");
+        }
 
         current_index = index_value->u.integer;
       } else {
@@ -242,9 +269,10 @@ void infer_array_size_from_initializer(
     }
 
     size = max_index + 1;
-  } else {
-    assert(init->u.expr->t == STRING_LITERAL_EXPR);
+  } else if (init->u.expr->t == STRING_LITERAL_EXPR) {
     size = init->u.expr->u.string_literal.len + 1;
+  } else {
+    emit_fatal_error_no_loc("Invalid expression for initialising array");
   }
 
   set_array_type_length(type, size);
@@ -259,9 +287,13 @@ static void ir_gen_c_init(
 
   switch (type->t) {
   case ARRAY_TYPE: {
-    assert(!type->u.array.incomplete);
+    if (type->u.array.incomplete) {
+      emit_fatal_error_no_loc("Cannot determine size of array type");
+    }
     // Array values must be initialized by compound initializers.
-    assert(c_init->t == C_INIT_COMPOUND);
+    // This should have been checked by make_c_initializer, so we just assert
+    // rather than emitting an error.
+    ASSERT(c_init->t == C_INIT_COMPOUND);
 
     u32 elem_size = c_type_size(type->u.array.elem_type);
 
@@ -304,7 +336,7 @@ static void ir_gen_c_init(
     }
     break;
   default: {
-    assert(c_init->t == C_INIT_LEAF);
+    ASSERT(c_init->t == C_INIT_LEAF);
 
     IrType int_ptr_type = c_type_to_ir_type(type_env->int_ptr_type);
     IrValue field_ptr = build_binary_instr(
@@ -326,7 +358,9 @@ static bool is_full_initializer(CInitializer *c_init)
   u32 num_elems;
   switch (type->t) {
   case ARRAY_TYPE:
-    assert(!type->u.array.incomplete);
+    if (type->u.array.incomplete) {
+      emit_fatal_error_no_loc("Cannot determine size of array type");
+    }
     num_elems = type->u.array.size;
     break;
   case STRUCT_TYPE: num_elems = type->u.strukt.fields.size; break;
@@ -344,7 +378,7 @@ static bool is_full_initializer(CInitializer *c_init)
 IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
 {
   CType *type = c_init->type;
-  assert(type != NULL);
+  ASSERT(type != NULL);
   switch (type->t) {
   case STRUCT_TYPE: {
     IrConst *c = add_struct_const(builder, *type->u.strukt.ir_type);
@@ -371,18 +405,22 @@ IrConst *const_gen_c_init(IrBuilder *builder, CInitializer *c_init)
   }
   case INTEGER_TYPE: {
     IrValue value = c_init->u.leaf_value;
-    assert(value.type.t == IR_INT);
+    if (value.type.t != IR_INT) {
+      emit_fatal_error_no_loc("Expected integer constant");
+    }
     return add_int_const(builder, c_type_to_ir_type(type), value.u.const_int);
   }
   case FLOAT_TYPE: {
     IrValue value = c_init->u.leaf_value;
-    assert(value.type.t == IR_FLOAT);
+    if (value.type.t != IR_FLOAT) {
+      emit_fatal_error_no_loc("Expected float constant");
+    }
     return add_float_const(
         builder, c_type_to_ir_type(type), value.u.const_float);
   }
   case POINTER_TYPE: {
     IrValue value = c_init->u.leaf_value;
-    assert(value.t == IR_VALUE_GLOBAL);
+    ASSERT(value.t == IR_VALUE_GLOBAL);
     return add_global_const(builder, value.u.global);
   }
   default: UNIMPLEMENTED("Const initializer for type %d", type->t);
@@ -393,7 +431,7 @@ static void const_gen_c_init_array(
     IrBuilder *builder, CInitializer *c_init, IrConst *konst, u32 *const_index)
 {
   CType *type = c_init->type;
-  assert(type->t == ARRAY_TYPE);
+  PRECONDITION(type->t == ARRAY_TYPE);
 
   CType *elem_type = type->u.array.elem_type;
   u32 array_size = type->u.array.size;
@@ -428,7 +466,9 @@ IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
     return add_float_const(builder, c_type_to_ir_type(ctype), 0.0);
   case POINTER_TYPE: return add_global_const(builder, NULL);
   case ARRAY_TYPE: {
-    assert(!ctype->u.array.incomplete);
+    if (ctype->u.array.incomplete) {
+      emit_fatal_error_no_loc("Cannot determine size of array type");
+    }
     // @TODO: This allocates unnecessarily by calling zero_initializer
     // recursively and then copying the result into array_elems.
     IrConst *konst = add_array_const(builder, c_type_to_ir_type(ctype));
@@ -439,7 +479,9 @@ IrConst *zero_initializer(IrBuilder *builder, CType *ctype)
     return konst;
   }
   case STRUCT_TYPE: {
-    assert(!ctype->u.strukt.incomplete);
+    if (ctype->u.strukt.incomplete) {
+      emit_fatal_error_no_loc("Cannot initialise incomplete struct type");
+    }
     // @TODO: This allocates unnecessarily by calling zero_initializer
     // recursively and then copying the result into array_elems.
     IrConst *konst = add_struct_const(builder, c_type_to_ir_type(ctype));

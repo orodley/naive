@@ -1,13 +1,11 @@
 #include "ir_gen/ir_gen.h"
 
-#include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "array.h"
 #include "diagnostics.h"
-#include "exit_code.h"
 #include "ir.h"
 #include "ir_gen/c_type.h"
 #include "ir_gen/context.h"
@@ -16,6 +14,7 @@
 #include "ir_gen/expr.h"
 #include "ir_gen/initializer.h"
 #include "ir_gen/statement.h"
+#include "macros.h"
 #include "syntax/parse.h"
 #include "util.h"
 
@@ -67,8 +66,8 @@ IrModule ir_gen(ASTToplevel *toplevel)
   // @TODO: Do this once per function and reset size to 0 afterwards.
   for (u32 i = 0; i < ctx.goto_fixups.size; i++) {
     GotoFixup *fixup = ARRAY_REF(&ctx.goto_fixups, GotoFixup, i);
-    assert(fixup->instr->op == OP_JUMP);
-    assert(fixup->instr->u.target_block == NULL);
+    ASSERT(fixup->instr->op == OP_JUMP);
+    ASSERT(fixup->instr->u.target_block == NULL);
 
     for (u32 j = 0; j < ctx.goto_labels.size; j++) {
       GotoLabel *label = ARRAY_REF(&ctx.goto_labels, GotoLabel, j);
@@ -77,11 +76,11 @@ IrModule ir_gen(ASTToplevel *toplevel)
         break;
       }
     }
-    assert(fixup->instr->u.target_block != NULL);
+    ASSERT(fixup->instr->u.target_block != NULL);
   }
 
   IrGlobal *first_global = *ARRAY_REF(&builder.module->globals, IrGlobal *, 0);
-  assert(streq(first_global->name, "__scratch"));
+  ASSERT(streq(first_global->name, "__scratch"));
   ARRAY_REMOVE(&builder.module->globals, IrGlobal *, 0);
 
   pool_free(&ctx.type_env.pool);
@@ -159,7 +158,9 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
     ASTDecl *decl = toplevel->u.decl;
     ASTDeclSpecifier *decl_specifier_list = decl->decl_specifier_list;
     ASTInitDeclarator *init_declarator = decl->init_declarators;
-    assert(decl_specifier_list != NULL);
+    if (decl_specifier_list == NULL) {
+      emit_fatal_error_no_loc("Declaration must have type specifier");
+    }
 
     if (decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
         && decl_specifier_list->u.storage_class_specifier == EXTERN_SPECIFIER
@@ -180,12 +181,16 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
         InlineFunction *inline_function =
             ARRAY_REF(&ctx->inline_functions, InlineFunction, i);
         if (streq(inline_function->global->name, cdecl.name)) {
-          assert(c_type_eq(cdecl.type, inline_function->function_type));
+          fatal_error_if_type_not_eq(
+              cdecl.type, inline_function->function_type);
           matching = inline_function;
           break;
         }
       }
-      assert(matching != NULL);
+      if (matching == NULL) {
+        emit_fatal_error_no_loc(
+            "No inline function definition found for %s", cdecl.name);
+      }
 
       ir_gen_function(
           ctx, matching->global, matching->function_type,
@@ -194,13 +199,14 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
         decl_specifier_list->t == STORAGE_CLASS_SPECIFIER
         && decl_specifier_list->u.storage_class_specifier
                == TYPEDEF_SPECIFIER) {
-      assert(init_declarator != NULL);
+      if (init_declarator == NULL) {
+        emit_fatal_error_no_loc("Typedef must have a name");
+      }
       decl_specifier_list = decl_specifier_list->next;
       CType *decl_spec_type =
           decl_specifier_list_to_c_type(ctx, decl_specifier_list);
 
       while (init_declarator != NULL) {
-        assert(init_declarator->initializer == NULL);
         CDecl cdecl;
         decl_to_cdecl(ctx, decl_spec_type, init_declarator->declarator, &cdecl);
 
@@ -218,12 +224,16 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
       while (type_specs != NULL && type_specs->t == STORAGE_CLASS_SPECIFIER) {
         type_specs = type_specs->next;
       }
-      assert(type_specs != NULL);
+      if (type_specs == NULL) {
+        emit_fatal_error_no_loc("Declaration must have type specifier");
+      }
 
       if (init_declarator == NULL) {
         decl_specifier_list_to_c_type(ctx, type_specs);
       } else {
-        assert(init_declarator->next == NULL);
+        if (init_declarator->next != NULL) {
+          emit_fatal_error_no_loc("Multiple declarators in one decl");
+        }
         ASTDeclarator *declarator = init_declarator->declarator;
 
         // @TODO: Multiple declarators in one global decl.
@@ -241,7 +251,10 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
 
         global->linkage = IR_GLOBAL_LINKAGE;
         while (decl_specifier_list != type_specs) {
-          assert(decl_specifier_list->t == STORAGE_CLASS_SPECIFIER);
+          if (decl_specifier_list->t != STORAGE_CLASS_SPECIFIER) {
+            emit_fatal_error_no_loc(
+                "Storage class specifier must come before type specifier");
+          }
           ASTStorageClassSpecifier storage_class =
               decl_specifier_list->u.storage_class_specifier;
           if (storage_class == STATIC_SPECIFIER) {
@@ -262,7 +275,10 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
             global->initializer = zero_initializer(ctx->builder, global_type);
           }
         } else {
-          assert(!is_extern);
+          if (is_extern) {
+            emit_fatal_error_no_loc(
+                "Extern declaration cannot have initializer");
+          }
 
           Pool c_init_pool;
           pool_init(&c_init_pool, sizeof(CInitializer) * 5);
@@ -270,7 +286,7 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
           CInitializer c_init;
           make_c_initializer(
               ctx, &c_init_pool, global_type, init, true, &c_init);
-          assert(c_type_eq(c_init.type, global_type));
+          fatal_error_if_type_not_eq(c_init.type, global_type);
 
           global->initializer = const_gen_c_init(ctx->builder, &c_init);
           pool_free(&c_init_pool);
@@ -307,7 +323,9 @@ static void ir_gen_function(
       params_for_function_declarator(function_def->declarator);
   for (u32 i = 0; param != NULL; i++, param = param->next) {
     if (param->t == ELLIPSIS_DECL) {
-      assert(param->next == NULL);
+      if (param->next != NULL) {
+        emit_fatal_error_no_loc("Parameter found after ellipsis");
+      }
       continue;
     }
 
@@ -317,9 +335,12 @@ static void ir_gen_function(
     decl_to_cdecl(ctx, decl_spec_type, param->declarator, &cdecl);
 
     if (cdecl.type->t == VOID_TYPE) {
-      assert(i == 0);
-      assert(cdecl.name == NULL);
-      assert(param->next == NULL);
+      if (i != 0) {
+        emit_fatal_error_no_loc("void must be the only parameter if specified");
+      }
+      if (cdecl.name != NULL) {
+        emit_fatal_error_no_loc("void parameter cannot have a name");
+      }
       break;
     }
 
@@ -361,14 +382,24 @@ static void ir_gen_function(
 static ASTParameterDecl *params_for_function_declarator(
     ASTDeclarator *declarator)
 {
-  while (declarator->t != DIRECT_DECLARATOR) {
-    assert(declarator->t == POINTER_DECLARATOR);
-    declarator = declarator->u.pointer_declarator.pointee;
+  for (;;) {
+    if (declarator == NULL) {
+      emit_fatal_error_no_loc("Function declarator expected");
+    }
+
+    switch (declarator->t) {
+    case POINTER_DECLARATOR:
+      declarator = declarator->u.pointer_declarator.pointee;
+      break;
+    case DIRECT_DECLARATOR: goto found_direct_declarator;
+    }
   }
 
-  assert(declarator->t == DIRECT_DECLARATOR);
+found_direct_declarator:;
   ASTDirectDeclarator *direct_declarator = declarator->u.direct_declarator;
-  assert(direct_declarator->t == FUNCTION_DECLARATOR);
+  if (direct_declarator->t != FUNCTION_DECLARATOR) {
+    emit_fatal_error_no_loc("Function declarator expected");
+  }
 
   return direct_declarator->u.function_declarator.parameters;
 }

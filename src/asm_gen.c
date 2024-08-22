@@ -1,13 +1,12 @@
 #include "asm_gen.h"
 
-#include <assert.h>
 #include <stdlib.h>
 
 #include "array.h"
 #include "asm.h"
-#include "exit_code.h"
 #include "flags.h"
 #include "ir.h"
+#include "macros.h"
 #include "reg_alloc.h"
 #include "util.h"
 
@@ -118,22 +117,24 @@ static bool asm_value_is_float(AsmBuilder *builder, AsmValue v)
   if (v.is_deref || v.t != ASM_VALUE_REGISTER) return false;
 
   Register r = v.u.reg;
-  if (r.t == PHYS_REG) return r.width == 128;
-  assert(r.t == V_REG);
-
-  VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, r.u.vreg_number);
-  return vreg->type == REG_TYPE_FLOAT;
+  switch (r.t) {
+  case PHYS_REG: return r.width == 128;
+  case V_REG: {
+    VReg *vreg = ARRAY_REF(&builder->virtual_registers, VReg, r.u.vreg_number);
+    return vreg->type == REG_TYPE_FLOAT;
+  }
+  }
 }
 
 AsmInstr *emit_mov(AsmBuilder *builder, AsmValue dest, AsmValue src)
 {
-  if (dest.t == ASM_VALUE_CONST) {
-    assert(!"Bad MOV! Can't move into a constant");
-  }
+  PRECONDITION(
+      dest.t != ASM_VALUE_CONST, "Bad MOV! Can't move into a constant");
   if (dest.t == ASM_VALUE_REGISTER && src.t == ASM_VALUE_REGISTER
-      && dest.u.reg.width != src.u.reg.width && !dest.is_deref
-      && !src.is_deref) {
-    assert(!"Bad MOV! Registers are different sizes.");
+      && !dest.is_deref && !src.is_deref) {
+    PRECONDITION(
+        dest.u.reg.width == src.u.reg.width,
+        "Bad MOV! Registers are different sizes.");
   }
 
   bool dest_is_float = asm_value_is_float(builder, dest);
@@ -155,9 +156,8 @@ AsmInstr *emit_mov(AsmBuilder *builder, AsmValue dest, AsmValue src)
 
 static void add_dep(AsmInstr *instr, AsmValue dep)
 {
-  assert(instr->num_deps < STATIC_ARRAY_LENGTH(instr->vreg_deps));
-  assert(dep.t == ASM_VALUE_REGISTER);
-  assert(dep.u.reg.t == V_REG);
+  PRECONDITION(instr->num_deps < STATIC_ARRAY_LENGTH(instr->vreg_deps));
+  PRECONDITION(dep.t == ASM_VALUE_REGISTER && dep.u.reg.t == V_REG);
 
   instr->vreg_deps[instr->num_deps++] = dep.u.reg.u.vreg_number;
 }
@@ -195,8 +195,7 @@ static u32 new_float_vreg(AsmBuilder *builder)
 // has a lot in common that could be factored out too.
 static AsmValue assign_vreg(IrInstr *instr, AsmValue vreg)
 {
-  assert(vreg.t == ASM_VALUE_REGISTER);
-  assert(vreg.u.reg.t == V_REG);
+  PRECONDITION(vreg.t == ASM_VALUE_REGISTER && vreg.u.reg.t == V_REG);
 
   instr->vreg_number = vreg.u.reg.u.vreg_number;
   return vreg;
@@ -220,11 +219,14 @@ static AsmValue pre_alloced_vreg(AsmBuilder *builder, RegClass class, u8 width)
 
 static AsmValue asm_vreg_of_type(u32 vreg_number, IrType type)
 {
-  if (type.t == IR_FLOAT) {
-    return asm_float_vreg(vreg_number, size_of_ir_type(type) * 8);
+  PRECONDITION(type.t == IR_INT || type.t == IR_FLOAT || type.t == IR_POINTER);
+
+  switch (type.t) {
+  case IR_FLOAT: return asm_float_vreg(vreg_number, type.u.float_bits);
+  case IR_INT:
+  case IR_POINTER: return asm_vreg(vreg_number, size_of_ir_type(type) * 8);
+  default: UNREACHABLE;
   }
-  assert(type.t == IR_INT || type.t == IR_POINTER);
-  return asm_vreg(vreg_number, size_of_ir_type(type) * 8);
 }
 
 static AsmValue new_asm_vreg_of_type(AsmBuilder *builder, IrType type)
@@ -240,7 +242,7 @@ static AsmValue new_asm_vreg_of_type(AsmBuilder *builder, IrType type)
 
 AsmValue return_reg_for_type(AsmBuilder *builder, IrType type)
 {
-  assert(type.t == IR_INT || type.t == IR_FLOAT || type.t == IR_POINTER);
+  PRECONDITION(type.t == IR_INT || type.t == IR_FLOAT || type.t == IR_POINTER);
 
   return pre_alloced_vreg(
       builder, type.t == IR_FLOAT ? REG_CLASS_XMM0 : REG_CLASS_A,
@@ -318,9 +320,9 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
     // @TODO: Call asm_gen_pointer_instr and use LEA.
     case OP_FIELD: {
       IrValue ptr = instr->u.field.ptr;
+      PRECONDITION(ptr.type.t == IR_POINTER);
       IrType type = instr->u.field.type;
       u32 field_num = instr->u.field.field_number;
-      assert(ptr.type.t == IR_POINTER);
 
       AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
       assign_vreg(instr, temp_vreg);
@@ -351,9 +353,10 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
       return cast_value;
     }
     default: {
-      i32 vreg_number = instr->vreg_number;
-      assert(vreg_number != -1);
-      return asm_vreg_of_type(vreg_number, instr->type);
+      PRECONDITION(
+          instr->vreg_number != -1,
+          "VReg should be assigned for instr before passing to asm_value");
+      return asm_vreg_of_type(instr->vreg_number, instr->type);
     }
     }
   }
@@ -390,7 +393,10 @@ static AsmValue asm_value(AsmBuilder *builder, IrValue value)
   }
   case IR_VALUE_GLOBAL: {
     AsmSymbol *symbol = value.u.global->asm_symbol;
-    assert(symbol != NULL);
+    PRECONDITION(
+        symbol != NULL,
+        "Symbol should be assigned for global '%s' before passing to asm_value",
+        value.u.global->name);
     return asm_symbol(symbol);
   }
   }
@@ -469,11 +475,17 @@ static bool get_inner_cmp(AsmBuilder *builder, IrInstr *instr, IrInstr **out)
   u64 c;
   IrValue non_const_arg;
   if (arg1.t == IR_VALUE_CONST_INT) {
-    assert(arg2.t != IR_VALUE_CONST_INT);
+    ASSERT(
+        arg2.t != IR_VALUE_CONST_INT,
+        "If both arguments are const, we should have constant folded this "
+        "already");
     c = arg1.u.const_int;
     non_const_arg = arg2;
   } else if (arg2.t == IR_VALUE_CONST_INT) {
-    assert(arg1.t != IR_VALUE_CONST_INT);
+    ASSERT(
+        arg1.t != IR_VALUE_CONST_INT,
+        "If both arguments are const, we should have constant folded this "
+        "already");
     c = arg2.u.const_int;
     non_const_arg = arg1;
   } else {
@@ -522,9 +534,10 @@ static IrCmp invert_cmp(IrCmp cmp)
 
 static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
 {
+  PRECONDITION(instr->op == OP_CMP || instr->op == OP_CMPF);
+
   bool invert = get_inner_cmp(builder, instr, &instr);
 
-  assert(instr->op == OP_CMP || instr->op == OP_CMPF);
   IrValue arg1 = instr->u.cmp.arg1;
   IrValue arg2 = instr->u.cmp.arg2;
   IrCmp cmp = maybe_flip_conditional(instr->u.cmp.cmp, &arg1, &arg2);
@@ -550,15 +563,16 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
 
   u32 vreg = new_vreg(builder);
 
-  assert(asm_arg1.t == ASM_VALUE_REGISTER);
+  ASSERT(asm_arg1.t == ASM_VALUE_REGISTER);
 
   emit_instr2(builder, XOR, asm_vreg(vreg, 32), asm_vreg(vreg, 32));
   AsmOp cmp_op;
-  if (instr->op == OP_CMP) {
-    cmp_op = CMP;
-  } else {
-    assert(instr->op == OP_CMPF);
+  switch (instr->op) {
+  case OP_CMP: cmp_op = CMP; break;
+  case OP_CMPF:
     cmp_op = instr->u.cmp.arg1.type.u.float_bits == 32 ? UCOMISS : UCOMISD;
+    break;
+  default: UNREACHABLE;
   }
   emit_instr2(
       builder, cmp_op, asm_arg1,
@@ -570,7 +584,7 @@ static AsmValue asm_gen_relational_instr(AsmBuilder *builder, IrInstr *instr)
 
 static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 {
-  assert(instr->type.t == IR_INT);
+  PRECONDITION(instr->type.t == IR_INT);
 
   AsmValue lhs = asm_value(builder, instr->u.binary_op.arg1);
   AsmValue rhs = asm_value(builder, instr->u.binary_op.arg2);
@@ -588,7 +602,7 @@ static void asm_gen_binary_instr(AsmBuilder *builder, IrInstr *instr, AsmOp op)
 static void asm_gen_binary_float_instr(
     AsmBuilder *builder, IrInstr *instr, AsmOp float_op, AsmOp double_op)
 {
-  assert(instr->type.t == IR_FLOAT);
+  PRECONDITION(instr->type.t == IR_FLOAT);
 
   AsmValue lhs = asm_value(builder, instr->u.binary_op.arg1);
   AsmValue rhs = asm_value(builder, instr->u.binary_op.arg2);
@@ -673,7 +687,10 @@ static void handle_phi_nodes(
         break;
       }
     }
-    assert(encountered_src_block);
+    ASSERT(
+        encountered_src_block,
+        "Phi node in block %s has no parameter for incoming block %s",
+        dest_block->name, src_block->name);
   }
 }
 
@@ -847,9 +864,8 @@ static AsmValue asm_gen_pointer_instr(AsmBuilder *builder, IrValue pointer)
 
 static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
 {
-  assert(cond->op == OP_COND);
+  PRECONDITION(cond->op == OP_COND);
   IrValue condition = cond->u.cond.condition;
-
   if (condition.t != IR_VALUE_INSTR) return false;
 
   IrInstr *cond_instr = condition.u.instr;
@@ -882,11 +898,12 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
       builder, asm_value(builder, arg2), size_of_ir_type(arg1.type) * 8, true);
 
   AsmOp op;
-  if (cond_instr->op == OP_CMP) {
-    op = CMP;
-  } else {
-    assert(cond_instr->op == OP_CMPF);
+  switch (cond_instr->op) {
+  case OP_CMP: op = CMP; break;
+  case OP_CMPF:
     op = cond_instr->u.cmp.arg1.type.u.float_bits == 32 ? UCOMISS : UCOMISD;
+    break;
+  default: UNREACHABLE;
   }
   emit_instr2(builder, op, asm_value(builder, arg1), arg2_value);
   emit_instr1(builder, jcc, asm_symbol(cond->u.cond.then_block->label));
@@ -895,10 +912,14 @@ static bool asm_gen_cond_of_cmp(AsmBuilder *builder, IrInstr *cond)
   return true;
 }
 
+// @TODO: Can ir_global be passed as a function instead, or pushed into the
+// builder as the current function?
 static void asm_gen_instr(
     AsmBuilder *builder, IrGlobal *ir_global, IrBlock *curr_block,
     IrInstr *instr)
 {
+  PRECONDITION(ir_global->type.t == IR_FUNCTION);
+
   switch (instr->op) {
   case OP_INVALID: UNREACHABLE;
   case OP_LOCAL: {
@@ -919,8 +940,10 @@ static void asm_gen_instr(
     break;
   case OP_RET: {
     IrValue arg = instr->u.arg;
-    assert(ir_global->type.t == IR_FUNCTION);
-    assert(ir_type_eq(ir_global->type.u.function.return_type, &arg.type));
+    ASSERT(
+        ir_type_eq(ir_global->type.u.function.return_type, &arg.type),
+        "IR function return type does not match value passed to ret "
+        "instruction");
 
     AsmValue return_reg =
         return_reg_for_type(builder, *ir_global->type.u.function.return_type);
@@ -1005,7 +1028,7 @@ static void asm_gen_instr(
       switch (konst.t) {
       case ASM_CONST_SYMBOL: break;
       case ASM_CONST_FIXED_IMMEDIATE:
-        assert(konst.u.fixed_immediate.width == bit_width);
+        ASSERT(konst.u.fixed_immediate.width == bit_width);
         break;
       case ASM_CONST_IMMEDIATE:
         value.u.constant = asm_const_fixed_imm(konst.u.immediate, bit_width);
@@ -1023,11 +1046,14 @@ static void asm_gen_instr(
     }
 
     if (type.t == IR_FLOAT) {
-      if (type.u.float_bits == 32) {
+      switch (type.u.float_bits) {
+      case IR_FLOAT_32:
         emit_instr2(builder, MOVSS, asm_deref(pointer), value);
-      } else {
-        assert(type.u.float_bits == 64);
+        break;
+      case IR_FLOAT_64:
         emit_instr2(builder, MOVSD, asm_deref(pointer), value);
+        break;
+      case IR_FLOAT_80: UNIMPLEMENTED("OP_STORE for 80-bit floats");
       }
     } else {
       emit_mov(builder, asm_deref(pointer), value);
@@ -1056,8 +1082,7 @@ static void asm_gen_instr(
   }
   case OP_CAST: break;  // cast is a type-theoretic operation only
   case OP_ZEXT: {
-    assert(instr->type.t == IR_INT);
-    assert(instr->u.arg.type.t == IR_INT);
+    PRECONDITION(instr->type.t == IR_INT && instr->u.arg.type.t == IR_INT);
 
     if (instr->type.u.bit_width == 64 && instr->u.arg.type.u.bit_width == 32) {
       AsmValue vreg = asm_vreg(new_vreg(builder), 32);
@@ -1074,8 +1099,7 @@ static void asm_gen_instr(
     break;
   }
   case OP_SEXT: {
-    assert(instr->type.t == IR_INT);
-    assert(instr->u.arg.type.t == IR_INT);
+    PRECONDITION(instr->type.t == IR_INT && instr->u.arg.type.t == IR_INT);
 
     AsmValue vreg = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
     assign_vreg(instr, vreg);
@@ -1083,15 +1107,14 @@ static void asm_gen_instr(
     break;
   }
   case OP_TRUNC: {
-    assert(instr->type.t == IR_INT);
-    assert(instr->u.arg.type.t == IR_INT);
+    PRECONDITION(instr->type.t == IR_INT && instr->u.arg.type.t == IR_INT);
 
     AsmValue value = asm_value(builder, instr->u.arg);
 
     // For register we can implicitly truncate by just using the smaller
     // version of the register.
     if (value.t == ASM_VALUE_REGISTER) {
-      assert(value.u.reg.t == V_REG);
+      ASSERT(value.u.reg.t == V_REG);
       instr->vreg_number = value.u.reg.u.vreg_number;
     } else {
       UNIMPLEMENTED("Truncating value not in a register (type %u)", value.t);
@@ -1100,8 +1123,7 @@ static void asm_gen_instr(
     break;
   }
   case OP_EXTF: {
-    assert(instr->type.t == IR_FLOAT);
-    assert(instr->u.arg.type.t == IR_FLOAT);
+    PRECONDITION(instr->type.t == IR_FLOAT && instr->u.arg.type.t == IR_FLOAT);
 
     if (instr->type.u.float_bits != IR_FLOAT_64) {
       UNIMPLEMENTED("Extending to %d-bit float", instr->type.u.float_bits);
@@ -1114,8 +1136,7 @@ static void asm_gen_instr(
     break;
   }
   case OP_TRUNCF: {
-    assert(instr->type.t == IR_FLOAT);
-    assert(instr->u.arg.type.t == IR_FLOAT);
+    PRECONDITION(instr->type.t == IR_FLOAT && instr->u.arg.type.t == IR_FLOAT);
 
     if (instr->type.u.float_bits != IR_FLOAT_32) {
       UNIMPLEMENTED("Truncating to %d-bit float", instr->type.u.float_bits);
@@ -1128,8 +1149,7 @@ static void asm_gen_instr(
     break;
   }
   case OP_SINT_TO_FLOAT: {
-    assert(instr->type.t == IR_FLOAT);
-    assert(instr->u.arg.type.t == IR_INT);
+    PRECONDITION(instr->type.t == IR_FLOAT && instr->u.arg.type.t == IR_INT);
 
     AsmValue value = asm_value(builder, instr->u.arg);
 
@@ -1148,8 +1168,7 @@ static void asm_gen_instr(
     break;
   }
   case OP_UINT_TO_FLOAT: {
-    assert(instr->type.t == IR_FLOAT);
-    assert(instr->u.arg.type.t == IR_INT);
+    PRECONDITION(instr->type.t == IR_FLOAT && instr->u.arg.type.t == IR_INT);
 
     AsmValue value = asm_value(builder, instr->u.arg);
     AsmValue result =
@@ -1219,8 +1238,7 @@ static void asm_gen_instr(
     break;
   }
   case OP_FLOAT_TO_SINT: {
-    assert(instr->type.t == IR_INT);
-    assert(instr->u.arg.type.t == IR_FLOAT);
+    PRECONDITION(instr->type.t == IR_INT && instr->u.arg.type.t == IR_FLOAT);
 
     AsmValue value = asm_value(builder, instr->u.arg);
 
@@ -1245,10 +1263,9 @@ static void asm_gen_instr(
   case OP_BIT_AND: asm_gen_binary_instr(builder, instr, AND); break;
   case OP_BIT_OR: asm_gen_binary_instr(builder, instr, OR); break;
   case OP_BIT_NOT: {
-    assert(instr->type.t == IR_INT);
-    u8 width = instr->type.u.bit_width;
+    PRECONDITION(instr->type.t == IR_INT);
 
-    AsmValue vreg = asm_vreg(new_vreg(builder), width);
+    AsmValue vreg = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
     assign_vreg(instr, vreg);
     AsmValue arg = asm_value(builder, instr->u.arg);
 
@@ -1258,10 +1275,9 @@ static void asm_gen_instr(
     break;
   }
   case OP_NEG: {
-    assert(instr->type.t == IR_INT);
-    u8 width = instr->type.u.bit_width;
+    PRECONDITION(instr->type.t == IR_INT);
 
-    AsmValue vreg = asm_vreg(new_vreg(builder), width);
+    AsmValue vreg = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
     assign_vreg(instr, vreg);
     AsmValue arg = asm_value(builder, instr->u.arg);
 
@@ -1279,9 +1295,8 @@ static void asm_gen_instr(
 
     AsmValue shiftee = asm_value(builder, instr->u.binary_op.arg1);
     AsmValue shift_amount = asm_value(builder, instr->u.binary_op.arg2);
-    u8 width = instr->type.u.bit_width;
 
-    AsmValue target = asm_vreg(new_vreg(builder), width);
+    AsmValue target = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
     assign_vreg(instr, target);
     emit_mov(builder, target, shiftee);
 
@@ -1311,10 +1326,9 @@ static void asm_gen_instr(
   case OP_ADD: asm_gen_binary_instr(builder, instr, ADD); break;
   case OP_SUB: asm_gen_binary_instr(builder, instr, SUB); break;
   case OP_MUL: {
-    assert(instr->type.t == IR_INT);
-    u8 width = instr->type.u.bit_width;
+    PRECONDITION(instr->type.t == IR_INT);
 
-    AsmValue vreg = asm_vreg(new_vreg(builder), width);
+    AsmValue vreg = asm_vreg(new_vreg(builder), instr->type.u.bit_width);
     assign_vreg(instr, vreg);
 
     AsmValue factor1 = asm_value(builder, instr->u.binary_op.arg1);
@@ -1333,7 +1347,6 @@ static void asm_gen_instr(
         const_arg = factor2;
         non_const_arg = factor1;
       }
-      assert(non_const_arg.t != ASM_VALUE_CONST);
 
       emit_instr3(builder, IMUL, vreg, non_const_arg, const_arg);
     }
@@ -1342,9 +1355,9 @@ static void asm_gen_instr(
   }
   case OP_DIV:
   case OP_MOD: {
-    assert(instr->type.t == IR_INT);
-    u8 width = instr->type.u.bit_width;
+    PRECONDITION(instr->type.t == IR_INT);
 
+    u8 width = instr->type.u.bit_width;
     AsmValue numerator = asm_value(builder, instr->u.binary_op.arg1);
     AsmValue denominator = asm_value(builder, instr->u.binary_op.arg2);
 
@@ -1449,13 +1462,12 @@ static void asm_gen_call(AsmBuilder *builder, IrInstr *instr)
   bool gen_new_call_seq;
   if (instr->u.call.callee.t == IR_VALUE_GLOBAL) {
     IrGlobal *target = instr->u.call.callee.u.global;
-    assert(target->type.t == IR_FUNCTION);
-
     IrType callee_type = instr->u.call.callee.u.global->type;
-    assert(callee_type.t == IR_FUNCTION);
+    ASSERT(target->type.t == IR_FUNCTION);
+    ASSERT(callee_type.t == IR_FUNCTION);
 
     u32 callee_arity = callee_type.u.function.arity;
-    assert(
+    ASSERT(
         call_arity == callee_arity
         || (call_arity > callee_arity
             && callee_type.u.function.variable_arity));
@@ -1542,7 +1554,7 @@ static void asm_gen_call(AsmBuilder *builder, IrInstr *instr)
       if (!arg_class->u.mem.remains_in_memory) {
         // Stack args that don't remain in memory should always be
         // rounded up to 8 bytes.
-        assert(arg_class->u.mem.size == 8);
+        ASSERT(arg_class->u.mem.size == 8);
 
         // Need a temp vreg to do an 8-byte store into memory.
         AsmValue temp_vreg = asm_vreg(new_vreg(builder), 64);
@@ -1695,11 +1707,11 @@ static bool is_callee_save(RegClass reg)
 
 void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 {
-  assert(ir_global->type.t == IR_FUNCTION);
-  IrFunction *ir_func = &ir_global->initializer->u.function;
-
   AsmSymbol *global_symbol = ir_global->asm_symbol;
-  assert(global_symbol != NULL);
+  PRECONDITION(global_symbol != NULL);
+  PRECONDITION(ir_global->type.t == IR_FUNCTION);
+
+  IrFunction *ir_func = &ir_global->initializer->u.function;
 
   global_symbol->defined = ir_global->initializer != NULL;
   if (!global_symbol->defined) return;
@@ -1719,7 +1731,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     array_free(&builder->virtual_registers);
   ARRAY_INIT(&builder->virtual_registers, VReg, 20);
   IrType return_type = *ir_global->type.u.function.return_type;
-  assert(
+  ASSERT(
       return_type.t == IR_INT || return_type.t == IR_FLOAT
       || return_type.t == IR_POINTER || return_type.t == IR_VOID);
 
@@ -2093,7 +2105,7 @@ void generate_asm_module(AsmBuilder *builder, IrModule *module)
       write_const(asm_module, konst, data);
       asm_symbol->size = data->size - asm_symbol->offset;
     } else {
-      assert(asm_symbol->section == BSS_SECTION);
+      ASSERT(asm_symbol->section == BSS_SECTION);
       u32 size = size_of_ir_type(ir_global->type);
       // @TODO: Alignment
       asm_symbol->offset = asm_module->bss_size;

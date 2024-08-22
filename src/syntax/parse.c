@@ -1,6 +1,5 @@
 #include "syntax/parse.h"
 
-#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +7,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
+#include "macros.h"
 #include "misc.h"
 #include "pool.h"
 #include "syntax/lex.h"
@@ -747,7 +747,7 @@ static void pretty_printf(char *fmt, ...)
     switch (c) {
     case '%':
       i++;
-      assert(fmt[i] != '\0');
+      ASSERT(fmt[i] != '\0');
 
       switch (fmt[i]) {
       case 's':;
@@ -1153,7 +1153,7 @@ static void dump_decl_specifier_list(ASTDeclSpecifier *decl_specifier_list)
       break;
 #undef CASE
     case FUNCTION_SPECIFIER:
-      assert(decl_specifier_list->u.function_specifier == INLINE_SPECIFIER);
+      ASSERT(decl_specifier_list->u.function_specifier == INLINE_SPECIFIER);
       pretty_printf("INLINE_SPECIFIER");
       break;
     case TYPE_SPECIFIER:
@@ -1332,7 +1332,7 @@ static void dump_decls(ASTDecl *decls)
 
 void dump_toplevel(ASTToplevel *ast)
 {
-  assert(indent_level == 0);
+  PRECONDITION(indent_level == 0);
 
   while (ast != NULL) {
     switch (ast->t) {
@@ -1358,5 +1358,5 @@ void dump_toplevel(ASTToplevel *ast)
     ast = ast->next;
   }
 
-  assert(indent_level == 0);
+  POSTCONDITION(indent_level == 0);
 }

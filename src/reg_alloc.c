@@ -1,12 +1,12 @@
 #include "reg_alloc.h"
 
-#include <assert.h>
 #include <stdlib.h>
 
 #include "asm.h"
 #include "asm_gen.h"
 #include "bit_set.h"
 #include "flags.h"
+#include "macros.h"
 #include "misc.h"
 
 // Reserved for spills and fills.
@@ -99,8 +99,8 @@ void allocate_registers(AsmBuilder *builder)
 
   Array(AsmInstr) *body = builder->current_block;
 
-  assert(reg_alloc_params[REG_TYPE_INTEGER].allocatable_regs < 8 * sizeof(u32));
-  assert(reg_alloc_params[REG_TYPE_FLOAT].allocatable_regs < 8 * sizeof(u32));
+  ASSERT(reg_alloc_params[REG_TYPE_INTEGER].allocatable_regs < 8 * sizeof(u32));
+  ASSERT(reg_alloc_params[REG_TYPE_FLOAT].allocatable_regs < 8 * sizeof(u32));
 
   // Start with all regs free
   u32 free_regs_bitsets[] = {
@@ -122,7 +122,7 @@ void allocate_registers(AsmBuilder *builder)
     // This indicates that we assigned a vreg to something that wasn't
     // used, e.g. a pre-alloced RAX for the return value of a function.
     if (vreg->live_range_start == -1) {
-      assert(vreg->live_range_end == -1);
+      ASSERT(vreg->live_range_end == -1, "Live range has a start but no end");
       continue;
     }
 
@@ -181,8 +181,8 @@ void allocate_registers(AsmBuilder *builder)
       // This register has already been assigned, e.g. part of a call
       // sequence. We don't need to allocate it, but we do need to keep
       // track of it so it doesn't get clobbered.
-      assert(vreg->t == IN_REG);
-      assert(vreg->pre_alloced);
+      ASSERT(vreg->t == IN_REG);
+      ASSERT(vreg->pre_alloced);
 
       u32 alloc_index = params.reg_to_alloc_index[vreg->u.assigned_register];
       if ((*free_regs_bitset & (1 << alloc_index)) == 0) {
@@ -200,12 +200,12 @@ void allocate_registers(AsmBuilder *builder)
             break;
           }
         }
-        assert(existing != NULL);
+        ASSERT(existing != NULL);
 
         // If the existing register is also pre-alloced, we have two
         // vregs with overlapping live ranges that need the same
         // physical register. This should never happen.
-        assert(!existing->pre_alloced);
+        ASSERT(!existing->pre_alloced);
 
         existing->t = ON_STACK;
         // @TODO: Alignment
@@ -235,7 +235,7 @@ void allocate_registers(AsmBuilder *builder)
       VReg *active_vreg = *ARRAY_REF(&active_vregs, VReg *, 0);
       if (active_vreg->live_range_end == -1) continue;
       if ((u32)active_vreg->live_range_end >= i) break;
-      assert(active_vreg->t == IN_REG);
+      ASSERT(active_vreg->t == IN_REG);
 
       // @TODO: Remove all the invalidated vregs at once instead of
       // repeatedly shifting down.
@@ -298,10 +298,10 @@ void allocate_registers(AsmBuilder *builder)
     if (instr->op == SUB && instr->args[0].t == ASM_VALUE_REGISTER
         && instr->args[0].u.reg.t == PHYS_REG
         && instr->args[0].u.reg.u.class == REG_CLASS_SP) {
-      assert(instr->args[1].t == ASM_VALUE_CONST);
+      ASSERT(instr->args[1].t == ASM_VALUE_CONST);
 
       AsmConst c = instr->args[1].u.constant;
-      assert(c.t == ASM_CONST_IMMEDIATE);
+      ASSERT(c.t == ASM_CONST_IMMEDIATE);
       curr_sp_diff += c.u.immediate;
     }
 
@@ -326,14 +326,11 @@ void allocate_registers(AsmBuilder *builder)
         // @TODO: Insert all at once, rather than shifting along
         // every time.
         AsmOp op;
-        if (vreg->type == REG_TYPE_INTEGER) {
-          op = MOV;
-        } else {
-          assert(vreg->type == REG_TYPE_FLOAT);
-          if (arg->u.reg.value_width == 32)
-            op = MOVSS;
-          else
-            op = MOVSD;
+        switch (vreg->type) {
+        case REG_TYPE_INTEGER: op = MOV; break;
+        case REG_TYPE_FLOAT:
+          op = arg->u.reg.value_width == 32 ? MOVSS : MOVSD;
+          break;
         }
 
         // @TODO: Elide this when we just write to the register and
@@ -394,13 +391,13 @@ static void find_preds(AsmBuilder *builder, Pool *pool)
     default: continue;
     }
 
-    assert(instr->args[0].t == ASM_VALUE_CONST);
+    ASSERT(instr->args[0].t == ASM_VALUE_CONST);
     AsmConst c = instr->args[0].u.constant;
-    assert(c.t == ASM_CONST_SYMBOL);
+    ASSERT(c.t == ASM_CONST_SYMBOL);
     AsmSymbol *target = c.u.symbol;
 
     if (target != builder->ret_label) {
-      assert(target->offset < body->size);
+      ASSERT(target->offset < body->size);
 
       Pred **location = &target->pred;
       Pred *pred = target->pred;
@@ -461,7 +458,7 @@ static void compute_live_ranges(AsmBuilder *builder, Array(VReg) *vregs)
         // We shouldn't be re-examining points that are already live.
         // If we've shown a vreg to be live at pc the analysis below
         // will add nothing.
-        assert(!bit_set_get_bit(&liveness, pc));
+        ASSERT(!bit_set_get_bit(&liveness, pc));
 
         // @TODO: We might be able to simplify this somewhat based on
         // the fact that (I think) our instruction selection always
@@ -483,13 +480,13 @@ static void compute_live_ranges(AsmBuilder *builder, Array(VReg) *vregs)
           succ1 = pc + 1;
           // fallthrough.
         case JMP: {
-          assert(instr->args[0].t == ASM_VALUE_CONST);
+          ASSERT(instr->args[0].t == ASM_VALUE_CONST);
           AsmConst c = instr->args[0].u.constant;
-          assert(c.t == ASM_CONST_SYMBOL);
+          ASSERT(c.t == ASM_CONST_SYMBOL);
           AsmSymbol *target = c.u.symbol;
 
           if (target != builder->ret_label) {
-            assert(target->offset < body->size);
+            ASSERT(target->offset < body->size);
             succ0 = target->offset;
           }
           break;

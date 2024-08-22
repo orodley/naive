@@ -25,7 +25,7 @@ void push_scope(IrGenContext *ctx, Scope *scope)
 
 void pop_scope(IrGenContext *ctx)
 {
-  assert(ctx->scope != NULL);
+  PRECONDITION(ctx->scope != NULL);
 
   array_free(&ctx->scope->bindings);
   ctx->scope = ctx->scope->parent_scope;

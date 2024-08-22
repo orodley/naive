@@ -1,7 +1,6 @@
 // @PORT
 #define _POSIX_SOURCE
 #define _DEFAULT_SOURCE
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -423,7 +422,10 @@ static char *make_temp_file(void)
       close(fd);
       return filename;
     } else {
-      assert(errno == EEXIST);
+      if (errno != EEXIST) {
+        perror("Unable to create temporary file");
+        exit_with_code(EXIT_CODE_IO_ERROR);
+      }
     }
   }
 }
@@ -432,7 +434,10 @@ static char *make_temp_file(void)
 static ExitCode make_file_executable(char *filename)
 {
   int fd = open(filename, O_RDONLY);
-  assert(fd != -1);
+  if (fd == -1) {
+    perror("Unable to open file to make executable");
+    return EXIT_CODE_IO_ERROR;
+  }
 
   struct stat status;
   if (fstat(fd, &status) == -1) {
@@ -461,8 +466,8 @@ static char *directory_of_executable(void)
 {
   char buf[1024];
   ssize_t size = readlink("/proc/self/exe", buf, sizeof buf);
-  assert(size > 0);
-  assert(size != 1024);
+  ASSERT(size > 0);
+  ASSERT(size != 1024);
 
   while (buf[size - 1] != '/') size--;
 

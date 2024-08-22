@@ -6,7 +6,7 @@
 #include "asm.h"
 #include "diagnostics.h"
 #include "elf.h"
-#include "exit_code.h"
+#include "macros.h"
 #include "misc.h"
 #include "pool.h"
 #include "syntax/reader.h"
@@ -64,8 +64,12 @@ static bool string_eq_case_insensitive(String a, char *b)
 static AsmValue read_register_or_symbol(
     Reader *reader, Array(AsmSymbol *) *symbols)
 {
+  SourceLoc ident_start = reader->source_loc;
   String ident = read_symbol(reader);
-  assert(is_valid(ident));
+  if (!is_valid(ident)) {
+    emit_fatal_error(
+        &ident_start, "Invalid identifier %.*s\n", ident.len, ident.chars);
+  }
 
   for (u32 i = 0; i < STATIC_ARRAY_LENGTH(registers); i++) {
     for (u32 j = 0; j < STATIC_ARRAY_LENGTH(registers[i].names); j++) {
@@ -87,7 +91,6 @@ static AsmValue read_register_or_symbol(
   UNREACHABLE;
 }
 
-// @TODO: Make this be able to fail, and replace asserts with issue_errors.
 static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
 {
   switch (peek_char(reader)) {
@@ -103,11 +106,15 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
   case '9': return asm_imm(read_integer(reader));
   case '[': {
     advance(reader);
+    SourceLoc start_source_loc = reader->source_loc;
     AsmValue value = read_register_or_symbol(reader, symbols);
-    assert(value.t == ASM_VALUE_REGISTER);
+    if (value.t != ASM_VALUE_REGISTER) {
+      emit_fatal_error(
+          &start_source_loc, "Expected register in memory operand");
+    }
 
     Register reg = value.u.reg;
-    assert(reg.t == PHYS_REG);
+    ASSERT(reg.t == PHYS_REG);
 
     skip_whitespace(reader);
 
@@ -116,7 +123,9 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
       skip_whitespace(reader);
       u64 offset = read_integer(reader);
       skip_whitespace(reader);
-      assert(read_char(reader) == ']');
+      if (!expect_char(reader, ']')) {
+        emit_fatal_error(&reader->source_loc, "Expected ']' after offset");
+      }
 
       return asm_deref(
           asm_offset_reg(reg.u.class, reg.width, asm_const_imm(offset)));
@@ -206,15 +215,19 @@ int main(int argc, char *argv[])
       break;
     default: {
       if (!initial_ident_char(peek_char(reader))) {
-        emit_error(
-            &reader->source_loc, "Unexpected character: '%c'\n",
+        emit_fatal_error(
+            &reader->source_loc, "Unexpected character: '%c'",
             peek_char(reader));
         return EXIT_CODE_INVALID_SOURCE;
       }
 
       SourceLoc ident_source_loc = reader->source_loc;
       String ident = read_symbol(reader);
-      assert(is_valid(ident));
+      if (!is_valid(ident)) {
+        emit_fatal_error(
+            &ident_source_loc, "Invalid identifier %.*s", ident.len,
+            ident.chars);
+      }
       skip_whitespace(reader);
 
       if (strneq(ident.chars, "bits", ident.len)) {
@@ -273,10 +286,9 @@ int main(int argc, char *argv[])
         *ARRAY_APPEND(&asm_module.symbols, AsmSymbol *) = symbol;
       } else if (peek_char(reader) != ':') {
         if (!in_text_section) {
-          emit_error(
+          emit_fatal_error(
               &ident_source_loc,
               "Instruction encountered before section directive");
-          return EXIT_CODE_INVALID_SOURCE;
         }
 
         AsmInstr *instr = ARRAY_APPEND(&asm_module.text.instrs, AsmInstr);
@@ -298,10 +310,9 @@ int main(int argc, char *argv[])
         }
 
         if (!found) {
-          emit_error(
-              &ident_source_loc, "Unknown instruction name '%s'\n",
+          emit_fatal_error(
+              &ident_source_loc, "Unknown instruction name '%s'",
               strndup(ident.chars, ident.len));
-          return EXIT_CODE_INVALID_SOURCE;
         }
 
         skip_whitespace(reader);

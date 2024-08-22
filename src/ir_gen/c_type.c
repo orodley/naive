@@ -1,8 +1,10 @@
 #include "ir_gen/c_type.h"
 
+#include <assert.h>
 #include <stdarg.h>
 #include <stdbool.h>
 
+#include "macros.h"
 #include "syntax/lex.h"
 #include "syntax/parse.h"
 
@@ -34,8 +36,8 @@ bool c_type_eq(CType *a, CType *b)
     if (a->u.strukt.incomplete) return a == b;
     return a->u.strukt.ir_type == b->u.strukt.ir_type;
   case POINTER_TYPE:
-    assert(a != a->u.pointee_type);
-    assert(b != b->u.pointee_type);
+    ASSERT(a != a->u.pointee_type, "Recursive pointer type");
+    ASSERT(b != b->u.pointee_type, "Recursive pointer type");
     return c_type_eq(a->u.pointee_type, b->u.pointee_type);
   case ARRAY_TYPE:
     return ((a->u.array.incomplete && b->u.array.incomplete)
@@ -94,7 +96,10 @@ IrType c_type_to_ir_type(CType *ctype)
   case ARRAY_TYPE: return *ctype->u.array.ir_type;
   case FUNCTION_TYPE: return (IrType){.t = IR_FUNCTION};
   case STRUCT_TYPE:
-    assert(!ctype->u.strukt.incomplete);
+    if (ctype->u.strukt.incomplete) {
+      emit_fatal_error_no_loc(
+          "Trying to define an object of incomplete struct type");
+    }
     return *ctype->u.strukt.ir_type;
   }
 
@@ -103,7 +108,7 @@ IrType c_type_to_ir_type(CType *ctype)
 
 u8 c_type_rank(CType *type)
 {
-  assert(type->t == INTEGER_TYPE);
+  PRECONDITION(type->t == INTEGER_TYPE);
   switch (type->u.integer.type) {
   case BOOL: return 0;
   case CHAR: return 1;
@@ -112,8 +117,6 @@ u8 c_type_rank(CType *type)
   case LONG: return 4;
   case LONG_LONG: return 5;
   }
-
-  UNREACHABLE;
 }
 
 void init_type_env(TypeEnv *type_env)
@@ -261,7 +264,7 @@ CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type)
 
 void set_array_type_length(CType *array_type, u64 size)
 {
-  assert(array_type->t == ARRAY_TYPE);
+  PRECONDITION(array_type->t == ARRAY_TYPE);
 
   array_type->u.array.size = size;
 
@@ -300,7 +303,7 @@ u32 c_type_num_fields(CType *type)
 
 static bool value_fits_in_type(CType *type, u64 value)
 {
-  assert(type->t == INTEGER_TYPE);
+  PRECONDITION(type->t == INTEGER_TYPE);
 
   bool is_signed = type->u.integer.is_signed;
   u32 int_width = c_type_size(type) * 8;
@@ -345,7 +348,8 @@ CType *type_of_int_literal(TypeEnv *type_env, IntLiteral int_literal)
   bool l_suffix = (suffix & LONG_SUFFIX) != 0;
   bool ll_suffix = (suffix & LONG_LONG_SUFFIX) != 0;
 
-  assert(!l_suffix || !ll_suffix);
+  // This shouldn't be possible to obtain from the parser.
+  ASSERT(!(l_suffix && ll_suffix));
 
   // This follows the table given in C99 6.4.4.1.5
   if (suffix == NO_SUFFIX) {
@@ -413,7 +417,7 @@ static bool matches_sequence(
     char *str = va_arg(args, char *);
     length--;
 
-    assert(decl_specifier_list->t == TYPE_SPECIFIER);
+    ASSERT(decl_specifier_list->t == TYPE_SPECIFIER);
     ASTTypeSpecifier *type_spec = decl_specifier_list->u.type_specifier;
     if (type_spec->t != NAMED_TYPE_SPECIFIER
         || !streq(type_spec->u.name, str)) {
@@ -435,7 +439,7 @@ CType *named_type_specifier_to_ctype(
     TypeEnv *type_env, ASTDeclSpecifier *decl_specifier_list)
 {
   ASTTypeSpecifier *type_spec = decl_specifier_list->u.type_specifier;
-  assert(type_spec->t == NAMED_TYPE_SPECIFIER);
+  PRECONDITION(type_spec->t == NAMED_TYPE_SPECIFIER);
 
   // @TODO: This would be more efficiently (but perhaps less readably?)
   // encoded as a tree, so as to eliminate redundant comparisons.
@@ -506,11 +510,30 @@ CType *named_type_specifier_to_ctype(
   // Phew
 
   CType *type = search(&type_env->typedef_types, type_spec->u.name);
-  assert(type != NULL);
+  if (type == NULL) {
+    emit_fatal_error_no_loc("Unknown type %s", type_spec->u.name);
+  }
   return type;
 }
 
 bool is_arithmetic_type(CType *type)
 {
   return type->t == INTEGER_TYPE || type->t == FLOAT_TYPE;
+}
+
+void fatal_error_if_not_int(CType *type)
+{
+  if (type->t != INTEGER_TYPE) {
+    // @TODO: Better error message. In particular, we should print the actual
+    // type.
+    emit_fatal_error_no_loc("Expected integer type");
+  }
+}
+
+void fatal_error_if_type_not_eq(CType *actual, CType *expected)
+{
+  // @TODO: Better error message. In particular, we should print both types.
+  if (!c_type_eq(actual, expected)) {
+    emit_fatal_error_no_loc("Wrong type");
+  }
 }
