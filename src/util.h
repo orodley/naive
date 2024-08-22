@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "exit_code.h"
 #include "macros.h"
 #include "misc.h"
 

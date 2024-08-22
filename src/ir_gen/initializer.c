@@ -1,5 +1,6 @@
 #include "ir_gen/initializer.h"
 
+#include "exit_code.h"
 #include "ir_gen/c_type.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"

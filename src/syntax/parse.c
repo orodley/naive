@@ -7,6 +7,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
+#include "exit_code.h"
 #include "macros.h"
 #include "misc.h"
 #include "pool.h"

@@ -1,25 +1,23 @@
 #ifndef NAIVE_MACROS_H_
 #define NAIVE_MACROS_H_
 
-#include "exit_code.h"
+#define IGNORE(x) (void)x
+#define STATIC_ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 
-#define ASSERT_FAIL(...) \
-  exit_internal_compiler_error(__FILE__, __LINE__, __func__, __VA_ARGS__)
-#define ASSERT_IMPL(expr, prefix, ...)            \
-  do {                                            \
-    if (!(expr)) {                                \
-      ASSERT_FAIL(prefix #expr ": " __VA_ARGS__); \
-    }                                             \
-  } while (0)
+#define RUNNING_UNDER_SANITIZER 0
+#ifdef __has_feature
+#if __has_feature(memory_sanitizer) || __has_feature(address_sanitizer)
+#undef RUNNING_UNDER_SANITIZER
+#define RUNNING_UNDER_SANITIZER 1
+#endif
+#endif
 
-#define ASSERT(expr, ...) ASSERT_IMPL(expr, "Failed assertion: ", __VA_ARGS__)
-#define PRECONDITION(expr, ...) \
-  ASSERT_IMPL(expr, "Failed precondition: ", __VA_ARGS__)
-#define POSTCONDITION(expr, ...) \
-  ASSERT_IMPL(expr, "Failed postcondition: ", __VA_ARGS__)
-#define UNREACHABLE ASSERT_FAIL("This should never be reached")
-
-#define UNIMPLEMENTED(...) \
-  exit_unimplemented(__FILE__, __LINE__, __func__, __VA_ARGS__)
+#define NORETURN
+#ifdef __has_attribute
+#if __has_attribute(noreturn)
+#undef NORETURN
+#define NORETURN __attribute__((noreturn))
+#endif
+#endif
 
 #endif
