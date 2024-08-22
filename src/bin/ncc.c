@@ -13,10 +13,10 @@
 #include <unistd.h>
 
 #include "array.h"
-#include "asm.h"
-#include "asm_gen.h"
 #include "assertions.h"
-#include "elf.h"
+#include "backend/asm.h"
+#include "backend/asm_gen.h"
+#include "backend/elf.h"
 #include "file.h"
 #include "ir_gen/ir_gen.h"
 #include "syntax/lex.h"

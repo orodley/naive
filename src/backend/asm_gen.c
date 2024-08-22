@@ -1,14 +1,14 @@
-#include "asm_gen.h"
+#include "backend/asm_gen.h"
 
 #include <stdlib.h>
 
 #include "array.h"
-#include "asm.h"
 #include "assertions.h"
+#include "backend/asm.h"
+#include "backend/reg_alloc.h"
 #include "flags.h"
 #include "ir.h"
 #include "macros.h"
-#include "reg_alloc.h"
 #include "util.h"
 
 #define REGISTER_SAVE_AREA_SIZE                    \

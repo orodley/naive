@@ -1,7 +1,7 @@
-#ifndef NAIVE_ASM_GEN_H_
-#define NAIVE_ASM_GEN_H_
+#ifndef NAIVE_BACKEND_ASM_GEN_H_
+#define NAIVE_BACKEND_ASM_GEN_H_
 
-#include "asm.h"
+#include "backend/asm.h"
 #include "ir.h"
 
 typedef struct VReg

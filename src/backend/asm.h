@@ -1,5 +1,5 @@
-#ifndef NAIVE_ASM_H_
-#define NAIVE_ASM_H_
+#ifndef NAIVE_BACKEND_ASM_H_
+#define NAIVE_BACKEND_ASM_H_
 
 #include <stdio.h>
 

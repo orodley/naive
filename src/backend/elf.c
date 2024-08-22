@@ -1,10 +1,10 @@
 #define _POSIX_C_SOURCE 200809L
-#include "elf.h"
+#include "backend/elf.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "asm.h"
+#include "backend/asm.h"
 #include "file.h"
 #include "macros.h"
 #include "types.h"

@@ -1,9 +1,9 @@
-#include "reg_alloc.h"
+#include "backend/reg_alloc.h"
 
 #include <stdlib.h>
 
-#include "asm.h"
-#include "asm_gen.h"
+#include "backend/asm.h"
+#include "backend/asm_gen.h"
 #include "bit_set.h"
 #include "flags.h"
 #include "macros.h"

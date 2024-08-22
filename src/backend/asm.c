@@ -1,4 +1,4 @@
-#include "asm.h"
+#include "backend/asm.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "array.h"
-#include "asm_gen.h"
+#include "backend/asm_gen.h"
 #include "file.h"
 #include "macros.h"
 #include "util.h"
@@ -856,7 +856,7 @@ static void encode_instr(
 }
 
 // This is generated from "x64.enc", and defines the function "assemble_instr".
-#include "x64.inc"
+#include "backend/x64.inc"
 
 void assemble(AsmModule *asm_module)
 {

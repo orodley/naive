@@ -2,7 +2,7 @@
 #define NAIVE_IR_H_
 
 #include "array.h"
-#include "asm.h"
+#include "backend/asm.h"
 #include "pool.h"
 #include "types.h"
 

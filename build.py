@@ -436,6 +436,7 @@ def build(build_config):
     os.makedirs(build_config.install_dir, exist_ok=True)
     os.makedirs("build/toolchain", exist_ok=True)
     os.makedirs("build/bin", exist_ok=True)
+    os.makedirs("build/backend", exist_ok=True)
     os.makedirs("build/ir_gen", exist_ok=True)
     os.makedirs("build/libc", exist_ok=True)
     os.makedirs("build/syntax", exist_ok=True)
@@ -445,7 +446,9 @@ def build(build_config):
     enqueue_proc(
         procs, ["dsl/peg.py", "src/syntax/parse.peg", "build/syntax/parse.inc"], "PEG"
     )
-    enqueue_proc(procs, ["dsl/enc.py", "src/x64.enc", "build/x64.inc"], "INC")
+    enqueue_proc(
+        procs, ["dsl/enc.py", "src/backend/x64.enc", "build/backend/x64.inc"], "INC"
+    )
     if (ret := run_all_procs_printing_failures(procs)) != 0:
         return ret
 
@@ -453,12 +456,12 @@ def build(build_config):
         "src/bin/ncc": [
             "src/bin/ncc.o",
             "src/array.o",
-            "src/asm.o",
-            "src/asm_gen.o",
-            "src/reg_alloc.o",
+            "src/backend/asm.o",
+            "src/backend/asm_gen.o",
+            "src/backend/reg_alloc.o",
             "src/bit_set.o",
             "src/diagnostics.o",
-            "src/elf.o",
+            "src/backend/elf.o",
             "src/assertions.o",
             "src/file.o",
             "src/ir.o",
@@ -482,8 +485,8 @@ def build(build_config):
             "src/syntax/reader.o",
             "src/util.o",
             "src/diagnostics.o",
-            "src/asm.o",
-            "src/elf.o",
+            "src/backend/asm.o",
+            "src/backend/elf.o",
             "src/assertions.o",
             "src/pool.o",
             "src/file.o",

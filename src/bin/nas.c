@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "asm.h"
+#include "backend/asm.h"
+#include "backend/elf.h"
 #include "diagnostics.h"
-#include "elf.h"
 #include "macros.h"
 #include "pool.h"
 #include "syntax/reader.h"
