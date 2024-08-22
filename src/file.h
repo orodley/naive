@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include "exit_code.h"
+#include "assertions.h"
 #include "misc.h"
 
 typedef enum FileType

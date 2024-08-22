@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#include "exit_code.h"
+#include "assertions.h"
 #include "macros.h"
 
 static void v_issue_diagnostic(

@@ -1,5 +1,5 @@
-#ifndef NAIVE_EXIT_CODE_H_
-#define NAIVE_EXIT_CODE_H_
+#ifndef NAIVE_ASSERTIONS_H_
+#define NAIVE_ASSERTIONS_H_
 
 #include <stdlib.h>
 

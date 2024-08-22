@@ -3,7 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-#include "exit_code.h"
+#include "assertions.h"
 #include "ir.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"

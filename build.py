@@ -459,7 +459,7 @@ def build(build_config):
             "src/bit_set.o",
             "src/diagnostics.o",
             "src/elf.o",
-            "src/exit_code.o",
+            "src/assertions.o",
             "src/file.o",
             "src/ir.o",
             "src/ir_gen/ir_gen.o",
@@ -484,7 +484,7 @@ def build(build_config):
             "src/diagnostics.o",
             "src/asm.o",
             "src/elf.o",
-            "src/exit_code.o",
+            "src/assertions.o",
             "src/pool.o",
             "src/file.o",
             "src/array.o",
@@ -492,8 +492,8 @@ def build(build_config):
         "src/bin/nar": [
             "src/bin/nar.o",
             "src/array.o",
+            "src/assertions.o",
             "src/file.o",
-            "src/exit_code.o",
             "src/util.o",
         ],
     }

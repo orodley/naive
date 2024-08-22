@@ -6,7 +6,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#include "exit_code.h"
+#include "assertions.h"
 #include "util.h"
 
 extern inline u32 max(u32 a, u32 b);

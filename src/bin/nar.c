@@ -2,7 +2,7 @@
 #include <string.h>
 
 #include "array.h"
-#include "exit_code.h"
+#include "assertions.h"
 #include "file.h"
 #include "misc.h"
 #include "util.h"

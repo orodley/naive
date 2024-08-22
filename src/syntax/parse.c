@@ -6,8 +6,8 @@
 #include <string.h>
 
 #include "array.h"
+#include "assertions.h"
 #include "diagnostics.h"
-#include "exit_code.h"
 #include "macros.h"
 #include "misc.h"
 #include "pool.h"

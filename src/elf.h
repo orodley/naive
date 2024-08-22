@@ -3,7 +3,7 @@
 
 #include "array.h"
 #include "asm.h"
-#include "exit_code.h"
+#include "assertions.h"
 
 ExitCode write_elf_object_file(char *output_file_name, AsmModule *asm_module);
 ExitCode link_elf_executable(

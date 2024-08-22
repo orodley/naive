@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "exit_code.h"
+#include "assertions.h"
 #include "macros.h"
 #include "misc.h"
 

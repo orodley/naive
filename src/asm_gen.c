@@ -4,7 +4,7 @@
 
 #include "array.h"
 #include "asm.h"
-#include "exit_code.h"
+#include "assertions.h"
 #include "flags.h"
 #include "ir.h"
 #include "macros.h"
