@@ -3,8 +3,8 @@
 
 #include "array.h"
 #include "ir.h"
+#include "syntax/ast.h"
 #include "syntax/lex.h"
-#include "syntax/parse.h"
 #include "types.h"
 
 // @TODO: Use X macros so we can print the names in error messages

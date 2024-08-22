@@ -6,7 +6,7 @@
 #include "ir_gen/convert.h"
 #include "ir_gen/expr.h"
 #include "macros.h"
-#include "syntax/parse.h"
+#include "syntax/ast.h"
 
 static void ir_gen_c_init(
     IrBuilder *builder, TypeEnv *type_env, IrValue base_ptr,

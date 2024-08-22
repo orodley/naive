@@ -15,7 +15,7 @@
 #include "ir_gen/initializer.h"
 #include "ir_gen/statement.h"
 #include "macros.h"
-#include "syntax/parse.h"
+#include "syntax/ast.h"
 #include "util.h"
 
 static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel);

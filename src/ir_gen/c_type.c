@@ -5,8 +5,8 @@
 #include <stdbool.h>
 
 #include "macros.h"
+#include "syntax/ast.h"
 #include "syntax/lex.h"
-#include "syntax/parse.h"
 
 extern inline u32 c_type_size(CType *type);
 

@@ -4,7 +4,7 @@
 #include "ir_gen/context.h"
 #include "ir_gen/expr.h"
 #include "ir_gen/initializer.h"
-#include "syntax/parse.h"
+#include "syntax/ast.h"
 
 static void direct_declarator_to_cdecl(
     IrGenContext *ctx, CType *ident_type, ASTDirectDeclarator *declarator,

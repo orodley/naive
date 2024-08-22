@@ -2,7 +2,7 @@
 #define NAIVE_IR_GEN_IR_GEN_H
 
 #include "ir.h"
-#include "syntax/parse.h"
+#include "syntax/ast.h"
 
 IrModule ir_gen(ASTToplevel *toplevel);
 

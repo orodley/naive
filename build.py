@@ -474,6 +474,7 @@ def build(build_config):
             "src/ir_gen/initializer.o",
             "src/ir_gen/statement.o",
             "src/pool.o",
+            "src/syntax/ast.o",
             "src/syntax/parse.o",
             "src/syntax/preprocess.o",
             "src/syntax/reader.o",
