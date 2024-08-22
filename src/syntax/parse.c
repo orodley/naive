@@ -9,9 +9,9 @@
 #include "assertions.h"
 #include "diagnostics.h"
 #include "macros.h"
-#include "misc.h"
 #include "pool.h"
 #include "syntax/lex.h"
+#include "types.h"
 #include "util.h"
 
 typedef struct TypeTableEntry

@@ -7,7 +7,7 @@
 #include "bit_set.h"
 #include "flags.h"
 #include "macros.h"
-#include "misc.h"
+#include "types.h"
 
 // Reserved for spills and fills.
 #define INT_SPILL_REGISTER REG_CLASS_R12

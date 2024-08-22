@@ -3,7 +3,7 @@
 
 #include <assert.h>
 
-#include "misc.h"
+#include "types.h"
 #include "util.h"
 
 typedef struct BitSet

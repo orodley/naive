@@ -122,7 +122,7 @@ class CWriter(object):
 
 #include <stddef.h>
 
-#include "misc.h"
+#include "types.h"
 #include "syntax/parse.h"
 
 

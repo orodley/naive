@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#include "misc.h"
+#include "types.h"
 
 extern inline void exit_with_code(ExitCode code);
 

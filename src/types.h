@@ -1,7 +1,7 @@
-// Include this everywhere for types and macros
+// Include this everywhere for standard types
 
-#ifndef NAIVE_MISC_H_
-#define NAIVE_MISC_H_
+#ifndef NAIVE_TYPES_H_
+#define NAIVE_TYPES_H_
 
 #include <inttypes.h>
 #include <stdint.h>

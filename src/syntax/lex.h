@@ -3,7 +3,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
-#include "misc.h"
+#include "types.h"
 #include "util.h"
 
 #define TOKEN_TYPES                                                          \

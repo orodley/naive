@@ -1,7 +1,7 @@
 #ifndef NAIVE_FLAGS_H_
 #define NAIVE_FLAGS_H_
 
-#include "misc.h"
+#include "types.h"
 
 extern bool flag_dump_live_ranges;
 extern bool flag_dump_register_assignments;

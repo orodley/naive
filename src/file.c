@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#include "misc.h"
+#include "types.h"
 #include "util.h"
 
 FileType file_type_of_bytes(u8 *bytes, u32 length)

@@ -7,7 +7,7 @@
 #include "asm.h"
 #include "file.h"
 #include "macros.h"
-#include "misc.h"
+#include "types.h"
 #include "util.h"
 
 typedef enum ELFIdentIndex

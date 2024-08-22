@@ -4,7 +4,7 @@
 #include "array.h"
 #include "assertions.h"
 #include "file.h"
-#include "misc.h"
+#include "types.h"
 #include "util.h"
 
 static u8 read_buf[8192];

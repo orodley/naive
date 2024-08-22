@@ -9,7 +9,7 @@
 
 #include "assertions.h"
 #include "macros.h"
-#include "misc.h"
+#include "types.h"
 
 #define ZERO_STRUCT(s) memset(s, 0, sizeof *(s));
 

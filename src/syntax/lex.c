@@ -10,8 +10,8 @@
 #include "array.h"
 #include "diagnostics.h"
 #include "macros.h"
-#include "misc.h"
 #include "syntax/reader.h"
+#include "types.h"
 #include "util.h"
 
 typedef struct Lexer

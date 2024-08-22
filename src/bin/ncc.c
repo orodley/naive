@@ -19,10 +19,10 @@
 #include "elf.h"
 #include "file.h"
 #include "ir_gen/ir_gen.h"
-#include "misc.h"
 #include "syntax/lex.h"
 #include "syntax/parse.h"
 #include "syntax/preprocess.h"
+#include "types.h"
 #include "util.h"
 
 int __lsan_is_turned_off(void) { return 1; }

@@ -2,9 +2,9 @@
 #define NAIVE_SYNTAX_PARSE_H_
 
 #include "array.h"
-#include "misc.h"
 #include "pool.h"
 #include "syntax/lex.h"
+#include "types.h"
 #include "util.h"
 
 typedef struct ParseError

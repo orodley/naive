@@ -7,7 +7,7 @@
 #include "asm.h"
 #include "asm_gen.h"
 #include "macros.h"
-#include "misc.h"
+#include "types.h"
 #include "util.h"
 
 extern inline IrBlock *add_block(IrBuilder *builder, char *name);

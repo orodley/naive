@@ -3,7 +3,7 @@
 #ifndef NAIVE_ARRAY_H_
 #define NAIVE_ARRAY_H_
 
-#include "misc.h"
+#include "types.h"
 
 typedef struct Array_
 {

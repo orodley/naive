@@ -3,8 +3,8 @@
 
 #include "array.h"
 #include "asm.h"
-#include "misc.h"
 #include "pool.h"
+#include "types.h"
 
 typedef struct IrModule
 {

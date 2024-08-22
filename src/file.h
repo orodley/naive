@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 #include "assertions.h"
-#include "misc.h"
+#include "types.h"
 
 typedef enum FileType
 {
