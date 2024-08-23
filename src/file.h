@@ -16,6 +16,8 @@ typedef enum FileType
 
 FileType file_type_of_bytes(u8 *bytes, u32 length);
 FileType file_type(FILE *file);
+char *make_temp_file(void);
+ExitCode make_file_executable(char *filename);
 
 #define AR_GLOBAL_HEADER "!<arch>\n"
 

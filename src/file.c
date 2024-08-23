@@ -1,9 +1,25 @@
+// @PORT
+#define _DEFAULT_SOURCE
+#define _POSIX_SOURCE
+
 #include "file.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "types.h"
 #include "util.h"
+
+extern inline long checked_ftell(FILE *file);
+extern inline void checked_fseek(FILE *file, long offset, int whence);
+extern inline void checked_fread(
+    void *ptr, size_t size, size_t nmemb, FILE *stream);
+extern inline void checked_fwrite(
+    const void *ptr, size_t size, size_t nmemb, FILE *stream);
 
 FileType file_type_of_bytes(u8 *bytes, u32 length)
 {
@@ -35,9 +51,57 @@ FileType file_type(FILE *file)
   return type;
 }
 
-extern inline long checked_ftell(FILE *file);
-extern inline void checked_fseek(FILE *file, long offset, int whence);
-extern inline void checked_fread(
-    void *ptr, size_t size, size_t nmemb, FILE *stream);
-extern inline void checked_fwrite(
-    const void *ptr, size_t size, size_t nmemb, FILE *stream);
+// @PORT
+char *make_temp_file(void)
+{
+  char fmt[] = "/tmp/ncc_temp_%x.o";
+
+  // - 2 adjusts down for the "%x" which isn't present in the output
+  // sizeof(int) * 2 is the max length of rand_suffix in hex
+  // + 1 for the null terminator
+  u32 filename_max_length = sizeof fmt - 2 + sizeof(int) * 2 + 1;
+  char *filename = calloc(filename_max_length, 1);
+
+  for (;;) {
+    int rand_suffix = rand();
+    snprintf(filename, filename_max_length, fmt, rand_suffix);
+
+    int fd = open(filename, O_CREAT | O_WRONLY | O_EXCL, 0600);
+    if (fd != -1) {
+      close(fd);
+      return filename;
+    } else {
+      if (errno != EEXIST) {
+        perror("Unable to create temporary file");
+        exit_with_code(EXIT_CODE_IO_ERROR);
+      }
+    }
+  }
+}
+
+// @PORT
+ExitCode make_file_executable(char *filename)
+{
+  int fd = open(filename, O_RDONLY);
+  if (fd == -1) {
+    perror("Unable to open file to make executable");
+    return EXIT_CODE_IO_ERROR;
+  }
+
+  struct stat status;
+  if (fstat(fd, &status) == -1) {
+    perror("Unable to stat output file");
+    close(fd);
+    return EXIT_CODE_IO_ERROR;
+  }
+
+  mode_t new_mode = (status.st_mode & 07777) | S_IXUSR;
+  if (fchmod(fd, new_mode) == -1) {
+    perror("Unable to change output file to executable");
+    close(fd);
+    return EXIT_CODE_IO_ERROR;
+  }
+
+  close(fd);
+  return EXIT_CODE_SUCCESS;
+}

@@ -7,9 +7,6 @@
 
 // @PORT
 #include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include "array.h"
@@ -35,11 +32,9 @@ bool flag_dump_live_ranges = false;
 bool flag_dump_register_assignments = false;
 bool flag_print_pre_regalloc_stats = false;
 
-static char *make_temp_file(void);
 static int compile_file(
     char *input_filename, char *output_filename, Array(char *) *include_dirs,
     bool syntax_only, bool preprocess_only);
-static ExitCode make_file_executable(char *filename);
 static char *directory_of_executable(void);
 
 int main(int argc, char *argv[])
@@ -399,61 +394,6 @@ static int compile_file(
 
   free_asm_builder(&asm_builder);
 
-  return EXIT_CODE_SUCCESS;
-}
-
-// @PORT
-static char *make_temp_file(void)
-{
-  char fmt[] = "/tmp/ncc_temp_%x.o";
-
-  // - 2 adjusts down for the "%x" which isn't present in the output
-  // sizeof(int) * 2 is the max length of rand_suffix in hex
-  // + 1 for the null terminator
-  u32 filename_max_length = sizeof fmt - 2 + sizeof(int) * 2 + 1;
-  char *filename = calloc(filename_max_length, 1);
-
-  for (;;) {
-    int rand_suffix = rand();
-    snprintf(filename, filename_max_length, fmt, rand_suffix);
-
-    int fd = open(filename, O_CREAT | O_WRONLY | O_EXCL, 0600);
-    if (fd != -1) {
-      close(fd);
-      return filename;
-    } else {
-      if (errno != EEXIST) {
-        perror("Unable to create temporary file");
-        exit_with_code(EXIT_CODE_IO_ERROR);
-      }
-    }
-  }
-}
-
-// @PORT
-static ExitCode make_file_executable(char *filename)
-{
-  int fd = open(filename, O_RDONLY);
-  if (fd == -1) {
-    perror("Unable to open file to make executable");
-    return EXIT_CODE_IO_ERROR;
-  }
-
-  struct stat status;
-  if (fstat(fd, &status) == -1) {
-    perror("Unable to stat output file");
-    close(fd);
-    return EXIT_CODE_IO_ERROR;
-  }
-
-  mode_t new_mode = (status.st_mode & 07777) | S_IXUSR;
-  if (fchmod(fd, new_mode) == -1) {
-    perror("Unable to change output file to executable");
-    close(fd);
-    return EXIT_CODE_IO_ERROR;
-  }
-
-  close(fd);
   return EXIT_CODE_SUCCESS;
 }
 
