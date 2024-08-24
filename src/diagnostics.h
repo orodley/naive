@@ -2,8 +2,8 @@
 #define NAIVE_DIAGNOSTICS_H_
 
 #include "macros.h"
+#include "strings.h"
 #include "types.h"
-#include "util.h"
 
 typedef struct SourceLoc
 {

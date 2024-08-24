@@ -5,7 +5,7 @@
 
 #include "array.h"
 #include "pool.h"
-#include "util.h"
+#include "strings.h"
 
 #define REG_CLASSES                                                            \
   X(INVALID_REG_CLASS, "INVALID", "INVALID", "INVALID", "INVALID", "INVALID"), \

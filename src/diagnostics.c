@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "assertions.h"
+#include "file.h"
 #include "macros.h"
 
 static void v_issue_diagnostic(

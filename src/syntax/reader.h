@@ -5,7 +5,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
-#include "util.h"
+#include "strings.h"
 
 typedef enum AdjustmentType
 {

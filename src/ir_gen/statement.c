@@ -1,5 +1,6 @@
 #include "ir_gen/statement.h"
 
+#include "assertions.h"
 #include "ir.h"
 #include "ir_gen/context.h"
 #include "ir_gen/convert.h"

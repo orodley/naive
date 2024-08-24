@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+// @PORT
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -105,4 +107,33 @@ ExitCode make_file_executable(String filename)
 
   close(fd);
   return EXIT_CODE_SUCCESS;
+}
+
+// @PORT
+String map_file_into_memory(char *filename)
+{
+  int fd = open(filename, O_RDONLY);
+  if (fd == -1) return INVALID_STRING;
+
+  off_t file_size = lseek(fd, 0, SEEK_END);
+
+  if (file_size == -1) return INVALID_STRING;
+
+  if (file_size == 0) return EMPTY_STRING;
+
+  char *buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  if (buffer == MAP_FAILED) return INVALID_STRING;
+
+  close(fd);
+
+  return (String){buffer, file_size};
+}
+
+// @PORT
+void unmap_file(String buffer)
+{
+  int ret = munmap(buffer.chars, buffer.len);
+  if (ret != 0) {
+    exit_with_code(EXIT_CODE_IO_ERROR);
+  }
 }

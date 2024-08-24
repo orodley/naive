@@ -480,11 +480,13 @@ def build(build_config):
             "src/syntax/reader.o",
             "src/syntax/lex.o",
             "src/util.o",
+            "src/strings.o",
         ],
         "src/bin/nas": [
             "src/bin/nas.o",
             "src/syntax/reader.o",
             "src/util.o",
+            "src/strings.o",
             "src/diagnostics.o",
             "src/backend/asm.o",
             "src/backend/elf.o",
@@ -499,6 +501,7 @@ def build(build_config):
             "src/assertions.o",
             "src/file.o",
             "src/util.o",
+            "src/strings.o",
         ],
     }
 

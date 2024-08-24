@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
+#include "assertions.h"
 #include "macros.h"
 #include "syntax/ast.h"
 #include "syntax/lex.h"

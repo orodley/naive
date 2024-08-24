@@ -1,6 +1,7 @@
 #ifndef NAIVE_AST_H_
 #define NAIVE_AST_H_
 
+#include "strings.h"
 #include "syntax/lex.h"
 
 typedef struct ParseError

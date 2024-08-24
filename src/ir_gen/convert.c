@@ -1,5 +1,6 @@
 #include "ir_gen/convert.h"
 
+#include "assertions.h"
 #include "ir.h"
 #include "ir_gen/c_type.h"
 #include "macros.h"

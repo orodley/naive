@@ -3,8 +3,8 @@
 
 #include "array.h"
 #include "diagnostics.h"
+#include "strings.h"
 #include "types.h"
-#include "util.h"
 
 #define TOKEN_TYPES                                                          \
   X(TOK_INVALID),                                                            \

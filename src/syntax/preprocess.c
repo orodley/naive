@@ -8,6 +8,7 @@
 
 #include "array.h"
 #include "diagnostics.h"
+#include "file.h"
 #include "macros.h"
 #include "syntax/lex.h"
 #include "syntax/parse.h"

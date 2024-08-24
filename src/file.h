@@ -5,8 +5,8 @@
 #include <stdio.h>
 
 #include "assertions.h"
+#include "strings.h"
 #include "types.h"
-#include "util.h"
 
 typedef enum FileType
 {
@@ -19,6 +19,8 @@ FileType file_type_of_bytes(u8 *bytes, u32 length);
 FileType file_type(FILE *file);
 String make_temp_file(void);
 ExitCode make_file_executable(String filename);
+String map_file_into_memory(char *filename);
+void unmap_file(String buffer);
 
 #define AR_GLOBAL_HEADER "!<arch>\n"
 

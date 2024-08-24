@@ -1,6 +1,7 @@
 #include "ir_gen/context.h"
 
 #include "array.h"
+#include "assertions.h"
 
 Binding *binding_for_name(Scope *scope, char *name)
 {

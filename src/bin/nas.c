@@ -6,11 +6,12 @@
 #include "backend/asm.h"
 #include "backend/elf.h"
 #include "diagnostics.h"
+#include "file.h"
 #include "macros.h"
 #include "pool.h"
+#include "strings.h"
 #include "syntax/reader.h"
 #include "types.h"
-#include "util.h"
 
 // @NOTE: This doesn't skip newlines, because newlines aren't allowed in the
 // middle of instructions or directives.

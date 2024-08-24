@@ -1,5 +1,10 @@
 #include "syntax/ast.h"
 
+#include <stdarg.h>
+#include <stdio.h>
+
+#include "assertions.h"
+
 static void dump_decl_specifier_list(ASTDeclSpecifier *decl_specifier_list);
 static void dump_declarator(ASTDeclarator *declarator);
 static void dump_expr(ASTExpr *expr);
