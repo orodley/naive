@@ -3,6 +3,7 @@
 
 #define IGNORE(x) (void)x
 #define STATIC_ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
+#define ZERO_STRUCT(s) memset(s, 0, sizeof *(s));
 
 #define RUNNING_UNDER_SANITIZER 0
 #ifdef __has_feature

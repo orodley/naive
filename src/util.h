@@ -11,8 +11,6 @@
 #include "macros.h"
 #include "types.h"
 
-#define ZERO_STRUCT(s) memset(s, 0, sizeof *(s));
-
 inline u32 max(u32 a, u32 b) { return (a < b) ? b : a; }
 
 inline u32 lowest_set_bit(u64 x)
