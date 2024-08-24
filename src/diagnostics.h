@@ -3,12 +3,12 @@
 
 #include "macros.h"
 #include "types.h"
+#include "util.h"
 
 typedef struct SourceLoc
 {
-  char *filename;
-  u32 line;
-  u32 column;
+  String filename;
+  u32 offset;
 } SourceLoc;
 
 typedef enum ErrorLevel
@@ -17,13 +17,13 @@ typedef enum ErrorLevel
   ERROR,
 } ErrorLevel;
 
-void emit_diagnostic(ErrorLevel err_level, SourceLoc *context, char *fmt, ...);
+void emit_diagnostic(ErrorLevel err_level, SourceLoc context, char *fmt, ...);
 
-NORETURN void emit_fatal_error(SourceLoc *context, char *fmt, ...);
+NORETURN void emit_fatal_error(SourceLoc context, char *fmt, ...);
 // @TODO: Propagate SourceLoc to everywhere that calls this so we can use
 // emit_fatal_error instead.
 NORETURN void emit_fatal_error_no_loc(char *fmt, ...);
-void emit_error(SourceLoc *context, char *fmt, ...);
-void emit_warning(SourceLoc *context, char *fmt, ...);
+void emit_error(SourceLoc context, char *fmt, ...);
+void emit_warning(SourceLoc context, char *fmt, ...);
 
 #endif

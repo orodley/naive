@@ -33,9 +33,9 @@ bool flag_dump_register_assignments = false;
 bool flag_print_pre_regalloc_stats = false;
 
 static int compile_file(
-    char *input_filename, char *output_filename, Array(char *) *include_dirs,
+    String input_filename, String output_filename, Array(String) *include_dirs,
     bool syntax_only, bool preprocess_only);
-static char *directory_of_executable(void);
+static String directory_of_executable(void);
 
 int main(int argc, char *argv[])
 {
@@ -44,18 +44,18 @@ int main(int argc, char *argv[])
   // matter how we seed this.
   srand(time(NULL));
 
-  Array(char *) source_input_filenames;
-  Array(char *) linker_input_filenames;
-  ARRAY_INIT(&source_input_filenames, char *, 10);
-  ARRAY_INIT(&linker_input_filenames, char *, 10);
+  Array(String) source_input_filenames;
+  Array(String) linker_input_filenames;
+  ARRAY_INIT(&source_input_filenames, String, 10);
+  ARRAY_INIT(&linker_input_filenames, String, 10);
 
-  Array(char *) include_dirs = EMPTY_ARRAY;
+  Array(String) include_dirs = EMPTY_ARRAY;
 
   bool do_link = true;
   bool syntax_only = false;
   bool preprocess_only = false;
   bool freestanding = false;
-  char *output_filename = NULL;
+  String output_filename = INVALID_STRING;
 
   for (i32 i = 1; i < argc; i++) {
     char *arg = argv[i];
@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
           include_dir = with_slash;
         }
 
-        *ARRAY_APPEND(&include_dirs, char *) = include_dir;
+        *ARRAY_APPEND(&include_dirs, String) = STRING(include_dir);
       } else if (strneq(arg, "-std=", 5)) {
         char *standard = arg + 5;
         if (!streq(standard, "c99")) {
@@ -111,7 +111,8 @@ int main(int argc, char *argv[])
           fputs("Error: No filename after '-o'\n", stderr);
           return EXIT_CODE_BAD_CLI;
         }
-        output_filename = argv[++i];
+        i++;
+        output_filename = STRING(argv[i]);
       } else if (strneq(arg, "-W", 2)) {
         // Do nothing. We don't support any warnings, so for self-host
         // purposes we'll just ignore these flags, as they shouldn't
@@ -133,9 +134,9 @@ int main(int argc, char *argv[])
         return EXIT_CODE_BAD_CLI;
       }
     } else {
-      char *input_filename = arg;
+      String input_filename = STRING(arg);
 
-      FILE *input_file = fopen(input_filename, "rb");
+      FILE *input_file = fopen(arg, "rb");
       if (input_file == NULL) {
         perror("Unable to open input file");
         return EXIT_CODE_IO_ERROR;
@@ -144,9 +145,9 @@ int main(int argc, char *argv[])
       FileType type = file_type(input_file);
 
       if (type == ELF_FILE_TYPE || type == AR_FILE_TYPE) {
-        *ARRAY_APPEND(&linker_input_filenames, char *) = input_filename;
+        *ARRAY_APPEND(&linker_input_filenames, String) = input_filename;
       } else {
-        *ARRAY_APPEND(&source_input_filenames, char *) = input_filename;
+        *ARRAY_APPEND(&source_input_filenames, String) = input_filename;
       }
 
       fclose(input_file);
@@ -157,7 +158,8 @@ int main(int argc, char *argv[])
     fputs("Error: no input files given\n", stderr);
     return EXIT_CODE_BAD_CLI;
   }
-  if (!do_link && output_filename != NULL && source_input_filenames.size > 1) {
+  if (!do_link && is_valid(output_filename)
+      && source_input_filenames.size > 1) {
     fputs(
         "Cannot specify output filename"
         " when generating multiple output files\n",
@@ -166,26 +168,26 @@ int main(int argc, char *argv[])
   }
 
   // @LEAK
-  char *toolchain_dir = directory_of_executable();
+  String toolchain_dir = directory_of_executable();
 
   // Put system headers at the start, so they take precedence.
   if (!freestanding) {
     // @LEAK: concat
-    *ARRAY_INSERT(&include_dirs, char *, 0) =
-        concat(toolchain_dir, "/include/");
+    *ARRAY_INSERT(&include_dirs, String, 0) =
+        string_concat(toolchain_dir, STRING("/include/"));
   }
   // @LEAK: concat
-  *ARRAY_INSERT(&include_dirs, char *, 0) =
-      concat(toolchain_dir, "/freestanding/");
+  *ARRAY_INSERT(&include_dirs, String, 0) =
+      string_concat(toolchain_dir, STRING("/freestanding/"));
 
-  Array(char *) temp_filenames;
+  Array(String) temp_filenames;
   ARRAY_INIT(
-      &temp_filenames, char *, do_link ? source_input_filenames.size : 0);
+      &temp_filenames, String, do_link ? source_input_filenames.size : 0);
 
   for (u32 i = 0; i < source_input_filenames.size; i++) {
-    char *source_input_filename =
-        *ARRAY_REF(&source_input_filenames, char *, i);
-    char *object_filename = NULL;
+    String source_input_filename =
+        *ARRAY_REF(&source_input_filenames, String, i);
+    String object_filename = INVALID_STRING;
     if (preprocess_only) {
       object_filename = output_filename;
     } else if (!syntax_only) {
@@ -195,30 +197,25 @@ int main(int argc, char *argv[])
         // files passed on the command line, and then delete the
         // temporary object files we created.
         object_filename = make_temp_file();
-        *ARRAY_APPEND(&temp_filenames, char *) = object_filename;
-        *ARRAY_APPEND(&linker_input_filenames, char *) = object_filename;
+        *ARRAY_APPEND(&temp_filenames, String) = object_filename;
+        *ARRAY_APPEND(&linker_input_filenames, String) = object_filename;
       } else {
         // In this mode we compile all the given source files to object
         // files, and leave it at that.
-        if (output_filename != NULL) {
+        if (is_valid(output_filename)) {
           object_filename = output_filename;
         } else {
-          u32 input_filename_length = strlen(source_input_filename);
-          object_filename = malloc(input_filename_length + 1);  // @LEAK
-          memcpy(
-              object_filename, source_input_filename,
-              input_filename_length + 1);
-          object_filename[input_filename_length - 1] = 'o';
-          object_filename[input_filename_length] = '\0';
+          // @LEAK
+          object_filename = string_concat(source_input_filename, STRING(".o"));
 
-          u32 last_slash = input_filename_length - 1;
+          u32 last_slash = source_input_filename.len - 1;
           for (; last_slash != 0; last_slash--) {
-            if (object_filename[last_slash] == '/') break;
+            if (object_filename.chars[last_slash] == '/') break;
           }
 
           if (last_slash != 0) {
-            object_filename[last_slash - 1] = '.';
-            object_filename += last_slash - 1;
+            object_filename.chars[last_slash - 1] = '.';
+            object_filename.chars += last_slash - 1;
           }
         }
       }
@@ -236,13 +233,13 @@ int main(int argc, char *argv[])
     // Implicitly link in the standard library. We have to put this after
     // the rest of the inputs because it's an archive.
     if (!freestanding) {
-      *ARRAY_APPEND(&linker_input_filenames, char *) =
-          concat(toolchain_dir, "/libc.a");
+      *ARRAY_APPEND(&linker_input_filenames, String) =
+          string_concat(toolchain_dir, STRING("/libc.a"));
     }
 
-    char *executable_filename;
-    if (output_filename == NULL)
-      executable_filename = "a.out";
+    String executable_filename;
+    if (!is_valid(output_filename))
+      executable_filename = STRING("a.out");
     else
       executable_filename = output_filename;
 
@@ -257,8 +254,9 @@ int main(int argc, char *argv[])
 
     ExitCode result = 0;
     for (u32 i = 0; i < temp_filenames.size; i++) {
-      char *temp_filename = *ARRAY_REF(&temp_filenames, char *, i);
-      int ret = remove(temp_filename);
+      String temp_filename = *ARRAY_REF(&temp_filenames, String, i);
+      // @LEAK
+      int ret = remove(string_to_c_string(temp_filename));
       if (ret != 0) {
         perror("Failed to remove temporary object file");
         result = EXIT_CODE_IO_ERROR;
@@ -277,7 +275,7 @@ int main(int argc, char *argv[])
 }
 
 static int compile_file(
-    char *input_filename, char *output_filename, Array(char *) *include_dirs,
+    String input_filename, String output_filename, Array(String) *include_dirs,
     bool syntax_only, bool preprocess_only)
 {
   Array(char) preprocessed;
@@ -287,10 +285,11 @@ static int compile_file(
 
   if (preprocess_only) {
     *ARRAY_APPEND(&preprocessed, char) = '\0';
-    if (output_filename == NULL || streq(output_filename, "-")) {
+    if (!is_valid(output_filename) || string_eq(output_filename, STRING("-"))) {
       fputs((char *)preprocessed.elements, stdout);
     } else {
-      FILE *output = fopen(output_filename, "w");
+      // @LEAK
+      FILE *output = fopen(string_to_c_string(output_filename), "w");
       if (output == NULL) {
         perror("Unable to open output file");
         return EXIT_CODE_IO_ERROR;
@@ -335,15 +334,33 @@ static int compile_file(
   array_free(&adjustments);
 
   if (flag_dump_tokens) {
+    // @LEAK
+    String input_text =
+        map_file_into_memory(string_to_c_string(input_filename));
+    u32 line = 1;
+    u32 column = 1;
+    u32 offset = 0;
     for (u32 i = 0; i < tokens.size; i++) {
       SourceToken *source_token = ARRAY_REF(&tokens, SourceToken, i);
-      u32 line = source_token->source_loc.line;
-      u32 column = source_token->source_loc.column;
+      u32 token_offset = source_token->source_loc.offset;
+      ASSERT(token_offset >= offset);
+      ASSERT(token_offset < input_text.len);
+      while (offset != token_offset) {
+        offset++;
+        if (input_text.chars[offset] == '\n') {
+          line++;
+          column = 0;
+        } else {
+          column++;
+        }
+      }
 
-      printf("%d:%d, ", line, column);
+      printf("%u:%u, ", line, column);
       dump_token((Token *)source_token);
       putchar('\n');
     }
+
+    unmap_file(input_text);
   }
 
   Pool ast_pool;
@@ -402,7 +419,7 @@ static int compile_file(
 // GetModuleFileName. On some other Unixes there are slightly different
 // /proc-based things. On other systems without /proc there isn't a great
 // alternative unfortunately.
-static char *directory_of_executable(void)
+static String directory_of_executable(void)
 {
   char buf[1024];
   ssize_t size = readlink("/proc/self/exe", buf, sizeof buf);
@@ -415,5 +432,5 @@ static char *directory_of_executable(void)
   memcpy(ret, buf, size);
   ret[size] = '\0';
 
-  return ret;
+  return (String){ret, size};
 }

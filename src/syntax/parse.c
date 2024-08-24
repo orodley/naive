@@ -694,11 +694,11 @@ bool parse_toplevel(
   if (parser.position != tokens->size) {
     if (_unexpected_token.t != TOK_INVALID) {
       emit_error(
-          &_longest_parse_pos, "Unexpected token %s",
+          _longest_parse_pos, "Unexpected token %s",
           token_type_names[_unexpected_token.t]);
     } else {
-      SourceLoc s = {"<unknown>", 0, 0};
-      emit_error(&s, "Unknown error while parsing");
+      SourceLoc s = {STRING("<unknown>"), 0};
+      emit_error(s, "Unknown error while parsing");
     }
 
     return false;
@@ -718,11 +718,11 @@ bool parse_expr(Array(SourceToken) *tokens, Pool *ast_pool, ASTExpr **out_expr)
   if (parser.position != tokens->size) {
     if (_unexpected_token.t != TOK_INVALID) {
       emit_error(
-          &_longest_parse_pos, "Unexpected token %s",
+          _longest_parse_pos, "Unexpected token %s",
           token_type_names[_unexpected_token.t]);
     } else {
-      SourceLoc s = {"<unknown>", 0, 0};
-      emit_error(&s, "Unknown error while parsing");
+      SourceLoc s = {STRING("<unknown>"), 0};
+      emit_error(s, "Unknown error while parsing");
     }
 
     return false;

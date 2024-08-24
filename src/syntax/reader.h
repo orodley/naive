@@ -23,25 +23,27 @@ typedef struct Adjustment
 
 typedef struct Reader
 {
+  String filename;
   String buffer;
   u32 position;
 
+  u32 adjusted_position;
   Array(Adjustment) adjustments;
   u32 next_adjustment;
 
   bool at_start_of_line;
-
-  SourceLoc source_loc;
-  SourceLoc prev_char_source_loc;
 } Reader;
 
 void reader_init(
     Reader *reader, String buffer, Array(Adjustment) adjustments,
-    bool at_start_of_line, char *source_filename);
+    bool at_start_of_line, String source_filename);
+SourceLoc reader_source_loc(Reader *reader);
 void back_up(Reader *reader);
 void advance(Reader *reader);
 
 String read_symbol(Reader *reader);
+
+u32 reader_current_line(Reader *reader);
 
 inline bool at_end(Reader *reader)
 {

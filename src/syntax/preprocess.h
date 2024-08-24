@@ -2,9 +2,10 @@
 #define NAIVE_SYNTAX_PREPROCESS_H_
 
 #include "array.h"
+#include "util.h"
 
 bool preprocess(
-    char *input_filename, Array(char *) *include_dirs,
+    String input_filename, Array(String) *include_dirs,
     Array(char) *preprocessed, Array(Adjustment) *adjustments);
 
 #endif

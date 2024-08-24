@@ -5,6 +5,7 @@
 
 #include "array.h"
 #include "pool.h"
+#include "util.h"
 
 #define REG_CLASSES                                                            \
   X(INVALID_REG_CLASS, "INVALID", "INVALID", "INVALID", "INVALID", "INVALID"), \
@@ -240,7 +241,7 @@ typedef struct Fixup
 
 typedef struct AsmModule
 {
-  char *input_file_name;
+  String input_file_name;
   Pool pool;
 
   struct
@@ -256,7 +257,7 @@ typedef struct AsmModule
   Array(Fixup) fixups;
 } AsmModule;
 
-void init_asm_module(AsmModule *asm_module, char *input_file_name);
+void init_asm_module(AsmModule *asm_module, String input_file_name);
 
 void free_asm_module(AsmModule *asm_module);
 

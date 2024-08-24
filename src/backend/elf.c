@@ -645,9 +645,10 @@ static void finish_strtab_section(ELFFile *elf_file)
   }
 }
 
-ExitCode write_elf_object_file(char *output_file_name, AsmModule *asm_module)
+ExitCode write_elf_object_file(String output_file_name, AsmModule *asm_module)
 {
-  FILE *output_file = fopen(output_file_name, "wb");
+  // @LEAK
+  FILE *output_file = fopen(string_to_c_string(output_file_name), "wb");
   if (output_file == NULL) {
     perror("Unable to open output file");
     return EXIT_CODE_IO_ERROR;
@@ -691,16 +692,18 @@ ExitCode write_elf_object_file(char *output_file_name, AsmModule *asm_module)
         elf_file, STT_FUNC, binding, section, symbol->name, symbol->offset,
         symbol->size);
   }
+  // @LEAK
   add_symbol(
-      elf_file, STT_FILE, STB_LOCAL, SHN_ABS, asm_module->input_file_name, 0,
-      0);
+      elf_file, STT_FILE, STB_LOCAL, SHN_ABS,
+      string_to_c_string(asm_module->input_file_name), 0, 0);
   finish_symtab_section(elf_file);
 
   for (u32 i = 0; i < symbols->size; i++) {
     AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
     add_string(elf_file, symbol->name);
   }
-  add_string(elf_file, asm_module->input_file_name);
+  // @LEAK
+  add_string(elf_file, string_to_c_string(asm_module->input_file_name));
   finish_strtab_section(elf_file);
 
   fclose(output_file);
@@ -1039,16 +1042,17 @@ cleanup1:
 
 // @TODO: Add .note.GNU-STACK section header to prevent executable stack.
 ExitCode link_elf_executable(
-    char *executable_file_name, Array(char *) *linker_input_filenames)
+    String executable_file_name, Array(String) *linker_input_filenames)
 {
-  FILE *output_file = fopen(executable_file_name, "wb");
+  // @LEAK
+  FILE *output_file = fopen(string_to_c_string(executable_file_name), "wb");
   if (output_file == NULL) {
     perror("Failed to open linker output");
     return EXIT_CODE_IO_ERROR;
   }
 
   AsmModule asm_module;
-  init_asm_module(&asm_module, "");
+  init_asm_module(&asm_module, EMPTY_STRING);
   // @TODO: Merge with AsmSymbol so we can just use Binary?
   Array(Symbol) symbol_table;
   ARRAY_INIT(&symbol_table, Symbol, 100);
@@ -1056,8 +1060,9 @@ ExitCode link_elf_executable(
   ExitCode ret = EXIT_CODE_SUCCESS;
 
   for (u32 i = 0; i < linker_input_filenames->size; i++) {
-    char *input_filename = *ARRAY_REF(linker_input_filenames, char *, i);
-    FILE *input_file = fopen(input_filename, "rb");
+    String input_filename = *ARRAY_REF(linker_input_filenames, String, i);
+    // @LEAK
+    FILE *input_file = fopen(string_to_c_string(input_filename), "rb");
     if (input_file == NULL) {
       perror("Failed to open linker input");
       ret = EXIT_CODE_IO_ERROR;

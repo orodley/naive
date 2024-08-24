@@ -6,33 +6,29 @@
 
 void reader_init(
     Reader *reader, String buffer, Array(Adjustment) adjustments,
-    bool at_start_of_line, char *source_filename)
+    bool at_start_of_line, String source_filename)
 {
   *reader = (Reader){
+      .filename = source_filename,
       .buffer = buffer,
       .position = 0,
+      .adjusted_position = 0,
       .adjustments = adjustments,
       .next_adjustment = 0,
       .at_start_of_line = at_start_of_line,
-      .source_loc =
-          {
-              .filename = source_filename,
-              .line = 1,
-              .column = 1,
-          },
-      .prev_char_source_loc = {NULL, 0, 0},
   };
 }
 
-// @TODO: Maybe we should remove all uses of back_up (instead doing peek_char
-// followed by advance if we don't want to back up). Then we don't have to keep
-// track of prev_source_loc + remove some edge cases.
+SourceLoc reader_source_loc(Reader *reader)
+{
+  return (SourceLoc){
+      .filename = reader->filename,
+      .offset = reader->adjusted_position,
+  };
+}
+
 void back_up(Reader *reader)
 {
-  PRECONDITION(
-      reader->prev_char_source_loc.filename != NULL,
-      "Tried to back up twice in a row");
-
   Adjustment *prev_adjustment =
       ARRAY_REF(&reader->adjustments, Adjustment, reader->next_adjustment - 1);
   if (reader->next_adjustment >= 1
@@ -40,37 +36,30 @@ void back_up(Reader *reader)
     reader->next_adjustment--;
   }
 
-  reader->source_loc = reader->prev_char_source_loc;
-  reader->prev_char_source_loc = (SourceLoc){NULL, 0, 0};
-
   reader->position--;
+  reader->adjusted_position--;
 }
 
 void advance(Reader *reader)
 {
-  reader->prev_char_source_loc = reader->source_loc;
   reader->at_start_of_line = peek_char(reader) == '\n';
 
+  u32 start = reader->position;
   for (;;) {
     reader->position++;
-    reader->source_loc.column++;
 
     if (at_end(reader)) break;
+    if (peek_char(reader) != '\\') break;
 
-    if (peek_char(reader) == '\\') {
-      reader->position++;
-      if (peek_char(reader) == '\n') {
-        reader->source_loc.line++;
-        reader->source_loc.column = 0;
-        continue;
-      } else {
-        reader->position--;
-        break;
-      }
-    } else {
-      break;
+    reader->position++;
+    if (peek_char(reader) == '\n') {
+      continue;
     }
+
+    reader->position--;
+    break;
   }
+  u32 position_diff = reader->position - start;
 
   Adjustment *prev_adjustment = NULL;
   if (reader->next_adjustment >= 1
@@ -86,15 +75,14 @@ void advance(Reader *reader)
 
   if (next_adjustment != NULL
       && next_adjustment->location == reader->position) {
-    reader->source_loc = next_adjustment->new_source_loc;
+    reader->adjusted_position = next_adjustment->new_source_loc.offset;
     reader->next_adjustment++;
   } else if (
       prev_adjustment != NULL
       && prev_adjustment->type == BEGIN_MACRO_ADJUSTMENT) {
-    reader->source_loc = prev_adjustment->new_source_loc;
-  } else if (peek_char(reader) == '\n') {
-    reader->source_loc.line++;
-    reader->source_loc.column = 0;
+    reader->adjusted_position = prev_adjustment->new_source_loc.offset;
+  } else {
+    reader->adjusted_position += position_diff;
   }
 }
 
@@ -115,6 +103,16 @@ String read_symbol(Reader *reader)
       .chars = reader->buffer.chars + start_index,
       .len = reader->position - start_index,
   };
+}
+
+u32 reader_current_line(Reader *reader)
+{
+  u32 line = 1;
+  for (u32 i = 0; i < reader->position; i++) {
+    if (reader->buffer.chars[i] == '\n') line++;
+  }
+
+  return line;
 }
 
 extern inline bool at_end(Reader *reader);

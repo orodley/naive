@@ -3,6 +3,7 @@
 
 #include "backend/asm.h"
 #include "ir.h"
+#include "util.h"
 
 typedef struct VReg
 {
@@ -38,7 +39,7 @@ typedef struct AsmBuilder
   u32 global_temp_floats;
 } AsmBuilder;
 
-void init_asm_builder(AsmBuilder *builder, char *input_file_name);
+void init_asm_builder(AsmBuilder *builder, String input_file_name);
 void free_asm_builder(AsmBuilder *builder);
 void generate_asm_module(AsmBuilder *builder, IrModule *module);
 

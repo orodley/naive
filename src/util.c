@@ -11,10 +11,12 @@
 
 extern inline u32 max(u32 a, u32 b);
 
+extern inline char *string_to_c_string(String str);
 extern inline bool is_valid(String str);
 
 extern inline bool streq(char *a, char *b);
 extern inline bool strneq(char *a, char *b, u32 length);
+extern inline bool string_eq(String a, String b);
 
 extern inline u32 lowest_set_bit(u64 x);
 extern inline u32 highest_set_bit(u64 x);
@@ -25,20 +27,15 @@ extern inline u32 align_to(u32 n, u32 align);
 extern inline u32 float_to_raw_bits(float f);
 extern inline u64 double_to_raw_bits(double f);
 
-char *nconcat(char *str_a, u32 len_a, char *str_b, u32 len_b)
+String string_concat(String str_a, String str_b)
 {
-  u32 result_length = len_a + len_b;
+  u32 result_length = str_a.len + str_b.len;
   char *result = malloc(result_length + 1);
-  memcpy(result, str_a, len_a);
-  memcpy(result + len_a, str_b, len_b);
+  memcpy(result, str_a.chars, str_a.len);
+  memcpy(result + str_a.len, str_b.chars, str_b.len);
   result[result_length] = '\0';
 
-  return result;
-}
-
-char *concat(char *str_a, char *str_b)
-{
-  return nconcat(str_a, strlen(str_a), str_b, strlen(str_b));
+  return (String){result, result_length};
 }
 
 // @PORT

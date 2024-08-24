@@ -11,7 +11,7 @@
 #include "macros.h"
 #include "util.h"
 
-void init_asm_module(AsmModule *asm_module, char *input_file_name)
+void init_asm_module(AsmModule *asm_module, String input_file_name)
 {
   asm_module->input_file_name = input_file_name;
   pool_init(&asm_module->pool, 1024);

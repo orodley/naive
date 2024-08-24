@@ -44,7 +44,13 @@ bool lex(
 
   Lexer lexer;
   lexer.tokens = tokens;
-  reader_init(&lexer.reader, text, *adjustments, false, NULL);
+  // @TODO: This feels like a bit of a hack.
+  String filename = INVALID_STRING;
+  if (adjustments->size != 0) {
+    Adjustment *first = ARRAY_REF(adjustments, Adjustment, 0);
+    filename = first->new_source_loc.filename;
+  }
+  reader_init(&lexer.reader, text, *adjustments, false, filename);
 
   // @TODO: It feels like there should be a nicer way of doing this such that
   // we don't need a special case here. Maybe reader_init should do the
@@ -55,7 +61,6 @@ bool lex(
   ASSERT(first->location == 0);
   ASSERT(first->type == NORMAL_ADJUSTMENT);
 
-  lexer.reader.source_loc = first->new_source_loc;
   lexer.reader.next_adjustment++;
 
   bool ret = lex_aux(&lexer);
@@ -116,7 +121,8 @@ static NumericSuffix read_numeric_suffix(Reader *reader)
     case 'U':
       if ((suffix & UNSIGNED_SUFFIX) != 0) {
         emit_error(
-            &reader->source_loc, "Multiple 'u' suffixes on numeric literal");
+            reader_source_loc(reader),
+            "Multiple 'u' suffixes on numeric literal");
       }
 
       suffix |= UNSIGNED_SUFFIX;
@@ -125,7 +131,7 @@ static NumericSuffix read_numeric_suffix(Reader *reader)
     case 'L':
       if (((suffix & (LONG_SUFFIX | LONG_LONG_SUFFIX)) != 0)) {
         emit_error(
-            &reader->source_loc,
+            reader_source_loc(reader),
             "Multiple 'l'/'ll' suffixes on numeric literal");
       }
 
@@ -139,7 +145,8 @@ static NumericSuffix read_numeric_suffix(Reader *reader)
     case 'F':
       if (((suffix & FLOAT_SUFFIX) != 0)) {
         emit_error(
-            &reader->source_loc, "Multiple 'f' suffixes on numeric literal");
+            reader_source_loc(reader),
+            "Multiple 'f' suffixes on numeric literal");
       }
 
       suffix |= FLOAT_SUFFIX;
@@ -159,7 +166,8 @@ static bool read_octal_number(Reader *reader, u64 *value)
   while (c >= '0' && c <= '9') {
     if (c == '8' || c == '9') {
       // @TODO: Skip past all numeric characters to resync?
-      emit_error(&reader->source_loc, "Invalid digit '%c' in octal literal", c);
+      emit_error(
+          reader_source_loc(reader), "Invalid digit '%c' in octal literal", c);
       return false;
     } else {
       x *= 8;
@@ -196,7 +204,7 @@ static bool read_hex_number(Reader *reader, u64 *value)
 
   if (!at_least_one_digit) {
     emit_error(
-        &reader->source_loc,
+        reader_source_loc(reader),
         "Hexadecimal literal must have at least one digit");
     return false;
   }
@@ -206,7 +214,7 @@ static bool read_hex_number(Reader *reader, u64 *value)
   return true;
 }
 
-i64 read_char_in_literal(Reader *reader, SourceLoc *start_source_loc)
+i64 read_char_in_literal(Reader *reader, SourceLoc start_source_loc)
 {
   u64 value;
 
@@ -250,7 +258,7 @@ static bool lex_aux(Lexer *lexer)
   Reader *reader = &lexer->reader;
 
   while (!at_end(reader)) {
-    SourceLoc start_source_loc = reader->source_loc;
+    SourceLoc start_source_loc = reader_source_loc(reader);
 
 #define ADD_TOK(t) (append_token(lexer, start_source_loc, t))
 
@@ -277,7 +285,7 @@ static bool lex_aux(Lexer *lexer)
       ARRAY_INIT(&string_literal_chars, char, 20);
 
       while (peek_char(reader) != '"') {
-        i64 c = read_char_in_literal(reader, &start_source_loc);
+        i64 c = read_char_in_literal(reader, start_source_loc);
         if (c == -1) {
           array_free(&string_literal_chars);
           return false;
@@ -299,11 +307,11 @@ static bool lex_aux(Lexer *lexer)
       break;
     }
     case '\'': {
-      i64 value = read_char_in_literal(reader, &start_source_loc);
+      i64 value = read_char_in_literal(reader, start_source_loc);
       if (value == -1) return false;
 
       if (read_char(reader) != '\'') {
-        emit_error(&start_source_loc, "Unterminated character literal");
+        emit_error(start_source_loc, "Unterminated character literal");
         return false;
       }
 
@@ -454,17 +462,13 @@ static bool lex_aux(Lexer *lexer)
       String symbol = read_symbol(reader);
       ASSERT(is_valid(symbol));
       // @TODO: These two should be handled in the preprocessor.
-      if (strneq(symbol.chars, "__LINE__", symbol.len)) {
+      if (string_eq(symbol, STRING("__LINE__"))) {
         Token *line_number = ADD_TOK(TOK_INT_LITERAL);
-        line_number->u.int_literal.value = reader->source_loc.line;
+        line_number->u.int_literal.value = reader_current_line(reader);
         line_number->u.int_literal.suffix = NO_SUFFIX;
-      } else if (strneq(symbol.chars, "__FILE__", symbol.len)) {
+      } else if (string_eq(symbol, STRING("__FILE__"))) {
         Token *file_name = ADD_TOK(TOK_STRING_LITERAL);
-        ASSERT(reader->source_loc.filename != NULL);
-        file_name->u.string_literal = (String){
-            .chars = reader->source_loc.filename,
-            .len = strlen(reader->source_loc.filename),
-        };
+        file_name->u.string_literal = reader->filename;
       } else {
         Token *token = ADD_TOK(TOK_SYMBOL);
         ASSERT(symbol.chars != NULL);
@@ -481,15 +485,15 @@ static bool lex_aux(Lexer *lexer)
 
 static bool read_numeric_literal(Reader *reader, Token *token)
 {
-  SourceLoc start_source_loc = reader->source_loc;
   u32 start_pos = reader->position;
+  u32 start_adjusted_pos = reader->adjusted_position;
 
   TokenType type;
   int radix;
   classify_numeric_literal(reader, &type, &radix);
 
-  reader->source_loc = start_source_loc;
   reader->position = start_pos;
+  reader->adjusted_position = start_adjusted_pos;
 
   if (radix == 16) {
     // Skip past the "0x" we know is there

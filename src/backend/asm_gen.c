@@ -18,7 +18,7 @@
 static void write_const(AsmModule *asm_module, IrConst *konst, Array(u8) *out);
 static void asm_gen_call(AsmBuilder *builder, IrInstr *instr);
 
-void init_asm_builder(AsmBuilder *builder, char *input_file_name)
+void init_asm_builder(AsmBuilder *builder, String input_file_name)
 {
   init_asm_module(&builder->asm_module, input_file_name);
 

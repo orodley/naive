@@ -52,7 +52,7 @@ FileType file_type(FILE *file)
 }
 
 // @PORT
-char *make_temp_file(void)
+String make_temp_file(void)
 {
   char fmt[] = "/tmp/ncc_temp_%x.o";
 
@@ -64,12 +64,12 @@ char *make_temp_file(void)
 
   for (;;) {
     int rand_suffix = rand();
-    snprintf(filename, filename_max_length, fmt, rand_suffix);
+    int len = snprintf(filename, filename_max_length, fmt, rand_suffix);
 
     int fd = open(filename, O_CREAT | O_WRONLY | O_EXCL, 0600);
     if (fd != -1) {
       close(fd);
-      return filename;
+      return (String){filename, len};
     } else {
       if (errno != EEXIST) {
         perror("Unable to create temporary file");
@@ -80,9 +80,10 @@ char *make_temp_file(void)
 }
 
 // @PORT
-ExitCode make_file_executable(char *filename)
+ExitCode make_file_executable(String filename)
 {
-  int fd = open(filename, O_RDONLY);
+  // @LEAK
+  int fd = open(string_to_c_string(filename), O_RDONLY);
   if (fd == -1) {
     perror("Unable to open file to make executable");
     return EXIT_CODE_IO_ERROR;

@@ -64,11 +64,11 @@ static bool string_eq_case_insensitive(String a, char *b)
 static AsmValue read_register_or_symbol(
     Reader *reader, Array(AsmSymbol *) *symbols)
 {
-  SourceLoc ident_start = reader->source_loc;
+  SourceLoc ident_start = reader_source_loc(reader);
   String ident = read_symbol(reader);
   if (!is_valid(ident)) {
     emit_fatal_error(
-        &ident_start, "Invalid identifier %.*s\n", ident.len, ident.chars);
+        ident_start, "Invalid identifier %.*s\n", ident.len, ident.chars);
   }
 
   for (u32 i = 0; i < STATIC_ARRAY_LENGTH(registers); i++) {
@@ -106,11 +106,10 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
   case '9': return asm_imm(read_integer(reader));
   case '[': {
     advance(reader);
-    SourceLoc start_source_loc = reader->source_loc;
+    SourceLoc start_source_loc = reader_source_loc(reader);
     AsmValue value = read_register_or_symbol(reader, symbols);
     if (value.t != ASM_VALUE_REGISTER) {
-      emit_fatal_error(
-          &start_source_loc, "Expected register in memory operand");
+      emit_fatal_error(start_source_loc, "Expected register in memory operand");
     }
 
     Register reg = value.u.reg;
@@ -124,7 +123,8 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
       u64 offset = read_integer(reader);
       skip_whitespace(reader);
       if (!expect_char(reader, ']')) {
-        emit_fatal_error(&reader->source_loc, "Expected ']' after offset");
+        emit_fatal_error(
+            reader_source_loc(reader), "Expected ']' after offset");
       }
 
       return asm_deref(
@@ -146,8 +146,8 @@ static char *asm_op_names[] = {ASM_OPS};
 
 int main(int argc, char *argv[])
 {
-  char *input_filename = NULL;
-  char *output_filename = NULL;
+  String input_filename = INVALID_STRING;
+  String output_filename = INVALID_STRING;
 
   for (i32 i = 1; i < argc; i++) {
     char *arg = argv[i];
@@ -169,28 +169,32 @@ int main(int argc, char *argv[])
           fputs("Error: No filename after '-o'\n", stderr);
           return EXIT_CODE_BAD_CLI;
         }
-        output_filename = argv[++i];
+        i++;
+        output_filename = STRING(argv[i]);
       }
-    } else if (input_filename != NULL) {
+    } else if (is_valid(input_filename)) {
       fputs("Error: multiple input filenames given\n", stderr);
       return EXIT_CODE_BAD_CLI;
     } else {
-      input_filename = arg;
+      input_filename = STRING(arg);
     }
   }
 
-  if (input_filename == NULL) {
+  if (!is_valid(input_filename)) {
     fputs("Error: no input filename given\n", stderr);
     return EXIT_CODE_BAD_CLI;
   }
-  if (output_filename == NULL) {
+  if (!is_valid(output_filename)) {
     fputs("Error: no output filename given\n", stderr);
     return EXIT_CODE_BAD_CLI;
   }
 
-  String input = map_file_into_memory(input_filename);
+  // @LEAK
+  String input = map_file_into_memory(string_to_c_string(input_filename));
   if (!is_valid(input)) {
-    fprintf(stderr, "Failed to open input file: '%s'\n", input_filename);
+    fprintf(
+        stderr, "Failed to open input file: '%.*s'\n", input_filename.len,
+        input_filename.chars);
     return EXIT_CODE_IO_ERROR;
   }
 
@@ -216,23 +220,24 @@ int main(int argc, char *argv[])
     default: {
       if (!initial_ident_char(peek_char(reader))) {
         emit_fatal_error(
-            &reader->source_loc, "Unexpected character: '%c'",
+            reader_source_loc(reader), "Unexpected character: '%c'",
             peek_char(reader));
         return EXIT_CODE_INVALID_SOURCE;
       }
 
-      SourceLoc ident_source_loc = reader->source_loc;
+      SourceLoc ident_source_loc = reader_source_loc(reader);
       String ident = read_symbol(reader);
       if (!is_valid(ident)) {
         emit_fatal_error(
-            &ident_source_loc, "Invalid identifier %.*s", ident.len,
+            ident_source_loc, "Invalid identifier %.*s", ident.len,
             ident.chars);
       }
       skip_whitespace(reader);
 
       if (strneq(ident.chars, "bits", ident.len)) {
         if (read_char(reader) != '6' || read_char(reader) != '4') {
-          emit_error(&reader->source_loc, "Only 64-bit mode is supported");
+          emit_error(
+              reader_source_loc(reader), "Only 64-bit mode is supported");
           return EXIT_CODE_UNIMPLEMENTED;
         }
       } else if (strneq(ident.chars, "section", ident.len)) {
@@ -247,7 +252,7 @@ int main(int argc, char *argv[])
 
         String section_name = read_symbol(reader);
         if (!is_valid(section_name)) {
-          emit_error(&reader->source_loc, "Bad section name");
+          emit_error(reader_source_loc(reader), "Bad section name");
           return EXIT_CODE_INVALID_SOURCE;
         }
 
@@ -262,7 +267,7 @@ int main(int argc, char *argv[])
       } else if (strneq(ident.chars, "global", ident.len)) {
         String symbol_name = read_symbol(reader);
         if (!is_valid(symbol_name)) {
-          emit_error(&reader->source_loc, "Bad symbol name");
+          emit_error(reader_source_loc(reader), "Bad symbol name");
           return EXIT_CODE_INVALID_SOURCE;
         }
 
@@ -270,7 +275,7 @@ int main(int argc, char *argv[])
       } else if (strneq(ident.chars, "extern", ident.len)) {
         String symbol_name = read_symbol(reader);
         if (!is_valid(symbol_name)) {
-          emit_error(&reader->source_loc, "Bad symbol name");
+          emit_error(reader_source_loc(reader), "Bad symbol name");
           return EXIT_CODE_INVALID_SOURCE;
         }
 
@@ -287,7 +292,7 @@ int main(int argc, char *argv[])
       } else if (peek_char(reader) != ':') {
         if (!in_text_section) {
           emit_fatal_error(
-              &ident_source_loc,
+              ident_source_loc,
               "Instruction encountered before section directive");
         }
 
@@ -311,7 +316,7 @@ int main(int argc, char *argv[])
 
         if (!found) {
           emit_fatal_error(
-              &ident_source_loc, "Unknown instruction name '%s'",
+              ident_source_loc, "Unknown instruction name '%s'",
               strndup(ident.chars, ident.len));
         }
 
@@ -320,7 +325,7 @@ int main(int argc, char *argv[])
         u32 arg = 0;
         while (!at_end(reader) && peek_char(reader) != '\n') {
           if (arg == STATIC_ARRAY_LENGTH(instr->args)) {
-            emit_error(&reader->source_loc, "Too many operands");
+            emit_error(reader_source_loc(reader), "Too many operands");
             return EXIT_CODE_INVALID_SOURCE;
           }
 
@@ -332,7 +337,8 @@ int main(int argc, char *argv[])
             skip_whitespace(reader);
           } else if (!at_end(reader) && peek_char(reader) != '\n') {
             emit_error(
-                &reader->source_loc, "Expected comma or newline after operand");
+                reader_source_loc(reader),
+                "Expected comma or newline after operand");
             return EXIT_CODE_INVALID_SOURCE;
           }
 
@@ -345,7 +351,7 @@ int main(int argc, char *argv[])
 
         if (!in_text_section) {
           emit_error(
-              &ident_source_loc, "Symbol encountered before section directive");
+              ident_source_loc, "Symbol encountered before section directive");
           return EXIT_CODE_INVALID_SOURCE;
         }
 

@@ -26,6 +26,15 @@ typedef struct String
 #define EMPTY_STRING ((String){NULL, 0})
 #define STRING(s) ((String){(s), strlen(s)})
 
+inline char *string_to_c_string(String str)
+{
+  char *result = malloc(str.len + 1);
+  memcpy(result, str.chars, str.len);
+  result[str.len] = '\0';
+
+  return result;
+}
+
 inline bool is_valid(String str)
 {
   return !(
@@ -34,13 +43,20 @@ inline bool is_valid(String str)
 
 inline bool streq(char *a, char *b) { return strcmp(a, b) == 0; }
 
+// @TODO: There are lots of users of this function that could be replaced with
+// string_eq.
 inline bool strneq(char *a, char *b, u32 length)
 {
   return strncmp(a, b, length) == 0;
 }
 
-char *nconcat(char *str_a, u32 len_a, char *str_b, u32 len_b);
-char *concat(char *str_a, char *str_b);
+inline bool string_eq(String a, String b)
+{
+  if (a.len != b.len) return false;
+  return strneq(a.chars, b.chars, a.len);
+}
+
+String string_concat(String str_a, String str_b);
 
 inline u32 lowest_set_bit(u64 x)
 {
