@@ -20,7 +20,6 @@
 #include "syntax/parse.h"
 #include "syntax/preprocess.h"
 #include "types.h"
-#include "util.h"
 
 int __lsan_is_turned_off(void) { return 1; }
 

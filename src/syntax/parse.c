@@ -13,7 +13,6 @@
 #include "syntax/ast.h"
 #include "syntax/lex.h"
 #include "types.h"
-#include "util.h"
 
 typedef struct TypeTableEntry
 {

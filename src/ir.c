@@ -4,11 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "assertions.h"
 #include "backend/asm.h"
 #include "backend/asm_gen.h"
 #include "macros.h"
 #include "types.h"
-#include "util.h"
 
 extern inline IrBlock *add_block(IrBuilder *builder, char *name);
 

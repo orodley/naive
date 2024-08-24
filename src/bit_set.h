@@ -3,8 +3,8 @@
 
 #include <assert.h>
 
+#include "maths.h"
 #include "types.h"
-#include "util.h"
 
 typedef struct BitSet
 {

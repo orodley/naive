@@ -14,7 +14,6 @@
 #include <unistd.h>
 
 #include "types.h"
-#include "util.h"
 
 extern inline long checked_ftell(FILE *file);
 extern inline void checked_fseek(FILE *file, long offset, int whence);

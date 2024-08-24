@@ -4,7 +4,6 @@
 #include "array.h"
 #include "assertions.h"
 #include "backend/asm.h"
-#include "util.h"
 
 ExitCode write_elf_object_file(String output_file_name, AsmModule *asm_module);
 ExitCode link_elf_executable(

@@ -9,7 +9,7 @@
 #include "backend/asm_gen.h"
 #include "file.h"
 #include "macros.h"
-#include "util.h"
+#include "maths.h"
 
 void init_asm_module(AsmModule *asm_module, String input_file_name)
 {

@@ -6,7 +6,6 @@
 #include "syntax/ast.h"
 #include "syntax/lex.h"
 #include "types.h"
-#include "util.h"
 
 bool parse_toplevel(
     Array(SourceToken) *tokens, Pool *ast_pool, ASTToplevel **toplevel);

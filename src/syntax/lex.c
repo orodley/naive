@@ -8,11 +8,11 @@
 #include <string.h>
 
 #include "array.h"
+#include "assertions.h"
 #include "diagnostics.h"
 #include "macros.h"
 #include "syntax/reader.h"
 #include "types.h"
-#include "util.h"
 
 typedef struct Lexer
 {

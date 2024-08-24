@@ -1,14 +1,9 @@
-// Misc. utility functions
+// Misc. mathematical functions
 
-#ifndef NAIVE_UTIL_H_
-#define NAIVE_UTIL_H_
-
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
+#ifndef NAIVE_MATHS_H_
+#define NAIVE_MATHS_H_
 
 #include "assertions.h"
-#include "macros.h"
 #include "types.h"
 
 inline u32 max(u32 a, u32 b) { return (a < b) ? b : a; }

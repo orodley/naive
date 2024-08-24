@@ -5,7 +5,6 @@
 #include "assertions.h"
 #include "file.h"
 #include "types.h"
-#include "util.h"
 
 static u8 read_buf[8192];
 

@@ -9,7 +9,7 @@
 #include "flags.h"
 #include "ir.h"
 #include "macros.h"
-#include "util.h"
+#include "maths.h"
 
 #define REGISTER_SAVE_AREA_SIZE                    \
   (STATIC_ARRAY_LENGTH(int_argument_registers) * 8 \

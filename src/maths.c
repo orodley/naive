@@ -1,4 +1,4 @@
-#include "util.h"
+#include "maths.h"
 
 extern inline u32 max(u32 a, u32 b);
 

@@ -2,8 +2,6 @@
 
 #include <assert.h>
 
-#include "util.h"
-
 void reader_init(
     Reader *reader, String buffer, Array(Adjustment) adjustments,
     bool at_start_of_line, String source_filename)

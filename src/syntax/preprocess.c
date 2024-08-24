@@ -13,7 +13,6 @@
 #include "syntax/lex.h"
 #include "syntax/parse.h"
 #include "syntax/reader.h"
-#include "util.h"
 
 // @TODO: This whole thing is getting pretty overdue for a rewrite. Doing
 // everything character-by-character without lexing into preprocessor tokens

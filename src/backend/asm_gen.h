@@ -3,7 +3,6 @@
 
 #include "backend/asm.h"
 #include "ir.h"
-#include "util.h"
 
 typedef struct VReg
 {

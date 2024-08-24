@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "array.h"
+#include "assertions.h"
 #include "diagnostics.h"
 #include "ir.h"
 #include "ir_gen/c_type.h"
@@ -16,7 +17,6 @@
 #include "ir_gen/statement.h"
 #include "macros.h"
 #include "syntax/ast.h"
-#include "util.h"
 
 static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel);
 static void ir_gen_function(
