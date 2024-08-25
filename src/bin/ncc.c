@@ -54,6 +54,7 @@ int main(int argc, char *argv[])
   bool syntax_only = false;
   bool preprocess_only = false;
   bool freestanding = false;
+  bool color_diagnostics = isatty(fileno(stderr));
   String output_filename = INVALID_STRING;
 
   for (i32 i = 1; i < argc; i++) {
@@ -112,6 +113,8 @@ int main(int argc, char *argv[])
         }
         i++;
         output_filename = STRING(argv[i]);
+      } else if (streq(arg, "-fcolor-diagnostics")) {
+        color_diagnostics = true;
       } else if (strneq(arg, "-W", 2)) {
         // Do nothing. We don't support any warnings, so for self-host
         // purposes we'll just ignore these flags, as they shouldn't
@@ -120,9 +123,6 @@ int main(int argc, char *argv[])
         // Similarly we ignore "-g". Regardless of whether debug info
         // is present the binary should behave the same, so this should
         // be fine for self hosting.
-      } else if (streq(arg, "-fcolor-diagnostics")) {
-        // Again, ignore this flag. Not required for correctness, just
-        // pretty output.
       } else if (streq(arg, "-fno-asynchronous-unwind-tables")) {
         // Sure thing! We won't generate any unwind tables. We weren't
         // going to anyway.
@@ -152,6 +152,8 @@ int main(int argc, char *argv[])
       fclose(input_file);
     }
   }
+
+  enable_color_diagnostics(color_diagnostics);
 
   if (source_input_filenames.size == 0 && linker_input_filenames.size == 0) {
     fputs("Error: no input files given\n", stderr);

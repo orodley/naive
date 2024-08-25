@@ -38,4 +38,6 @@ void emit_warning(SourceRange context, char *fmt, ...);
 
 SourceRange point_range(SourceLoc loc);
 
+void enable_color_diagnostics(bool enable);
+
 #endif

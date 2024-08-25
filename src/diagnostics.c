@@ -7,6 +7,24 @@
 #include "file.h"
 #include "macros.h"
 
+static bool color_diagnostics = false;
+
+#define ESCAPE "\x1b"
+#define CSI ESCAPE "["
+#define SGR(code) CSI code "m"
+#define COLOR(code) (color_diagnostics ? SGR(code) : "")
+#define BOLD_COLOR(code) (color_diagnostics ? SGR(code) SGR(BOLD) : "")
+
+#define RESET "0"
+#define BOLD "1"
+#define RED "31"
+#define GREEN "32"
+#define YELLOW "33"
+#define BLUE "34"
+#define MAGENTA "35"
+#define CYAN "36"
+#define WHITE "37"
+
 static void v_emit_diagnostic(
     ErrorLevel err_level, SourceRange context, char *fmt, va_list varargs)
 {
@@ -61,9 +79,14 @@ static void v_emit_diagnostic(
   fprintf(
       stderr, "%.*s:%u:%u: ", filename.len, filename.chars, start_line,
       start_column);
+
   switch (err_level) {
-  case WARNING: fputs("Warning: ", stderr); break;
-  case ERROR: fputs("Error: ", stderr); break;
+  case WARNING:
+    fprintf(stderr, "%sWarning%s: ", BOLD_COLOR(YELLOW), COLOR(RESET));
+    break;
+  case ERROR:
+    fprintf(stderr, "%sError%s: ", BOLD_COLOR(RED), COLOR(RESET));
+    break;
   }
 
   vfprintf(stderr, fmt, varargs);
@@ -115,3 +138,5 @@ void emit_warning(SourceRange context, char *fmt, ...)
 }
 
 SourceRange point_range(SourceLoc loc) { return (SourceRange){loc, loc}; }
+
+void enable_color_diagnostics(bool enable) { color_diagnostics = enable; }
