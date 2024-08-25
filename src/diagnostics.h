@@ -11,11 +11,15 @@ typedef struct SourceLoc
   u32 offset;
 } SourceLoc;
 
+#define UNKNOWN_LOC ((SourceLoc){.filename = STRING("<unknown>"), .offset = 0})
+
 typedef struct SourceRange
 {
   SourceLoc start;
   SourceLoc end;  // inclusive
 } SourceRange;
+
+#define UNKNOWN_RANGE ((SourceRange){.start = UNKNOWN_LOC, .end = UNKNOWN_LOC})
 
 typedef enum ErrorLevel
 {

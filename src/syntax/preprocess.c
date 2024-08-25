@@ -1057,8 +1057,7 @@ static bool preprocess_aux(PP *pp)
       if (at_end(reader)) {
         // @TODO: Keep track of the SourceLoc of the opening directive.
         // Maybe we should store it on PPCondScope?
-        SourceLoc s = {STRING("<unknown>"), 0};
-        emit_error(point_range(s), "Unterminated preprocessor conditional");
+        emit_error(UNKNOWN_RANGE, "Unterminated preprocessor conditional");
         return false;
       }
     } else {

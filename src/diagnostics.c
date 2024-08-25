@@ -92,8 +92,7 @@ NORETURN void emit_fatal_error_no_loc(char *fmt, ...)
 {
   va_list varargs;
   va_start(varargs, fmt);
-  SourceLoc unknown = (SourceLoc){STRING("unknown"), 0};
-  v_emit_diagnostic(ERROR, (SourceRange){unknown, unknown}, fmt, varargs);
+  v_emit_diagnostic(ERROR, UNKNOWN_RANGE, fmt, varargs);
   va_end(varargs);
 
   exit_with_code(EXIT_CODE_INTERNAL_COMPILER_ERROR);
