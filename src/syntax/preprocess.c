@@ -306,7 +306,7 @@ static unsigned long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay);
 static bool eval_pp_condition(PP *pp, bool *result)
 {
   Reader *reader = &pp->reader;
-  SourceLoc start_source_loc = reader_source_loc(reader);
+  SourceLoc start_loc = reader_source_loc(reader);
   skip_whitespace_and_comments(pp, false);
 
   Array(char) condition_chars;
@@ -375,7 +375,7 @@ static bool eval_pp_condition(PP *pp, bool *result)
   Array(Adjustment) adjustments = EMPTY_ARRAY;
   *ARRAY_APPEND(&adjustments, Adjustment) = (Adjustment){
       .location = 0,
-      .new_source_loc = start_source_loc,
+      .new_source_loc = start_loc,
       .type = NORMAL_ADJUSTMENT,
   };
   lex(&tokens, STRING(expanded), &adjustments);
@@ -574,7 +574,7 @@ static bool handle_pp_directive(PP *pp)
   } else if (!ignoring_chars(pp)) {
     if (strneq(directive.chars, "include", directive.len)) {
       skip_whitespace_and_comments(pp, false);
-      SourceLoc include_path_source_loc = reader_source_loc(reader);
+      SourceLoc include_path_loc = reader_source_loc(reader);
 
       char c = read_char(reader);
       if (c != '<' && c != '"') {
@@ -591,8 +591,7 @@ static bool handle_pp_directive(PP *pp)
         ;
 
       if (at_end(reader)) {
-        emit_error(
-            point_range(include_path_source_loc), "Unterminated include path");
+        emit_error(point_range(include_path_loc), "Unterminated include path");
         return false;
       }
 
@@ -606,7 +605,7 @@ static bool handle_pp_directive(PP *pp)
 
       if (!is_valid(includee_path)) {
         emit_error(
-            point_range(include_path_source_loc), "File not found: '%.*s'",
+            point_range(include_path_loc), "File not found: '%.*s'",
             include_path.len, include_path.chars);
         return false;
       }
@@ -616,8 +615,7 @@ static bool handle_pp_directive(PP *pp)
       // data this should take up in a given compilation this is probably
       // fine.
 
-      bool success =
-          preprocess_file(pp, includee_path, include_path_source_loc);
+      bool success = preprocess_file(pp, includee_path, include_path_loc);
 
       if (!string_eq(include_path, includee_path)) free(includee_path.chars);
 
@@ -784,7 +782,7 @@ static bool handle_pp_directive(PP *pp)
 static bool substitute_macro_params(PP *pp, Macro *macro)
 {
   Reader *reader = &pp->reader;
-  SourceLoc start_source_loc = reader_source_loc(&pp->reader);
+  SourceLoc start_loc = reader_source_loc(&pp->reader);
 
   // First, find the span which contains all the arguments to this function-like
   // macro.
@@ -822,8 +820,7 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
   // If we're here, we reached the end of the reader without finding a
   // terminating ')'.
   emit_error(
-      point_range(start_source_loc),
-      "Unterminated function-like macro invocation");
+      point_range(start_loc), "Unterminated function-like macro invocation");
   array_free(&macro_args_str);
   return false;
 
@@ -893,7 +890,7 @@ got_all_args:
   if ((!macro->variadic && arg_values.size != macro->arg_names.size)
       || (macro->variadic && arg_values.size < macro->arg_names.size)) {
     emit_error(
-        range_from(reader, start_source_loc),
+        range_from(reader, start_loc),
         "Wrong number of parameters to function-like macro '%.*s'"
         " (expected %u%s, got %u)",
         macro->name.len, macro->name.chars, macro->arg_names.size,
@@ -1079,7 +1076,7 @@ static bool preprocess_aux(PP *pp)
       add_adjustment(pp, NORMAL_ADJUSTMENT);
     }
 
-    SourceLoc start_source_loc = reader_source_loc(reader);
+    SourceLoc start_loc = reader_source_loc(reader);
     bool at_start_of_line = reader->at_start_of_line;
 
     char c = read_char(reader);
@@ -1102,7 +1099,7 @@ static bool preprocess_aux(PP *pp)
         // token pasting operator.
         if (pp->macro_depth == 0) {
           emit_error(
-              range_from(reader, start_source_loc),
+              range_from(reader, start_loc),
               "The '##' operator is only allowed in a macro definition");
           return false;
         }
@@ -1117,7 +1114,7 @@ static bool preprocess_aux(PP *pp)
         if (!handle_pp_directive(pp)) return false;
       } else if (pp->macro_depth == 0) {
         emit_error(
-            point_range(start_source_loc),
+            point_range(start_loc),
             "Unexpected preprocessor directive (not at start of line)");
         return false;
       } else {
@@ -1127,12 +1124,12 @@ static bool preprocess_aux(PP *pp)
         //        replacement text.
         skip_whitespace_and_comments(pp, false);
 
-        SourceLoc expected_arg_name_source_loc = reader_source_loc(reader);
+        SourceLoc expected_arg_name_loc = reader_source_loc(reader);
         String arg_name = read_symbol(reader);
 
         if (!is_valid(arg_name)) {
           emit_error(
-              point_range(expected_arg_name_source_loc),
+              point_range(expected_arg_name_loc),
               "Expected identifier after '#' operator");
           return false;
         }
@@ -1140,7 +1137,7 @@ static bool preprocess_aux(PP *pp)
         Macro *macro = look_up_macro(&pp->curr_macro_params, arg_name);
         if (macro == NULL) {
           emit_error(
-              point_range(expected_arg_name_source_loc),
+              point_range(expected_arg_name_loc),
               "Argument to '#' does not name a macro parameter");
           return false;
         }
@@ -1179,7 +1176,7 @@ static bool preprocess_aux(PP *pp)
         } else if (macro->arg_names.size == 0 && !macro->variadic) {
           Array(Macro) old_params = pp->curr_macro_params;
           pp->curr_macro_params = EMPTY_ARRAY;
-          add_adjustment_to(pp, BEGIN_MACRO_ADJUSTMENT, start_source_loc);
+          add_adjustment_to(pp, BEGIN_MACRO_ADJUSTMENT, start_loc);
 
           if (!preprocess_string(pp, macro->value)) return false;
           pp->curr_macro_params = old_params;
@@ -1194,7 +1191,7 @@ static bool preprocess_aux(PP *pp)
             ARRAY_APPEND_ELEMS(&pp->out_chars, char, symbol.len, symbol.chars);
           } else {
             Array(Macro) old_params = pp->curr_macro_params;
-            add_adjustment_to(pp, BEGIN_MACRO_ADJUSTMENT, start_source_loc);
+            add_adjustment_to(pp, BEGIN_MACRO_ADJUSTMENT, start_loc);
             if (!substitute_macro_params(pp, macro)) return false;
 
             // @TODO: This isn't quite correct - we need to do a separate pass

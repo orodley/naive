@@ -33,10 +33,10 @@ SourceLoc reader_prev_source_loc(Reader *reader)
   };
 }
 
-SourceRange range_from(Reader *reader, SourceLoc start_source_loc)
+SourceRange range_from(Reader *reader, SourceLoc start_loc)
 {
   return (SourceRange){
-      .start = start_source_loc,
+      .start = start_loc,
       .end = reader_prev_source_loc(reader),
   };
 }

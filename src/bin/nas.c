@@ -108,12 +108,11 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
   case '9': return asm_imm(read_integer(reader));
   case '[': {
     advance(reader);
-    SourceLoc start_source_loc = reader_source_loc(reader);
+    SourceLoc start_loc = reader_source_loc(reader);
     AsmValue value = read_register_or_symbol(reader, symbols);
     if (value.t != ASM_VALUE_REGISTER) {
       emit_fatal_error(
-          range_from(reader, start_source_loc),
-          "Expected register in memory operand");
+          range_from(reader, start_loc), "Expected register in memory operand");
     }
 
     Register reg = value.u.reg;
@@ -230,22 +229,21 @@ int main(int argc, char *argv[])
         return EXIT_CODE_INVALID_SOURCE;
       }
 
-      SourceLoc ident_source_loc = reader_source_loc(reader);
+      SourceLoc ident_loc = reader_source_loc(reader);
       String ident = read_symbol(reader);
       if (!is_valid(ident)) {
         emit_fatal_error(
-            point_range(ident_source_loc), "Invalid identifier %.*s", ident.len,
+            point_range(ident_loc), "Invalid identifier %.*s", ident.len,
             ident.chars);
       }
-      SourceRange ident_range = range_from(reader, ident_source_loc);
+      SourceRange ident_range = range_from(reader, ident_loc);
 
       skip_whitespace(reader);
 
       if (strneq(ident.chars, "bits", ident.len)) {
         if (read_char(reader) != '6' || read_char(reader) != '4') {
           emit_error(
-              range_from(reader, ident_source_loc),
-              "Only 64-bit mode is supported");
+              range_from(reader, ident_loc), "Only 64-bit mode is supported");
           return EXIT_CODE_UNIMPLEMENTED;
         }
       } else if (strneq(ident.chars, "section", ident.len)) {
