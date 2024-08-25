@@ -1,1 +1,3 @@
 in.c:4:1: Error: Unexpected token TOK_RCURLY
+}
+^

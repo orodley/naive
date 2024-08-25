@@ -1,1 +1,3 @@
 in.c:1:10: Error: Unexpected preprocessor directive (not at start of line)
+int foo; #bar
+         ^

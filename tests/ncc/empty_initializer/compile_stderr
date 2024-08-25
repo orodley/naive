@@ -1,1 +1,3 @@
 in.c:1:8: Error: Unexpected token TOK_SEMICOLON
+int x =;
+       ^

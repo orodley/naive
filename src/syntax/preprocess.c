@@ -299,7 +299,7 @@ static String look_up_include_path(
 }
 
 static bool preprocess_file(
-    PP *pp, String input_filename, SourceLoc blame_source_loc);
+    PP *pp, String input_filename, SourceRange blame_source_range);
 
 static unsigned long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay);
 
@@ -595,6 +595,8 @@ static bool handle_pp_directive(PP *pp)
         return false;
       }
 
+      SourceRange include_path_range = range_from(reader, include_path_loc);
+
       u32 end_index = reader->position - 1;
       u32 length = end_index - start_index;
 
@@ -605,8 +607,8 @@ static bool handle_pp_directive(PP *pp)
 
       if (!is_valid(includee_path)) {
         emit_error(
-            point_range(include_path_loc), "File not found: '%.*s'",
-            include_path.len, include_path.chars);
+            include_path_range, "File not found: '%.*s'", include_path.len,
+            include_path.chars);
         return false;
       }
 
@@ -615,7 +617,7 @@ static bool handle_pp_directive(PP *pp)
       // data this should take up in a given compilation this is probably
       // fine.
 
-      bool success = preprocess_file(pp, includee_path, include_path_loc);
+      bool success = preprocess_file(pp, includee_path, include_path_range);
 
       if (!string_eq(include_path, includee_path)) free(includee_path.chars);
 
@@ -937,20 +939,20 @@ cleanup:
 
 // @TODO: Take a SourceRange instead.
 static bool preprocess_file(
-    PP *pp, String input_filename, SourceLoc blame_source_loc)
+    PP *pp, String input_filename, SourceRange blame_source_range)
 {
   char *c_str = string_to_c_string(input_filename);
   String buffer = map_file_into_memory(c_str);
   free(c_str);
   if (!is_valid(buffer)) {
-    if (!is_valid(blame_source_loc.filename)) {
+    if (!is_valid(blame_source_range.start.filename)) {
       fprintf(
           stderr, "Failed to open input file: '%.*s'\n", input_filename.len,
           input_filename.chars);
     } else {
       emit_error(
-          point_range(blame_source_loc), "File not found: '%.*s'\n",
-          input_filename.len, input_filename.chars);
+          blame_source_range, "File not found: '%.*s'\n", input_filename.len,
+          input_filename.chars);
     }
 
     return false;
@@ -1258,8 +1260,8 @@ bool preprocess(
   // versions.
   add_predefined_macro(&pp.macro_env, "__STDC_VERSION__", "199901L");
 
-  bool ret =
-      preprocess_file(&pp, input_filename, (SourceLoc){INVALID_STRING, 0});
+  SourceRange invalid_range = point_range((SourceLoc){INVALID_STRING, 0});
+  bool ret = preprocess_file(&pp, input_filename, invalid_range);
 
   for (u32 i = 0; i < pp.mapped_files.size; i++) {
     String *buffer = ARRAY_REF(&pp.mapped_files, String, i);
