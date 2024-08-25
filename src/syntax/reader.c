@@ -25,6 +25,22 @@ SourceLoc reader_source_loc(Reader *reader)
   };
 }
 
+SourceLoc reader_prev_source_loc(Reader *reader)
+{
+  return (SourceLoc){
+      .filename = reader->filename,
+      .offset = reader->adjusted_position - 1,
+  };
+}
+
+SourceRange range_from(Reader *reader, SourceLoc start_source_loc)
+{
+  return (SourceRange){
+      .start = start_source_loc,
+      .end = reader_prev_source_loc(reader),
+  };
+}
+
 void back_up(Reader *reader)
 {
   Adjustment *prev_adjustment =

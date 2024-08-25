@@ -113,7 +113,7 @@ static Token *current_token(Parser *parser)
 
 static SourceLoc *token_context(Token *token)
 {
-  return &((SourceToken *)token)->source_loc;
+  return &((SourceToken *)token)->source_range.start;
 }
 
 typedef struct WhichResult
@@ -693,11 +693,11 @@ bool parse_toplevel(
   if (parser.position != tokens->size) {
     if (_unexpected_token.t != TOK_INVALID) {
       emit_error(
-          _longest_parse_pos, "Unexpected token %s",
+          point_range(_longest_parse_pos), "Unexpected token %s",
           token_type_names[_unexpected_token.t]);
     } else {
       SourceLoc s = {STRING("<unknown>"), 0};
-      emit_error(s, "Unknown error while parsing");
+      emit_error(point_range(s), "Unknown error while parsing");
     }
 
     return false;
@@ -717,11 +717,11 @@ bool parse_expr(Array(SourceToken) *tokens, Pool *ast_pool, ASTExpr **out_expr)
   if (parser.position != tokens->size) {
     if (_unexpected_token.t != TOK_INVALID) {
       emit_error(
-          _longest_parse_pos, "Unexpected token %s",
+          point_range(_longest_parse_pos), "Unexpected token %s",
           token_type_names[_unexpected_token.t]);
     } else {
       SourceLoc s = {STRING("<unknown>"), 0};
-      emit_error(s, "Unknown error while parsing");
+      emit_error(point_range(s), "Unknown error while parsing");
     }
 
     return false;

@@ -178,7 +178,8 @@ static void skip_whitespace_and_comments_from_reader(
       break;
     case ' ':
     case '\t': advance(reader); break;
-    case '/':
+    case '/':;
+      SourceLoc comment_start = reader_source_loc(reader);
       advance(reader);
       switch (peek_char(reader)) {
       case '/':
@@ -197,7 +198,7 @@ static void skip_whitespace_and_comments_from_reader(
         }
 
         if (at_end(reader))
-          emit_error(reader_source_loc(reader), "Unterminated /* comment");
+          emit_error(point_range(comment_start), "Unterminated /* comment");
 
         break;
       default:
@@ -225,9 +226,9 @@ static bool append_string_or_char_literal(
   while (peek_char(reader) != start_char) {
     if (at_end(reader)) {
       emit_error(
-          literal_start_source_loc, start_char == '"'
-                                        ? "Unterminated string literal"
-                                        : "Unterminated character literal");
+          point_range(literal_start_source_loc),
+          start_char == '"' ? "Unterminated string literal"
+                            : "Unterminated character literal");
       return false;
     }
     expect_char(reader, '\\');
@@ -330,7 +331,7 @@ static bool eval_pp_condition(PP *pp, bool *result)
 
           if (!expect_char(reader, ')')) {
             emit_error(
-                reader_source_loc(reader),
+                point_range(reader_source_loc(reader)),
                 "Unexpected char '%c' in `defined' in preprocessor condition",
                 peek_char(reader));
             return false;
@@ -467,7 +468,7 @@ static unsigned long eval_pp_expr(PP *pp, ASTExpr *expr, bool *okay)
     // @TODO: This isn't accurate as we don't attach SourceLoc to ASTExpr.
     // @TODO: Include the expr type.
     emit_error(
-        reader_source_loc(&pp->reader),
+        point_range(reader_source_loc(&pp->reader)),
         "Unsupported operation in preprocessor conditional");
     *okay = false;
     return 1;
@@ -489,9 +490,11 @@ static bool handle_pp_directive(PP *pp)
   String directive = read_symbol(reader);
   if (!is_valid(directive)) {
     // @TODO: Sync to the next newline?
-    emit_error(reader_source_loc(reader), "Expected preprocessor directive");
+    emit_error(point_range(directive_start), "Expected preprocessor directive");
     return false;
   }
+
+  SourceRange directive_range = range_from(reader, directive_start);
 
   // Process #if and friends even if we're currently ignoring tokens.
   if (strneq(directive.chars, "if", directive.len)) {
@@ -513,7 +516,7 @@ static bool handle_pp_directive(PP *pp)
     skip_whitespace_and_comments(pp, false);
     String macro_name = read_symbol(reader);
     if (!is_valid(macro_name)) {
-      emit_error(reader_source_loc(reader), "Expected identifier after #ifdef");
+      emit_error(directive_range, "Expected identifier after #ifdef");
       return false;
     }
 
@@ -523,8 +526,7 @@ static bool handle_pp_directive(PP *pp)
     skip_whitespace_and_comments(pp, false);
     String macro_name = read_symbol(reader);
     if (!is_valid(macro_name)) {
-      emit_error(
-          reader_source_loc(reader), "Expected identifier after #ifndef");
+      emit_error(directive_range, "Expected identifier after #ifndef");
       return false;
     }
 
@@ -532,7 +534,7 @@ static bool handle_pp_directive(PP *pp)
     start_pp_if(pp, condition);
   } else if (strneq(directive.chars, "elif", directive.len)) {
     if (pp->pp_scope_stack.size == 0) {
-      emit_error(directive_start, "#elif without #if");
+      emit_error(directive_range, "#elif without #if");
       return false;
     }
 
@@ -551,7 +553,7 @@ static bool handle_pp_directive(PP *pp)
     PPCondScope *scope = ARRAY_LAST(&pp->pp_scope_stack, PPCondScope);
     if (scope->position == ELSE) {
       emit_error(
-          directive_start,
+          directive_range,
           "Duplicate #else clause for preprocessor conditional");
       return false;
     }
@@ -565,7 +567,7 @@ static bool handle_pp_directive(PP *pp)
     }
   } else if (strneq(directive.chars, "endif", directive.len)) {
     if (pp->pp_scope_stack.size == 0) {
-      emit_error(directive_start, "Unmatched #endif");
+      emit_error(directive_range, "Unmatched #endif");
       return false;
     }
     pp->pp_scope_stack.size--;
@@ -578,7 +580,8 @@ static bool handle_pp_directive(PP *pp)
       if (c != '<' && c != '"') {
         // @TODO: Resync to newline?
         emit_error(
-            reader_source_loc(reader), "Expected filename after #include");
+            point_range(reader_source_loc(reader)),
+            "Expected filename after #include");
         return false;
       }
 
@@ -588,7 +591,8 @@ static bool handle_pp_directive(PP *pp)
         ;
 
       if (at_end(reader)) {
-        emit_error(include_path_source_loc, "Unterminated include path");
+        emit_error(
+            point_range(include_path_source_loc), "Unterminated include path");
         return false;
       }
 
@@ -602,8 +606,8 @@ static bool handle_pp_directive(PP *pp)
 
       if (!is_valid(includee_path)) {
         emit_error(
-            include_path_source_loc, "File not found: '%.*s'", include_path.len,
-            include_path.chars);
+            point_range(include_path_source_loc), "File not found: '%.*s'",
+            include_path.len, include_path.chars);
         return false;
       }
 
@@ -623,12 +627,14 @@ static bool handle_pp_directive(PP *pp)
     } else if (strneq(directive.chars, "define", directive.len)) {
       skip_whitespace_and_comments(pp, false);
 
+      SourceLoc macro_name_loc = reader_source_loc(reader);
       String macro_name = read_symbol(reader);
       if (!is_valid(macro_name)) {
         emit_error(
-            reader_source_loc(reader), "Expected identifier after #define");
+            point_range(macro_name_loc), "Expected identifier after #define");
         return false;
       }
+      SourceRange macro_name_range = range_from(reader, macro_name_loc);
 
       Array(String) arg_names;
       bool variadic = false;
@@ -639,14 +645,14 @@ static bool handle_pp_directive(PP *pp)
           char c = peek_char(reader);
           if (c == '\n') {
             emit_error(
-                reader_source_loc(reader),
+                point_range(reader_source_loc(reader)),
                 "Unexpected newline in macro definition argument list");
             return false;
           } else if (c == '.') {
             advance(reader);
             if (read_char(reader) != '.' || read_char(reader) != '.') {
               emit_error(
-                  reader_source_loc(reader),
+                  point_range(reader_prev_source_loc(reader)),
                   "Unexpected char in variadic macro argument list");
               return false;
             }
@@ -656,15 +662,16 @@ static bool handle_pp_directive(PP *pp)
             if (read_char(reader) == ')') break;
 
             emit_error(
-                reader_source_loc(reader),
+                point_range(reader_prev_source_loc(reader)),
                 "Unexpected char after ellipsis in variadic macro argument "
                 "list");
             return false;
           } else {
+            SourceLoc arg_name_loc = reader_source_loc(reader);
             String arg_name = read_symbol(reader);
             if (!is_valid(arg_name)) {
               emit_error(
-                  reader_source_loc(reader),
+                  point_range(arg_name_loc),
                   "Unexpected character while processing "
                   "macro argument list");
               return false;
@@ -677,7 +684,7 @@ static bool handle_pp_directive(PP *pp)
               break;
             } else if (next != ',') {
               emit_error(
-                  reader_source_loc(reader),
+                  point_range(reader_prev_source_loc(reader)),
                   "Expected comma after macro argument name");
               return false;
             }
@@ -700,7 +707,7 @@ static bool handle_pp_directive(PP *pp)
         // @TODO: Proper checks as per C99 6.10.3.2
         if (macro->arg_names.size != arg_names.size) {
           emit_error(
-              reader_source_loc(reader),
+              macro_name_range,
               "Redefined macro '%.*s' has different number of arguments",
               macro_name.len, macro_name.chars);
           return false;
@@ -718,8 +725,7 @@ static bool handle_pp_directive(PP *pp)
 
       String macro_name = read_symbol(reader);
       if (!is_valid(macro_name)) {
-        emit_error(
-            reader_source_loc(reader), "Expected identifier after #undef");
+        emit_error(directive_range, "Expected identifier after #undef");
         return false;
       }
 
@@ -739,19 +745,21 @@ static bool handle_pp_directive(PP *pp)
     } else if (strneq(directive.chars, "error", directive.len)) {
       advance(reader);
 
+      SourceLoc error_message_start = reader_source_loc(reader);
       u32 start = reader->position;
       while (peek_char(reader) != '\n') advance(reader);
+      SourceRange error_message_range =
+          (SourceRange){error_message_start, reader_source_loc(reader)};
 
       u32 length = reader->position - start;
       char *error = strndup(reader->buffer.chars + start, length);
-      emit_error(directive_start, error);
+      emit_error(error_message_range, error);
       return false;
     } else if (strneq(directive.chars, "pragma", directive.len)) {
       UNIMPLEMENTED("#pragma preprocessor directive");
     } else {
       emit_error(
-          reader_source_loc(reader), "Invalid preprocessor directive: %s",
-          directive);
+          directive_range, "Invalid preprocessor directive: %s", directive);
       return false;
     }
   }
@@ -760,7 +768,7 @@ static bool handle_pp_directive(PP *pp)
 
   if (!ignoring_chars(pp) && !at_end(reader) && peek_char(reader) != '\n') {
     emit_error(
-        reader_source_loc(reader),
+        point_range(reader_source_loc(reader)),
         "Extraneous text after preprocessing directive");
     return false;
   }
@@ -813,7 +821,9 @@ static bool substitute_macro_params(PP *pp, Macro *macro)
 
   // If we're here, we reached the end of the reader without finding a
   // terminating ')'.
-  emit_error(start_source_loc, "Unterminated function-like macro invocation");
+  emit_error(
+      point_range(start_source_loc),
+      "Unterminated function-like macro invocation");
   array_free(&macro_args_str);
   return false;
 
@@ -883,7 +893,7 @@ got_all_args:
   if ((!macro->variadic && arg_values.size != macro->arg_names.size)
       || (macro->variadic && arg_values.size < macro->arg_names.size)) {
     emit_error(
-        reader_source_loc(reader),
+        range_from(reader, start_source_loc),
         "Wrong number of parameters to function-like macro '%.*s'"
         " (expected %u%s, got %u)",
         macro->name.len, macro->name.chars, macro->arg_names.size,
@@ -928,6 +938,7 @@ cleanup:
   return ret;
 }
 
+// @TODO: Take a SourceRange instead.
 static bool preprocess_file(
     PP *pp, String input_filename, SourceLoc blame_source_loc)
 {
@@ -941,8 +952,8 @@ static bool preprocess_file(
           input_filename.chars);
     } else {
       emit_error(
-          blame_source_loc, "File not found: '%.*s'\n", input_filename.len,
-          input_filename.chars);
+          point_range(blame_source_loc), "File not found: '%.*s'\n",
+          input_filename.len, input_filename.chars);
     }
 
     return false;
@@ -1047,7 +1058,7 @@ static bool preprocess_aux(PP *pp)
         // @TODO: Keep track of the SourceLoc of the opening directive.
         // Maybe we should store it on PPCondScope?
         SourceLoc s = {STRING("<unknown>"), 0};
-        emit_error(s, "Unterminated preprocessor conditional");
+        emit_error(point_range(s), "Unterminated preprocessor conditional");
         return false;
       }
     } else {
@@ -1092,7 +1103,7 @@ static bool preprocess_aux(PP *pp)
         // token pasting operator.
         if (pp->macro_depth == 0) {
           emit_error(
-              start_source_loc,
+              range_from(reader, start_source_loc),
               "The '##' operator is only allowed in a macro definition");
           return false;
         }
@@ -1107,7 +1118,7 @@ static bool preprocess_aux(PP *pp)
         if (!handle_pp_directive(pp)) return false;
       } else if (pp->macro_depth == 0) {
         emit_error(
-            start_source_loc,
+            point_range(start_source_loc),
             "Unexpected preprocessor directive (not at start of line)");
         return false;
       } else {
@@ -1122,7 +1133,7 @@ static bool preprocess_aux(PP *pp)
 
         if (!is_valid(arg_name)) {
           emit_error(
-              expected_arg_name_source_loc,
+              point_range(expected_arg_name_source_loc),
               "Expected identifier after '#' operator");
           return false;
         }
@@ -1130,7 +1141,7 @@ static bool preprocess_aux(PP *pp)
         Macro *macro = look_up_macro(&pp->curr_macro_params, arg_name);
         if (macro == NULL) {
           emit_error(
-              expected_arg_name_source_loc,
+              point_range(expected_arg_name_source_loc),
               "Argument to '#' does not name a macro parameter");
           return false;
         }

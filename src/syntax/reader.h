@@ -38,6 +38,8 @@ void reader_init(
     Reader *reader, String buffer, Array(Adjustment) adjustments,
     bool at_start_of_line, String source_filename);
 SourceLoc reader_source_loc(Reader *reader);
+SourceLoc reader_prev_source_loc(Reader *reader);
+SourceRange range_from(Reader *reader, SourceLoc start_source_loc);
 void back_up(Reader *reader);
 void advance(Reader *reader);
 

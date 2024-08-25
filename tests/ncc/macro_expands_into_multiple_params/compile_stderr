@@ -1,1 +1,1 @@
-??:1:17: Error: Wrong number of parameters to function-like macro 'BAZ' (expected 3, got 1)
+??:1:5: Error: Wrong number of parameters to function-like macro 'BAZ' (expected 3, got 1)

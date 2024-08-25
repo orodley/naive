@@ -94,7 +94,7 @@ typedef struct SourceToken
   // @NOTE: This is deliberately at the start, so that pointers to
   // SourceTokens can be treated as pointers to Tokens.
   Token token;
-  SourceLoc source_loc;
+  SourceRange source_range;
 } SourceToken;
 
 extern char *token_type_names[];

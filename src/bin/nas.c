@@ -69,7 +69,8 @@ static AsmValue read_register_or_symbol(
   String ident = read_symbol(reader);
   if (!is_valid(ident)) {
     emit_fatal_error(
-        ident_start, "Invalid identifier %.*s\n", ident.len, ident.chars);
+        range_from(reader, ident_start), "Invalid identifier %.*s\n", ident.len,
+        ident.chars);
   }
 
   for (u32 i = 0; i < STATIC_ARRAY_LENGTH(registers); i++) {
@@ -110,7 +111,9 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
     SourceLoc start_source_loc = reader_source_loc(reader);
     AsmValue value = read_register_or_symbol(reader, symbols);
     if (value.t != ASM_VALUE_REGISTER) {
-      emit_fatal_error(start_source_loc, "Expected register in memory operand");
+      emit_fatal_error(
+          range_from(reader, start_source_loc),
+          "Expected register in memory operand");
     }
 
     Register reg = value.u.reg;
@@ -125,7 +128,8 @@ static AsmValue read_operand(Reader *reader, Array(AsmSymbol *) *symbols)
       skip_whitespace(reader);
       if (!expect_char(reader, ']')) {
         emit_fatal_error(
-            reader_source_loc(reader), "Expected ']' after offset");
+            point_range(reader_source_loc(reader)),
+            "Expected ']' after offset");
       }
 
       return asm_deref(
@@ -221,8 +225,8 @@ int main(int argc, char *argv[])
     default: {
       if (!initial_ident_char(peek_char(reader))) {
         emit_fatal_error(
-            reader_source_loc(reader), "Unexpected character: '%c'",
-            peek_char(reader));
+            point_range(reader_source_loc(reader)),
+            "Unexpected character: '%c'", peek_char(reader));
         return EXIT_CODE_INVALID_SOURCE;
       }
 
@@ -230,15 +234,18 @@ int main(int argc, char *argv[])
       String ident = read_symbol(reader);
       if (!is_valid(ident)) {
         emit_fatal_error(
-            ident_source_loc, "Invalid identifier %.*s", ident.len,
+            point_range(ident_source_loc), "Invalid identifier %.*s", ident.len,
             ident.chars);
       }
+      SourceRange ident_range = range_from(reader, ident_source_loc);
+
       skip_whitespace(reader);
 
       if (strneq(ident.chars, "bits", ident.len)) {
         if (read_char(reader) != '6' || read_char(reader) != '4') {
           emit_error(
-              reader_source_loc(reader), "Only 64-bit mode is supported");
+              range_from(reader, ident_source_loc),
+              "Only 64-bit mode is supported");
           return EXIT_CODE_UNIMPLEMENTED;
         }
       } else if (strneq(ident.chars, "section", ident.len)) {
@@ -251,9 +258,10 @@ int main(int argc, char *argv[])
           advance(reader);
         }
 
+        SourceLoc section_name_loc = reader_source_loc(reader);
         String section_name = read_symbol(reader);
         if (!is_valid(section_name)) {
-          emit_error(reader_source_loc(reader), "Bad section name");
+          emit_error(point_range(section_name_loc), "Bad section name");
           return EXIT_CODE_INVALID_SOURCE;
         }
 
@@ -266,17 +274,19 @@ int main(int argc, char *argv[])
               "Non-text section '%.*s'", section_name.len, section_name.chars);
         }
       } else if (strneq(ident.chars, "global", ident.len)) {
+        SourceLoc symbol_loc = reader_source_loc(reader);
         String symbol_name = read_symbol(reader);
         if (!is_valid(symbol_name)) {
-          emit_error(reader_source_loc(reader), "Bad symbol name");
+          emit_error(point_range(symbol_loc), "Bad symbol name");
           return EXIT_CODE_INVALID_SOURCE;
         }
 
         *ARRAY_APPEND(&global_symbols, String) = symbol_name;
       } else if (strneq(ident.chars, "extern", ident.len)) {
+        SourceLoc symbol_loc = reader_source_loc(reader);
         String symbol_name = read_symbol(reader);
         if (!is_valid(symbol_name)) {
-          emit_error(reader_source_loc(reader), "Bad symbol name");
+          emit_error(point_range(symbol_loc), "Bad symbol name");
           return EXIT_CODE_INVALID_SOURCE;
         }
 
@@ -293,8 +303,7 @@ int main(int argc, char *argv[])
       } else if (peek_char(reader) != ':') {
         if (!in_text_section) {
           emit_fatal_error(
-              ident_source_loc,
-              "Instruction encountered before section directive");
+              ident_range, "Instruction encountered before section directive");
         }
 
         AsmInstr *instr = ARRAY_APPEND(&asm_module.text.instrs, AsmInstr);
@@ -317,7 +326,7 @@ int main(int argc, char *argv[])
 
         if (!found) {
           emit_fatal_error(
-              ident_source_loc, "Unknown instruction name '%s'",
+              ident_range, "Unknown instruction name '%s'",
               strndup(ident.chars, ident.len));
         }
 
@@ -326,7 +335,7 @@ int main(int argc, char *argv[])
         u32 arg = 0;
         while (!at_end(reader) && peek_char(reader) != '\n') {
           if (arg == STATIC_ARRAY_LENGTH(instr->args)) {
-            emit_error(reader_source_loc(reader), "Too many operands");
+            emit_error(ident_range, "Too many operands to instruction");
             return EXIT_CODE_INVALID_SOURCE;
           }
 
@@ -338,7 +347,7 @@ int main(int argc, char *argv[])
             skip_whitespace(reader);
           } else if (!at_end(reader) && peek_char(reader) != '\n') {
             emit_error(
-                reader_source_loc(reader),
+                point_range(reader_source_loc(reader)),
                 "Expected comma or newline after operand");
             return EXIT_CODE_INVALID_SOURCE;
           }
@@ -352,7 +361,7 @@ int main(int argc, char *argv[])
 
         if (!in_text_section) {
           emit_error(
-              ident_source_loc, "Symbol encountered before section directive");
+              ident_range, "Symbol encountered before section directive");
           return EXIT_CODE_INVALID_SOURCE;
         }
 

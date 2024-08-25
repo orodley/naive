@@ -341,7 +341,7 @@ static int compile_file(
     u32 offset = 0;
     for (u32 i = 0; i < tokens.size; i++) {
       SourceToken *source_token = ARRAY_REF(&tokens, SourceToken, i);
-      u32 token_offset = source_token->source_loc.offset;
+      u32 token_offset = source_token->source_range.start.offset;
       ASSERT(token_offset >= offset);
       ASSERT(token_offset < input_text.len);
       while (offset != token_offset) {

@@ -20,11 +20,12 @@ typedef struct Lexer
   Array(SourceToken) *tokens;
 } Lexer;
 
-static Token *append_token(Lexer *lexer, SourceLoc source_loc, TokenType type)
+static Token *append_token(
+    Lexer *lexer, SourceRange source_range, TokenType type)
 {
   SourceToken *source_token = ARRAY_APPEND(lexer->tokens, SourceToken);
   source_token->token.t = type;
-  source_token->source_loc = source_loc;
+  source_token->source_range = source_range;
 
   return (Token *)source_token;
 }
@@ -113,15 +114,17 @@ static bool is_numeric_suffix_char(char c)
 static NumericSuffix read_numeric_suffix(Reader *reader)
 {
   NumericSuffix suffix = NO_SUFFIX;
+  SourceLoc start_source_loc = reader_source_loc(reader);
 
   while (!at_end(reader)) {
+    SourceLoc loc = reader_source_loc(reader);
     char c = read_char(reader);
     switch (c) {
     case 'u':
     case 'U':
       if ((suffix & UNSIGNED_SUFFIX) != 0) {
         emit_error(
-            reader_source_loc(reader),
+            (SourceRange){start_source_loc, loc},
             "Multiple 'u' suffixes on numeric literal");
       }
 
@@ -131,7 +134,7 @@ static NumericSuffix read_numeric_suffix(Reader *reader)
     case 'L':
       if (((suffix & (LONG_SUFFIX | LONG_LONG_SUFFIX)) != 0)) {
         emit_error(
-            reader_source_loc(reader),
+            (SourceRange){start_source_loc, loc},
             "Multiple 'l'/'ll' suffixes on numeric literal");
       }
 
@@ -145,7 +148,7 @@ static NumericSuffix read_numeric_suffix(Reader *reader)
     case 'F':
       if (((suffix & FLOAT_SUFFIX) != 0)) {
         emit_error(
-            reader_source_loc(reader),
+            (SourceRange){start_source_loc, loc},
             "Multiple 'f' suffixes on numeric literal");
       }
 
@@ -167,7 +170,8 @@ static bool read_octal_number(Reader *reader, u64 *value)
     if (c == '8' || c == '9') {
       // @TODO: Skip past all numeric characters to resync?
       emit_error(
-          reader_source_loc(reader), "Invalid digit '%c' in octal literal", c);
+          point_range(reader_source_loc(reader)),
+          "Invalid digit '%c' in octal literal", c);
       return false;
     } else {
       x *= 8;
@@ -182,8 +186,12 @@ static bool read_octal_number(Reader *reader, u64 *value)
   return true;
 }
 
+// Expects the reader to be pointing at the first digit after the '0x'.
 static bool read_hex_number(Reader *reader, u64 *value)
 {
+  SourceLoc start_source_loc = reader_source_loc(reader);
+  start_source_loc.offset -= 2;
+
   u64 x = 0;
   bool at_least_one_digit = false;
   for (;;) {
@@ -204,7 +212,7 @@ static bool read_hex_number(Reader *reader, u64 *value)
 
   if (!at_least_one_digit) {
     emit_error(
-        reader_source_loc(reader),
+        (SourceRange){start_source_loc, reader_source_loc(reader)},
         "Hexadecimal literal must have at least one digit");
     return false;
   }
@@ -220,6 +228,7 @@ i64 read_char_in_literal(Reader *reader, SourceLoc start_source_loc)
 
   char c = read_char(reader);
   if (c == '\\') {
+    SourceLoc loc = reader_source_loc(reader);
     switch (read_char(reader)) {
     case '\\': value = '\\'; break;
     case '\'': value = '\''; break;
@@ -238,7 +247,9 @@ i64 read_char_in_literal(Reader *reader, SourceLoc start_source_loc)
       if (!read_hex_number(reader, &value)) return -1;
       break;
     default:
-      emit_error(start_source_loc, "Invalid escape character '%c'", c);
+      emit_error(
+          (SourceRange){start_source_loc, loc}, "Invalid escape character '%c'",
+          c);
       return -1;
     }
   } else {
@@ -246,7 +257,9 @@ i64 read_char_in_literal(Reader *reader, SourceLoc start_source_loc)
   }
 
   if (value > 0xFF) {
-    emit_error(start_source_loc, "Character constant larger than a character");
+    emit_error(
+        range_from(reader, start_source_loc),
+        "Character constant larger than a character");
     return -1;
   }
 
@@ -260,7 +273,7 @@ static bool lex_aux(Lexer *lexer)
   while (!at_end(reader)) {
     SourceLoc start_source_loc = reader_source_loc(reader);
 
-#define ADD_TOK(t) (append_token(lexer, start_source_loc, t))
+#define ADD_TOK(t) append_token(lexer, range_from(reader, start_source_loc), t)
 
     switch (read_char(reader)) {
     case '0':
@@ -277,7 +290,7 @@ static bool lex_aux(Lexer *lexer)
 
       SourceToken *token = ARRAY_APPEND(lexer->tokens, SourceToken);
       if (!read_numeric_literal(reader, (Token *)token)) return false;
-      token->source_loc = start_source_loc;
+      token->source_range = range_from(reader, start_source_loc);
       break;
     }
     case '"': {
@@ -311,7 +324,9 @@ static bool lex_aux(Lexer *lexer)
       if (value == -1) return false;
 
       if (read_char(reader) != '\'') {
-        emit_error(start_source_loc, "Unterminated character literal");
+        emit_error(
+            range_from(reader, start_source_loc),
+            "Unterminated character literal");
         return false;
       }
 

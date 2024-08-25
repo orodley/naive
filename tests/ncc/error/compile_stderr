@@ -1,1 +1,1 @@
-in.c:1:2: Error: this is "an" error
+in.c:1:8: Error: this is "an" error
