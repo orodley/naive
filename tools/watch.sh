@@ -8,7 +8,7 @@ echo Running command "$cmd"
 $cmd
 
 inotifywait -m -r -q -e modify,create,move \
-    --include '^./(src|libc|freestanding|meta|tests).*\.(c|h|peg|enc|py)$' . |
+    --include '^./(src|libc|freestanding|dsl|tests).*\.(c|h|peg|enc|py)$' . |
   while read -r dir action file; do
 		clear
 		echo "$action" "$dir$file"
