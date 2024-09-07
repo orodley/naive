@@ -740,7 +740,12 @@ def run_all_procs_printing_failures(procs):
             if stdout != b"":
                 print(stdout.decode(), file=sys.stdout)
             if stderr != b"":
-                print(stderr.decode(), file=sys.stderr)
+                try:
+                    stderr = stderr.decode()
+                except UnicodeDecodeError:
+                    print("Failed to decode stderr as UTF-8", file=sys.stderr)
+                else:
+                    print(stderr, file=sys.stderr)
     return overall_ret_code
 
 
