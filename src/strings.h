@@ -60,5 +60,6 @@ inline String string_dup(String str)
 }
 
 String string_concat(String str_a, String str_b);
+String string_printf(char *fmt, ...);
 
 #endif
