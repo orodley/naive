@@ -16,6 +16,7 @@ typedef struct String
 #define INVALID_STRING ((String){NULL, -1})
 #define EMPTY_STRING ((String){NULL, 0})
 #define STRING(s) ((String){(s), strlen(s)})
+#define LS(s) ((String){s, sizeof(s) - 1})
 
 inline char *string_to_c_string(String str)
 {
@@ -45,6 +46,17 @@ inline bool string_eq(String a, String b)
 {
   if (a.len != b.len) return false;
   return strneq(a.chars, b.chars, a.len);
+}
+
+inline String string_dup(String str)
+{
+  String result = {
+      .chars = malloc(str.len),
+      .len = str.len,
+  };
+  memcpy(result.chars, str.chars, str.len);
+
+  return result;
 }
 
 String string_concat(String str_a, String str_b);

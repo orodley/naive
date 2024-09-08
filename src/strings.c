@@ -6,6 +6,7 @@ extern inline bool is_valid(String str);
 extern inline bool streq(char *a, char *b);
 extern inline bool strneq(char *a, char *b, u32 length);
 extern inline bool string_eq(String a, String b);
+extern inline String string_dup(String str);
 
 String string_concat(String str_a, String str_b)
 {
