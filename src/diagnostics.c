@@ -94,7 +94,7 @@ static void v_emit_diagnostic(
   vfprintf(stderr, fmt, varargs);
   putc('\n', stderr);
 
-  if (start_line == end_line) {
+  if (is_valid(source_file) && start_line == end_line) {
     for (u32 i = start_of_start_line; i < source_file.len; i++) {
       if (source_file.chars[i] == '\n') {
         break;
