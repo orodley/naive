@@ -485,7 +485,9 @@ static bool lex_aux(Lexer *lexer)
       } else {
         Token *token = ADD_TOK(TOK_SYMBOL);
         ASSERT(symbol.chars != NULL);
-        token->u.symbol = strndup(symbol.chars, symbol.len);
+        // @LEAK
+        // We should have a pool for this.
+        token->u.symbol = string_dup(symbol);
       }
 
       break;
@@ -781,7 +783,9 @@ void dump_token(Token *token)
     // @TODO: Escape the resulting string
     printf("(\"%s\")", token->u.string_literal.chars);
     break;
-  case TOK_SYMBOL: printf("(%s)", token->u.symbol); break;
+  case TOK_SYMBOL:
+    printf("(%.*s)", token->u.symbol.len, token->u.symbol.chars);
+    break;
   default: break;
   }
 }

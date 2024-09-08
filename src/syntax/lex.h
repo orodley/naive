@@ -84,7 +84,7 @@ typedef struct Token
   {
     IntLiteral int_literal;
     FloatLiteral float_literal;
-    char *symbol;
+    String symbol;
     String string_literal;
   } u;
 } Token;

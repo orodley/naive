@@ -331,7 +331,6 @@ static int compile_file(
           &adjustments))
     return EXIT_CODE_INVALID_SOURCE;
 
-  array_free(&preprocessed);
   array_free(&adjustments);
 
   if (flag_dump_tokens) {

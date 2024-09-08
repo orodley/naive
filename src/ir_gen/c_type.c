@@ -206,11 +206,11 @@ void init_type_env(TypeEnv *type_env)
   };
 }
 
-CType *search(Array(TypeEnvEntry *) *types, char *name)
+CType *search(Array(TypeEnvEntry *) *types, String name)
 {
   for (u32 i = 0; i < types->size; i++) {
     TypeEnvEntry *entry = *ARRAY_REF(types, TypeEnvEntry *, i);
-    if (streq(entry->name, name)) {
+    if (string_eq(entry->name, name)) {
       return &entry->type;
     }
   }
@@ -277,11 +277,11 @@ void set_array_type_length(CType *array_type, u64 size)
   array_type->u.array.incomplete = false;
 }
 
-CType *struct_type(TypeEnv *type_env, char *name)
+CType *struct_type(TypeEnv *type_env, String name)
 {
   TypeEnvEntry *entry = pool_alloc(&type_env->pool, sizeof *entry);
   *ARRAY_APPEND(&type_env->struct_types, TypeEnvEntry *) = entry;
-  if (name == NULL) name = "<anonymous struct>";
+  if (!is_valid(name)) name = LS("<anonymous struct>");
   entry->name = name;
 
   CType *type = &entry->type;
@@ -415,13 +415,13 @@ static bool matches_sequence(
       return false;
     }
 
-    char *str = va_arg(args, char *);
+    String str = va_arg(args, String);
     length--;
 
     ASSERT(decl_specifier_list->t == TYPE_SPECIFIER);
     ASTTypeSpecifier *type_spec = decl_specifier_list->u.type_specifier;
     if (type_spec->t != NAMED_TYPE_SPECIFIER
-        || !streq(type_spec->u.name, str)) {
+        || !string_eq(type_spec->u.name, str)) {
       va_end(args);
       return false;
     }
@@ -444,67 +444,76 @@ CType *named_type_specifier_to_ctype(
 
   // @TODO: This would be more efficiently (but perhaps less readably?)
   // encoded as a tree, so as to eliminate redundant comparisons.
-  if (matches_sequence(decl_specifier_list, 1, "void")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("void"))) {
     return &type_env->void_type;
   }
-  if (matches_sequence(decl_specifier_list, 1, "char")
-      || matches_sequence(decl_specifier_list, 2, "signed", "char")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("char"))
+      || matches_sequence(decl_specifier_list, 2, LS("signed"), LS("char"))) {
     return &type_env->char_type;
   }
-  if (matches_sequence(decl_specifier_list, 2, "unsigned", "char")) {
+  if (matches_sequence(decl_specifier_list, 2, LS("unsigned"), LS("char"))) {
     return &type_env->unsigned_char_type;
   }
-  if (matches_sequence(decl_specifier_list, 1, "_Bool")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("_Bool"))) {
     return &type_env->bool_type;
   }
-  if (matches_sequence(decl_specifier_list, 1, "short")
-      || matches_sequence(decl_specifier_list, 2, "signed", "short")
-      || matches_sequence(decl_specifier_list, 2, "short", "int")
-      || matches_sequence(decl_specifier_list, 3, "signed", "short", "int")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("short"))
+      || matches_sequence(decl_specifier_list, 2, LS("signed"), LS("short"))
+      || matches_sequence(decl_specifier_list, 2, LS("short"), LS("int"))
+      || matches_sequence(
+          decl_specifier_list, 3, LS("signed"), LS("short"), LS("int"))) {
     return &type_env->short_type;
   }
-  if (matches_sequence(decl_specifier_list, 2, "unsigned", "short")
-      || matches_sequence(decl_specifier_list, 3, "unsigned", "short", "int")) {
+  if (matches_sequence(decl_specifier_list, 2, LS("unsigned"), LS("short"))
+      || matches_sequence(
+          decl_specifier_list, 3, LS("unsigned"), LS("short"), LS("int"))) {
     return &type_env->unsigned_short_type;
   }
-  if (matches_sequence(decl_specifier_list, 1, "int")
-      || matches_sequence(decl_specifier_list, 1, "signed")
-      || matches_sequence(decl_specifier_list, 2, "signed", "int")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("int"))
+      || matches_sequence(decl_specifier_list, 1, LS("signed"))
+      || matches_sequence(decl_specifier_list, 2, LS("signed"), LS("int"))) {
     return &type_env->int_type;
   }
-  if (matches_sequence(decl_specifier_list, 1, "unsigned")
-      || matches_sequence(decl_specifier_list, 2, "unsigned", "int")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("unsigned"))
+      || matches_sequence(decl_specifier_list, 2, LS("unsigned"), LS("int"))) {
     return &type_env->unsigned_int_type;
   }
-  if (matches_sequence(decl_specifier_list, 1, "long")
-      || matches_sequence(decl_specifier_list, 2, "signed", "long")
-      || matches_sequence(decl_specifier_list, 2, "long", "int")
-      || matches_sequence(decl_specifier_list, 3, "signed", "long", "int")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("long"))
+      || matches_sequence(decl_specifier_list, 2, LS("signed"), LS("long"))
+      || matches_sequence(decl_specifier_list, 2, LS("long"), LS("int"))
+      || matches_sequence(
+          decl_specifier_list, 3, LS("signed"), LS("long"), LS("int"))) {
     return &type_env->long_type;
   }
-  if (matches_sequence(decl_specifier_list, 2, "unsigned", "long")
-      || matches_sequence(decl_specifier_list, 3, "unsigned", "long", "int")) {
+  if (matches_sequence(decl_specifier_list, 2, LS("unsigned"), LS("long"))
+      || matches_sequence(
+          decl_specifier_list, 3, LS("unsigned"), LS("long"), LS("int"))) {
     return &type_env->unsigned_long_type;
   }
-  if (matches_sequence(decl_specifier_list, 2, "long", "long")
-      || matches_sequence(decl_specifier_list, 3, "signed", "long", "long")
-      || matches_sequence(decl_specifier_list, 3, "long", "long", "int")
+  if (matches_sequence(decl_specifier_list, 2, LS("long"), LS("long"))
       || matches_sequence(
-          decl_specifier_list, 4, "signed", "long", "long", "int")) {
+          decl_specifier_list, 3, LS("signed"), LS("long"), LS("long"))
+      || matches_sequence(
+          decl_specifier_list, 3, LS("long"), LS("long"), LS("int"))
+      || matches_sequence(
+          decl_specifier_list, 4, LS("signed"), LS("long"), LS("long"),
+          LS("int"))) {
     return &type_env->long_long_type;
   }
-  if (matches_sequence(decl_specifier_list, 3, "unsigned", "long", "long")
+  if (matches_sequence(
+          decl_specifier_list, 3, LS("unsigned"), LS("long"), LS("long"))
       || matches_sequence(
-          decl_specifier_list, 4, "unsigned", "long", "long", "int")) {
+          decl_specifier_list, 4, LS("unsigned"), LS("long"), LS("long"),
+          LS("int"))) {
     return &type_env->unsigned_long_long_type;
   }
-  if (matches_sequence(decl_specifier_list, 1, "float")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("float"))) {
     return &type_env->float_type;
   }
-  if (matches_sequence(decl_specifier_list, 1, "double")) {
+  if (matches_sequence(decl_specifier_list, 1, LS("double"))) {
     return &type_env->double_type;
   }
-  if (matches_sequence(decl_specifier_list, 2, "long", "double")) {
+  if (matches_sequence(decl_specifier_list, 2, LS("long"), LS("double"))) {
     return &type_env->long_double_type;
   }
 
@@ -512,7 +521,9 @@ CType *named_type_specifier_to_ctype(
 
   CType *type = search(&type_env->typedef_types, type_spec->u.name);
   if (type == NULL) {
-    emit_fatal_error_no_loc("Unknown type %s", type_spec->u.name);
+    // @LEAK
+    emit_fatal_error_no_loc(
+        "Unknown type %s", string_to_c_string(type_spec->u.name));
   }
   return type;
 }

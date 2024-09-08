@@ -1,6 +1,7 @@
 #ifndef NAIVE_POOL_H_
 #define NAIVE_POOL_H_
 
+#include "macros.h"
 #include "types.h"
 
 #if RUNNING_UNDER_SANITIZER

@@ -29,7 +29,7 @@ IrGlobal *ir_global_for_decl(
   if (ctype->t == FUNCTION_TYPE) {
     // It shouldn't be possible, syntactically, to have a function decl with no
     // name.
-    ASSERT(cdecl.name != NULL);
+    ASSERT(is_valid(cdecl.name));
 
     // Struct returns are handled in the frontend, by adding a pointer
     // parameter at the start, and allocating a local in the caller.
@@ -73,7 +73,7 @@ IrGlobal *ir_global_for_decl(
     *result_c_type = ctype;
     return global;
   } else {
-    if (cdecl.name == NULL) {
+    if (!is_valid(cdecl.name)) {
       emit_fatal_error_no_loc("Global variable declaration must have a name");
     }
 
@@ -94,7 +94,7 @@ void decl_to_cdecl(
     CDecl *cdecl)
 {
   if (declarator == NULL) {
-    *cdecl = (CDecl){NULL, ident_type};
+    *cdecl = (CDecl){INVALID_STRING, ident_type};
     return;
   }
 
@@ -182,7 +182,7 @@ static void direct_declarator_to_cdecl(
             emit_fatal_error_no_loc(
                 "void must be the only parameter if specified");
           }
-          if (param_cdecl.name != NULL) {
+          if (is_valid(param_cdecl.name)) {
             emit_fatal_error_no_loc("void parameter cannot have a name");
           }
         }
@@ -253,12 +253,13 @@ CType *decl_specifier_list_to_c_type(
   case UNION_TYPE_SPECIFIER: {
     ASTFieldDecl *field_list =
         type_spec->u.struct_or_union_specifier.field_list;
-    char *name = type_spec->u.struct_or_union_specifier.name;
+    String name = type_spec->u.struct_or_union_specifier.name;
     ASTAttribute *attribute = type_spec->u.struct_or_union_specifier.attribute;
-    bool is_packed = attribute != NULL && streq(attribute->name, "packed");
+    bool is_packed =
+        attribute != NULL && string_eq(attribute->name, LS("packed"));
 
     CType *existing_type = NULL;
-    if (name != NULL) {
+    if (is_valid(name)) {
       // @TODO: Really we just want to search in the current scope; it's
       // perfectly valid to shadow a struct or union type from an
       // enclosing scope.
@@ -343,19 +344,19 @@ CType *decl_specifier_list_to_c_type(
     return type;
   }
   case ENUM_TYPE_SPECIFIER: {
-    char *tag = type_spec->u.enum_specifier.name;
+    String tag = type_spec->u.enum_specifier.name;
     ASTEnumerator *enumerator_list =
         type_spec->u.enum_specifier.enumerator_list;
 
     CType *ctype = &type_env->int_type;
 
     CType *existing_type = NULL;
-    if (tag != NULL) {
+    if (is_valid(tag)) {
       existing_type = search(&type_env->enum_types, tag);
     }
 
     if (enumerator_list == NULL) {
-      if (tag == NULL) {
+      if (!is_valid(tag)) {
         emit_fatal_error_no_loc("Error, no name or enumerators for enum type");
       } else if (existing_type == NULL) {
         // Incomplete type.
@@ -370,7 +371,7 @@ CType *decl_specifier_list_to_c_type(
       UNIMPLEMENTED("Definition of previously declared incomplete enum type");
     }
 
-    if (tag != NULL) {
+    if (is_valid(tag)) {
       TypeEnvEntry *new_type_alias =
           pool_alloc(&type_env->pool, sizeof *new_type_alias);
       *ARRAY_APPEND(&type_env->enum_types, TypeEnvEntry *) = new_type_alias;
@@ -380,7 +381,7 @@ CType *decl_specifier_list_to_c_type(
 
     u64 curr_enum_value = 0;
     while (enumerator_list != NULL) {
-      char *name = enumerator_list->name;
+      String name = enumerator_list->name;
       ASTExpr *expr = enumerator_list->value;
 
       if (expr != NULL) {

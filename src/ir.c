@@ -10,9 +10,9 @@
 #include "macros.h"
 #include "types.h"
 
-extern inline IrBlock *add_block(IrBuilder *builder, char *name);
+extern inline IrBlock *add_block(IrBuilder *builder, String name);
 
-void block_init(IrBlock *block, char *name, u32 id)
+void block_init(IrBlock *block, String name, u32 id)
 {
   block->name = name;
   block->id = id;
@@ -50,7 +50,7 @@ void ir_module_free(IrModule *module)
 }
 
 IrBlock *add_block_to_function(
-    IrModule *module, IrFunction *function, char *name)
+    IrModule *module, IrFunction *function, String name)
 {
   IrBlock *block = pool_alloc(&module->pool, sizeof *block);
   *ARRAY_APPEND(&function->blocks, IrBlock *) = block;
@@ -60,7 +60,7 @@ IrBlock *add_block_to_function(
 }
 
 IrGlobal *ir_module_add_function(
-    IrModule *module, char *name, IrType return_type, u32 arity,
+    IrModule *module, String name, IrType return_type, u32 arity,
     bool variable_arity, IrType *arg_types)
 {
   IrGlobal *new_global = pool_alloc(&module->pool, sizeof *new_global);
@@ -97,12 +97,12 @@ IrConst *add_init_to_function(IrModule *module, IrGlobal *global)
 
   ARRAY_INIT(&function->blocks, IrBlock *, 5);
   function->curr_instr_id = 0;
-  add_block_to_function(module, function, "entry");
+  add_block_to_function(module, function, LS("entry"));
 
   return initializer;
 }
 
-IrGlobal *ir_module_add_var(IrModule *module, char *name, IrType type)
+IrGlobal *ir_module_add_var(IrModule *module, String name, IrType type)
 {
   IrGlobal *new_global = pool_alloc(&module->pool, sizeof *new_global);
   *ARRAY_APPEND(&module->globals, IrGlobal *) = new_global;
@@ -115,20 +115,13 @@ IrGlobal *ir_module_add_var(IrModule *module, char *name, IrType type)
   return new_global;
 }
 
-IrType *ir_module_add_struct(IrModule *module, char *name, u32 num_fields)
+IrType *ir_module_add_struct(IrModule *module, String name, u32 num_fields)
 {
   IrType *new_type = pool_alloc(&module->pool, sizeof *new_type);
   *ARRAY_APPEND(&module->types, IrType *) = new_type;
 
-  if (name == NULL) {
-    char fmt[] = "__anon_struct_%x";
-
-    // - 2 adjusts down for the "%x" which isn't present in the output
-    // sizeof(u32) * 2 is the max length of globals.size in hex
-    // + 1 for the null terminator
-    u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
-    name = pool_alloc(&module->pool, name_max_length);
-    snprintf(name, name_max_length, fmt, module->types.size);
+  if (!is_valid(name)) {
+    name = string_printf("__anon_struct_%x", module->types.size);
   }
 
   new_type->t = IR_STRUCT;
@@ -152,7 +145,7 @@ bool ir_type_eq(IrType *a, IrType *b)
   case IR_VOID:
   case IR_POINTER:
   case IR_FUNCTION: return true;
-  case IR_STRUCT: return streq(a->u.strukt.name, b->u.strukt.name);
+  case IR_STRUCT: return string_eq(a->u.strukt.name, b->u.strukt.name);
   case IR_ARRAY:
     return ir_type_eq(a->u.array.elem_type, b->u.array.elem_type)
            && a->u.array.size == b->u.array.size;
@@ -206,7 +199,9 @@ void dump_ir_type(IrType type)
     dump_ir_type(*type.u.function.return_type);
 
     break;
-  case IR_STRUCT: printf("$%s", type.u.strukt.name); break;
+  case IR_STRUCT:
+    printf("$%.*s", type.u.strukt.name.len, type.u.strukt.name.chars);
+    break;
   case IR_ARRAY:
     printf("[%lu x ", type.u.array.size);
     dump_ir_type(*type.u.array.elem_type);
@@ -228,13 +223,15 @@ static void dump_value(IrValue value)
   case IR_VALUE_CONST_FLOAT: printf("%e", value.u.const_float); break;
   case IR_VALUE_ARG: printf("@%d", value.u.arg_index); break;
   case IR_VALUE_INSTR: printf("#%d", value.u.instr->id); break;
-  case IR_VALUE_GLOBAL: printf("$%s", value.u.global->name); break;
+  case IR_VALUE_GLOBAL:
+    printf("$%.*s", value.u.global->name.len, value.u.global->name.chars);
+    break;
   }
 }
 
 static void dump_block_name(IrBlock *block)
 {
-  printf("%u.%s", block->id, block->name);
+  printf("%u.%.*s", block->id, block->name.len, block->name.chars);
 }
 
 #define X(x) #x
@@ -348,7 +345,9 @@ static void dump_const(IrConst *konst)
     if (global == NULL) {
       fputs("null", stdout);
     } else {
-      printf("$%s", konst->u.global_pointer->name);
+      printf(
+          "$%.*s", konst->u.global_pointer->name.len,
+          konst->u.global_pointer->name.chars);
     }
     break;
   }
@@ -410,7 +409,9 @@ void dump_ir_module(IrModule *module)
     IrType *type = *ARRAY_REF(&module->types, IrType *, i);
     ASSERT(type->t == IR_STRUCT);
 
-    printf("struct $%s\n{\n", type->u.strukt.name);
+    printf(
+        "struct $%.*s\n{\n", type->u.strukt.name.len,
+        type->u.strukt.name.chars);
     for (u32 i = 0; i < type->u.strukt.num_fields; i++) {
       printf("\t[%u] ", type->u.strukt.fields[i].offset);
       dump_ir_type(type->u.strukt.fields[i].type);
@@ -422,7 +423,7 @@ void dump_ir_module(IrModule *module)
 
   for (u32 i = 0; i < module->globals.size; i++) {
     IrGlobal *global = *ARRAY_REF(&module->globals, IrGlobal *, i);
-    printf("%s ", global->name);
+    printf("%.*s ", global->name.len, global->name.chars);
     dump_ir_type(global->type);
 
     if (global->initializer != NULL) {
@@ -864,17 +865,17 @@ IrConst *add_struct_const(IrBuilder *builder, IrType type)
 }
 
 // @TODO: Make this not linear in the number of functions in the TU.
-IrGlobal *find_global_by_name(IrModule *module, char *name)
+IrGlobal *find_global_by_name(IrModule *module, String name)
 {
   for (u32 i = 0; i < module->globals.size; i++) {
     IrGlobal *global = *ARRAY_REF(&module->globals, IrGlobal *, i);
-    if (streq(global->name, name)) return global;
+    if (string_eq(global->name, name)) return global;
   }
   return NULL;
 }
 
 static IrValue builtin_function(
-    IrBuilder *builder, char *name, u32 arity, IrType return_type,
+    IrBuilder *builder, String name, u32 arity, IrType return_type,
     IrType *arg_types)
 {
   IrGlobal *existing_global = find_global_by_name(builder->module, name);
@@ -891,7 +892,7 @@ IrValue builtin_memcpy(IrBuilder *builder)
       pointer, pointer,
       // @TODO: Don't hardcode the size of a pointer!
       (IrType){.t = IR_INT, .u.bit_width = 64}};
-  return builtin_function(builder, "memcpy", 3, pointer, arg_types);
+  return builtin_function(builder, LS("memcpy"), 3, pointer, arg_types);
 }
 
 IrValue builtin_memset(IrBuilder *builder)
@@ -905,7 +906,7 @@ IrValue builtin_memset(IrBuilder *builder)
   };
 
   return builtin_function(
-      builder, "memset", 3, (IrType){.t = IR_POINTER}, arg_types);
+      builder, LS("memset"), 3, (IrType){.t = IR_POINTER}, arg_types);
 }
 
 IrValue build_builtin_va_start(IrBuilder *builder, IrValue va_list_ptr)

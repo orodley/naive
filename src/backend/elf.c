@@ -370,9 +370,9 @@ static void write_contents(ELFFile *elf_file, Array(Fixup) *fixups)
 // @TODO: Why does this not add the string as well?
 static void add_symbol(
     ELFFile *elf_file, ELFSymbolType type, ELFSymbolBinding binding,
-    u32 section, char *name, i32 value, u32 size)
+    u32 section, String name, i32 value, u32 size)
 {
-  if (elf_file->type == ET_EXEC && streq(name, "_start")) {
+  if (elf_file->type == ET_EXEC && string_eq(name, LS("_start"))) {
     elf_file->entry_point_virtual_address = value;
   }
   if (binding == STB_LOCAL) {
@@ -387,7 +387,7 @@ static void add_symbol(
   symbol.value = value;
   symbol.size = size;
 
-  elf_file->next_string_index += strlen(name) + 1;
+  elf_file->next_string_index += name.len + 1;
   elf_file->curr_symbol_index++;
 
   checked_fwrite(&symbol, sizeof symbol, 1, elf_file->output_file);
@@ -405,9 +405,9 @@ static void finish_symtab_section(ELFFile *elf_file)
   fputc('\0', elf_file->output_file);
 }
 
-static void add_string(ELFFile *elf_file, char *string)
+static void add_string(ELFFile *elf_file, String string)
 {
-  fputs(string, elf_file->output_file);
+  fprintf(elf_file->output_file, "%.*s", string.len, string.chars);
   fputc('\0', elf_file->output_file);
 }
 
@@ -692,18 +692,16 @@ ExitCode write_elf_object_file(String output_file_name, AsmModule *asm_module)
         elf_file, STT_FUNC, binding, section, symbol->name, symbol->offset,
         symbol->size);
   }
-  // @LEAK
   add_symbol(
-      elf_file, STT_FILE, STB_LOCAL, SHN_ABS,
-      string_to_c_string(asm_module->input_file_name), 0, 0);
+      elf_file, STT_FILE, STB_LOCAL, SHN_ABS, asm_module->input_file_name, 0,
+      0);
   finish_symtab_section(elf_file);
 
   for (u32 i = 0; i < symbols->size; i++) {
     AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
     add_string(elf_file, symbol->name);
   }
-  // @LEAK
-  add_string(elf_file, string_to_c_string(asm_module->input_file_name));
+  add_string(elf_file, asm_module->input_file_name);
   finish_strtab_section(elf_file);
 
   fclose(output_file);
@@ -721,7 +719,7 @@ typedef struct Relocation
 typedef struct Symbol
 {
   bool defined;
-  char *name;
+  String name;
   Array(Relocation) relocs;
 
   // @NOTE: None of the following fields have well-defined values if defined
@@ -936,7 +934,7 @@ static ExitCode process_elf_file(
     ELF64Symbol symtab_symbol;
     checked_fread(&symtab_symbol, sizeof symtab_symbol, 1, input_file);
 
-    char *symbol_name = strtab + symtab_symbol.strtab_index_for_name;
+    String symbol_name = STRING(strtab + symtab_symbol.strtab_index_for_name);
     ELFSymbolType type = ELF64_SYMBOL_TYPE(symtab_symbol.type_and_binding);
     ELFSymbolBinding binding =
         ELF64_SYMBOL_BINDING(symtab_symbol.type_and_binding);
@@ -953,7 +951,8 @@ static ExitCode process_elf_file(
       for (u32 symbol_index = 0; symbol_index < symbol_table->size;
            symbol_index++) {
         Symbol *symbol = ARRAY_REF(symbol_table, Symbol, symbol_index);
-        if (symbol->binding == STB_GLOBAL && streq(symbol->name, symbol_name)) {
+        if (symbol->binding == STB_GLOBAL
+            && string_eq(symbol->name, symbol_name)) {
           found_symbol_index = symbol_index;
           break;
         }
@@ -968,7 +967,7 @@ static ExitCode process_elf_file(
 
         Symbol *symbol = ARRAY_APPEND(symbol_table, Symbol);
         symbol->defined = false;
-        symbol->name = strdup(symbol_name);
+        symbol->name = symbol_name;
         symbol->binding = binding;
         symbol->contents = NULL;
         ARRAY_INIT(&symbol->relocs, Relocation, 5);
@@ -993,7 +992,9 @@ static ExitCode process_elf_file(
         symbol_index = found_symbol_index;
         symbol = ARRAY_REF(symbol_table, Symbol, found_symbol_index);
         if (symbol->defined) {
-          fprintf(stderr, "Multiple definitions of symbol '%s'\n", symbol_name);
+          fprintf(
+              stderr, "Multiple definitions of symbol '%.*s'\n",
+              symbol_name.len, symbol_name.chars);
           ret = EXIT_CODE_LINKER_ERROR;
           goto cleanup2;
         }
@@ -1013,7 +1014,7 @@ static ExitCode process_elf_file(
       }
 
       symbol->defined = true;
-      symbol->name = strdup(symbol_name);
+      symbol->name = symbol_name;
       symbol->binding = binding;
       symbol->size = symtab_symbol.size;
       symbol->contents = NULL;
@@ -1031,9 +1032,10 @@ static ExitCode process_elf_file(
       rela_data_header, file_symbols, symbol_table, input_file,
       initial_location, existing_data_size, DATA_INDEX);
 
+  // Don't bother freeing the string table, as our symbols contain strings
+  // pointing into it.
 cleanup2:
   free(file_symbols);
-  free(strtab);
 cleanup1:
   free(shstrtab);
   free(headers);
@@ -1163,7 +1165,9 @@ ExitCode link_elf_executable(
 
     if (!symbol->defined) {
       if (symbol->relocs.size != 0) {
-        fprintf(stderr, "Undefined symbol '%s'\n", symbol->name);
+        fprintf(
+            stderr, "Undefined symbol '%.*s'\n", symbol->name.len,
+            symbol->name.chars);
         ret = EXIT_CODE_LINKER_ERROR;
         goto cleanup;
       }

@@ -206,7 +206,7 @@ if (parser->position >= parser->tokens->size)
 \treturn failure;
 
 Token *token = read_token(parser);
-if (token->t == TOK_SYMBOL && streq(token->u.symbol, "%s")) {
+if (token->t == TOK_SYMBOL && string_eq(token->u.symbol, STRING("%s"))) {
 \treturn success((void *)1);
 } else {
 \tback_up(parser);

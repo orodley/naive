@@ -84,8 +84,8 @@ static AsmValue read_register_or_symbol(
 
   for (u32 i = 0; i < symbols->size; i++) {
     AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
-    char *name = symbol->name;
-    if (strlen(name) == ident.len && strneq(ident.chars, name, ident.len)) {
+    String name = symbol->name;
+    if (string_eq(name, ident)) {
       return asm_symbol(symbol);
     }
   }
@@ -290,7 +290,7 @@ int main(int argc, char *argv[])
 
         AsmSymbol *symbol = pool_alloc(&asm_module.pool, sizeof *symbol);
         *symbol = (AsmSymbol){
-            .name = strndup(symbol_name.chars, symbol_name.len),
+            .name = symbol_name,
             .section = TEXT_SECTION,
             .defined = false,
             .linkage = ASM_GLOBAL_LINKAGE,
@@ -375,7 +375,7 @@ int main(int argc, char *argv[])
 
         AsmSymbol *symbol = pool_alloc(&asm_module.pool, sizeof *symbol);
         *symbol = (AsmSymbol){
-            .name = strndup(ident.chars, ident.len),
+            .name = ident,
             .section = TEXT_SECTION,
             .defined = true,
             .linkage = linkage,

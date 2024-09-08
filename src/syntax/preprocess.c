@@ -619,8 +619,6 @@ static bool handle_pp_directive(PP *pp)
 
       bool success = preprocess_file(pp, includee_path, include_path_range);
 
-      if (!string_eq(include_path, includee_path)) free(includee_path.chars);
-
       if (!success) return false;
 
       skip_whitespace_and_comments(pp, false);

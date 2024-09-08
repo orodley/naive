@@ -36,6 +36,12 @@ static void pretty_printf(char *fmt, ...)
         char *str = va_arg(varargs, char *);
         fputs(str, stdout);
         break;
+      case 'S':;
+        String s = va_arg(varargs, String);
+        for (u32 i = 0; i < s.len; i++) {
+          putchar(s.chars[i]);
+        }
+        break;
       case '8':;
         uint64_t x = va_arg(varargs, uint64_t);
         printf("%" PRIu64, x);
@@ -126,14 +132,12 @@ static void dump_expr(ASTExpr *expr)
     dump_numeric_suffix(expr->u.float_literal.suffix);
     break;
   }
-  case STRING_LITERAL_EXPR:
-    pretty_printf("%s", expr->u.string_literal.chars);
-    break;
-  case IDENTIFIER_EXPR: pretty_printf("%s", expr->u.identifier); break;
+  case STRING_LITERAL_EXPR: pretty_printf("%S", expr->u.string_literal); break;
+  case IDENTIFIER_EXPR: pretty_printf("%S", expr->u.identifier); break;
   case STRUCT_DOT_FIELD_EXPR:
   case STRUCT_ARROW_FIELD_EXPR:
     dump_expr(expr->u.struct_field.struct_expr);
-    pretty_printf(",%s", expr->u.struct_field.field_name);
+    pretty_printf(",%S", expr->u.struct_field.field_name);
     break;
   case POST_INCREMENT_EXPR:
   case POST_DECREMENT_EXPR:
@@ -290,7 +294,7 @@ static void dump_statement(ASTStatement *statement)
     if (statement->u.for_statement.update_expr != NULL)
       dump_expr(statement->u.for_statement.update_expr);
     break;
-  case GOTO_STATEMENT: pretty_printf(statement->u.goto_label); break;
+  case GOTO_STATEMENT: pretty_printf("%S", statement->u.goto_label); break;
   }
 
   pretty_printf(")");
@@ -349,7 +353,7 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
 {
   switch (type_specifier->t) {
   case NAMED_TYPE_SPECIFIER:
-    pretty_printf("NAMED_TYPE_SPECIFIER(%s", type_specifier->u.name);
+    pretty_printf("NAMED_TYPE_SPECIFIER(%S", type_specifier->u.name);
     break;
   case UNION_TYPE_SPECIFIER:
   case STRUCT_TYPE_SPECIFIER: {
@@ -357,8 +361,8 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
         type_specifier->t == STRUCT_TYPE_SPECIFIER ? "STRUCT_TYPE_SPECIFIER("
                                                    : "UNION_TYPE_SPECIFIER(");
 
-    char *name = type_specifier->u.struct_or_union_specifier.name;
-    if (name != NULL) pretty_printf("%s,", name);
+    String name = type_specifier->u.struct_or_union_specifier.name;
+    if (is_valid(name)) pretty_printf("%S,", name);
 
     pretty_printf("FIELD_LIST(");
     dump_struct_or_union_field_list(
@@ -374,22 +378,22 @@ static void dump_type_specifier(ASTTypeSpecifier *type_specifier)
   }
   case ENUM_TYPE_SPECIFIER: {
     pretty_printf("ENUM_TYPE_SPECIFIER(");
-    char *name = type_specifier->u.enum_specifier.name;
+    String name = type_specifier->u.enum_specifier.name;
     ASTEnumerator *enumerator_list =
         type_specifier->u.enum_specifier.enumerator_list;
 
-    if (name != NULL) {
-      pretty_printf("%s", name);
+    if (is_valid(name)) {
+      pretty_printf("%S", name);
       if (enumerator_list != NULL) pretty_printf(",");
     }
 
     while (enumerator_list != NULL) {
       pretty_printf("ENUMERATOR(");
-      if (enumerator_list->name != NULL) {
-        pretty_printf("%s", enumerator_list->name);
+      if (is_valid(enumerator_list->name)) {
+        pretty_printf("%S", enumerator_list->name);
       }
       if (enumerator_list->value != NULL) {
-        if (enumerator_list->name != NULL) pretty_printf(",");
+        if (is_valid(enumerator_list->name)) pretty_printf(",");
         dump_expr(enumerator_list->value);
       }
       pretty_printf(")");
@@ -476,7 +480,7 @@ static void dump_direct_declarator(ASTDirectDeclarator *declarator)
     break;
   case IDENTIFIER_DECLARATOR:
     pretty_printf("IDENTIFIER_DECLARATOR(");
-    if (declarator->u.name != NULL) pretty_printf("%s", declarator->u.name);
+    if (is_valid(declarator->u.name)) pretty_printf("%S", declarator->u.name);
     break;
   case FUNCTION_DECLARATOR:
     pretty_printf("FUNCTION_DECLARATOR(");
@@ -527,7 +531,7 @@ static void dump_designator_list(ASTDesignator *designator_list)
       dump_expr(designator_list->u.index_expr);
       break;
     case FIELD_DESIGNATOR:
-      pretty_printf("FIELD_DESIGNATOR(%s", designator_list->u.field_name);
+      pretty_printf("FIELD_DESIGNATOR(%S", designator_list->u.field_name);
       break;
     }
     pretty_printf(")");

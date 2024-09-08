@@ -42,7 +42,7 @@ IrModule ir_gen(ASTToplevel *toplevel)
   // expression, and then switch back, keeping only the type of the resulting
   // Term.
   IrGlobal *scratch_function = ir_module_add_function(
-      builder.module, "__scratch", (IrType){.t = IR_VOID}, 0, false, NULL);
+      builder.module, LS("__scratch"), (IrType){.t = IR_VOID}, 0, false, NULL);
   add_init_to_function(builder.module, scratch_function);
 
   IrGenContext ctx;
@@ -71,7 +71,7 @@ IrModule ir_gen(ASTToplevel *toplevel)
 
     for (u32 j = 0; j < ctx.goto_labels.size; j++) {
       GotoLabel *label = ARRAY_REF(&ctx.goto_labels, GotoLabel, j);
-      if (streq(label->name, fixup->label_name)) {
+      if (string_eq(label->name, fixup->label_name)) {
         fixup->instr->u.target_block = label->block;
         break;
       }
@@ -80,7 +80,7 @@ IrModule ir_gen(ASTToplevel *toplevel)
   }
 
   IrGlobal *first_global = *ARRAY_REF(&builder.module->globals, IrGlobal *, 0);
-  ASSERT(streq(first_global->name, "__scratch"));
+  ASSERT(string_eq(first_global->name, LS("__scratch")));
   ARRAY_REMOVE(&builder.module->globals, IrGlobal *, 0);
 
   pool_free(&ctx.type_env.pool);
@@ -180,7 +180,7 @@ static void ir_gen_toplevel(IrGenContext *ctx, ASTToplevel *toplevel)
       for (u32 i = 0; i < ctx->inline_functions.size; i++) {
         InlineFunction *inline_function =
             ARRAY_REF(&ctx->inline_functions, InlineFunction, i);
-        if (streq(inline_function->global->name, cdecl.name)) {
+        if (string_eq(inline_function->global->name, cdecl.name)) {
           fatal_error_if_type_not_eq(
               cdecl.type, inline_function->function_type);
           matching = inline_function;
@@ -338,7 +338,7 @@ static void ir_gen_function(
       if (i != 0) {
         emit_fatal_error_no_loc("void must be the only parameter if specified");
       }
-      if (cdecl.name != NULL) {
+      if (is_valid(cdecl.name)) {
         emit_fatal_error_no_loc("void parameter cannot have a name");
       }
       break;

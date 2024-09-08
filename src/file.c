@@ -55,27 +55,17 @@ FileType file_type(FILE *file)
 // @PORT
 String make_temp_file(void)
 {
-  char fmt[] = "/tmp/ncc_temp_%x.o";
-
-  // - 2 adjusts down for the "%x" which isn't present in the output
-  // sizeof(int) * 2 is the max length of rand_suffix in hex
-  // + 1 for the null terminator
-  u32 filename_max_length = sizeof fmt - 2 + sizeof(int) * 2 + 1;
-  char *filename = calloc(filename_max_length, 1);
-
   for (;;) {
     int rand_suffix = rand();
-    int len = snprintf(filename, filename_max_length, fmt, rand_suffix);
+    String filename = string_printf("/tmp/ncc_temp_%x.o", rand_suffix);
 
-    int fd = open(filename, O_CREAT | O_WRONLY | O_EXCL, 0600);
+    int fd = open(filename.chars, O_CREAT | O_WRONLY | O_EXCL, 0600);
     if (fd != -1) {
       close(fd);
-      return (String){filename, len};
-    } else {
-      if (errno != EEXIST) {
-        perror("Unable to create temporary file");
-        exit_with_code(EXIT_CODE_IO_ERROR);
-      }
+      return filename;
+    } else if (errno != EEXIST) {
+      perror("Unable to create temporary file");
+      exit_with_code(EXIT_CODE_IO_ERROR);
     }
   }
 }

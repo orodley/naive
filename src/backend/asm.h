@@ -197,7 +197,7 @@ typedef enum AsmSymbolSection
 
 typedef struct AsmSymbol
 {
-  char *name;
+  String name;
   AsmSymbolSection section;
   bool defined;
   AsmLinkage linkage;

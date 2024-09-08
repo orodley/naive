@@ -574,7 +574,9 @@ static void compute_live_ranges(AsmBuilder *builder, Array(VReg) *vregs)
   bit_set_free(&working_set);
 
   if (flag_dump_live_ranges) {
-    printf("%s:\n", builder->current_function->name);
+    printf(
+        "%.*s:\n", builder->current_function->name.len,
+        builder->current_function->name.chars);
     for (u32 i = 0; i < body->size; i++) {
       AsmInstr *instr = ARRAY_REF(body, AsmInstr, i);
       dump_asm_instr_with_line_number(instr, i);

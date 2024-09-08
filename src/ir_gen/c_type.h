@@ -70,7 +70,7 @@ typedef struct CType
 
 typedef struct CDecl
 {
-  char *name;
+  String name;
   CType *type;
 } CDecl;
 
@@ -85,7 +85,7 @@ inline u32 c_type_size(CType *type)
 
 typedef struct TypeEnvEntry
 {
-  char *name;
+  String name;
   CType type;
 } TypeEnvEntry;
 
@@ -119,7 +119,7 @@ typedef struct TypeEnv
 } TypeEnv;
 
 void init_type_env(TypeEnv *type_env);
-CType *search(Array(TypeEnvEntry *) *types, char *name);
+CType *search(Array(TypeEnvEntry *) *types, String name);
 
 CType *pointer_type(TypeEnv *type_env, CType *type);
 CType *decay_to_pointer(TypeEnv *type_env, CType *type);
@@ -127,7 +127,7 @@ CType *decay_to_pointer(TypeEnv *type_env, CType *type);
 CType *array_type(IrBuilder *builder, TypeEnv *type_env, CType *type);
 void set_array_type_length(CType *array_type, u64 size);
 
-CType *struct_type(TypeEnv *type_env, char *name);
+CType *struct_type(TypeEnv *type_env, String name);
 
 u32 c_type_num_fields(CType *type);
 

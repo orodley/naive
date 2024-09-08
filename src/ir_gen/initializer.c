@@ -117,7 +117,7 @@ void make_c_initializer(
           u32 field_number;
           for (u32 i = 0; i < fields->size; i++) {
             CDecl *field = ARRAY_REF(fields, CDecl, i);
-            if (streq(field->name, designator_list->u.field_name)) {
+            if (string_eq(field->name, designator_list->u.field_name)) {
               selected_field = field;
               field_number = i;
               break;

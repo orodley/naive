@@ -16,7 +16,7 @@
 
 typedef struct TypeTableEntry
 {
-  char *type_name;
+  String type_name;
 } TypeTableEntry;
 
 typedef struct TypeTable
@@ -24,9 +24,10 @@ typedef struct TypeTable
   Array(TypeTableEntry) entries;
 } TypeTable;
 
-static char *builtin_types[] = {
-    "void",   "char",   "short",    "int",   "long",     "float",
-    "double", "signed", "unsigned", "_Bool", "_Complex",
+static String builtin_types[] = {
+    LS("void"),     LS("char"),  LS("short"),    LS("int"),
+    LS("long"),     LS("float"), LS("double"),   LS("signed"),
+    LS("unsigned"), LS("_Bool"), LS("_Complex"),
 };
 
 static void type_table_add_entry(TypeTable *table, TypeTableEntry entry)
@@ -50,11 +51,11 @@ static void type_table_free(TypeTable *type_table)
 }
 
 static bool type_table_look_up_name(
-    TypeTable *type_table, char *name, TypeTableEntry *out)
+    TypeTable *type_table, String name, TypeTableEntry *out)
 {
   for (u32 i = 0; i < type_table->entries.size; i++) {
     TypeTableEntry *entry = ARRAY_REF(&type_table->entries, TypeTableEntry, i);
-    if (streq(entry->type_name, name)) {
+    if (string_eq(entry->type_name, name)) {
       *out = *entry;
       return true;
     }
@@ -147,9 +148,9 @@ static void *second(Parser *parser, void *a, void *b)
   return b;
 }
 
-static char *direct_declarator_name(ASTDirectDeclarator *declarator);
+static String direct_declarator_name(ASTDirectDeclarator *declarator);
 
-static char *declarator_name(ASTDeclarator *declarator)
+static String declarator_name(ASTDeclarator *declarator)
 {
   switch (declarator->t) {
   case POINTER_DECLARATOR:
@@ -161,7 +162,7 @@ static char *declarator_name(ASTDeclarator *declarator)
   UNREACHABLE;
 }
 
-static char *direct_declarator_name(ASTDirectDeclarator *declarator)
+static String direct_declarator_name(ASTDirectDeclarator *declarator)
 {
   switch (declarator->t) {
   case IDENTIFIER_DECLARATOR: return declarator->u.name;
@@ -449,7 +450,7 @@ static ParserResult named_type(Parser *parser)
     return failure;
   }
 
-  char *name = token->u.symbol;
+  String name = token->u.symbol;
   TypeTableEntry entry;
   if (!type_table_look_up_name(&parser->defined_types, name, &entry)) {
     back_up(parser);
@@ -483,7 +484,7 @@ ASTTypeSpecifier *build_struct_or_union(
   result->t =
       keyword->which == 0 ? STRUCT_TYPE_SPECIFIER : UNION_TYPE_SPECIFIER;
   if (opt_name == NULL) {
-    result->u.struct_or_union_specifier.name = NULL;
+    result->u.struct_or_union_specifier.name = INVALID_STRING;
   } else {
     result->u.struct_or_union_specifier.name = opt_name->u.symbol;
   }
@@ -505,7 +506,7 @@ ASTTypeSpecifier *build_enum(
   ASTTypeSpecifier *result = pool_alloc(parser->pool, sizeof *result);
   result->t = ENUM_TYPE_SPECIFIER;
   if (opt_name == NULL) {
-    result->u.enum_specifier.name = NULL;
+    result->u.enum_specifier.name = INVALID_STRING;
   } else {
     result->u.enum_specifier.name = opt_name->u.symbol;
   }
@@ -566,7 +567,7 @@ ASTDirectDeclarator *optional_declarator(
   if (declarator == NULL) {
     declarator = pool_alloc(parser->pool, sizeof *declarator);
     declarator->t = IDENTIFIER_DECLARATOR;
-    declarator->u.name = NULL;
+    declarator->u.name = INVALID_STRING;
   }
 
   return declarator;
@@ -594,8 +595,8 @@ static ParserResult identifier(Parser *parser)
     return failure;
   }
 
-  char *name = token->u.symbol;
-  if (streq(name, "sizeof")) {
+  String name = token->u.symbol;
+  if (string_eq(name, STRING("sizeof"))) {
     back_up(parser);
     return failure;
   }

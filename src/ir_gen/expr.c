@@ -14,7 +14,7 @@
 
 static Term ir_gen_assign_expr(IrGenContext *ctx, ASTExpr *expr, IrOp ir_op);
 static Term ir_gen_struct_field(
-    IrBuilder *builder, Term struct_term, char *field_name,
+    IrBuilder *builder, Term struct_term, String field_name,
     ExprContext context);
 static Term ir_gen_deref(
     IrBuilder *builder, TypeEnv *type_env, Term pointer, ExprContext context);
@@ -27,8 +27,8 @@ static Term ir_gen_add(IrGenContext *ctx, Term left, Term right);
 static Term ir_gen_sub(IrGenContext *ctx, Term left, Term right);
 static Term ir_gen_inc_dec(IrGenContext *ctx, ASTExpr *expr);
 static Term ir_gen_va_arg(
-    IrGenContext *ctx, Term va_list_term, char *builtin_name, CType *arg_type);
-static bool look_up_builtin_ident(IrGenContext *ctx, char *name, Term *result);
+    IrGenContext *ctx, Term va_list_term, String builtin_name, CType *arg_type);
+static bool look_up_builtin_ident(IrGenContext *ctx, String name, Term *result);
 
 static CType *type_name_to_c_type(IrGenContext *ctx, ASTTypeName *type_name);
 
@@ -77,7 +77,9 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     Binding *binding = binding_for_name(ctx->scope, expr->u.identifier);
 
     if (binding == NULL) {
-      fprintf(stderr, "Unknown identifier '%s'\n", expr->u.identifier);
+      fprintf(
+          stderr, "Unknown identifier '%.*s'\n", expr->u.identifier.len,
+          expr->u.identifier.chars);
       exit(1);
     }
     ASSERT(binding->term.value.type.t == IR_POINTER || binding->constant);
@@ -180,14 +182,9 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     return (Term){.ctype = result_type, .value = value};
   }
   case STRING_LITERAL_EXPR: {
-    char fmt[] = "__string_literal_%x";
-
-    // - 2 adjusts down for the "%x" which isn't present in the output
-    // sizeof(u32) * 2 is the max length of globals.size in hex
-    // + 1 for the null terminator
-    u32 name_max_length = sizeof fmt - 2 + sizeof(u32) * 2 + 1;
-    char *name = pool_alloc(&builder->module->pool, name_max_length);
-    snprintf(name, name_max_length, fmt, builder->module->globals.size);
+    // @TODO: This should be in the module pool, not malloced.
+    String name =
+        string_printf("__string_literal_%x", builder->module->globals.size);
 
     String string = expr->u.string_literal;
     u32 length = string.len + 1;
@@ -282,11 +279,11 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     }
 
     if (callee_expr->t == IDENTIFIER_EXPR) {
-      char *name = callee_expr->u.identifier;
+      String name = callee_expr->u.identifier;
       Term result;
       if (look_up_builtin_ident(ctx, name, &result)) return result;
 
-      if (streq(name, "__builtin_va_start")) {
+      if (string_eq(name, LS("__builtin_va_start"))) {
         if (call_arity != 1) {
           emit_fatal_error_no_loc(
               "Wrong number of arguments for __builtin_va_start (got %u, "
@@ -311,7 +308,7 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
             .ctype = &ctx->type_env.void_type,
             .value = build_builtin_va_start(builder, va_list_ptr.value),
         };
-      } else if (streq(name, "__builtin_va_end")) {
+      } else if (string_eq(name, LS("__builtin_va_end"))) {
         // va_end is a NOP for System V x64, so just return a dummy
         // value, and give it void type to ensure it's not used.
         return (Term){
@@ -413,8 +410,10 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
   case LOGICAL_AND_EXPR: {
     bool is_or = t == LOGICAL_OR_EXPR;
 
-    IrBlock *rhs_block = add_block(builder, is_or ? "or.rhs" : "and.rhs");
-    IrBlock *after_block = add_block(builder, is_or ? "or.after" : "and.after");
+    IrBlock *rhs_block =
+        add_block(builder, is_or ? LS("or.rhs") : LS("and.rhs"));
+    IrBlock *after_block =
+        add_block(builder, is_or ? LS("or.after") : LS("and.after"));
 
     ASTExpr *lhs_expr = expr->u.binary_op.arg1;
     ASTExpr *rhs_expr = expr->u.binary_op.arg2;
@@ -454,9 +453,9 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
     return (Term){.ctype = &ctx->type_env.int_type, .value = phi};
   }
   case CONDITIONAL_EXPR: {
-    IrBlock *then_block = add_block(builder, "ternary.then");
-    IrBlock *else_block = add_block(builder, "ternary.else");
-    IrBlock *after_block = add_block(builder, "ternary.after");
+    IrBlock *then_block = add_block(builder, LS("ternary.then"));
+    IrBlock *else_block = add_block(builder, LS("ternary.else"));
+    IrBlock *after_block = add_block(builder, LS("ternary.after"));
 
     ASTExpr *condition_expr = expr->u.ternary_op.arg1;
     Term condition_term = ir_gen_expr(ctx, condition_expr, RVALUE_CONTEXT);
@@ -572,16 +571,16 @@ Term ir_gen_expr(IrGenContext *ctx, ASTExpr *expr, ExprContext context)
       return convert_type(
           builder,
           ir_gen_va_arg(
-              ctx, va_list_term, "__builtin_va_arg_uint64",
+              ctx, va_list_term, STRING("__builtin_va_arg_uint64"),
               &ctx->type_env.unsigned_long_type),
           arg_type);
     } else if (arg_type->t == FLOAT_TYPE) {
       if (arg_type->u.floatt == FLOAT) {
         return ir_gen_va_arg(
-            ctx, va_list_term, "__builtin_va_arg_float", arg_type);
+            ctx, va_list_term, STRING("__builtin_va_arg_float"), arg_type);
       } else if (arg_type->u.floatt == DOUBLE) {
         return ir_gen_va_arg(
-            ctx, va_list_term, "__builtin_va_arg_double", arg_type);
+            ctx, va_list_term, STRING("__builtin_va_arg_double"), arg_type);
       } else {
         UNIMPLEMENTED("va_arg for float type %u", arg_type->u.floatt);
       }
@@ -641,7 +640,8 @@ Term ir_gen_assign_op(
 }
 
 static Term ir_gen_struct_field(
-    IrBuilder *builder, Term struct_term, char *field_name, ExprContext context)
+    IrBuilder *builder, Term struct_term, String field_name,
+    ExprContext context)
 {
   PRECONDITION(struct_term.value.type.t == IR_POINTER);
 
@@ -659,7 +659,7 @@ static Term ir_gen_struct_field(
   u32 field_number = 0;
   for (u32 i = 0; i < fields->size; i++) {
     CDecl *field = ARRAY_REF(fields, CDecl, i);
-    if (streq(field->name, field_name)) {
+    if (string_eq(field->name, field_name)) {
       selected_field = field;
       field_number = i;
       break;
@@ -1012,7 +1012,7 @@ static Term ir_gen_inc_dec(IrGenContext *ctx, ASTExpr *expr)
 }
 
 static Term ir_gen_va_arg(
-    IrGenContext *ctx, Term va_list_term, char *builtin_name, CType *arg_type)
+    IrGenContext *ctx, Term va_list_term, String builtin_name, CType *arg_type)
 {
   IrGlobal *global_builtin_va_arg =
       find_global_by_name(ctx->builder->module, builtin_name);
@@ -1028,9 +1028,9 @@ static Term ir_gen_va_arg(
   };
 }
 
-static bool look_up_builtin_ident(IrGenContext *ctx, char *name, Term *result)
+static bool look_up_builtin_ident(IrGenContext *ctx, String name, Term *result)
 {
-  if (streq(name, "__builtin_inf")) {
+  if (string_eq(name, LS("__builtin_inf"))) {
     *result = (Term){
         .ctype = &ctx->type_env.float_type,
         .value = value_const_float(
@@ -1085,6 +1085,6 @@ static CType *type_name_to_c_type(IrGenContext *ctx, ASTTypeName *type_name)
   CType *decl_spec_type =
       decl_specifier_list_to_c_type(ctx, type_name->decl_specifier_list);
   decl_to_cdecl(ctx, decl_spec_type, type_name->declarator, &cdecl);
-  ASSERT(cdecl.name == NULL);
+  ASSERT(!is_valid(cdecl.name));
   return cdecl.type;
 }

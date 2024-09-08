@@ -13,7 +13,7 @@ typedef struct Term
 
 typedef struct Binding
 {
-  char *name;
+  String name;
   bool constant;
   Term term;
 } Binding;
@@ -24,7 +24,7 @@ typedef struct Scope
   struct Scope *parent_scope;
 } Scope;
 
-Binding *binding_for_name(Scope *scope, char *name);
+Binding *binding_for_name(Scope *scope, String name);
 
 typedef struct InlineFunction
 {
@@ -42,13 +42,13 @@ typedef struct SwitchCase
 
 typedef struct GotoLabel
 {
-  char *name;
+  String name;
   IrBlock *block;
 } GotoLabel;
 
 typedef struct GotoFixup
 {
-  char *label_name;
+  String label_name;
   IrInstr *instr;
 } GotoFixup;
 

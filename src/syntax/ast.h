@@ -46,7 +46,7 @@ typedef struct ASTExpr
     IntLiteral int_literal;
     FloatLiteral float_literal;
     String string_literal;
-    char *identifier;
+    String identifier;
     struct ASTExpr *unary_arg;
     struct ASTTypeName *type;
     struct
@@ -73,7 +73,7 @@ typedef struct ASTExpr
     struct
     {
       struct ASTExpr *struct_expr;
-      char *field_name;
+      String field_name;
     } struct_field;
     struct
     {
@@ -133,7 +133,7 @@ typedef struct ASTStatement
   {
     struct
     {
-      char *label_name;
+      String label_name;
       struct ASTStatement *statement;
     } labeled_statement;
     struct
@@ -149,7 +149,7 @@ typedef struct ASTStatement
       struct ASTStatement *else_statement;
     } if_statement;
     ASTForStatement for_statement;
-    char *goto_label;
+    String goto_label;
     ASTExpr *expr;
   } u;
 } ASTStatement;
@@ -184,7 +184,7 @@ typedef struct ASTDesignator
   union
   {
     ASTExpr *index_expr;
-    char *field_name;
+    String field_name;
   } u;
 } ASTDesignator;
 
@@ -259,7 +259,7 @@ typedef struct ASTDirectDeclarator
 
   union
   {
-    char *name;
+    String name;
     struct ASTDeclarator *declarator;
     struct
     {
@@ -317,7 +317,7 @@ typedef enum ASTFunctionSpecifier
 typedef struct ASTEnumerator
 {
   struct ASTEnumerator *next;
-  char *name;
+  String name;
   ASTExpr *value;
 } ASTEnumerator;
 
@@ -352,7 +352,7 @@ typedef struct ASTFieldDecl
 
 typedef struct ASTAttribute
 {
-  char *name;
+  String name;
 } ASTAttribute;
 
 typedef struct ASTTypeSpecifier
@@ -367,16 +367,16 @@ typedef struct ASTTypeSpecifier
 
   union
   {
-    char *name;
+    String name;
     struct
     {
-      char *name;
+      String name;
       ASTFieldDecl *field_list;
       ASTAttribute *attribute;
     } struct_or_union_specifier;
     struct
     {
-      char *name;
+      String name;
       ASTEnumerator *enumerator_list;
     } enum_specifier;
   } u;

@@ -39,7 +39,7 @@ typedef struct IrType
     struct
     {
       // @TODO: This field probably shouldn't be here.
-      char *name;
+      String name;
       struct IrStructField *fields;
       u32 total_size;
       u16 num_fields;
@@ -69,7 +69,7 @@ typedef struct IrStructField
 typedef struct IrBlock
 {
   u32 id;
-  char *name;
+  String name;
   Array(IrInstr *) instrs;
 
   // used by asm_gen
@@ -111,7 +111,7 @@ typedef enum IrLinkage
 
 typedef struct IrGlobal
 {
-  char *name;
+  String name;
   IrType type;
   IrLinkage linkage;
   AsmSymbol *asm_symbol;
@@ -253,17 +253,17 @@ typedef struct IrInstr
 void ir_module_init(IrModule *module);
 void ir_module_free(IrModule *module);
 IrGlobal *ir_module_add_function(
-    IrModule *module, char *name, IrType return_type, u32 arity,
+    IrModule *module, String name, IrType return_type, u32 arity,
     bool variable_arity, IrType *arg_types);
-IrGlobal *ir_module_add_var(IrModule *module, char *name, IrType type);
-IrType *ir_module_add_struct(IrModule *module, char *name, u32 num_fields);
+IrGlobal *ir_module_add_var(IrModule *module, String name, IrType type);
+IrType *ir_module_add_struct(IrModule *module, String name, u32 num_fields);
 
-void block_init(IrBlock *block, char *name, u32 id);
+void block_init(IrBlock *block, String name, u32 id);
 
 IrConst *add_init_to_function(IrModule *module, IrGlobal *global);
 IrBlock *add_block_to_function(
-    IrModule *module, IrFunction *function, char *name);
-inline IrBlock *add_block(IrBuilder *builder, char *name)
+    IrModule *module, IrFunction *function, String name);
+inline IrBlock *add_block(IrBuilder *builder, String name)
 {
   return add_block_to_function(
       builder->module, builder->current_function, name);
@@ -315,7 +315,7 @@ IrValue build_phi(IrBuilder *builder, IrType type, u32 arity);
 void phi_set_param(
     IrValue phi, u32 index, IrBlock *source_block, IrValue value);
 
-IrGlobal *find_global_by_name(IrModule *module, char *name);
+IrGlobal *find_global_by_name(IrModule *module, String name);
 
 IrValue builtin_memcpy(IrBuilder *builder);
 IrValue builtin_memset(IrBuilder *builder);

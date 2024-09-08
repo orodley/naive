@@ -47,7 +47,7 @@ AsmSymbol *add_asm_symbol(AsmBuilder *builder)
   return asm_symbol;
 }
 
-AsmSymbol *add_label(AsmBuilder *builder, char *name)
+AsmSymbol *add_label(AsmBuilder *builder, String name)
 {
   AsmSymbol *symbol = add_asm_symbol(builder);
   *symbol = (AsmSymbol){
@@ -252,16 +252,11 @@ AsmValue return_reg_for_type(AsmBuilder *builder, IrType type)
 
 static AsmValue asm_const_float(AsmBuilder *builder, u8 bit_width, double value)
 {
-  char name[32];
-  i32 len = snprintf(name, sizeof name, "__f%d", builder->global_temp_floats);
+  String name = string_printf("__f%d", builder->global_temp_floats);
   builder->global_temp_floats++;
 
-  char *name_copy = pool_alloc(&builder->asm_module.pool, len + 1);
-  strncpy(name_copy, name, len);
-  name_copy[len] = '\0';
-
   AsmSymbol *symbol = add_asm_symbol(builder);
-  symbol->name = name_copy;
+  symbol->name = name;
   symbol->defined = true;
   symbol->linkage = ASM_LOCAL_LINKAGE;
   symbol->section = DATA_SECTION;
@@ -1725,7 +1720,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
 
   builder->local_stack_usage = 0;
 
-  AsmSymbol *ret_label = add_label(builder, "ret");
+  AsmSymbol *ret_label = add_label(builder, LS("ret"));
   builder->ret_label = ret_label;
 
   if (ARRAY_IS_VALID(&builder->virtual_registers))
@@ -1793,8 +1788,9 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     }
 
     printf(
-        "%s: %u instrs, %u vregs (%u int, %u float)\n", ir_global->name,
-        body.size, builder->virtual_registers.size, int_count, float_count);
+        "%.*s: %u instrs, %u vregs (%u int, %u float)\n", ir_global->name.len,
+        ir_global->name.chars, body.size, builder->virtual_registers.size,
+        int_count, float_count);
   }
 
   allocate_registers(builder);
@@ -1889,7 +1885,7 @@ void asm_gen_function(AsmBuilder *builder, IrGlobal *ir_global)
     // it's zero, and if not, we save them. We don't bother checking the exact
     // number to skip saving some. We do skip those that were already used to
     // pass normal arguments, as above with int argument registers.
-    AsmSymbol *skip_vector_save = add_label(builder, "skip_vector_save");
+    AsmSymbol *skip_vector_save = add_label(builder, LS("skip_vector_save"));
     emit_instr2(builder, CMP, asm_phys_reg(REG_CLASS_A, 8), asm_imm(0));
     emit_instr1(builder, JE, asm_symbol(skip_vector_save));
     for (u32 i = num_float_reg_args;
@@ -2061,12 +2057,11 @@ void generate_asm_module(AsmBuilder *builder, IrModule *module)
     ir_global->asm_symbol = asm_symbol;
     asm_symbol->ir_global = ir_global;
 
-    u32 name_len = strlen(ir_global->name);
-    char *name_copy = pool_alloc(&builder->asm_module.pool, name_len + 1);
-    memcpy(name_copy, ir_global->name, name_len);
-    name_copy[name_len] = '\0';
+    u32 name_len = ir_global->name.len;
+    char *name_copy = pool_alloc(&builder->asm_module.pool, name_len);
+    memcpy(name_copy, ir_global->name.chars, name_len);
 
-    asm_symbol->name = name_copy;
+    asm_symbol->name = (String){name_copy, name_len};
     asm_symbol->defined = ir_global->initializer != NULL;
     asm_symbol->section = section;
     asm_symbol->offset = 0;

@@ -89,7 +89,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
     IrBlock *before_block = builder->current_block;
 
-    IrBlock *then_block = add_block(builder, "if.then");
+    IrBlock *then_block = add_block(builder, LS("if.then"));
     builder->current_block = then_block;
     ir_gen_statement(ctx, then_statement);
     IrBlock *then_resultant_block = builder->current_block;
@@ -97,13 +97,13 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     IrBlock *else_block = NULL;
     IrBlock *else_resultant_block = NULL;
     if (else_statement != NULL) {
-      else_block = add_block(builder, "if.else");
+      else_block = add_block(builder, LS("if.else"));
       builder->current_block = else_block;
       ir_gen_statement(ctx, else_statement);
       else_resultant_block = builder->current_block;
     }
 
-    IrBlock *after_block = add_block(builder, "if.after");
+    IrBlock *after_block = add_block(builder, LS("if.after"));
 
     builder->current_block = before_block;
     if (else_statement == NULL) {
@@ -128,11 +128,11 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
     IrBlock *switch_entry = builder->current_block;
     u32 before_body = builder->current_function->blocks.size;
-    IrBlock *after = add_block(builder, "switch.after");
+    IrBlock *after = add_block(builder, LS("switch.after"));
     IrBlock *prev_break_target = ctx->break_target;
     ctx->break_target = after;
 
-    builder->current_block = add_block(builder, "switch.body");
+    builder->current_block = add_block(builder, LS("switch.body"));
     ir_gen_statement(ctx, statement->u.expr_and_statement.statement);
     build_jump(builder, after);
 
@@ -151,7 +151,8 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
         default_index = i;
       } else {
         IrBlock *next = pool_alloc(&builder->module->pool, sizeof *next);
-        block_init(next, "switch.cmp", builder->current_function->blocks.size);
+        block_init(
+            next, LS("switch.cmp"), builder->current_function->blocks.size);
 
         IrValue cmp = build_cmp(
             builder, CMP_EQ, switch_value.value,
@@ -182,7 +183,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
   }
   case CASE_STATEMENT: {
     // @TODO: Ensure we're inside a switch statement.
-    IrBlock *case_block = add_block(builder, "switch.case");
+    IrBlock *case_block = add_block(builder, LS("switch.case"));
     build_jump(builder, case_block);
     builder->current_block = case_block;
 
@@ -196,11 +197,11 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     break;
   }
   case LABELED_STATEMENT: {
-    char *label_name = statement->u.labeled_statement.label_name;
+    String label_name = statement->u.labeled_statement.label_name;
     IrBlock *label_block = add_block(builder, label_name);
     build_jump(builder, label_block);
     builder->current_block = label_block;
-    if (streq(label_name, "default")) {
+    if (string_eq(label_name, LS("default"))) {
       SwitchCase *default_case = ARRAY_APPEND(&ctx->case_labels, SwitchCase);
       default_case->is_default = true;
       default_case->block = label_block;
@@ -215,7 +216,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     break;
   }
   case WHILE_STATEMENT: {
-    IrBlock *pre_header = add_block(builder, "while.ph");
+    IrBlock *pre_header = add_block(builder, LS("while.ph"));
     // @NOTE: We allocate this now, but only add it to the function later.
     // This is because we need it to exist as break_target while ir_gen'ing
     // the body, but we want it to be after the body, so the blocks are
@@ -232,7 +233,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
       emit_fatal_error_no_loc("while condition must be of integer type");
     }
 
-    IrBlock *body = add_block(builder, "while.body");
+    IrBlock *body = add_block(builder, LS("while.body"));
     build_cond(builder, condition_term.value, body, after);
 
     IrBlock *prev_break_target = ctx->break_target;
@@ -249,15 +250,15 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
     *ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = after;
     block_init(
-        after, "while.after", builder->current_function->blocks.size - 1);
+        after, LS("while.after"), builder->current_function->blocks.size - 1);
     builder->current_block = after;
 
     break;
   }
   case DO_WHILE_STATEMENT: {
-    IrBlock *pre_header = add_block(builder, "do_while.ph");
-    IrBlock *body = add_block(builder, "do_while.body");
-    IrBlock *after = add_block(builder, "do_while.after");
+    IrBlock *pre_header = add_block(builder, LS("do_while.ph"));
+    IrBlock *body = add_block(builder, LS("do_while.body"));
+    IrBlock *after = add_block(builder, LS("do_while.after"));
 
     ASTExpr *condition_expr = statement->u.expr_and_statement.expr;
     ASTStatement *body_statement = statement->u.expr_and_statement.statement;
@@ -288,8 +289,8 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     break;
   }
   case FOR_STATEMENT: {
-    IrBlock *pre_header = add_block(builder, "for.ph");
-    IrBlock *body = add_block(builder, "for.body");
+    IrBlock *pre_header = add_block(builder, LS("for.ph"));
+    IrBlock *body = add_block(builder, LS("for.body"));
     // @NOTE: We allocate these now, but only add it to the function later.
     // This is because we need them to exist as break_target and
     // continue_target while ir_gen'ing the body, but we want them to be
@@ -338,7 +339,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
 
     *ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = update;
     block_init(
-        update, "for.update", builder->current_function->blocks.size - 1);
+        update, LS("for.update"), builder->current_function->blocks.size - 1);
 
     ctx->break_target = prev_break_target;
     ctx->continue_target = prev_continue_target;
@@ -352,7 +353,8 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     builder->current_block = after;
 
     *ARRAY_APPEND(&builder->current_function->blocks, IrBlock *) = after;
-    block_init(after, "for.after", builder->current_function->blocks.size - 1);
+    block_init(
+        after, LS("for.after"), builder->current_function->blocks.size - 1);
 
     break;
   }
@@ -362,7 +364,7 @@ void ir_gen_statement(IrGenContext *ctx, ASTStatement *statement)
     fixup->label_name = statement->u.goto_label;
     fixup->instr = branch_instr;
 
-    builder->current_block = add_block(builder, "goto.after");
+    builder->current_block = add_block(builder, LS("goto.after"));
     break;
   }
   case BREAK_STATEMENT:

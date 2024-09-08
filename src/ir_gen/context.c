@@ -3,11 +3,11 @@
 #include "array.h"
 #include "assertions.h"
 
-Binding *binding_for_name(Scope *scope, char *name)
+Binding *binding_for_name(Scope *scope, String name)
 {
   for (u32 i = 0; i < scope->bindings.size; i++) {
     Binding *binding = ARRAY_REF(&scope->bindings, Binding, i);
-    if (streq(binding->name, name)) return binding;
+    if (string_eq(binding->name, name)) return binding;
   }
 
   if (scope->parent_scope != NULL) {

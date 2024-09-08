@@ -316,15 +316,18 @@ static void dump_asm_const(AsmConst constant)
     dump_immediate(constant.u.immediate);
     break;
   }
-  case ASM_CONST_SYMBOL: printf("%s", constant.u.symbol->name); break;
+  case ASM_CONST_SYMBOL:
+    printf("%.*s", constant.u.symbol->name.len, constant.u.symbol->name.chars);
+    break;
   }
 }
 
 static void dump_symbol(AsmSymbol *symbol)
 {
-  char *name = symbol->name;
-  if (symbol->linkage == ASM_GLOBAL_LINKAGE) printf("global %s\n", name);
-  printf("%s:\n", name);
+  String name = symbol->name;
+  if (symbol->linkage == ASM_GLOBAL_LINKAGE)
+    printf("global %.*s\n", name.len, name.chars);
+  printf("%.*s:\n", name.len, name.chars);
 }
 
 void dump_asm_instr_with_line_number(AsmInstr *instr, i32 line_no)
@@ -368,7 +371,8 @@ void dump_asm_module(AsmModule *asm_module)
   for (u32 i = 0; i < symbols->size; i++) {
     AsmSymbol *symbol = *ARRAY_REF(symbols, AsmSymbol *, i);
 
-    if (!symbol->defined) printf("extern %s\n", symbol->name);
+    if (!symbol->defined)
+      printf("extern %.*s\n", symbol->name.len, symbol->name.chars);
   }
   putchar('\n');
 
